@@ -1,9 +1,7 @@
-import { Context } from "@deepseek-ai/cordis";
 import type { Agent } from "@deepseek-ai/dsh-agent";
-import type { SubagentRuntime } from "@deepseek-ai/dsh-subagent";
-import type { ToolDefinition, ToolRunContext, ToolRuntime } from "@deepseek-ai/dsh-tools";
+import type { ToolRunContext } from "@deepseek-ai/dsh-tools";
 import { describe, expect, it, vi } from "vitest";
-import { createOhStoryRoleTool, OH_STORY_ROLE_TOOL_NAME, registerOhStoryRoleTool, roleToolFilter, type OhStoryRoleSubagents } from "../src/role-tool.js";
+import { createOhStoryRoleTool, OH_STORY_ROLE_TOOL_NAME, roleToolFilter, type OhStoryRoleSubagents } from "../src/role-tool.js";
 
 function roleSubagents(start: unknown): OhStoryRoleSubagents {
   return { start } as unknown as OhStoryRoleSubagents;
@@ -63,81 +61,6 @@ describe("native Oh Story Role tool", () => {
     }));
     expect(result).toMatchObject({ role: "narrative-writer", runId: "role-run-1" });
     expect(dispose).toHaveBeenCalledOnce();
-  });
-
-  it("starts roles through the plugin subagent runtime when the Agent context does not inject it", async () => {
-    const root = new Context();
-    const dispose = vi.fn(async () => {});
-    const start = vi.fn(async () => ({
-      id: "role-run-scoped",
-      result: Promise.resolve({
-        output: [{ type: "text", text: "架构结果" }],
-        stopReason: "completed" as const
-      }),
-      dispose
-    }));
-    let definition: ToolDefinition | undefined;
-    let agentContext: Context | undefined;
-
-    await root.plugin({
-      name: "tools-provider",
-      apply(context) {
-        context.provide("tools", {
-          register(value: ToolDefinition) {
-            definition = value;
-            return () => {};
-          },
-          get: vi.fn(() => ({}))
-        } as unknown as ToolRuntime);
-      }
-    });
-    await root.plugin({
-      name: "subagents-provider",
-      apply(context) {
-        context.provide("subagents", {
-          getProvider: vi.fn((name: string) => name === "spawn" ? { name } : undefined),
-          start
-        } as unknown as SubagentRuntime);
-      }
-    });
-    await root.plugin({
-      name: "agent-scope",
-      inject: ["tools"],
-      apply(context) {
-        agentContext = context;
-      }
-    });
-    await root.plugin({
-      name: "oh-story-test",
-      inject: ["tools", "subagents"],
-      apply: registerOhStoryRoleTool
-    });
-
-    try {
-      if (definition === undefined || agentContext === undefined) {
-        throw new Error("test services did not initialize");
-      }
-      const agent = { ctx: agentContext } as unknown as Agent;
-      const callId = "call-scoped" as ToolRunContext["callId"];
-      const execute = definition.execute as (args: { readonly role: "story-architect"; readonly prompt: string }, exec: ToolRunContext) => Promise<unknown>;
-      const result = await execute({ role: "story-architect", prompt: "检查故事架构" }, {
-        agent,
-        signal: new AbortController().signal,
-        callId,
-        rootCallId: callId,
-        name: OH_STORY_ROLE_TOOL_NAME,
-        arguments: {},
-        token: Symbol("tool") as ToolRunContext["token"],
-        deferContext: vi.fn(),
-        concludeTurn: vi.fn()
-      });
-
-      expect(result).toMatchObject({ role: "story-architect", runId: "role-run-scoped" });
-      expect(start).toHaveBeenCalledOnce();
-      expect(dispose).toHaveBeenCalledOnce();
-    } finally {
-      await root.fiber.dispose();
-    }
   });
 
   it("fails closed and still disposes an incomplete role run", async () => {

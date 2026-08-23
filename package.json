@@ -17,6 +17,7 @@
     "lint": "eslint . --max-warnings=0",
     "test": "pnpm test:unit",
     "test:unit": "pnpm -r --if-present test",
+    "test:contract": "pnpm -r --if-present test:contract",
     "test:dsh": "pnpm test:dsh:native",
     "test:dsh:native": "tsx scripts/native-dsh-smoke.ts",
     "test:dsh:real": "tsx scripts/native-dsh-real.ts",

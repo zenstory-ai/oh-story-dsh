@@ -84,14 +84,16 @@ describe("native DSH prose guards", () => {
   it("preserves DSH's downstream permission decision instead of forcing ask", async () => {
     const root = await project();
     const fs = localDshFs();
+    const get = vi.fn((name: string) => name === "fs" ? fs : undefined);
     const exec = {
       name: "write",
       arguments: { file_path: "正文/第002章.md" },
-      agent: { session: { header: { cwd: root } }, ctx: { get: () => fs } },
+      agent: { session: { header: { cwd: root } }, ctx: { get } },
       signal: new AbortController().signal
     } as unknown as ToolExecution;
     await expect(decideStoryMutation(exec, async () => ({ kind: "allow" })))
       .resolves.toEqual({ kind: "allow" });
+    expect(get).toHaveBeenCalledWith("fs");
   });
 
   it("does not impose long-form guards on a plain short-story workspace", async () => {
@@ -127,14 +129,16 @@ describe("native DSH prose guards", () => {
         }
       }])
     } as StoryFileSystem;
+    const get = vi.fn((name: string) => name === "fs" ? fs : undefined);
     const exec = {
       name: "write",
       arguments: { file_path: "正文/第002章.md" },
-      agent: { session: { header: { cwd: "/virtual-story" } }, ctx: { get: () => fs } },
+      agent: { session: { header: { cwd: "/virtual-story" } }, ctx: { get } },
       signal: new AbortController().signal
     } as unknown as ToolExecution;
 
     await expect(decideStoryMutation(exec, async () => ({ kind: "allow" }))).resolves.toEqual({ kind: "allow" });
+    expect(get).toHaveBeenCalledWith("fs");
     expect(calls).toContain("/virtual-story/追踪/_tracking-state.json");
   });
 });
