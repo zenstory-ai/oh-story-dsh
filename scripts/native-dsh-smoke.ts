@@ -5,7 +5,7 @@ import { createServer as createNetServer } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { chromium, type Page } from "@playwright/test";
+import { chromium, type Locator, type Page } from "@playwright/test";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const dshVersion = "0.1.1-rc.1";
@@ -26,6 +26,10 @@ const agentMutationContent = "# Agent 写入验证\n\n这段正文由真实 DSH 
 const agentMutationReply = "测试文件已通过 write 工具创建。";
 const todoLayoutPrompt = "TODO_LAYOUT_SMOKE：写入十一条已完成任务。";
 const todoLayoutItems = Array.from({ length: 11 }, (_, index) => ({ content: `布局任务 ${String(index + 1)}`, status: "completed" }));
+const roleSmokePrompt = "ROLE_RUNTIME_SMOKE：必须调用 oh_story_role 的 story-explorer，并返回子角色结果。";
+const roleChildPrompt = "ROLE_CHILD_SMOKE：只回复指定验证文本，不调用任何工具。";
+const roleChildReply = "ROLE_CHILD_RESULT：story-explorer 子 Agent 已完成。";
+const roleParentReply = "ROLE_PARENT_RESULT：已收到 story-explorer 子 Agent 结果。";
 
 async function captureDemoFrame(page: Page, workbench: "story" | "drama", index: number): Promise<void> {
   if (demoFramesDirectory === undefined) return;
@@ -70,10 +74,12 @@ async function freePort(): Promise<number> {
 
 interface MockDeepSeek {
   readonly baseURL: string;
+  readonly requests: string[];
   readonly server: HttpServer;
 }
 
 async function startMockDeepSeek(): Promise<MockDeepSeek> {
+  const requests: string[] = [];
   const server = createHttpServer((request, response) => {
     let body = "";
     request.on("data", (chunk: Buffer) => { body += chunk.toString("utf8"); });
@@ -94,12 +100,25 @@ async function startMockDeepSeek(): Promise<MockDeepSeek> {
       const currentTurn = JSON.stringify(messages.slice(Math.max(lastUserIndex, 0)));
       const mutationTurn = currentTurn.includes(agentMutationPrompt);
       const todoLayoutTurn = currentTurn.includes(todoLayoutPrompt);
+      const roleParentTurn = currentTurn.includes(roleSmokePrompt);
+      const roleChildTurn = serialized.includes(roleChildPrompt) && !serialized.includes(roleSmokePrompt);
       const hasToolResult = messages.slice(lastUserIndex + 1).some((message) => message.role === "tool");
       let events: string[];
-      if ((mutationTurn || todoLayoutTurn) && !hasToolResult) {
-        const tool = todoLayoutTurn
-          ? { id: "call_todo_layout", name: "todo_write", args: { todos: todoLayoutItems } }
-          : { id: "call_oh_story_write_smoke", name: "write", args: { file_path: agentMutationPath, content: agentMutationContent } };
+      if (roleChildTurn) {
+        requests.push("role-child");
+        events = [
+          JSON.stringify({ choices: [{ delta: { role: "assistant", content: null, reasoning_content: "" } }] }),
+          JSON.stringify({ choices: [{ delta: { content: roleChildReply } }] }),
+          JSON.stringify({ choices: [{ delta: { content: "" }, finish_reason: "stop" }], usage: { prompt_tokens: 12, completion_tokens: 20 } }),
+          "[DONE]"
+        ];
+      } else if ((mutationTurn || todoLayoutTurn || roleParentTurn) && !hasToolResult) {
+        const tool = roleParentTurn
+          ? { id: "call_oh_story_role_smoke", name: "oh_story_role", args: { role: "story-explorer", prompt: roleChildPrompt } }
+          : todoLayoutTurn
+            ? { id: "call_todo_layout", name: "todo_write", args: { todos: todoLayoutItems } }
+            : { id: "call_oh_story_write_smoke", name: "write", args: { file_path: agentMutationPath, content: agentMutationContent } };
+        requests.push(roleParentTurn ? "role-parent-start" : todoLayoutTurn ? "todo" : "write");
         const argumentsJson = JSON.stringify(tool.args);
         const chunks = argumentsJson.match(/.{1,14}/gu) ?? [argumentsJson];
         events = [
@@ -113,7 +132,17 @@ async function startMockDeepSeek(): Promise<MockDeepSeek> {
           "[DONE]"
         ];
       } else {
-        const content = mutationTurn ? agentMutationReply : serialized.includes(dramaProjectName) ? dramaReply : storyReply;
+        if (roleParentTurn && !serialized.includes(roleChildReply)) {
+          requests.push("role-parent-resume-missing-result");
+          response.writeHead(422, { "content-type": "application/json" }).end('{"error":"role child result was not returned to the parent"}');
+          return;
+        }
+        requests.push(roleParentTurn ? "role-parent-resume" : "other");
+        const content = roleParentTurn
+          ? roleParentReply
+          : mutationTurn
+            ? agentMutationReply
+            : serialized.includes(dramaProjectName) ? dramaReply : storyReply;
         events = [
           JSON.stringify({ choices: [{ delta: { role: "assistant", content: null, reasoning_content: "" } }] }),
           JSON.stringify({ choices: [{ delta: { content } }] }),
@@ -141,7 +170,7 @@ async function startMockDeepSeek(): Promise<MockDeepSeek> {
   });
   const address = server.address();
   if (address === null || typeof address === "string") throw new Error("Could not start the local DeepSeek fixture.");
-  return { baseURL: `http://127.0.0.1:${String(address.port)}`, server };
+  return { baseURL: `http://127.0.0.1:${String(address.port)}`, requests, server };
 }
 
 async function closeServer(server: HttpServer): Promise<void> {
@@ -184,18 +213,24 @@ async function rpc<T>(origin: string, method: string, payload: unknown): Promise
   }
 }
 
-interface HistoryEvent { readonly type: string; readonly data: unknown }
+interface HistoryEvent { readonly seq: number; readonly type: string; readonly data: unknown }
 
-async function waitForCompletedTurn(origin: string, sessionId: string): Promise<readonly HistoryEvent[]> {
+async function sessionEvents(origin: string, sessionId: string): Promise<readonly HistoryEvent[]> {
+  const history = await rpc<{ readonly events: readonly { readonly event: HistoryEvent }[] }>(origin, "session.history", { sessionId, maxMessages: 1_000 });
+  return history.events.map((entry) => entry.event);
+}
+
+async function waitForCompletedTurn(origin: string, sessionId: string, afterSeq = -1): Promise<readonly HistoryEvent[]> {
   const timeout = useRealDeepSeek ? 600_000 : 30_000;
   const deadline = Date.now() + timeout;
   while (Date.now() < deadline) {
-    const history = await rpc<{ readonly events: readonly { readonly event: HistoryEvent }[] }>(origin, "session.history", { sessionId, maxMessages: 1_000 });
-    const events = history.events.map((entry) => entry.event);
+    const events = (await sessionEvents(origin, sessionId)).filter((event) => event.seq > afterSeq);
     const end = [...events].reverse().find((event) => event.type === "turn/end");
     if (end !== undefined) {
       const reason = (end.data as { readonly reason?: { readonly kind?: string } }).reason?.kind;
-      if (reason !== "completed") throw new Error(`DSH Agent turn ended with ${String(reason)}.`);
+      if (reason !== "completed") {
+        throw new Error(`DSH Agent turn ended with ${String(reason)}: ${JSON.stringify({ end: end.data, tail: events.slice(-12).map((event) => ({ seq: event.seq, type: event.type, data: event.data })) })}`);
+      }
       if (!events.some((event) => event.type === "assistant/message")) throw new Error("DSH Agent turn has no assistant result.");
       return events;
     }
@@ -275,6 +310,37 @@ async function selectSession(page: Page, workspaceTitle: string, sessionTitle: s
   await sessionRow.click();
   await page.getByRole("treeitem", { selected: true }).filter({ hasText: sessionTitle }).first()
     .waitFor({ state: "visible", timeout: 10_000 });
+}
+
+async function assertChatAnchorContract(
+  page: Page,
+  chat: Locator,
+  scroller: Locator,
+  composer: Locator,
+  expectedLayout: "wide" | "medium" | "compact"
+): Promise<void> {
+  await page.waitForFunction((layout) => (
+    document.querySelector("[data-conversation-scroll]")?.getAttribute("data-oh-story-layout") === layout
+  ), expectedLayout);
+  const anchor = page.locator("[data-chat-flow-key]").last();
+  await anchor.evaluate(async (element) => {
+    element.scrollIntoView({ block: "end" });
+    await new Promise<void>((accept) => {
+      requestAnimationFrame(() => { requestAnimationFrame(() => { accept(); }); });
+    });
+  });
+  const [anchorBox, composerBox, chatBox, scrollPaddingBottom] = await Promise.all([
+    anchor.boundingBox(), composer.boundingBox(), chat.boundingBox(),
+    scroller.evaluate((element) => Number.parseFloat(getComputedStyle(element).scrollPaddingBottom))
+  ]);
+  const valid = anchorBox !== null && composerBox !== null && chatBox !== null
+    && anchorBox.y + anchorBox.height <= composerBox.y - 15
+    && scrollPaddingBottom >= composerBox.height + 15
+    && composerBox.x >= chatBox.x - 1
+    && composerBox.x + composerBox.width <= chatBox.x + chatBox.width + 1;
+  if (!valid) {
+    throw new Error(`Chat anchor contract failed in ${expectedLayout} layout: ${JSON.stringify({ anchorBox, composerBox, chatBox, scrollPaddingBottom })}`);
+  }
 }
 
 async function stop(child: ChildProcess): Promise<void> {
@@ -368,6 +434,41 @@ async function main(): Promise<void> {
     const dramaSessionTitle = `短剧 · ${dramaProjectName}`;
     await prepareSession(origin, storySession.sessionId, storyPrompt, storySessionTitle);
     await prepareSession(origin, dramaSession.sessionId, dramaPrompt, dramaSessionTitle);
+
+    if (!useRealDeepSeek) {
+      const previousEvents = await sessionEvents(origin, storySession.sessionId);
+      const afterSeq = previousEvents.at(-1)?.seq ?? -1;
+      await rpc(origin, "session.prompt", {
+        sessionId: storySession.sessionId,
+        mode: "queue",
+        content: [{ type: "text", text: roleSmokePrompt }]
+      });
+      const roleEvents = await waitForCompletedTurn(origin, storySession.sessionId, afterSeq);
+      const roleCalls = roleEvents.filter((event) => event.type === "tool/call")
+        .map((event) => event.data as { readonly callId?: string; readonly name?: string; readonly arguments?: unknown })
+        .filter((call) => call.name === "oh_story_role");
+      const roleResult = roleEvents.filter((event) => event.type === "tool/result")
+        .flatMap((event) => (event.data as {
+          readonly message?: { readonly content?: readonly { readonly toolCallId?: string; readonly isError?: boolean }[] };
+        }).message?.content ?? [])
+        .find((result) => result.toolCallId === roleCalls[0]?.callId);
+      let roleArguments: unknown;
+      try {
+        const value = roleCalls[0]?.arguments;
+        roleArguments = typeof value === "string" ? JSON.parse(value) as unknown : value;
+      } catch { roleArguments = undefined; }
+      const roleTrace = mockDeepSeek?.requests.filter((kind) => kind.startsWith("role-")) ?? [];
+      const serializedRoleEvents = JSON.stringify(roleEvents);
+      if (roleCalls.length !== 1
+        || (roleArguments as { readonly role?: unknown } | undefined)?.role !== "story-explorer"
+        || (roleArguments as { readonly prompt?: unknown } | undefined)?.prompt !== roleChildPrompt
+        || roleResult?.isError !== false
+        || !serializedRoleEvents.includes(roleChildReply)
+        || !serializedRoleEvents.includes(roleParentReply)
+        || JSON.stringify(roleTrace) !== JSON.stringify(["role-parent-start", "role-child", "role-parent-resume"])) {
+        throw new Error(`Packaged oh_story_role contract failed: ${JSON.stringify({ roleCalls, roleArguments, roleResult, roleTrace, eventTypes: roleEvents.map((event) => event.type), hasChildReply: serializedRoleEvents.includes(roleChildReply), hasParentReply: serializedRoleEvents.includes(roleParentReply) })}`);
+      }
+    }
 
     const storyWorkspaceResponse = await fetch(`${origin}/oh-story/workspace?sessionId=${encodeURIComponent(storySession.sessionId)}`);
     const storyWorkspacePayload = await storyWorkspaceResponse.json() as { readonly mode?: string; readonly cwd?: string; readonly files?: readonly { readonly path: string }[]; readonly shortDrama?: unknown };
@@ -845,18 +946,7 @@ async function main(): Promise<void> {
       if (await scrollerLocator.getAttribute("data-oh-story-layout") !== "wide") {
         throw new Error("Workbench did not derive its wide layout from the conversation container.");
       }
-      const anchoredChatRow = page.locator("[data-chat-flow-key]").last();
-      await anchoredChatRow.evaluate((element) => { element.scrollIntoView({ block: "end" }); });
-      await page.waitForTimeout(50);
-      const [anchoredChatBox, anchoredComposerBox, scrollPaddingBottom] = await Promise.all([
-        anchoredChatRow.boundingBox(), composerLocator.boundingBox(),
-        scrollerLocator.evaluate((element) => Number.parseFloat(getComputedStyle(element).scrollPaddingBottom))
-      ]);
-      if (anchoredChatBox === null || anchoredComposerBox === null
-        || anchoredChatBox.y + anchoredChatBox.height > anchoredComposerBox.y - 15
-        || scrollPaddingBottom < anchoredComposerBox.height + 15) {
-        throw new Error(`Chat anchor scrolled behind the official Composer: ${JSON.stringify({ anchoredChatBox, anchoredComposerBox, scrollPaddingBottom })}`);
-      }
+      await assertChatAnchorContract(page, chatLocator, scrollerLocator, composerLocator, "wide");
       const scrollViewport = await scrollerLocator.boundingBox();
       if (scrollViewport === null) throw new Error("Missing conversation scroll viewport.");
       const priorMinHeight = await chatLocator.evaluate((element) => element.style.minHeight);
@@ -908,6 +998,7 @@ async function main(): Promise<void> {
         || narrowTree.width < 100 || narrowEditor.width < 200 || narrowChat.width < 240) {
         throw new Error(`Workbench overflowed the minimum DSH center width: ${JSON.stringify({ narrowViewportWidth, narrowScroller, narrowWorkbench, narrowTree, narrowEditor, narrowChat })}`);
       }
+      await assertChatAnchorContract(page, chatLocator, scrollerLocator, composerLocator, "medium");
       await openGroup(page, "剧集");
       await openFolder(page, "EP001");
       await openFolder(page, "storyboard");
@@ -943,6 +1034,7 @@ async function main(): Promise<void> {
         || compactFileTextWidth < 32 || compactHeaderWidth < 40 || compactJsonIdWidth < 32 || pageOverflow > 1) {
         throw new Error(`500px viewport clipped the workbench or made its content unreadable: ${JSON.stringify({ compactScroller, compactBoxes, compactFileTextWidth, compactHeaderWidth, compactJsonIdWidth, pageOverflow })}`);
       }
+      await assertChatAnchorContract(page, chatLocator, scrollerLocator, composerLocator, "compact");
       await page.getByRole("tab", { name: "源码" }).click();
       const compactSource = page.getByRole("textbox", { name: compactPath });
       await compactSource.press("End");
@@ -976,13 +1068,14 @@ async function main(): Promise<void> {
       uiSlots: ["shell.overlay", "tool.call.toolview"],
       threeColumn: true,
       agentWriteStreaming: !useRealDeepSeek,
+      roleToolE2e: !useRealDeepSeek,
       atomicCasWriters: candidates.length,
       compactViewport: 500
     })}\n`);
   } catch (error) {
     const apiKey = process.env.DEEPSEEK_API_KEY;
     const redact = (value: string): string => apiKey === undefined ? value : value.replaceAll(apiKey, "[REDACTED]");
-    throw new Error(`${redact(String(error))}\nDSH logs:\n${redact(logs.join("").slice(-16_000))}`, { cause: error });
+    throw new Error(`${redact(String(error))}\nMock requests: ${JSON.stringify(mockDeepSeek?.requests ?? [])}\nDSH logs:\n${redact(logs.join("").slice(-16_000))}`, { cause: error });
   } finally {
     if (child !== undefined) await stop(child);
     if (mockDeepSeek !== undefined) await closeServer(mockDeepSeek.server);

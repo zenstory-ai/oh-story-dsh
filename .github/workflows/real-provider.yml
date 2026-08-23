@@ -11,34 +11,88 @@ permissions:
   contents: read
 
 jobs:
-  deepseek:
-    name: Official DeepSeek end-to-end
+  credential-preflight:
+    name: Credential preflight
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    outputs:
+      available: ${{ steps.credential.outputs.available }}
     env:
       DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
     steps:
-      - uses: actions/checkout@v7
       - name: Check credential availability
         id: credential
         shell: bash
         run: |
           if [[ -n "$DEEPSEEK_API_KEY" ]]; then
             echo "available=true" >> "$GITHUB_OUTPUT"
+            echo "DEEPSEEK_API_KEY is configured; the paid compatibility observation will run."
           else
             echo "available=false" >> "$GITHUB_OUTPUT"
-            echo "DEEPSEEK_API_KEY is not configured; skipping the paid real-provider test."
+            echo "DEEPSEEK_API_KEY is not configured; the paid compatibility observation will be skipped."
           fi
-      - if: steps.credential.outputs.available == 'true'
-        uses: pnpm/action-setup@v6
+
+  deepseek:
+    name: Official DeepSeek end-to-end
+    needs: credential-preflight
+    if: ${{ needs.credential-preflight.outputs.available == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
         with:
           version: 11.7.0
-      - if: steps.credential.outputs.available == 'true'
-        uses: actions/setup-node@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: pnpm
-      - if: steps.credential.outputs.available == 'true'
-        run: pnpm install --frozen-lockfile
-      - if: steps.credential.outputs.available == 'true'
-        run: pnpm test:dsh:real
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test:dsh:real
+
+  summary:
+    name: Real-provider outcome
+    needs:
+      - credential-preflight
+      - deepseek
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report execution outcome
+        env:
+          CREDENTIAL_AVAILABLE: ${{ needs.credential-preflight.outputs.available }}
+          PREFLIGHT_RESULT: ${{ needs.credential-preflight.result }}
+          REAL_PROVIDER_RESULT: ${{ needs.deepseek.result }}
+        shell: bash
+        run: |
+          if [[ "$PREFLIGHT_RESULT" != "success" ]]; then
+            outcome="PREFLIGHT_FAILED"
+            detail="The credential preflight failed, so the paid provider observation did not execute."
+          elif [[ "$CREDENTIAL_AVAILABLE" != "true" ]]; then
+            outcome="SKIPPED_NO_CREDENTIAL"
+            detail="The paid provider observation did not execute because DEEPSEEK_API_KEY is not configured. This is not a passing compatibility result."
+          elif [[ "$REAL_PROVIDER_RESULT" == "success" ]]; then
+            outcome="EXECUTED_AND_PASSED"
+            detail="The paid provider observation executed and passed."
+          elif [[ "$REAL_PROVIDER_RESULT" == "failure" ]]; then
+            outcome="EXECUTED_AND_FAILED"
+            detail="The paid provider observation executed and failed."
+          else
+            outcome="PROVIDER_JOB_NOT_COMPLETED"
+            detail="The paid provider job was skipped or cancelled after credential preflight, so no compatibility result is available."
+          fi
+
+          {
+            echo "## Real Provider: $outcome"
+            echo
+            echo "$detail"
+            echo
+            echo "The deterministic packaged Role test remains the correctness gate; this paid run is a provider-compatibility observation."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          echo "Real Provider outcome: $outcome"
+          if [[ "$outcome" != "EXECUTED_AND_PASSED" ]]; then
+            echo "Only an executed and passing provider observation is a successful workflow outcome." >&2
+            exit 1
+          fi
