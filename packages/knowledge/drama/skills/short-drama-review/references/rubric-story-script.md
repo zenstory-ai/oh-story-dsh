@@ -24,9 +24,30 @@
 - What pressure is active at the opening?
 - What does the protagonist want now, and what resists it?
 - Which choice/action causes the directional turn?
+- If the episode frames that turn as a consequential choice, what live value does each
+  executable direction protect, and what cost is newly caused by the action (`SCR-13`)?
+  If it is an ordinary decision or single-path pursuit, leave this test inactive rather
+  than manufacturing a dilemma.
+- Conditional does not mean cursory: when the episode itself foregrounds a choice,
+  evidence carrier, deadline, or rule, does resistance, action, and consequence dramatize
+  it, rather than merely naming it in dialogue?
+- Could a viewer identify those stakes from the screenplay alone, without access to
+  the upstream brief or episode card?
+- Do explicit brief facts, must/forbid constraints, genre contract, and required exit state
+  outrank craft defaults, or did the screenplay invent precision, records, resources,
+  procedures, relationships, or mechanisms merely to display a rule?
+- When a choice cost or deadline is essential, was it perceptible before the decision,
+  or invented at decision time by a convenient new condition?
 - What part of the promised experience is delivered before the outgoing hook?
 - What exact state enters the next episode?
 - Before the outgoing hook, what local dramatic result has already landed?
+- Which behavior, relationship history, line, silence, spatial choice, or object makes the
+  protagonist's private reason legible? Do not require a recurring object when another
+  carrier already does the work.
+- Does the ending fulfill the episode's viewing contract through consequence, relationship,
+  irony, afterimage, atmosphere, or intentional openness? A new external event is optional.
+- If the ending declares a path closed or a consequence irreversible, do later beats
+  accidentally contradict that claim without presenting an intentional new change?
 - Whose choice caused that result (`STY-13`)? If it arrived by outside force, cite the
   protagonist's earlier action that made it arrive now, and what they did with it.
   A protagonist who only endures until rescue is this episode's audience, not its lead.
@@ -78,6 +99,18 @@ What is reportable:
 - Do world truth, character beliefs, and audience knowledge remain separate?
 - For each evidence carrier, what claim does it directly support, and which identity,
   cause, motive, or mechanism remains an unresolved inference (`STY-15`)?
+- When a major belief change hinges on contested evidence, is the response limited to
+  what was proved, or does the story intentionally preserve/delay uncertainty (`SCR-14`)?
+  Leave this test inactive for uncontested facts, comic misunderstanding, subjective
+  narration, or clues whose ambiguity is the intended effect.
+- When contested evidence is a primary episode engine, does at least one visible state
+  change alter which explanations remain live or alter the next action, rather than
+  leaving every increment to verbal report? Photographing, bagging, numbering, or logging
+  is not a dramatic turn by itself. Once the required inference changes, does testing stop
+  unless another live counter-explanation would genuinely change the next action?
+- If a proof claim depends on continuity such as connection, sealing, position, time, or
+  lack of contact, did preceding action preserve that exact property? A continuity label
+  may carry forward a shown state; it cannot prove that an unseen event or contact never occurred.
 - Does active serial memory preserve character/relationship state, information
   permissions, setup debt, rhythm direction, and the exact physical handoff?
 - Do external pressure and emotional load rise, fall, or diverge for a reason?
@@ -88,16 +121,20 @@ dialogue quota.
 
 ## Scene test
 
-For each scene ask:
+For a scene organized around active pursuit or conflict, ask:
 
 1. Why must it exist?
 2. Whose agenda organizes it?
 3. What force opposes that agenda?
-4. What becomes visible, known, decided, owned, risked, or irreversible?
+4. What traceable fact, leverage change, cost, authority, or choice makes the prior
+   strategy fail? An opponent merely becoming silent or leaving is not enough.
 5. What exit state pressures the next scene?
 
-A quiet scene can pass when pressure and change are legible. A loud scene can fail
-when nothing changes.
+A quiet scene can pass when pressure and change are legible. Atmospheric, ritual,
+montage, transition, and consequence-processing scenes may instead justify their
+function through a necessary change in knowledge, relationship, pressure, rhythm,
+or production state; do not invent an opponent or strategy failure merely to make
+them fit this checklist. A loud scene can fail when nothing changes.
 
 ## Action and production meaning
 
@@ -107,6 +144,42 @@ when nothing changes.
 - Are exact on-screen text, prop text, SFX, VO/OS, and transitions tagged?
 - Does prose avoid camera/prompt boilerplate while retaining production-critical
   facts?
+- Do supporting characters who receive substantial dramatic emphasis have a goal, judgment,
+  or strategy of their own? Incidental, transactional, choral, and environmental roles need
+  not all alter the main plot.
+- Does a central participant who supplies the main leverage, opposition, or cost remain
+  strategically present through the turn and response, rather than becoming a passive prop
+  once the protagonist acts?
+- If that participant's leverage disappears, what already-established action, spatial fact,
+  authority, relationship, or choice made it disappear? Do not infer neutralization merely
+  from the protagonist completing one step.
+- When a literal precise deadline is foregrounded and audience-auditable, does its action
+  chain fit, or does the screenplay make compression, changed method, changed objective,
+  or failure legible (`SCR-16`)? Qualitative urgency must not be upgraded into invented
+  minutes, timestamps, notifications, or records. Do not apply a real-time test to montage,
+  ellipsis, subjective time, or declared stylization.
+- When the brief defines a limited number of attempts, turns, breaths, beats, or other units,
+  does each unit end with its required visible state (`SCR-17`)? Labels, counts, requests,
+  authorization, preparation, and cleanup after the boundary do not substitute for completion;
+  an intentional failure or partial result may count when it is legible at that boundary.
+- When exact timestamps share one literal continuity, are they mutually consistent?
+- When the current date is necessary to a conclusion, is it supported by a current source?
+- Does a compressed process retain only the steps that change strategy, relationship,
+  risk, or result, instead of listing interchangeable operations?
+- When multiple carriers repeat one pressure or fact, does each add rhythm, viewpoint,
+  irony, misdirection, or consequence? If not, which one is redundant?
+- Does a solution use established resources and still confront the core obstacle, rather
+  than erase it with a newly invented convenience?
+- Even when a resource is established, does it change the problem without conveniently
+  performing the character's hardest dramatic work for them?
+- Does an outside response increase or transform pressure in a way grounded in the work's
+  established world, rather than suddenly forgiving, rewarding, or rescuing the character
+  to make the ending easy?
+- After a mechanism becomes visually clear, does dialogue change the relationship or
+  narrow the claim instead of explaining the same mechanism again?
+- When the brief gives a target duration but the project has no pacing rates, has the
+  writer still performed a real-time read/action pass and removed obviously excessive
+  repeated verification, date exposition, or equivalent closing beats?
 
 ## Dialogue
 
@@ -162,3 +235,30 @@ the benefit is not, and the mark exists precisely so the strong version can stay
 - generic emotion adjectives replace visible performance;
 - every character explains the plot in the same voice;
 - downstream production requirement was never marked in screenplay truth.
+- a redundant `[连续性]` tag repeats an exit state already explicit in the final action;
+- a story-critical ending state appears without a prior transition;
+- the script uses atmosphere, silence, or a black frame to avoid landing a result the episode
+  promised, rather than as an intentional ending form;
+- a beat is sold as a consequential choice after one direction has already become valueless
+  or impossible (`SCR-13`);
+- contested evidence produces a broader conclusion than the evidence or intentionally
+  incomplete verification supports (`SCR-14`);
+- a claimed proof relies on a continuity property the preceding action already destroyed,
+  or on a continuity label asserting an unseen negative event;
+- a local payoff erases its established residue or replaces meaning with a slogan (`SCR-15`);
+- a cost framed as central pressure automatically resets at success, leaving no material
+  effect on ability, body, resource, relationship, or next action;
+- a central participant supplies the opening leverage or cost but becomes a passive prop
+  through the decisive action;
+- the core opposing force disappears only because its holder becomes silent, stops acting,
+  or leaves, without a traceable loss of leverage, accepted cost, or changed strategy;
+- a literal, audience-auditable deadline succeeds only through unexplained speed, or
+  qualitative urgency is upgraded into invented precise timing (`SCR-16`);
+- a limited unit is counted before its required state completes, with the completion moved
+  outside the boundary (`SCR-17`);
+- a newly invented resource, permission, or ability removes the central obstacle;
+- a limited result is renamed as a broader success or truth than the scene demonstrated;
+- repeated carriers restate one pressure without adding viewpoint, rhythm, irony, or consequence;
+- a second same-direction decision, closing line, or maxim merely translates a change,
+  punchline, or metaphor that the preceding action already completed;
+- post-result action unintentionally contradicts a consequence the screenplay called irreversible.

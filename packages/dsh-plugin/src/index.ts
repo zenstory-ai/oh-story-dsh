@@ -13,6 +13,7 @@ import { assertTrustedWorkspaceAuthority } from "./workspace-request-trust.js";
 export { createDramaSkillProvider, createOhStorySkillProvider, parseBundledSkill } from "./skill-provider.js";
 export { OH_STORY_ROLE_NAMES, loadBundledRole } from "./role-provider.js";
 export { createOhStoryRoleTool, OH_STORY_ROLE_TOOL_NAME, registerOhStoryRoleTool, roleToolFilter, type OhStoryRoleSubagents } from "./role-tool.js";
+export { bundledReferenceGuard, createOhStoryReferenceTool, OH_STORY_REFERENCE_TOOL_NAME } from "./reference-tool.js";
 export { registerWorkspaceRoute } from "./workspace-route.js";
 export { registerOhStoryHooks } from "./native-hooks.js";
 

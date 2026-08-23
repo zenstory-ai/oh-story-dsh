@@ -4,6 +4,7 @@
 
 - Node.js 24+
 - pnpm 11.7+
+- Python 3（上游 Drama Skills 自测需要；可用 `DRAMA_PYTHON` 指定解释器）
 - Chrome（仅原生 DSH Web 集成测试需要）
 
 ```bash
@@ -44,6 +45,7 @@ pnpm assets:check
 ```
 
 同步提交必须连同 manifest 更新一起评审。不要手工修改固定资产后绕过哈希校验。
+若上游是破坏性版本，PR 还必须说明旧项目迁移边界，并更新 DSH bridge、演示 fixture、原生浏览器测试与真实 provider fixture；不能只看 skill 目录数量或因旧脚本仍存在就沿用旧工作流。
 
 ## CI 分层
 

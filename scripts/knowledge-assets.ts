@@ -27,8 +27,17 @@ const platformGlue = [
   "story-setup/references/zcode/",
   "story-setup/scripts/merge-claude-settings.py",
   "story-setup/scripts/merge-codex-hooks.py",
+  "story-setup/scripts/copy-path-safety.py",
   "story-setup/UPGRADING.md"
 ] as const;
+
+function isPortableSourceAsset(path: string): boolean {
+  const normalized = path.split(sep).join("/");
+  return !normalized.includes("/__pycache__/")
+    && !normalized.endsWith("/__pycache__")
+    && !normalized.endsWith(".pyc")
+    && !normalized.endsWith("/.DS_Store");
+}
 
 export interface AssetManifest {
   readonly schemaVersion: 2;
@@ -123,7 +132,8 @@ export async function synchronizeAssets(): Promise<AssetManifest> {
     dereference: false,
     filter: (path) => {
       const bundledPath = portableRelative(sourceSkills, path);
-      return !platformGlue.some((entry) => bundledPath === entry.replace(/\/$/u, "") || bundledPath.startsWith(entry));
+      return isPortableSourceAsset(path)
+        && !platformGlue.some((entry) => bundledPath === entry.replace(/\/$/u, "") || bundledPath.startsWith(entry));
     }
   });
   await cp(join(source, "skills/story-setup/references/templates/agents"), join(ohStoryRoot, "roles"), { recursive: true });

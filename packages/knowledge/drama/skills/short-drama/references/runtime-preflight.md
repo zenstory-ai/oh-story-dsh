@@ -1,27 +1,21 @@
-# 项目定位与发布纪律
+# 项目定位与安全写入
 
-core 只管理当前项目的目录、生命周期和交付。
+## 定位项目
 
-## 1. 读取项目状态
+优先使用用户给出的项目路径；没有项目时可以直接在用户指定目录完成独立任务。需要项目配置时运行：
 
-定位 `short-drama.json` 后运行：
-
-```text
-python3 <core>/scripts/project_tool.py status <project>
+```bash
+python3 <core>/scripts/project_tool.py init <project> --title "项目名"
 ```
 
-使用 `status.layout.roots` 返回的项目目录。`mode=mixed` 表示中英文阶段目录并存，应先合并；
-空项目在第一次阶段发布时固定布局。只读取本次任务需要的直接输入。
+创作文档固定写入 `剧集/<EP>/`。只读取当前任务需要的直接输入；不要扫描整个项目寻找可补造的上游。
 
-## 2. 通过公开命令写入
+## 写入纪律
 
-- owner 用 `publish` 原子发布一项产物，并用可重复的 `--input <project-path>` 声明直接输入。
-- `accept` 只记录创作者对当前输出的接受或拒绝。
-- `review` 只记录当前输出的复核结论；reviewer 不直接改 owner 文件。
-- 输入或输出变化后，该产物显示 `update_needed`，重新发布即可；不递归改写下游状态。
-- `package` 只收录当前 `approved` 的文本/JSON，不能替代接受或复核。
-- 第一次发布由任意非空 owner 认领合法阶段路径，此后这条路径归该 owner。
-- 同一项目路径仍只能属于一个 artifact，输入、交付和机器状态目录仍受保护。
+- 创作正文直接写五份 Markdown，修改时保留未受影响内容与稳定可见 ID。
+- 输入目录、隐藏运行目录、制作成果和凭据不是创作正文；不要把它们复制进提示词。
+- 文本写入使用临时文件加原子替换；外部编辑发生时先重新读取，不静默覆盖。
+- Dashboard 只展示和编辑项目文件，不承担创作路由或生产授权。
+- 外部生产仍由 `$short-drama-produce` 预览精确任务、取得显式确认后执行。
 
-完整参数见 [lifecycle-commands.md](lifecycle-commands.md)，权威边界见
-[contract-and-ownership.md](contract-and-ownership.md)。
+输出语言、稳定 ID 与信任边界见 [契约与所有权](contract-and-ownership.md)。

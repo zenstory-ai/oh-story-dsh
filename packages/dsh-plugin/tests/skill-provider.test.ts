@@ -1,4 +1,6 @@
+import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { renderSkillContent } from "@deepseek-ai/dsh-skill";
 import { describe, expect, it } from "vitest";
 import { createDramaSkillProvider, createOhStorySkillProvider, parseBundledSkill } from "../src/skill-provider.js";
 
@@ -21,11 +23,21 @@ describe("Oh Story bundled skill provider", () => {
     expect(skill?.content).toContain("oh_story_role");
     expect(skill?.content).toContain("DSH owns the workspace, model, preset, permissions, Session Log");
     expect(skill?.content).toContain("Keep the upstream writing, Tracking, lint, outline, revision, and quality workflows");
+    const workflowSetup = await readFile(resolve(skillRoot, "story-long-write/references/workflow-setup.md"), "utf8");
+    expect(workflowSetup).toContain("目标字数合计：下限X字（章目标Y，范围Y-Z）");
     expect(skill?.content.startsWith("---")).toBe(false);
     const setupCandidate = candidates.find((candidate) => candidate.name === "story-setup");
     const setup = await provider.get(setupCandidate!, {});
     expect(setup?.content).toContain("never deploy Claude/OpenCode/Codex/ZCode/OpenClaw/Reasonix files");
     expect(setup?.content).not.toContain("merge-codex-hooks.py");
+    expect(setup?.resourceBase).toEqual({ kind: "directory", path: resolve(skillRoot, "story-setup") });
+    for (const reference of ["character-basics.md", "quality-checklist.md", "writing-craft.md", "outline-methods.md"]) {
+      await expect(readFile(resolve(skillRoot, "story-setup/references/agent-references", reference), "utf8"))
+        .resolves.toMatch(/\S/u);
+    }
+    const renderedSetup = renderSkillContent(setup!);
+    expect(renderedSetup).toContain("<skill_resources>");
+    expect(renderedSetup).toContain(`Base directory for this skill: ${resolve(skillRoot, "story-setup")}`);
     const routeCandidate = candidates.find((candidate) => candidate.name === "story");
     const route = await provider.get(routeCandidate!, {});
     expect(route?.content).toContain("The 小说 workspace is an official DSH conversation view");
@@ -72,12 +84,31 @@ describe("Drama Skills bundled provider", () => {
     expect(listed.map((candidate) => candidate.name)).toEqual(expect.arrayContaining([
       "short-drama", "short-drama-write", "short-drama-storyboard", "short-drama-produce"
     ]));
+    for (const candidate of listed) {
+      const skill = await provider.get(candidate, {});
+      expect(skill?.content).toContain("each episode keeps only the requested documents, up to five creator-facing sources");
+      expect(skill?.content).toContain("Never precreate empty documents, backfill nominal stages, or start work the creator did not request");
+      expect(skill?.content).toContain("an oral review writes nothing");
+      expect(skill?.content).toContain("never create a parallel JSON/JSONL lifecycle truth");
+      expect(skill?.content).toContain("Never upgrade a v0.5 structured project in place");
+    }
     const routeCandidate = listed.find((candidate) => candidate.name === "short-drama");
     const route = await provider.get(routeCandidate!, {});
     expect(route?.content).toContain("native 短剧 tab");
+    expect(route?.content).toContain("each episode keeps only the requested documents, up to five creator-facing sources");
+    expect(route?.content).toContain("剧集/<EP>/剧本.md, 视觉设定.md, 分镜.md, 图片提示词.md, and 视频提示词.md");
+    expect(route?.content).toContain("never create a parallel JSON/JSONL lifecycle truth");
+    expect(route?.content).toContain("Never upgrade a v0.5 structured project in place");
+    expect(route?.content).toContain("New projects follow only the v0.6 creator-first contract and create only documents required by the current request");
+    expect(route?.content).toContain("不建立并行的结构化创作真相");
+    const reviewCandidate = listed.find((candidate) => candidate.name === "short-drama-review");
+    const review = await provider.get(reviewCandidate!, {});
+    expect(review?.content).toContain("审查/EP001-审查.md");
     const productionCandidate = listed.find((candidate) => candidate.name === "short-drama-produce");
     const production = await provider.get(productionCandidate!, {});
     expect(production?.content).toContain("explicitly confirms the exact current job");
     expect(production?.content).toContain("DSH permissions and approval UI");
+    expect(production?.content).toContain("source must be the current creator-first Markdown");
+    expect(production?.content).toContain("剧集/<EP>/制作成果/");
   });
 });

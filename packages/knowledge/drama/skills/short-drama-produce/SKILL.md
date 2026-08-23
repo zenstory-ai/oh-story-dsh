@@ -12,12 +12,15 @@ license: MIT
 
 ## Quick Start
 
-先离线验证确认闸门、fixture adapter 和供应商 payload 编译，不发起远端请求：
+只在用户明确要求实际生成后，从当前 `图片提示词.md`、`分镜.md` 或 `视频提示词.md` 中
+取出本次提示词，建立一个有边界的运行 job。creator-first job 的 `source` 必须指向拥有这条提示词的
+当前 Markdown，输出放在 `剧集/<EP>/制作成果/`；这个 job 是生产工具的临时输入，不是第六份创作文档：
 
 ```bash
-python3 {技能目录}/scripts/selftest.py
-python3 {技能目录}/scripts/provider_adapters.py --selftest
+python3 {技能目录}/scripts/production_tool.py prepare <project> --job <临时-job.json>
 ```
+
+先展示 `prepare` 的完整预览；此时不会调用供应商。
 
 ## 硬闸门
 
@@ -36,7 +39,8 @@ job、prompt、参数、输出路径或直接输入任一变化，旧确认立�
 
 ## 命令
 
-先把待执行任务写成 JSON；格式和 adapter 契约见
+只在进入生产边界后把当前提示词和运行参数写成临时 JSON；不要在创作阶段为每条提示词预建 job。
+格式和 adapter 契约见
 [adapter-contract.md](references/adapter-contract.md)。命令由
 [production_tool.py](scripts/production_tool.py) 提供，然后运行：
 
@@ -55,11 +59,14 @@ python3 <本技能目录>/scripts/production_tool.py audit <project>
 
 ## 输入选择
 
-- **image**：读取当前图片 prompt/spec、必要参考图和明确的输出尺寸/数量。
-- **video**：读取当前 motion spec、对应 shot/keyframe、必要首尾帧和时长/画幅。
-- **tts**：读取当前录音表中的原句、说话人/声音参考和本句表演要求；不得在生产 job 中改词。
-- **music**：读取已接受的时间线音乐规格；主题曲使用已确认歌词，纯配乐不携带歌词。供应商不能
-  精确承诺时长时，生成 source track 后仍由剪辑按 `mix_intent` 完成落点、循环、淡入淡出和对白 ducking。
+- **image**：读取 `图片提示词.md` 的当前可复制正文、必要参考图和明确的输出尺寸/数量。
+- **video**：读取 `视频提示词.md` 的当前可复制正文，并核对 `分镜.md` 中对应镜头、冻结关键帧、
+  时长与画幅。
+- **tts**：从 `剧本.md` 读取原句与表演要求，声音参考由用户或现有媒体明确提供。不得在生产 job
+  中改词，也不为 TTS 新建第六份创作文档。
+- **music**：读取 `视频提示词.md` 中创作者已确认的时间线音乐章节；主题曲使用已确认歌词，纯配乐
+  不携带歌词。供应商不能精确承诺时长时，生成源音轨后仍由剪辑按文档里的混音意图完成落点、循环、
+  淡入淡出和对白 ducking。
 
 一个 job 不混合 modality。大批量工作拆成创作者能看清数量和成本边界的小 job；不为方便把整季
 隐式塞进一次确认。
@@ -70,7 +77,7 @@ adapter 配置必须在项目外，只包含 argv 命令和超时；凭据由 ad
 存储读取。项目 job、确认记录、运行记录和 Dashboard 都不得保存密钥。
 
 脚本以 JSON stdin 调用 argv 数组，不使用 shell，不拼接命令。adapter 返回本地临时文件；工具只
-接受与已确认 targets 完全一致的结果，并把完整文件原子复制到项目的 `production/制作成果`
+接受与已确认 targets 完全一致的结果，并把完整文件原子复制到项目的 `剧集/<EP>/制作成果/`
 目录。项目和上游 Skill 不写死供应商、模型或即将变化的 API。
 
 本技能可选提供三个 stdlib adapter，均通过项目外 adapter config 选择，凭据只从运行环境读取：
@@ -101,3 +108,12 @@ adapter 配置必须在项目外，只包含 argv 命令和超时；凭据由 ad
 缺陷回到对应 prompt/spec owner。
 如需质量复核，报告可把已有结果另行交给 `$short-drama-review`；不要在生产调用中自动启动复核。
 Dashboard 只负责展示这些文件和运行摘要，不提供 adapter 设置或生产按钮。
+
+## 安装维护
+
+只有安装、升级或排障时运行离线自检；普通创作和生产准备不运行：
+
+```bash
+python3 scripts/selftest.py
+python3 scripts/provider_adapters.py --selftest
+```

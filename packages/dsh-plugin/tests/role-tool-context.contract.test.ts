@@ -10,6 +10,7 @@ type RoleStart = ReturnType<typeof vi.fn>;
 interface RoleContextTopology {
   readonly root: Context;
   readonly agent: Agent;
+  readonly guard: ReturnType<typeof vi.fn>;
   readonly registeredDefinition: () => ToolDefinition | undefined;
 }
 
@@ -26,6 +27,7 @@ function completedRoleStart(runId: string): RoleStart {
 
 async function createRoleContextTopology(start?: RoleStart): Promise<RoleContextTopology> {
   const root = new Context();
+  const guard = vi.fn(() => () => {});
   let definition: ToolDefinition | undefined;
   let agentContext: Context | undefined;
 
@@ -37,7 +39,8 @@ async function createRoleContextTopology(start?: RoleStart): Promise<RoleContext
           definition = value;
           return () => { definition = undefined; };
         },
-        get: vi.fn(() => ({}))
+        get: vi.fn(() => ({})),
+        guard
       } as unknown as ToolRuntime);
     }
   });
@@ -64,6 +67,7 @@ async function createRoleContextTopology(start?: RoleStart): Promise<RoleContext
   return {
     root,
     agent: { ctx: agentContext } as unknown as Agent,
+    guard,
     registeredDefinition: () => definition
   };
 }
@@ -104,6 +108,7 @@ describe("oh_story_role Cordis Context contract", () => {
       });
       const definition = topology.registeredDefinition();
       if (definition === undefined) throw new Error("role tool did not register");
+      expect(topology.guard).toHaveBeenCalledOnce();
 
       await expect(executeStoryArchitect(definition, topology.agent, "call-plugin"))
         .resolves.toMatchObject({ role: "story-architect", runId: "role-run-plugin" });

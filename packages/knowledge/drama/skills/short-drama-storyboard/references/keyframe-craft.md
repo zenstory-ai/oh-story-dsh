@@ -81,10 +81,11 @@ composition, camera/lens, frame-only staging, and exclusions.
 排除：无动作过程，无雨丝拖影。
 ```
 
-`text_treatment_refs` must resolve to the asset owner's accepted text-policy
-field (or explicitly candidate policy in a provisional chain). A frozen frame
-may determine whether the surface is legible in this composition; it may not
-replace the source wording or policy with an untraceable prose instruction.
+The keyframe must name the matching text policy or `IMG-...` entry in
+`视觉设定.md` / `图片提示词.md`. A frozen frame may determine whether the surface
+is legible in this composition; it may not replace the exact wording or policy
+with an untraceable prose instruction. If the policy is still undecided, say so
+instead of inventing a hidden candidate state.
 
 ## 尾帧：什么时候可以有，以及它换来什么代价（`SHT-17`）
 
@@ -122,11 +123,11 @@ from the boundary that frame declares. 首帧写进任何由运动或终点首�
 
 Keyframe 默认是 shot start，不是“本镜最有戏的时刻”。为避免把 end 提前：
 
-1. 先冻结 `boundary_ref`（`boundary_role: start`），草拟 prompt 时暂不读 end/motion prose；
+1. 先明确本帧冻结 `SHOT-...` 的起点，草拟正文时暂不读终点与运动描述；
 2. 只填 start 已成立的 position/pose/gaze/hands/held props/visible state；
 3. 再与 end 做“新出现事实”差集；差集中的事实不得出现在 keyframe prompt；
-4. 渲染 Markdown 后从自然语言反向提取手位/持物/目光/可见状态，与
-   structured boundary 再比一次；不能只验 JSON 投影而忽略真正交付的 prompt。
+4. 写完 Markdown 后从自然语言反向提取手位、持物、目光和可见状态，与镜头起点再比一次；
+   不能只看条目说明而忽略真正交付的正文。
 
 反例：start 是“右手空置、看对方”，end 是“右手握铃绳、看门”。冻结帧写
 “手已握铃绳”即使很好看，也属于 boundary drift。

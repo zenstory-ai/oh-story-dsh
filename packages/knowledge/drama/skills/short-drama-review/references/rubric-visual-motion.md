@@ -23,7 +23,7 @@
   genuinely differ — in knowledge timing, audience alignment, performance space,
   strongest image, landing, losses, or production fit?
 - Does the formal plan bind the approach the creator selected, rather than the first draft?
-- When a `scene_visual_plan` exists: do its start/end audience positions, spatial
+- When a scene visual plan was used: do its start/end audience positions, spatial
   pressure, camera rhythm, reaction landing, and sound movement carry **one** dramatic turn?
 - Does that plan stay clear of owning shot boundaries? (Ordinary scenes need no plan
   merely to satisfy a form.)
@@ -34,7 +34,7 @@
 - Are Location/View, axis, screen direction, eyelines, entrances, positions,
   hands, and props coherent?
 - Are exact asset variants bound?
-- Does `audience_visibility` expose every fact this shot must carry while protecting
+- Does the shot expose every fact it must carry while protecting
   facts the source withholds until a later action or cut?
 - Do crop, occlusion, focus, back view, and offscreen space serve that information
   permission rather than accidentally reveal or conceal it?
@@ -42,7 +42,7 @@
 ## Frozen keyframe
 
 - Can all described facts exist in one still instant?
-- Does it project the authoritative shot start boundary?
+- Does it project the start state written for this shot?
 - Are focal hierarchy, composition, camera/lens, geography, pose/gaze/hands/prop,
   expression, and light legible?
 - Does it avoid ordered actions, performance arcs, camera moves, or transforming
@@ -56,15 +56,13 @@
 - In multi-character motion: do the actors who actually change have distinct,
   readable triggers, choices, leaks, or landings — as this shot needs, not one
   identical arc per actor?
-- Is `attention_handoffs` used only where attention truly transfers, rather than for
+- Is attention handed off only where it truly transfers, rather than for
   synchronized reaction?
-- Does the derived text-readiness view cite accepted inputs and real blocking gaps?
-- Does it avoid any claim about generated media quality, and avoid persisting a second
-  readiness truth inside each motion record?
+- Does any text-readiness claim cite the current creator-visible inputs and a real blocking gap?
+- Does it avoid any claim about generated media quality or create a second readiness truth?
 - Is camera behavior coherent and motivated?
 - Are environment motion, dialogue, SFX, and audio included only when relevant?
-- Does the end report match storyboard `end_boundary` and feed no unauthorized
-  write into the next shot?
+- Does the described end match the storyboard's written end state without rewriting the next shot?
 - When a reference frame carries appearance/composition, does motion prose avoid
   dumping the full visual 设定集?
 - Does every claim about text-bearing reference pixels cite a creator/reference-owner
@@ -78,12 +76,10 @@
 
 For a pickup or alternate, ask these separately:
 
-- Does `coverage_scope` bind each exact source obligation?
-- Is every obligation mapped to a current motion field or an explicit disposition?
-- Are the exact master/supplement record IDs named?
-- Is supersession only *requested* here? Only a downstream verdict may bind fixed
-  alternate/master records and decide it — see the
-  [supersession decision example](../assets/supersession-decision.example.json).
+- Does the pickup/alternate name its master by visible `MOTION-...` heading?
+- Is every source obligation assigned to the master, this version, another named version or a requested storyboard revision?
+- Are the changed items and the items that must remain unchanged explicit?
+- Is replacement only requested here? The review Markdown decides whether the master remains primary or the alternate replaces it.
 
 For music, ask these separately (`VID-14`):
 
@@ -136,7 +132,7 @@ ellipsis, dream, or deliberate disorientation.
 - every emotional beat uses the same close-up/push template;
 - provider batching is mistaken for editorial shot structure.
 - a narrowed pickup silently replaces the master and drops dialogue, reaction,
-  reveal, end-boundary, or accepted-directive obligations.
+  reveal, end-state, or creator-directive obligations.
 
 ## Production-risk and authorized-observation checklist (REV-08)
 
@@ -145,9 +141,9 @@ ellipsis, dream, or deliberate disorientation.
 并把该记录作为外部证据引用。没有观察记录时保持结果未知，不从任务成功、结果地址或提示词
 存在推断成片质量。
 
-需要项目校准时，先区分 `input_reference` 与 `generated_result`。后一种观察只有在绑定准确
-prompt/spec 记录、稳定 reference slots、production profile/config、观察方法和限制时才可引用；
-finding 同时给出最小 `change_set` 与 `preserve_set`，并保持结论只在该项目和版本条件下有效。
+需要项目校准时，先区分输入参考与生成结果。后一种观察只有在绑定准确的提示词/镜头标题、参考顺序、
+制作形态/配置、观察方法和限制时才可引用；finding 同时给出最小修改项与保持项，并保持结论只在该项目
+和版本条件下有效。
 
 短剧生产中需要防范的文字风险或获授权观察包括：
 

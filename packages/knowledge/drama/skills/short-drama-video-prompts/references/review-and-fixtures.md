@@ -4,80 +4,51 @@
 
 1. 审查顺序
 2. 证据量表
-3. 诊断目录
+3. 完成前结构检查
 4. 合成正例
 5. 合成反例
 
 ## 1. 审查顺序
 
-先验证 refs、显式时长、camera interval、音频否定与 end equality，再由审查者看 performability、action feasibility、camera motivation 和 semantic invention。Reviewer 写 finding，不改 motion、shot 或 screenplay。
+先核对可见 ID、显式时长、摄影机区间、声音来源和终点一致，再由审查者判断表演可执行性、动作负载、
+运镜动机与语义发明。Reviewer 写 finding，不替 motion、shot 或 screenplay owner 修改来源。
 
-Finding 必须含被引用快照的 artifact（从该文件 `sources` 声明里读出）、引用片段、影响、
-required fix、owner、severity、status。禁止用 prompt 长度、动词数量、固定动作/秒或“AI 味”替代证据。
+Finding 必须含文件与 `MOTION-...` / `SHOT-...`、必要短引文、影响、修订结果、owner、严重程度和状态。
+禁止用提示词长度、动词数量、固定动作/秒或“AI 味”替代证据。
 
 ## 2. 证据量表
 
 | 维度 | 核心问题 | 必须引用 |
 |---|---|---|
-| Start fidelity | 第一动作是否从 keyframe/shot start 真正可接上？ | start 字段与 prompt 起始句 |
-| Ordered action | actor、方向、接触、先后和结果是否清楚？ | action stages |
-| Performance | 触发、处理、选择、landing 是否可见且符合 agenda？ | source beat/shot purpose + motion |
-| Action budget | duration 内能否保留故事动作、对白与 reaction？ | duration、距离、台词、动作、camera |
-| Camera | lock/move 是否一致，且因注意/压力/揭示而发生？ | camera interval + shot purpose |
-| Environment | 是否只动了有依据的环境，未发明天气/事件？ | accepted continuity + environment |
-| Dialogue/audio | exact refs、`speaker_ref`、可选 `voice_direction_ref`、VO/OS/SFX 与本场 delivery 是否分别保持？ | source audio fields + character voice direction + prompt |
-| End fidelity | reported end 是否逐项等于 continuity out？ | end report + source end |
-| Economy | frame 已承载外观是否被无谓倾倒？ | reference contents + copy block |
-| Shot boundary | 是否偷改 duration/end/next shot，或在单个镜头内部藏未声明的 cut？ | source shot + motion |
-| Segment integrity | 每个计时段是否只有一个连续视角？各段相加是否正好等于**所属镜头**的已接受时长？ | segment 列表 + accepted shot duration |
-| Container arithmetic | 容器承载了哪些已接受镜头？容器时长是否等于成员时长之和？成员是否顺序连续、同一绑定链、不跨场次、各自可单独审查？ | container 成员列表 + 各镜 accepted duration |
-| Deliverable text | 交付文本里是否只剩要拍的画面内容，没有文件名、版本号、锁定标记、草图指代或任务备注？ | prompt 正文 |
+| Start fidelity | 第一动作是否从关键帧/镜头起点真正可接上？ | 起点事实与正文起始句 |
+| Ordered action | 人物、方向、接触、先后和结果是否清楚？ | 动作阶段 |
+| Performance | 触发、处理、选择和落点是否可见且符合人物目标？ | 剧本节拍、镜头职责与运动正文 |
+| Action budget | 时长内能否保留故事动作、对白与反应？ | 时长、距离、台词、动作、运镜 |
+| Camera | 固定/运动是否一致，且因注意、压力或揭示而发生？ | 运镜区间与镜头职责 |
+| Environment | 是否只动了有依据的环境，未发明天气或事件？ | 连续性与环境动作 |
+| Dialogue/audio | 逐字台词、说话人、VO/OS/SFX 与本场声音策略是否保持？ | 场景 ID、声音事实与正文 |
+| End fidelity | 运动终点是否逐项等于分镜终点？ | 终点说明与来源终点 |
+| Economy | 参考帧已承载的外观是否被无谓重复？ | 参考内容与可复制正文 |
+| Shot boundary | 是否偷改时长/终点/下一镜，或在单镜内藏切？ | `SHOT-...` 与 `MOTION-...` |
+| Segment integrity | 每个计时段是否只有一个连续视角，时间并集是否正好覆盖本镜？ | 分段与镜头时长 |
+| Delivery grouping | 多镜分组是否连续、同场、同一地理/资产链，时长是否等于成员之和？ | 分组章节与成员时长 |
+| Deliverable text | 可复制正文是否只剩要生成的内容？ | 提示词正文 |
 
-语义 finding 的修复应指出删/改哪一段 motion，或该向哪个 owner 发 revision request，而不是笼统说“动作自然一点”。
+语义 finding 的修复应指出删/改哪一段运动，或该向哪个 owner 提出什么修订，不笼统说“动作自然一点”。
 
-## 3. 诊断目录
+## 3. 完成前结构检查
 
-| code | classification | enforcer | 默认 severity | owner | 含义 |
-|---|---|---|---|---|---|
-| VID_SOURCE_REF_UNRESOLVED | structural_invariant | validator | error | video-prompts | shot/keyframe/dialogue/audio ref 未解析：`src` 在本文件 `sources` 里没有对应条目、引用没有给出任何上游绑定，或解析出的记录/字段在目标快照里不存在 |
-| VID_EXPLICIT_TIMING_OVERFLOW | structural_invariant | validator | error | video-prompts | 显式时间终点/非重叠总量超 duration |
-| VID_EXPLICIT_TIMING_SHORTFALL | structural_invariant | validator | error | video-prompts | 裁剪到镜头长度内的分段并集短于 duration；开头留空、中间留空与结尾留空都算，余量会被无来源动作填满 |
-| VID_TIMING_MODE_INCONSISTENT | structural_invariant | validator | error | video-prompts | `timing_plan.mode` 写 `relative` 却有分段标 `explicit`，两种计时同时声明 |
-| VID_EXPLICIT_TIMING_UNDECLARED_OVERLAP | structural_invariant | validator | error | video-prompts | 分段区间重叠但未声明重叠关系，合计无法判定 |
-| VID_EXPLICIT_TIMING_UNPARSEABLE | structural_invariant | validator | error | video-prompts | 声明 explicit 却没有可读秒区间，无法做 VID-04 算术 |
-| VID_DECLARED_TOTAL_MISMATCH | structural_invariant | validator | error | video-prompts | `declared_total_or_endpoint_seconds` 与分段实际覆盖不一致 |
-| VID_DURATION_PROJECTION_STALE | structural_invariant | validator | error | video-prompts | `boundary_refs.duration.value_seconds` 与镜头已接受时长不一致 |
-| VID_CAMERA_INTERVAL_CONFLICT | structural_invariant | validator | error | video-prompts | 同一区间 lock 与 move 等显式冲突 |
-| VID_END_REPORT_MISMATCH | structural_invariant | validator | error | video-prompts | reported end 不等于 storyboard continuity out |
-| VID_BOUNDARY_OVERRIDE | structural_invariant | validator | error | video-prompts | motion 写入 duration/end/next-shot override |
-| VID_ACTION_INFEASIBLE | reviewed_invariant | reviewer | error | video-prompts/storyboard | 一般动作负载不可行或掩盖故事变化 |
-| VID_SEMANTIC_INVENTION | reviewed_invariant | reviewer | error | video-prompts | 新造故事、关系、知识、状态或音频事实 |
-| VID_CAMERA_UNMOTIVATED | craft_default | reviewer | warning | video-prompts | movement 无助于目的/注意变化 |
-| VID_REFERENCE_DUMP | craft_default | reviewer | warning | video-prompts | bound frame 已带外观却重复整本 设定集 |
-| VID_HIDDEN_CUT_IN_SEGMENT | reviewed_invariant | reviewer | error | video-prompts | 单个计时段内藏入视角或空间跳变，等于一次未申报的剪辑 |
-| VID15_SHOT_PACKED_TWICE | structural_invariant | validator | error | video-prompts | 同一镜头被两个容器认领，全集时长凭空多一段 |
-| VID15_MEMBER_IS_NOT_AN_EPISODE_SHOT | structural_invariant | validator | error | video-prompts | 容器成员不属于本集镜头集合 |
-| VID15_MEMBER_SHOT_HAS_NO_DURATION | structural_invariant | validator | error | video-prompts | 被装箱的镜头没有数值时长，容器时长无从成立 |
-| VID15_CONTAINER_DURATION_IS_NOT_THE_SUM | structural_invariant | validator | error | video-prompts | 容器时长不等于成员已接受时长之和 |
-| VID15_EPISODE_TOTAL_DOES_NOT_RECONCILE | structural_invariant | validator | error | video-prompts | 容器加散镜不等于全集镜头时长总和 |
-| VID15_MEMBER_ORDER_IS_NOT_A_SEQUENCE | structural_invariant | validator | error | video-prompts | 成员 `order` 不是从 1 开始、升序、无重复无跳号 |
-| VID15_MEMBER_HAS_NO_ACCEPTED_DURATION | structural_invariant | validator | error | video-prompts | 成员没有投影它所装镜头的时长 |
-| VID15_MEMBER_DURATION_IS_STALE | structural_invariant | validator | error | video-prompts | 成员的 `accepted_duration` 与它所装镜头的值不一致 |
-| VID15_MEMBERSHIP_BASIS_MISSING | structural_invariant | validator | error | video-prompts | 容器没有记录成员为何同属一个容器 |
-| VID15_MEMBERSHIP_BASIS_INCOMPLETE | structural_invariant | validator | error | video-prompts | `membership_basis` 三项里有结论留空 |
-| VID15_CONTAINER_HAS_NO_ID | structural_invariant | validator | error | video-prompts | 容器记录没有 `container_id` |
-| VID15_CONTAINER_HAS_NO_MEMBERS | structural_invariant | validator | error | video-prompts | 容器没有成员 |
-| VID15_CONTAINER_DURATION_MISSING | structural_invariant | validator | error | video-prompts | `container_duration` 缺失或不是秒数 |
-| VID15_MEMBER_HAS_NO_SHOT_REF | structural_invariant | validator | error | video-prompts | 成员没有点名它所装的镜头 |
+- 每个 `MOTION-...` 唯一对应真实 `SHOT-...`，并继承相同时长；
+- 起点、主要变化、分段时序、声音、运镜和终点没有互相冲突；
+- 显式分段的并集既不超时，也不留下由模型自行填充的空白；重叠必须说明；
+- 固定和运动摄影机不在同一区间同时生效；
+- 终点逐项对齐分镜，下一镜仍读取分镜自己的起点；
+- 同一镜头最多进入一个交付分组；分组加散镜恰好覆盖点名范围一次；
+- 静态漫剧只做关键帧切换加配音时可以没有逐镜运动正文；
+- 可复制正文不含文件名、版本号、ID、状态、哈希或任务备注。
 
-`VID15_*` 由 [container_check.py](../scripts/container_check.py) 执行。未装容器的散镜与
-时长尚未确定的镜头**只报告不判错**：前者是合法的打包选择，后者是上游还没做完，把它们
-写成缺陷会让"进行中"和"做错了"无法区分。
-| VID_UNEXECUTABLE_MICRO_METRIC | craft_default | reviewer | warning | video-prompts | 亚秒偏移、厘米位移、角度数等读起来精确却无法执行也无法验证的计量 |
-| VID_INNER_MONOLOGUE_ONLY | craft_default | reviewer | warning | video-prompts | 绝大多数段落只有内心活动，没有可拍的可见事件或有来源的声音 |
-| VID_STYLE_ALTERNATIVE | taste_option | reviewer | note | video-prompts | 表演/摄影/声音风格的非阻断选择 |
-
-语义问题只能由 reviewer 证据化判断；不要写正则把“缓慢”“同时”或动词数量变成错误。
+未分组的散镜和时长尚未确定的镜头只报告为当前状态，不伪装成质量缺陷。动作可行性、隐藏剪辑、
+语义发明和无动机运镜仍需 reviewer 结合剧情判断。
 
 ## 4. 合成正例
 

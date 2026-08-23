@@ -4,45 +4,45 @@
 
 1. 审查方式
 2. 证据量表
-3. 诊断目录
+3. 完成前结构检查
 4. 合成正例
 5. 合成反例
 
 ## 1. 审查方式
 
-先做可确定检查，再由与作者分离的 reviewer 判断语义和 craft。Reviewer 不改 spec；它写 finding，包含产物与记录 ID、精确证据、影响、所需修复、owner、severity 与状态。不要以固定长度、词数、形容词比例或“像 AI”判质量。
+先做可确定检查，再由与作者分离的 reviewer 判断语义和 craft。Reviewer 不替 owner 修改；finding
+包含文件与 `IMG-...`、精确证据、影响、所需修订、owner、严重程度和状态。不要以固定长度、词数、
+形容词比例或“像 AI”判质量。
 
 ## 2. 证据量表
 
-对每条 prompt，逐项给出 `PASS | REVISE | NOTE` 和引用：
+对每条提示词逐项给出 `PASS | REVISE | NOTE` 和引用：
 
 | 维度 | 要问的问题 | 合格证据 |
 |---|---|---|
-| 绑定 | 是哪个 identity + exact variant？ | spec source ref 与 accepted snapshot |
-| 区分度 | 不看 display name，能否认出/区分？ | prompt 中对应 stable anchors 与 delta |
-| 单一目的 | 是否把多种互斥参考需求混在一起？ | purpose、构图与状态一致 |
-| 空间/尺度 | 关系能否同时成立并复用？ | geography/scale 原字段与 prompt 句子 |
-| 文字 | 政策、内容、承载面、排除是否相容？ | text policy 与 constraints |
+| 绑定 | 是哪个身份与当前变体？ | `视觉设定.md` 的可见 ID 与提示词引用 |
+| 区分度 | 不看显示名，能否认出或区分？ | 稳定锚点与当前变化 |
+| 单一目的 | 是否把互斥参考需求混在一起？ | 用途、构图与状态一致 |
+| 空间/尺度 | 关系能否同时成立并复用？ | 地理/尺度事实与正文句子 |
+| 文字 | 政策、内容、承载面与排除是否相容？ | 文字事实与呈现方法 |
 | 经济性 | 参考已承载的内容是否被无意义重复？ | 可删句与未受影响事实 |
-| 越权 | 是否新造资产、故事或连续性事实？ | source fact 与冲突句 |
-| 可复制 | 去掉内部元数据后正文是否自足？ | generic prompt 本身 |
+| 越权 | 是否新造资产、故事或连续性事实？ | 来源事实与冲突句 |
+| 可复制 | 去掉标题元信息后正文是否自足？ | 可复制正文 |
 
-Finding 的“修复”必须可执行，例如“补回 View 中安全门相对检修台的位置”，不能只写“加强细节”。审美替代方案属于 NOTE，除非违反已接受约束。
+Finding 的修复必须可执行，例如“补回安全门相对检修台的位置”，不能只写“加强细节”。审美替代
+方案属于 NOTE，除非违反已确认约束。
 
-## 3. 诊断目录
+## 3. 完成前结构检查
 
-| code | classification | enforcer | 默认 severity | owner | 含义 |
-|---|---|---|---|---|---|
-| IMG_BINDING_UNRESOLVED | structural_invariant | validator | error | image-prompts | asset/variant 或 source ref 未解析 |
-| IMG_TEXT_POLICY_CONFLICT | structural_invariant | validator | error | image-prompts | readable 与 no-text 等显式冲突 |
-| IMG_EDIT_SCOPE_MISSING | structural_invariant | validator | error | image-prompts | edit 缺 target/change/preserve/impact |
-| IMG_VARIANT_INCOHERENT | reviewed_invariant | reviewer | error | image-prompts | 一个规格混入不相容 Look/State |
-| IMG_GEOGRAPHY_LOSS | reviewed_invariant | reviewer | error | image-prompts | 场景固定地理/方向被丢失或改写 |
-| IMG_PROP_UNRECOGNIZABLE | reviewed_invariant | reviewer | error | image-prompts | 尺度、形制、材料、功能不足以辨认 |
-| IMG_BOILERPLATE_DOMINANT | craft_default | reviewer | warning | image-prompts | 已有锚点但泛化词压过它们 |
-| IMG_STYLE_ALTERNATIVE | taste_option | reviewer | note | image-prompts | 可选审美方案，不单独阻断 |
+- 每个 `IMG-...` 标题唯一，并引用真实视觉设定条目；
+- 人物、地点或道具的当前变体与有效范围没有冲突；
+- 可读文字与全局禁字没有同时出现；
+- 局部编辑包含目标、变化、保持项和连续性影响；
+- 每张参考写明用途、允许控制、不得控制与未验证风险；
+- 可复制正文不含 ID、文件路径、占位符、流程说明或 QA 结论。
 
-只有 validator 可证明的 `structural_invariant` 直接阻断。语义问题由 reviewer 引用源字段和 prompt 文句后给 `REVISE`；默认与选项可覆盖。
+只有本地可证明的结构冲突直接阻断。语义问题由 reviewer 引用来源与正文后给 `REVISE`；默认做法与
+审美选项可由创作者覆盖。
 
 ## 4. 合成正例
 

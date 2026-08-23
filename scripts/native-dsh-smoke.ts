@@ -13,23 +13,26 @@ const demoFramesDirectory = process.env.OH_STORY_DEMO_FRAMES_DIR;
 const useRealDeepSeek = process.env.OH_STORY_DEMO_USE_REAL_DEEPSEEK === "1";
 const browserChannel = process.env.DSH_SMOKE_BROWSER_CHANNEL ?? (process.platform === "win32" ? "msedge" : "chrome");
 const storyProjectName = "让你管账号，你高燃混剪炸全网";
-const dramaProjectName = "善意不结账";
+const dramaProjectName = "让你管账号";
 const storyFixture = join(repositoryRoot, "scripts", "demo-fixtures", "story", storyProjectName);
 const dramaFixture = join(repositoryRoot, "scripts", "demo-fixtures", "drama", dramaProjectName);
 const storyPrompt = `请只读检查《${storyProjectName}》当前工程，简要概览正文、大纲、设定与追踪状态，不修改任何文件。`;
-const dramaPrompt = `请只读检查短剧《${dramaProjectName}》当前工程，简要概览项目开发、剧本、设定集、分镜与审查状态，不修改任何文件。`;
+const dramaPrompt = `请只读检查短剧《${dramaProjectName}》EP001 的 creator-first 五份创作文档，简要概览剧本、视觉设定、分镜、图片提示词与视频提示词，不修改任何文件。`;
 const storyReply = `已读取《${storyProjectName}》工程。正文、大纲、设定与追踪文件已就绪。`;
-const dramaReply = `已读取《${dramaProjectName}》工程。项目开发、8 集剧本、设定集、分镜与审查产物已就绪。`;
+const dramaReply = `已读取《${dramaProjectName}》EP001。creator-first 五份 Markdown 创作文档已就绪，未发现并行 JSON/JSONL 创作真相。`;
+const dramaCreatorFiles = ["剧本.md", "视觉设定.md", "分镜.md", "图片提示词.md", "视频提示词.md"] as const;
 const agentMutationPrompt = "AGENT_WRITE_SMOKE：请使用 write 工具创建指定测试文件。";
 const agentMutationPath = "设定/角色/_agent-write-smoke.md";
 const agentMutationContent = "# Agent 写入验证\n\n这段正文由真实 DSH Agent 工具调用流式写入。\n\n- 文件树自动定位\n- 编辑器同步更新\n";
 const agentMutationReply = "测试文件已通过 write 工具创建。";
 const todoLayoutPrompt = "TODO_LAYOUT_SMOKE：写入十一条已完成任务。";
 const todoLayoutItems = Array.from({ length: 11 }, (_, index) => ({ content: `布局任务 ${String(index + 1)}`, status: "completed" }));
-const roleSmokePrompt = "ROLE_RUNTIME_SMOKE：必须调用 oh_story_role 的 story-explorer，并返回子角色结果。";
-const roleChildPrompt = "ROLE_CHILD_SMOKE：只回复指定验证文本，不调用任何工具。";
-const roleChildReply = "ROLE_CHILD_RESULT：story-explorer 子 Agent 已完成。";
-const roleParentReply = "ROLE_PARENT_RESULT：已收到 story-explorer 子 Agent 结果。";
+const roleReference = "story-setup/references/agent-references/writing-craft.md";
+const roleReferenceExcerpt = "贯穿道具系统";
+const roleSmokePrompt = "ROLE_RUNTIME_SMOKE：必须调用 oh_story_role 的 narrative-writer，并返回子角色结果。";
+const roleChildPrompt = `ROLE_CHILD_SMOKE：必须先调用 oh_story_bundled_reference 读取 ${roleReference}，确认内容包含“${roleReferenceExcerpt}”，再回复指定验证文本。`;
+const roleChildReply = "ROLE_CHILD_RESULT：narrative-writer 子 Agent 已读取打包参考并完成。";
+const roleParentReply = "ROLE_PARENT_RESULT：已收到 narrative-writer 子 Agent 结果。";
 
 async function captureDemoFrame(page: Page, workbench: "story" | "drama", index: number): Promise<void> {
   if (demoFramesDirectory === undefined) return;
@@ -104,8 +107,27 @@ async function startMockDeepSeek(): Promise<MockDeepSeek> {
       const roleChildTurn = serialized.includes(roleChildPrompt) && !serialized.includes(roleSmokePrompt);
       const hasToolResult = messages.slice(lastUserIndex + 1).some((message) => message.role === "tool");
       let events: string[];
-      if (roleChildTurn) {
-        requests.push("role-child");
+      if (roleChildTurn && !hasToolResult) {
+        requests.push("role-child-reference-start");
+        const argumentsJson = JSON.stringify({ reference: roleReference });
+        const chunks = argumentsJson.match(/.{1,14}/gu) ?? [argumentsJson];
+        events = [
+          JSON.stringify({ choices: [{ delta: { role: "assistant", content: null, reasoning_content: "" } }] }),
+          ...chunks.map((argumentsDelta, index) => JSON.stringify({ choices: [{ delta: { tool_calls: [{
+            index: 0,
+            ...(index === 0 ? { id: "call_oh_story_reference_smoke", type: "function" } : {}),
+            function: { ...(index === 0 ? { name: "oh_story_bundled_reference" } : {}), arguments: argumentsDelta }
+          }] } }] })),
+          JSON.stringify({ choices: [{ delta: { content: "" }, finish_reason: "tool_calls" }], usage: { prompt_tokens: 12, completion_tokens: 20 } }),
+          "[DONE]"
+        ];
+      } else if (roleChildTurn) {
+        if (!serialized.includes(roleReferenceExcerpt)) {
+          requests.push("role-child-reference-missing-result");
+          response.writeHead(422, { "content-type": "application/json" }).end('{"error":"bundled reference result was not returned to the child"}');
+          return;
+        }
+        requests.push("role-child-reference-resume");
         events = [
           JSON.stringify({ choices: [{ delta: { role: "assistant", content: null, reasoning_content: "" } }] }),
           JSON.stringify({ choices: [{ delta: { content: roleChildReply } }] }),
@@ -114,7 +136,7 @@ async function startMockDeepSeek(): Promise<MockDeepSeek> {
         ];
       } else if ((mutationTurn || todoLayoutTurn || roleParentTurn) && !hasToolResult) {
         const tool = roleParentTurn
-          ? { id: "call_oh_story_role_smoke", name: "oh_story_role", args: { role: "story-explorer", prompt: roleChildPrompt } }
+          ? { id: "call_oh_story_role_smoke", name: "oh_story_role", args: { role: "narrative-writer", prompt: roleChildPrompt } }
           : todoLayoutTurn
             ? { id: "call_todo_layout", name: "todo_write", args: { todos: todoLayoutItems } }
             : { id: "call_oh_story_write_smoke", name: "write", args: { file_path: agentMutationPath, content: agentMutationContent } };
@@ -142,7 +164,7 @@ async function startMockDeepSeek(): Promise<MockDeepSeek> {
           ? roleParentReply
           : mutationTurn
             ? agentMutationReply
-            : serialized.includes(dramaProjectName) ? dramaReply : storyReply;
+            : serialized.includes(storyProjectName) ? storyReply : dramaReply;
         events = [
           JSON.stringify({ choices: [{ delta: { role: "assistant", content: null, reasoning_content: "" } }] }),
           JSON.stringify({ choices: [{ delta: { content } }] }),
@@ -323,24 +345,29 @@ async function assertChatAnchorContract(
     document.querySelector("[data-conversation-scroll]")?.getAttribute("data-oh-story-layout") === layout
   ), expectedLayout);
   const anchor = page.locator("[data-chat-flow-key]").last();
-  await anchor.evaluate(async (element) => {
-    element.scrollIntoView({ block: "end" });
-    await new Promise<void>((accept) => {
-      requestAnimationFrame(() => { requestAnimationFrame(() => { accept(); }); });
+  let measurement: {
+    readonly anchorBox: Awaited<ReturnType<Locator["boundingBox"]>>;
+    readonly composerBox: Awaited<ReturnType<Locator["boundingBox"]>>;
+    readonly chatBox: Awaited<ReturnType<Locator["boundingBox"]>>;
+    readonly scrollPaddingBottom: number;
+  } | undefined;
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    await anchor.evaluate(async (element) => {
+      element.scrollIntoView({ block: "end" });
+      await new Promise<void>((accept) => { requestAnimationFrame(() => { requestAnimationFrame(() => { accept(); }); }); });
     });
-  });
-  const [anchorBox, composerBox, chatBox, scrollPaddingBottom] = await Promise.all([
-    anchor.boundingBox(), composer.boundingBox(), chat.boundingBox(),
-    scroller.evaluate((element) => Number.parseFloat(getComputedStyle(element).scrollPaddingBottom))
-  ]);
-  const valid = anchorBox !== null && composerBox !== null && chatBox !== null
-    && anchorBox.y + anchorBox.height <= composerBox.y - 15
-    && scrollPaddingBottom >= composerBox.height + 15
-    && composerBox.x >= chatBox.x - 1
-    && composerBox.x + composerBox.width <= chatBox.x + chatBox.width + 1;
-  if (!valid) {
-    throw new Error(`Chat anchor contract failed in ${expectedLayout} layout: ${JSON.stringify({ anchorBox, composerBox, chatBox, scrollPaddingBottom })}`);
+    const [anchorBox, composerBox, chatBox, scrollPaddingBottom] = await Promise.all([
+      anchor.boundingBox(), composer.boundingBox(), chat.boundingBox(),
+      scroller.evaluate((element) => Number.parseFloat(getComputedStyle(element).scrollPaddingBottom))
+    ]);
+    measurement = { anchorBox, composerBox, chatBox, scrollPaddingBottom };
+    if (anchorBox !== null && composerBox !== null && chatBox !== null
+      && anchorBox.y + anchorBox.height <= composerBox.y - 15
+      && scrollPaddingBottom >= composerBox.height + 15
+      && composerBox.x >= chatBox.x - 1
+      && composerBox.x + composerBox.width <= chatBox.x + chatBox.width + 1) return;
   }
+  throw new Error(`Chat anchor contract failed in ${expectedLayout} layout: ${JSON.stringify(measurement)}`);
 }
 
 async function stop(child: ChildProcess): Promise<void> {
@@ -390,12 +417,21 @@ async function main(): Promise<void> {
     const entries = new Set(archive.stdout.split(/\r?\n/u).filter((entry) => entry !== ""));
     for (const required of [
       "package/LICENSE", "package/README.md", "package/cordis.patch.yml", "package/package.json",
-      "package/lib/index.js", "package/lib/client.js", "package/lib/oh-story/manifest.json", "package/lib/drama/manifest.json"
+      "package/lib/index.js", "package/lib/client.js", "package/lib/oh-story/manifest.json", "package/lib/drama/manifest.json",
+      "package/lib/oh-story/skills/story-setup/references/agent-references/writing-craft.md",
+      "package/lib/drama/skills/short-drama/references/creator-documents.md",
+      "package/lib/drama/skills/short-drama-storyboard/references/comic-keyframe-lexicon.md"
     ]) {
       if (!entries.has(required)) throw new Error(`Plugin tarball is missing ${required}.`);
     }
     for (const entry of entries) {
-      if (/\/(?:src|tests)\//u.test(entry) || /dashboard_server\.py$/u.test(entry) || entry.endsWith("/.DS_Store")) {
+      if (/\/(?:src|tests)\//u.test(entry)
+        || /(?:^|\/)__pycache__(?:\/|$)/u.test(entry)
+        || /\.pyc$/u.test(entry)
+        || /(?:^|\/)\.DS_Store$/u.test(entry)
+        || /copy-path-safety\.py$/u.test(entry)
+        || /dashboard_server\.py$/u.test(entry)
+        || /drama\/skills\/short-drama\/references\/lifecycle-commands\.md$/u.test(entry)) {
         throw new Error(`Plugin tarball retained forbidden content: ${entry}`);
       }
     }
@@ -460,12 +496,12 @@ async function main(): Promise<void> {
       const roleTrace = mockDeepSeek?.requests.filter((kind) => kind.startsWith("role-")) ?? [];
       const serializedRoleEvents = JSON.stringify(roleEvents);
       if (roleCalls.length !== 1
-        || (roleArguments as { readonly role?: unknown } | undefined)?.role !== "story-explorer"
+        || (roleArguments as { readonly role?: unknown } | undefined)?.role !== "narrative-writer"
         || (roleArguments as { readonly prompt?: unknown } | undefined)?.prompt !== roleChildPrompt
         || roleResult?.isError !== false
         || !serializedRoleEvents.includes(roleChildReply)
         || !serializedRoleEvents.includes(roleParentReply)
-        || JSON.stringify(roleTrace) !== JSON.stringify(["role-parent-start", "role-child", "role-parent-resume"])) {
+        || JSON.stringify(roleTrace) !== JSON.stringify(["role-parent-start", "role-child-reference-start", "role-child-reference-resume", "role-parent-resume"])) {
         throw new Error(`Packaged oh_story_role contract failed: ${JSON.stringify({ roleCalls, roleArguments, roleResult, roleTrace, eventTypes: roleEvents.map((event) => event.type), hasChildReply: serializedRoleEvents.includes(roleChildReply), hasParentReply: serializedRoleEvents.includes(roleParentReply) })}`);
       }
     }
@@ -477,9 +513,12 @@ async function main(): Promise<void> {
       throw new Error(`Story Session workspace route failed: ${JSON.stringify(storyWorkspacePayload)}`);
     }
     const dramaWorkspaceResponse = await fetch(`${origin}/oh-story/workspace?sessionId=${encodeURIComponent(dramaSession.sessionId)}`);
-    const dramaWorkspacePayload = await dramaWorkspaceResponse.json() as { readonly mode?: string; readonly cwd?: string; readonly files?: readonly { readonly path: string }[]; readonly shortDrama?: { readonly title?: string } };
+    const dramaWorkspacePayload = await dramaWorkspaceResponse.json() as { readonly mode?: string; readonly cwd?: string; readonly files?: readonly { readonly path: string }[]; readonly shortDrama?: unknown };
+    const dramaPaths = dramaWorkspacePayload.files?.map((file) => file.path).sort() ?? [];
+    const expectedDramaPaths = dramaCreatorFiles.map((name) => `剧集/EP001/${name}`).sort();
     if (!dramaWorkspaceResponse.ok || dramaWorkspacePayload.mode !== "dsh-session" || dramaWorkspacePayload.cwd !== await realpath(dramaRoot)
-      || !dramaWorkspacePayload.files?.some((file) => file.path.startsWith("剧集/")) || dramaWorkspacePayload.shortDrama?.title !== dramaProjectName) {
+      || JSON.stringify(dramaPaths) !== JSON.stringify(expectedDramaPaths) || dramaWorkspacePayload.shortDrama !== null
+      || dramaPaths.some((path) => /\.jsonl?$/u.test(path))) {
       throw new Error(`Drama Session workspace route failed: ${JSON.stringify(dramaWorkspacePayload)}`);
     }
     const escaped = await fetch(`${origin}/oh-story/file?sessionId=${encodeURIComponent(storySession.sessionId)}&path=${encodeURIComponent("../package.json")}`);
@@ -882,6 +921,7 @@ async function main(): Promise<void> {
       if (await dramaKind.textContent() !== "短剧" || await page.getByRole("tablist", { name: "创作工作台" }).count() !== 0) {
         throw new Error("A drama-only workspace still rendered a redundant type switcher.");
       }
+      await page.getByRole("article", { name: "剧集/EP001/剧本.md 渲染预览" }).waitFor({ state: "visible", timeout: 10_000 });
       await page.getByText(dramaPrompt, { exact: true }).waitFor({ state: "visible", timeout: 20_000 });
       if (!useRealDeepSeek) await page.getByText(dramaReply, { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
       if (await page.getByText("This turn failed", { exact: false }).isVisible()) throw new Error("Drama Chat contains a failed turn.");
@@ -905,24 +945,19 @@ async function main(): Promise<void> {
         }
       }
       await prepareDemoSurface(page);
-      await selectFile(page, "剧集/EP001/screenplay.md");
-      await page.getByRole("article", { name: "剧集/EP001/screenplay.md 渲染预览" }).waitFor({ state: "visible", timeout: 10_000 });
+      await selectFile(page, "剧集/EP001/剧本.md");
+      await page.getByRole("article", { name: "剧集/EP001/剧本.md 渲染预览" }).waitFor({ state: "visible", timeout: 10_000 });
       await captureDemoFrame(page, "drama", 1);
-      await openGroup(page, "项目开发");
-      await selectFile(page, "项目开发/creative-brief.md");
-      await page.getByRole("article", { name: "项目开发/creative-brief.md 渲染预览" }).waitFor({ state: "visible", timeout: 10_000 });
+      await selectFile(page, "剧集/EP001/视觉设定.md");
+      await page.getByRole("article", { name: "剧集/EP001/视觉设定.md 渲染预览" }).waitFor({ state: "visible", timeout: 10_000 });
       await captureDemoFrame(page, "drama", 2);
-      await openGroup(page, "剧集");
-      await openFolder(page, "EP001");
-      await openFolder(page, "storyboard");
-      await selectFile(page, "剧集/EP001/storyboard/shots.jsonl");
-      const dramaJsonl = page.getByRole("region", { name: "剧集/EP001/storyboard/shots.jsonl 结构化预览" });
-      await dramaJsonl.waitFor({ state: "visible", timeout: 10_000 });
-      await dramaJsonl.getByText("6 条记录", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+      await selectFile(page, "剧集/EP001/图片提示词.md");
+      await page.getByRole("article", { name: "剧集/EP001/图片提示词.md 渲染预览" }).waitFor({ state: "visible", timeout: 10_000 });
+      await selectFile(page, "剧集/EP001/分镜.md");
+      await page.getByRole("article", { name: "剧集/EP001/分镜.md 渲染预览" }).waitFor({ state: "visible", timeout: 10_000 });
       await captureDemoFrame(page, "drama", 3);
-      await openGroup(page, "项目");
-      await selectFile(page, "short-drama.json");
-      await page.getByRole("textbox", { name: "short-drama.json" }).waitFor({ state: "visible", timeout: 10_000 });
+      await selectFile(page, "剧集/EP001/视频提示词.md");
+      await page.getByRole("article", { name: "剧集/EP001/视频提示词.md 渲染预览" }).waitFor({ state: "visible", timeout: 10_000 });
       await captureDemoFrame(page, "drama", 4);
       if (await page.getByRole("complementary", { name: "Agent 工作详情" }).count() !== 0) {
         throw new Error("Novel workspace still duplicates the official Agent activity UI.");
@@ -1001,10 +1036,9 @@ async function main(): Promise<void> {
       await assertChatAnchorContract(page, chatLocator, scrollerLocator, composerLocator, "medium");
       await openGroup(page, "剧集");
       await openFolder(page, "EP001");
-      await openFolder(page, "storyboard");
-      const compactPath = "剧集/EP001/storyboard/shots.jsonl";
+      const compactPath = "剧集/EP001/分镜.md";
       await selectFile(page, compactPath);
-      await page.getByRole("region", { name: `${compactPath} 结构化预览` }).waitFor({ state: "visible", timeout: 10_000 });
+      await page.getByRole("article", { name: `${compactPath} 渲染预览` }).waitFor({ state: "visible", timeout: 10_000 });
       await page.setViewportSize({ width: 500, height: 900 });
       await page.waitForTimeout(100);
       const compactScroller = await scrollerLocator.evaluate((element) => ({ clientWidth: element.clientWidth, scrollWidth: element.scrollWidth }));
@@ -1027,12 +1061,12 @@ async function main(): Promise<void> {
         return element.clientWidth - Number.parseFloat(style.paddingLeft) - Number.parseFloat(style.paddingRight);
       });
       const compactHeaderWidth = await page.locator(".oh-story-editor-path > strong").evaluate((element) => element.getBoundingClientRect().width);
-      const compactJsonIdWidth = await page.locator(".oh-story-jsonl details > summary > strong").first().evaluate((element) => element.getBoundingClientRect().width);
+      const compactShotHeadingWidth = await page.getByRole("heading", { name: /^SHOT-EP001-/u }).first().evaluate((element) => element.getBoundingClientRect().width);
       const pageOverflow = await page.evaluate(() => Math.max(document.body.scrollWidth, document.documentElement.scrollWidth) - document.documentElement.clientWidth);
       if (!compactOrdered || !compactVisible
         || await scrollerLocator.getAttribute("data-oh-story-layout") !== "compact"
-        || compactFileTextWidth < 32 || compactHeaderWidth < 40 || compactJsonIdWidth < 32 || pageOverflow > 1) {
-        throw new Error(`500px viewport clipped the workbench or made its content unreadable: ${JSON.stringify({ compactScroller, compactBoxes, compactFileTextWidth, compactHeaderWidth, compactJsonIdWidth, pageOverflow })}`);
+        || compactFileTextWidth < 32 || compactHeaderWidth < 40 || compactShotHeadingWidth < 32 || pageOverflow > 1) {
+        throw new Error(`500px viewport clipped the workbench or made its content unreadable: ${JSON.stringify({ compactScroller, compactBoxes, compactFileTextWidth, compactHeaderWidth, compactShotHeadingWidth, pageOverflow })}`);
       }
       await assertChatAnchorContract(page, chatLocator, scrollerLocator, composerLocator, "compact");
       await page.getByRole("tab", { name: "源码" }).click();

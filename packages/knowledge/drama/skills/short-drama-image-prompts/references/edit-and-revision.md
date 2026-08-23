@@ -2,16 +2,15 @@
 
 ## 有界编辑合同 (`IMG-06`)
 
-每次 edit 都声明精确 target/region、要改什么、必须保留什么、以及预期的
-continuity impact。如果期望变更会改写 identity 或 accepted 上游事实，路由给
-该 owner，不要伪装成局部 prompt revision。
+每次 edit 都声明精确目标/区域、要改什么、必须保留什么，以及预期的连续性影响。如果期望变更会
+改写身份或已确认上游事实，路由给该 owner，不要伪装成局部提示词修订。
 
 ## 目录
 
 1. 两类修改
 2. Edit-delta 配方
-3. 自然语言 spec → diff → accept → rerender
-4. 缓存漂移的 restore/adopt
+3. 自然语言要求 → 差异预览 → 确认 → 重写
+4. 当前文件与旧预览不一致时的处理
 5. 失败与检查
 
 ## 1. 两类修改
@@ -26,15 +25,15 @@ continuity impact。如果期望变更会改写 identity 或 accepted 上游事�
 四个问题缺一不可：
 
 ```text
-Target：哪个精确来源快照（`sources` 键）、记录、entity 和 region？
+Target：哪个可见 `IMG-...`、对象和区域？
 Change：哪些有边界、可观察的变化？
 Preserve：身份、构图、光线、空间以及哪些未影响 entity/region 必须不变？
-Continuity impact：预期对应哪个 accepted State/binding，有效到哪里？
+Continuity impact：预期对应哪个已确认状态或引用，有效到哪里？
 ```
 
 ### Target
 
-- 用元信息绑定目标快照；copyable 正文用自然语言明确主体和区域。
+- 用可见 `IMG-...` 和对象名绑定目标；可复制正文用自然语言明确主体和区域。
 - “改背景”“让她更狼狈”过宽；需要具体新 View/区域与可观察变化。
 - 多个不相干 target 默认拆为多个 edit，防止 preserve 集失焦。
 
@@ -50,73 +49,62 @@ Continuity impact：预期对应哪个 accepted State/binding，有效到哪里�
 
 引用 道具状态/Look/View 或提出 owner revision；记录受影响的 prompt/shot/keyframe，而非在 edit 中成为新的连续性权威。若没有影响，也明确 `none` 及理由。
 
-- **`structural_invariant`**：`target_ref`、region、changes、preserve 和 impact 必须存在且没有显式冲突。
+- **`structural_invariant`**：目标、区域、变化、保持项和影响必须存在且没有显式冲突。
 - **`reviewed_invariant`**：修改范围是否足够清楚、preserve 是否保护真正身份/地理，需要 reviewer 引用证据判断。
 - **`craft_default`**：一次 edit 聚焦少量相互关联的 delta；复杂重构改用新 variant/plate。
 - **`taste_option`**：变化的视觉强度由创作者决定，只要状态事实未变。
 
-## 3. 自然语言 spec → diff → accept → rerender
+## 3. 自然语言修订
 
-用户不需要知道 JSONL 字段。对“把工作服换成深蓝，但保留脸和袖口油渍”执行：
+用户不需要知道内部字段。对“把工作服换成深蓝，但保留脸和袖口油渍”执行：
 
-1. **读取权威源**：当前 accepted spec、asset refs 与 recipe version。
-2. **解释请求**：区分 prompt-owned 改动、source-owned 事实、含糊项与可能影响。
-3. **生成候选 spec**：不覆盖 accepted spec；不确定值保持 unresolved。
-4. **展示语义 diff**：字段路径、before、after、理由、影响、是否需上游 owner。
-5. **展示新 prompt 预览**：让创作者看实际文案效果，而非只看字段。
-6. **接受/拒绝**：接受才提交；拒绝使原 spec 与 Markdown byte-identical。
-7. **重渲染**：从 accepted spec 与 recipe version 导出 Markdown，更新下游 stale 状态。
+1. 读取当前 `视觉设定.md` 条目和 `图片提示词.md` 的 `IMG-...`；
+2. 区分提示词可改措辞、资产 owner 才能改的事实、含糊项和连续性影响；
+3. 展示简短语义差异：改前、改后、理由、保持项、影响和是否需要上游修改；
+4. 展示新的可复制正文，让创作者看到实际效果；
+5. 确认后直接更新同一个 `IMG-...`；拒绝时当前文件保持不变；
+6. 列出需要同步检查的 `SHOT-...` 或其他 `IMG-...`，不自动改用户未点名的文档。
 
 建议预览：
 
 ```markdown
 ### 提议修改 `IMG-...`
-- `variant_delta.uniform.color`: `灰蓝` → `深蓝`
-- `preserve`: 新增 `右袖口原有油渍的形状与位置`
-- 未改：Character identity、服装剪裁、背景、构图、光向
-- 影响：仅当前 Look prompt；若资产 Look 尚未接受深蓝色，先请求 assets 修改
-- 未映射：无
+- 深灰蓝工作服 → 深蓝工作服
+- 保持：脸、服装剪裁、右袖口旧油渍的形状与位置、背景、构图、光向
+- 影响：仅当前造型提示词；若 `视觉设定.md` 还没有深蓝变体，先交给 assets 修改
 
-**重渲染预览**
+**新正文预览**
 > ...
 ```
 
-对“更有电影感”不能擅自选择一串风格字段。给两三个互斥但可解释的候选（如更明确光比/构图/色彩关系），标为 `taste_option` 让创作者选。
+对“更有电影感”不能擅自堆一串风格词。给两三个互斥且可观察的候选，例如光比、构图或色彩关系，
+作为 `taste_option` 让创作者选择。
 
-## 4. 缓存漂移的 restore/adopt
+## 4. 当前文件冲突
 
-`image-prompts.md` 是缓存视图。发现它与 spec 不一致时暂停覆盖：
+如果另一个编辑或人工修改已经改变当前 `IMG-...`，不要用旧预览覆盖：
 
-### Restore
+- 重新读取当前条目；
+- 展示人工改动与本次修改的语义差异；
+- 能安全合并时生成新的完整预览；
+- 无法无损对应、触及上游事实或存在冲突时保留当前文件，并交给创作者选择。
 
-- 展示当前手改文本与将恢复的 canonical preview；
-- 创作者接受后从 accepted spec 重渲染；
-- 不把手改内容静默写回 spec。
-
-### Adopt
-
-- 将可表示的手改语义解析为候选 spec diff；
-- 逐条列出 `mapped`、`unmapped`、`lossy`；
-- 有 unmapped/lossy 或改动 source-owned 事实时阻断 adopt，保留原文件与冲突副本；
-- 安全且被接受后，先提交 spec，再重渲染成规范 Markdown。最终文本可能排版变化，但语义 diff 必须无损。
-
-选择 `merge` 时也先生成候选 diff；不能以“最后写入者获胜”处理创作权威。
+不得把“最后写入者获胜”当创作规则，也不得为了恢复格式丢掉人工增加的有效语义。
 
 ## 5. 失败与检查
 
 ### 失败征兆
 
-- 直接改 accepted JSONL 或只改 Markdown；
-- diff 只写“优化措辞”，没有字段和语义影响；
-- 把身份、Location 地理、道具状态 在 prompt 层擅自改掉；
-- edit 只有 Change 没有 Preserve；
-- unmapped 手改被自动丢弃；拒绝后文件仍改变。
+- 只改可复制正文，却不核对 `视觉设定.md`；
+- 差异只写“优化措辞”，没有语义影响和保持项；
+- 把身份、地点地理或道具状态在提示词层擅自改掉；
+- edit 只有 Change，没有 Preserve；
+- 发现冲突后自动覆盖人工修改。
 
 ### 完成检查
 
-- source-owned 请求已路由给正确 owner；
-- 候选与 accepted 分离，diff 可读、可拒绝，预览可复制；
-- accept 顺序是 spec commit 后 rerender；reject 不变；
-- restore/adopt 都有预览，无法对应字段的改动保留为冲突；
-- 本提示词修订流程不调用媒体生成或 provider API；实际生产交 `$short-drama-produce`
-  并对精确任务预览单独确认。
+- 上游事实请求已路由给正确 owner；
+- 目标、区域、变化、保持项和连续性影响都清楚；
+- 差异预览可读、可拒绝，新正文可直接复制；
+- 拒绝不改变当前文件，冲突不静默吞掉；
+- 本流程不调用媒体生成或 provider API；实际生产交 `$short-drama-produce`，并对精确任务预览单独确认。

@@ -16,15 +16,18 @@ oh-story-dsh is a Cordis plugin loaded into DeepSeek Harness. The repository shi
 
 ## Host entry
 
-The Host entry registers five contributions in the current Cordis context:
+The Host entry registers six contributions in the current Cordis context:
 
 1. An `oh-story` Skill provider for 13 pinned novel Skills.
 2. A `short-drama` Skill provider for 10 pinned Drama Skills.
 3. The `oh_story_role` tool, backed by DSH's `spawn` provider and bounded by the caller's visible tools.
-4. `tools/pre-execute` and `tools/post-execute` hooks for long-form outline and Tracking checks.
-5. A Session-scoped creative file route for Markdown, text, JSON and JSONL files.
+4. The read-only `oh_story_bundled_reference` tool for exact, pinned Role craft references.
+5. `tools/pre-execute` and `tools/post-execute` hooks for long-form outline and Tracking checks.
+6. A Session-scoped creative file route for Markdown, text, JSON and JSONL files.
 
-Both providers prepend a small DSH bridge at load time. The bridge maps upstream platform integration points to the current Session, tools, approvals and UI while leaving craft instructions and references intact. The short-drama production bridge retains the upstream exact-job confirmation contract. Specialist Roles preserve their upstream structured file tools and intersect them with the calling Agent's visible DSH tools.
+Both providers prepend a small DSH bridge at load time. The bridge maps upstream platform integration points to the current Session, tools, approvals and UI while leaving craft instructions and references intact. The short-drama bridge fixes the Drama Skills 0.6 creator-first boundary: episodes keep only the requested subset of up to five creator-facing Markdown documents, no empty documents or nominal stages are backfilled, persisted reviews remain readable Markdown while oral reviews write nothing, production keeps the exact-job confirmation contract, and legacy v0.5 structured projects are never migrated in place. Bundled legacy validators remain maintenance resources and do not reactivate the old JSON/JSONL workflow.
+
+Specialist Roles preserve their upstream structured file tools and intersect them with the calling Agent's visible DSH tools. Roles that reference shared `story-setup` craft material receive only the plugin's `oh_story_bundled_reference` reader when it is visible. The reader exposes an allowlist built from the pinned package, resolves every file canonically inside that package, rejects path escape, and fails closed if a scoped same-name tool shadows it; project Skills can therefore neither redirect Role references nor inject replacement instructions. Roles never probe `.claude`, `.codex` or other deployment directories.
 
 The prose guards and file route resolve the live Agent and use that Agent's DSH `FileSystem`, so their view of the workspace matches native tools under local, sandboxed and remote providers. The route first applies the same Host, Origin and Fetch Metadata trust boundary as DSH's native browser API, then uses the Agent filesystem and sandbox policy for resolution, containment, reads and atomic `replaceIfVersion` writes. Access remains limited to documented novel and short-drama project directories. Loopback is trusted by default; explicit non-loopback authorities must be declared through the plugin's `trustedHosts` config. Child Sessions do not receive an editor route.
 
@@ -49,7 +52,7 @@ Markdown rendering is implemented as a safe React element tree with tables, task
 
 `packages/knowledge/oh-story/manifest.json` pins the Oh Story release, commit, 13 Skills, 7 Roles, agents version and every file hash. `packages/knowledge/drama/manifest.json` performs the same role for 10 Drama Skills.
 
-The Drama Skills standalone dashboard server and assets are omitted during synchronization because the creator surface is supplied by the DSH workbench. Oh Story's login/CDP rank scrapers are also excluded; the two scan Skills use DSH-native, visible-tool research instructions instead. Remaining workflow, reference, validation and production-adapter resources are packaged with their upstream paths.
+The Drama Skills standalone dashboard server and assets are omitted during synchronization because the creator surface is supplied by the DSH workbench. Oh Story's login/CDP rank scrapers and platform deployment helpers are also excluded; the two scan Skills use DSH-native, visible-tool research instructions instead. Synchronization rejects Python bytecode, `__pycache__` and `.DS_Store` workspace pollution before manifests are generated. Remaining workflow, reference, validation and production-adapter resources are packaged with their upstream paths.
 
 ## Release boundary
 

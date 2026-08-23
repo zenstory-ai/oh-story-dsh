@@ -28,6 +28,10 @@ interface JsonStringPrefix {
 
 export type WorkbenchMode = "story" | "drama";
 
+export interface WorkspaceFilePath {
+  readonly path: string;
+}
+
 const STORY_DIRECTORIES = new Set(["正文", "大纲", "设定", "追踪", "对标", "参考资料"]);
 const DRAMA_DIRECTORIES = new Set(["输入", "项目开发", "设定集", "剧集", "交付", "创作者决策", "审查"]);
 const EDITABLE_EXTENSION = /\.(?:md|txt|json|jsonl)$/iu;
@@ -246,6 +250,31 @@ export function workbenchModeForPath(path: string | undefined): WorkbenchMode | 
   if (directory !== undefined && STORY_DIRECTORIES.has(directory)) return "story";
   if (directory !== undefined && DRAMA_DIRECTORIES.has(directory)) return "drama";
   return undefined;
+}
+
+/** Choose the first useful document when a creative workbench opens. */
+export function preferredWorkbenchFile(
+  files: readonly WorkspaceFilePath[],
+  mode: WorkbenchMode
+): string | undefined {
+  const matching = files.filter((file) => workbenchModeForPath(file.path) === mode);
+  const preferences = mode === "story"
+    ? [/^正文\/.*\.md$/u, /^大纲\/.*\.md$/u, /\.md$/u]
+    : [
+        /^剧集\/EP0*1\/剧本\.md$/u,
+        /^剧集\/.*\/剧本\.md$/u,
+        /^剧集\/EP0*1\/screenplay\.md$/iu,
+        /^剧集\/.*\/screenplay\.md$/iu,
+        /^项目开发\/creative-brief\.md$/u,
+        /^输入\/.*\.md$/u,
+        /\.md$/u,
+        /^short-drama\.json$/u
+      ];
+  for (const pattern of preferences) {
+    const match = matching.find((file) => pattern.test(file.path));
+    if (match !== undefined) return match.path;
+  }
+  return matching[0]?.path;
 }
 
 /** Project one streamed mutation over its immediate predecessor. */

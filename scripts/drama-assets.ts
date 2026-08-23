@@ -67,8 +67,13 @@ export async function synchronizeDramaAssets(): Promise<DramaAssetManifest> {
     recursive: true,
     dereference: false,
     filter: (path) => {
+      const normalized = path.split(sep).join("/");
       const bundledPath = portableRelative(sourceSkills, path);
-      return bundledPath !== "short-drama/scripts/dashboard_server.py"
+      return !normalized.includes("/__pycache__/")
+        && !normalized.endsWith("/__pycache__")
+        && !normalized.endsWith(".pyc")
+        && !normalized.endsWith("/.DS_Store")
+        && bundledPath !== "short-drama/scripts/dashboard_server.py"
         && !bundledPath.startsWith("short-drama/assets/dashboard/");
     }
   });

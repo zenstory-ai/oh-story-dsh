@@ -12,27 +12,27 @@
 
 变体的目标是在不改变持久身份的前提下，把有因果、可复用、在一定范围内持续的视觉状态明确出来。它不是为了给每个表情、角度或手势建一张新资产图。
 
-先用 assets 的接受决定区分：
+先用 `视觉设定.md` 的当前判断区分：
 
 - **reuse**：身份/地理/功能和需要保持的 state 都没变，直接复用；
 - **variant**：同一身份上出现可逆或时间有界的 Look/View/道具状态差异；
 - **new asset**：持久身份、固定地理或基本功能已改变；
-- **unresolved**：无法确定，停止编译并让创作者选择。
+- **unresolved**：无法确定，停止写提示词并让创作者选择。
 
-图片提示词不能自行做这项身份决定，只把 accepted variant 编译为可见参考。
+图片提示词不能自行做这项身份决定，只把已确认变体写成可见参考。
 
 ## 2. Base—delta—validity
 
-一条变体规格必须能回答：
+一个 `IMG-...` 变体条目必须能回答：
 
-1. **Base**：它从哪个 exact accepted asset/variant 派生？
+1. **Base**：它从哪个准确身份/变体 ID 派生？
 2. **Preserved anchors**：哪些 Character/Location/Prop 身份事实不变？
 3. **Delta**：哪里发生了什么可观察变化，范围和强度如何？
-4. **Cause/source**：变化来自哪个 screenplay/continuity 事实或 creator 决定？
+4. **Cause/source**：变化来自哪个场景、连续性事实或创作者决定？
 5. **Validity**：从哪里开始、持续到哪里、何时恢复/再变化？
-6. **Affected bindings**：哪些 prompts/shots/keyframes 需要此 variant？
+6. **Affected work**：哪些 `IMG-...`、`SHOT-...` 或关键帧需要此变体？
 
-- **`structural_invariant`**：绑定 exact base + variant ID，source refs 与 validity 可解析；不得同时绑定不相容 variants。
+- **`structural_invariant`**：基底、变体 ID、来源与有效范围可解析；不得同时使用不相容变体。
 - **`reviewed_invariant`**：delta 与持久锚点没有混层，也没有超过 source 支持的范围。
 - **`craft_default`**：正文先短述保持的身份，再把注意力放在 delta；不要重写全部 base。
 - **`taste_option`**：单独 variant plate、同版对照或局部细节板由复用目的决定；默认单独 plate 更少歧义。
@@ -61,13 +61,13 @@
 
 ## 4. 变体 plate 与 edit 的区别
 
-- **Variant plate** 描述一个已接受、可被多个镜头复用的完整当前状态；它可以从零编写 generic prompt，不依赖某张待编辑图片。
-- **Edit-delta** 针对 `target_ref` 指名的精确快照、记录与 region，说明 change/preserve/continuity impact；用于“从现有参考改成 accepted variant”的提示词。
+- **Variant plate** 描述一个已确认、可被多个镜头复用的完整当前状态；它可以从零编写提示词，不依赖某张待编辑图片。
+- **Edit-delta** 针对可见 `IMG-...`、对象和区域，说明变化、保持项与连续性影响；用于“从现有参考改成当前变体”的提示词。
 
 若创作者说“把袖子改湿”：
 
-1. 已有 accepted wet Look，且目标是复用状态 → 可以写 variant plate 或 scoped edit；
-2. wet Look 尚未接受 → 先向 assets 提 variant proposal；
+1. 已有明确的湿衣 Look，且目标是复用状态 → 可以写变体板或局部编辑；
+2. 湿衣 Look 尚未确认 → 先向 assets 提变体选择；
 3. 只发生在单镜头动作末端、没有持续复用 → 可能应由 storyboard continuity 拥有，不自动创建资产 prompt。
 
 不要把 before/after 两个互斥人物叠在一张身份板，除非用途明确是比较板，且两个区域/标签不会造成身份融合；这属于可覆盖的 craft choice，不是默认。
@@ -87,10 +87,11 @@
 
 | 检查 | 分类 |
 |---|---|
-| exact base/variant、source、validity 解析 | `structural_invariant` |
+| 准确基底/变体、来源、有效范围解析 | `structural_invariant` |
 | delta 是否保持 identity/geography/function | `reviewed_invariant` |
 | 是否误把瞬时 shot 状态升级为 asset variant | `reviewed_invariant` |
 | delta 是否比 base boilerplate 更醒目 | `craft_default` |
 | 单图或对照板、变化强度与呈现媒介 | `taste_option` |
 
-输出包含 base、delta、preserve、validity 与 affected bindings 的 spec，以及一段聚焦当前状态的 generic prompt。不得生成图片，也不得声称变体画面已经验证成功。
+输出一个写清基底、变化、保持项、有效范围和受影响工作的 `IMG-...` 条目，以及一段聚焦当前状态的
+可复制正文。不得生成图片，也不得声称变体画面已经验证成功。

@@ -2,34 +2,27 @@
 
 ## Binding gate (`AST-05`)
 
-资产接受前，每个下游 binding 都要解析到已接受的 identity，且 variant
-必须在引用的剧情范围内有效。未解决的 occurrence 继续保持 unresolved；不得
-为了让提示词或分镜继续工作，猜一个看似合理的 ID。
+资产设定完成前，每个下游引用都要解析到明确的身份条目，且变体必须在引用的剧情范围内有效。
+未解决的出现项继续保持未决；不得为了让提示词或分镜继续工作，猜一个看似合理的 ID。
 
 按“机械事实 → 语义判断 → 创作者接受”顺序检查。Owner 可按 finding 修订；修订动作本身
 不等于审查 verdict。需要 verdict 时另起一次审查动作，自检也可以如实记录有证据支持的结论。
 
 ## A. 机械检查（`structural_invariant`）
 
-- [ ] 每个 production-relevant screenplay block 有 occurrence 或明确
-  `no_asset_change` disposition。
-- [ ] 每个文件首行的 `sources` 声明了它用到的全部上游快照，记录里的 `src` 都能解析到
-  其中一条。
-- [ ] occurrence 的 `source_ref` 指向 accepted screenplay/index 快照，并给出 field、
-  block、scene。
-- [ ] source pointer、derived visible facts、asset reconciliation、continuity pointer 的
-  数据角色没有混写。
-- [ ] 每个 occurrence 的 decision 恰为 `reuse` / `new_variant` / `new_asset` /
-  `unresolved`。
-- [ ] `new_variant` 有 base、differences、cause、valid_from、valid_until/open-ended。
+- [ ] 每个制作相关的剧本段都有资产处理结果，或明确说明本段没有资产变化。
+- [ ] 每个结果都指向可见场景 ID，并能从当前 `剧本.md` 找到依据。
+- [ ] 来源位置、剧本明示事实、资产判断与连续性变化没有混写。
+- [ ] 每个出现项恰为复用、新变体、新身份或未决之一。
+- [ ] 新变体写清基底、变化、原因、生效位置与结束位置；没有明确终点时标为持续。
 - [ ] ID 唯一；所有已接受 binding 精确解析到 Character+Look、Location+View 或
   Prop+State。
-- [ ] unresolved 没有伪造 accepted binding，不能流入 prompt/storyboard 编译。
-- [ ] 每条 delta 有 before、after、cause/source、effective range、affected bindings。
+- [ ] 未决项没有伪造成已确认身份，不能流入图片提示词或分镜。
+- [ ] 每条变化有前态、后态、原因/来源、生效范围和受影响的可见 ID。
 - [ ] linked outgoing/incoming 状态一致，或有明确待处理 reconciliation。
 - [ ] 可读文字政策完整；`exact_readable` 不与 `no_readable_text` 冲突。
 
-机械失败指出具体 record/field、owner 和修复方向，不回显整段创作文本。
+机械失败指出具体文件、标题 ID、owner 和修复方向，不回显整段创作文本。
 
 ## B. 语义审查（`reviewed_invariant`）
 
@@ -45,8 +38,8 @@
 - [ ] occurrence 的 production disposition 合理：提及不被误当出镜，关键操作物不被
   降成普通布景。
 
-Reviewer finding 应含被引用记录（`src` 与 `record_id`）、evidence、impact、required fix、
-owner、severity、status；不能只说“资产不够细”或“看起来 AI”。
+Reviewer finding 应含文件与标题 ID、证据、影响、修订结果、owner、严重程度和状态；不能只说
+“资产不够细”或“看起来 AI”。
 
 ## C. Craft 默认（可覆盖，不单独阻断）
 
@@ -68,7 +61,7 @@ Creator 可用制作原因覆盖，例如需要逐件审批背景陈设；记录
 
 不得仅因 reviewer 偏好另一个选项而判失败。
 
-## E. Creator acceptance（独立 checkpoint）
+## E. 创作者确认
 
 给创作者看的摘要必须列出：
 
@@ -77,13 +70,13 @@ Creator 可用制作原因覆盖，例如需要逐件审批背景陈设；记录
 3. 新 asset 及持久区分证据；
 4. unresolved 的原文证据、候选和不同选择的下游影响；
 5. continuity deltas 与跨集 outgoing；
-6. 接受后会 stale 的下游文件。
+6. 确认后需要同步更新的下游文件。
 
-逐项保存 `proposed/accepted/rejected/superseded` 与 creator decision ref。Creator acceptance
-不自动代表结构检查、审查 verdict 或 delivery-ready；只在对应动作真实发生时分别记录。
+把创作者确认的结果直接写进 `视觉设定.md`，未确认选择保留为“未决”并说明影响。创作者确认不等于
+结构检查通过、审查通过或可以投产；这些动作各自独立发生。
 
 ## 当前范围完成判据
 
-本次范围内结构检查通过、每个 occurrence 已决定、无 unresolved binding、continuity 可交接，
-且 creator 接受了新增/复用/变体/delta，即完成当前资产批次。审查与交付是后续独立动作，
+本次范围内结构检查通过、每个出现项已决定、没有未决引用、连续性可交接，且创作者已确认需要选择的
+新增/复用/变体/变化，即完成当前资产批次。审查与交付是后续独立动作，
 不作为图片提示词或 storyboard 这两个并列分支的隐式前置门槛。

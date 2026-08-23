@@ -54,7 +54,7 @@
 8. **保持/排除**：防止变形、错材、错状态或多出复制品。
 
 - **`craft_default`**：若尺度容易误判，加入不带身份的参照或给出功能性尺寸关系；不要用剧情角色的手当默认参照。
-- **`craft_default`**：对可动部件，选择一个接受状态；如确需开/关两态，分为两个 道具状态/spec。
+- **`craft_default`**：对可动部件，选择一个明确状态；如确需开/关两态，分为两个道具状态条目。
 - **`taste_option`**：产品式悬浮、台面陈列、正交视图或环境内静物由复用目的决定。
 
 ## 4. 文字政策
@@ -62,8 +62,7 @@
 文字是一项资产状态和制作决策，不是随手加的装饰。
 
 不要改写 assets owner 的 `exact_readable | graphic_only | no_readable_text |
-pending_creator_text`。本 skill 只为当前 plate 选择下列 render treatment，并在
-spec 中保留 source pointer 和映射理由。完整映射表见
+pending_creator_text`。本 skill 只为当前道具板选择下列呈现方式，并在条目中保留资产 ID 与映射理由。完整映射表见
 [common-recipe.md](common-recipe.md)。
 
 ### `readable`
@@ -104,13 +103,11 @@ spec 中保留 source pointer 和映射理由。完整映射表见
 | 中性参照、视图数量、背景方式 | `craft_default` |
 | 产品感、写实度、陈列审美 | `taste_option` |
 
-输出精确绑定的 spec 和 generic prompt；不承诺文字最终生成准确，也不生成任何媒体。
+输出一个精确绑定的 `IMG-...` 道具板条目和可复制正文；不承诺文字最终生成准确，也不生成媒体。
 
 ## 6. 制作形态投影
 
-已接受的 `short-drama.json#/creator_authority/{visual_direction,production_profile}` 决定这件
-道具用什么词汇被画出来，不决定它是什么东西。形态词表见
-本阶段需要从制作形态取得哪些输入，见 [阶段契约](stage-contract.md) 的“制作形态需要什么”。
+`视觉设定.md` 的项目视觉方向与已明确制作形态决定这件道具用什么词汇被画出来，不决定它是什么。
 
 ### 从形态取什么
 

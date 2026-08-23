@@ -1,187 +1,66 @@
 ---
 name: short-drama-assets
-description: "从短剧剧本拆解并统筹角色/造型、场景/视图、道具/状态、可选的角色声音方向和跨场连续性。用户说‘拆角色/场景/道具’、‘做资产表/角色表/场景表/道具表’、‘判断复用还是新变体’、‘更新造型/道具状态’、‘给角色定声音/音色/绑定参考音频/做配音选角表’，或拿现成剧本直接做视觉资产准备时使用；本 skill 不写资产图提示词，不生成图片或视频，也不合成音频、不调用任何语音服务。"
+description: 从短剧剧本拆出人物/造型、地点/视图、道具/状态和跨场连续性，写成创作者可读的视觉设定。用户说“拆角色/场景/道具”“做资产设定”“判断复用还是新变体”“更新造型/道具状态”，或拿现成剧本直接做视觉资产准备时使用；不写图片提示词，不生成媒体。
 license: MIT
 ---
 
 # 短剧资产拆解
 
-把剧本文字变成**可追溯、可复用、能接续状态**的生产资产。重点不是数出
-多少人名和名词，而是回答：屏幕上具体需要什么、它与已有资产是不是同一个、
-此刻是哪种造型/视图/状态，以及变化怎样传到下一场和下一集。
-
-## 开始前
-
-本技能可独立安装和执行。先读取用户明确提供的剧本、既有资产与本任务直接输入；若当前目录
-是 `short-drama` 项目且项目工具可用，可以读取 `status` 并使用其发布生命周期，但缺少 core
-或任何其他技能都不是资产拆解的阻断条件。[阶段契约](references/stage-contract.md) 给出
-本阶段边界、制作形态输入与规则表，无需读取其他技能的文件。
+把剧本文字变成可复用、可持续的视觉事实，统一写入 `剧集/<EP>/视觉设定.md`。不要把每次出场都
+变成新资产，也不要抢写剧本语义、镜头走位或生成提示词。
 
 ## Quick Start
 
-先复制 `examples/minimal/` 的原生 Character/Look JSONL，再修改为当前资产。发布前运行：
-
 ```text
-python3 {技能目录}/scripts/asset_check.py \
-  --characters examples/minimal/characters.jsonl \
-  --looks examples/minimal/looks.jsonl
-python3 {技能目录}/scripts/selftest.py
+用 $short-drama-assets 从 EP001 剧本拆完人物、造型、地点、道具和本集状态
 ```
 
-校验器只检查稳定 ID、引用能否解析到本文件首行 `sources` 声明的快照、创作者接受状态与
-Look → Character 绑定；身份是否可信、差异是否有戏剧依据仍由创作者和 reviewer 判断。
-输入路径不存在于当前目录时，会相对本技能目录解析。
+## 入口与边界
 
-## 边界
+现成剧本可以直接拆资产。先区分：
 
-- 资产事实只来自已接受剧本、已有 设定集、连续性和创作者补充；不擅改剧情。
-- 项目存在时读取 `short-drama.json#/creator_authority/{visual_direction,production_profile}`
-  中状态为 `accepted` 的视觉方向与制作形态；独立运行时使用创作者直接提供的等价约束，未提供
-  就保持 `unset`。形态决定哪些身份锚点在本项目里根本可被表达——以剪影为
-  识别通道的形态与以面部结构为识别通道的形态需要不同的锚点集合；若状态为 `unset`，就向
-  创作者给出选择，不从对话记忆补造。形态可以改变锚点的表达通道与颗粒度，不得反过来改写
-  已接受的身份、地理、持物归属、可读文字政策或故事状态。
-- 只拥有 Character/Look、Location/View、Prop/State、occurrence reconciliation
-  和资产状态 delta。知识/信念/目标/关系/情绪等 story-state 可以在连续性
-  ledger 中被追踪，但只是带 write/develop source pointer 的投影，不是 assets
-  的第二份真相。剧本语义归 `short-drama-write`，镜头手位/走位归
-  `short-drama-storyboard`，图片提示词归 `short-drama-image-prompts`。
-- 可直接接收现成剧本，不强迫补创意开发、故事引擎或集纲。
-- 只产出文本/JSONL；不调用图片、视频、音频模型或 provider API。
-- 创作者可读的产物在项目内跟随 `short-drama.json#/language`，独立运行时跟随用户使用的
-  语言。本阶段不产生送给生成器的
-  提示词正文，与 `#/format/prompt_language` 无关；角色实际说什么语言来自
-  `voice_direction.language`，与两者都无关。
-
-所有权边界见 [阶段契约](references/stage-contract.md)；只在需要时加载
-下列专项参考，不要一次读完所有文件。
-
-## 入口判断
-
-1. **已有已接受的 `screenplay.md` 与 index**：直接拆解。
-2. **已有资产 设定集，只需补集内出现与状态**：读取旧 ID，先判复用，再提新项。
-3. **只有非 canonical 的中文剧本**：保留原字节到 `输入/`；调用 write owner
-   产生最小规范化预览、语义 diff 和未映射片段。创作者接受前不发布
-   `screenplay.md`，拒绝也不改变原稿。接受后直接回来拆资产，不虚构 development。
-4. **用户只要局部结果**（如“拆本场道具”）：仍执行 occurrence → decision，
-   但只呈现所问范围及它依赖的连续性，不用强迫走完整项目流程。
-
-缺少 index 时，不凭行号冒充稳定来源；先请 write owner 对剧本建立 block ID。
-
-## 每轮的工作单元
-
-一轮处理一个明确的来源场次/块范围。整集请求按来源边界拆成若干轮，每轮：
-
-1. 只读这个范围的直接输入，拆出它的资产事实，跑本地结构检查；
-2. 落盘这个范围，其余范围保持原样；
-3. 报告已覆盖范围、剩余范围、未决 occurrence 和下一个值得做的范围；
-4. 交还控制权，等创作者的下一次请求。
-
-图片提示词、分镜和审查各自是独立的工作单元，由创作者明确请求时开始。
+- **身份**：换一个就不再是同一个人、地或物；
+- **变体**：身份不变，但服装、伤势、时段、天气、开合或持有状态改变；
+- **镜头瞬态**：姿势、视线、左右手、站位和相机角度，由分镜拥有；
+- **故事语义**：知识、目标、关系和情绪由写作/开发拥有，只引用可见后果。
 
 ## 工作流
 
-### 1. 先读事实边界
+1. 只读当前范围的剧本和已决定的视觉方向。
+2. 逐场找实体、可见描述、状态变化和含混指代，先不创建资产。
+3. 对每项决定新建、复用、增加变体或标记未决；含混指代不猜。
+4. 写最小可识别设定：统一使用 `识别锚点`、本集状态和变化原因。
+5. 检查造型/伤势、持物/所有权、道具状态、地点时段/天气/光态与跨集 outgoing。
+6. 整集请求自动处理完整集，末端一次回报关键身份决定和未决指代。
 
-读取本集剧本/index、已有 设定集、上集 outgoing、创作者参考与文本政策，以及已接受的
-视觉方向与制作形态。标记哪个版本已被接受。不要把旧 prompt、旧分镜或文件名当成资产真相。
+## 内容要求
 
-### 2. 逐块提 occurrence，暂不创建资产
+- 每项先写什么不变使它仍是同一资产，再写本集变化。
+- 识别锚点必须可见、可生成、可比较，不用空泛质量词替代事实。
+- 服装、伤势、湿污、道具开合和光态通常是变体，不是新身份。
+- 不复制剧情摘要，只保留下游生成、分镜或连续性真正需要的事实。
+- 文字、标识和敏感信息遵守项目政策，不擅自补造品牌或私密信息。
+- 多集状态写清生效与持续范围；镜头内瞬态留给分镜。
 
-按 source block 收集出镜或生产必需的角色、地点、道具及其显式状态：造型、伤污、
-所有者、持物手、位置、损坏、内容物、开闭、可读文字、时段、天气、光态和剧情作用。
-每条 occurrence 先保持“剧本怎样写”的颗粒度，再与资产表对齐。
+## 按需知识
 
-- 不猜“她”“那个人”“另一把钥匙”指谁；保留原称谓和证据，状态设为 unresolved。
-- 区分出镜、画外声、屏幕/照片呈现、仅被提及；被提及不等于要做视觉资产。
-- 不把每个名词都建档。只保留影响识别、复用、提示词、镜头或连续性的事实。
-- 未来的 decisions 先用 locator 指位；decision 建立后由它单向引用 occurrence 的
-  exact snapshot。
+默认只读本 SKILL、当前剧本和视觉方向。遇到对应问题时只打开一份：
 
-方法与反例见 `references/occurrence-extraction.md`，记录形状见
-`assets/occurrences.example.jsonl`。
+- 阶段边界与规则分级：[阶段契约](references/stage-contract.md)
+- 从剧本找真正的资产出现证据：[出现提取](references/occurrence-extraction.md)
+- 新身份、复用、变体或未决：[身份与变体](references/identity-vs-variant.md)
+- 人物识别与造型层次：[人物与造型](references/character-and-look.md)
+- 地点地理、视图和固定锚点：[地点与视图](references/location-and-view.md)
+- 功能道具、所有权和状态变化：[道具与状态](references/prop-and-state.md)
+- 声音参考的身份与授权边界：[声音方向](references/voice-direction.md)
+- 跨场、跨镜、跨集状态：[连续性变化](references/continuity-delta.md)
+- 完成前做一次资产漏项检查：[资产审查清单](references/asset-review-checklist.md)
 
-### 3. 再做身份判断
+## 完成
 
-把 occurrence 与已有 设定集 逐项比对，只给四种提案：
+所有明确出场都已复用、新建、变体化或标为真实未决；需要保持的视觉事实与状态变化已写入唯一
+视觉设定文档，即完成。图片提示词、分镜、审查和生产不自动开始。
 
-- `reuse`：持续身份和本次所需变体均已存在；
-- `new_variant`：同一身份，新增 Look/View/State；
-- `new_asset`：持续身份、空间地理或物体功能/形制确实不同；
-- `unresolved`：证据不足或多个候选都成立，等待创作者选择。
+## 安装维护
 
-先问“同一个东西什么没变”，再问“这次什么变了、为何变、何时有效”。服装、伤势、
-湿污、灯光、道具开合通常不是新身份；相机角度和瞬时姿势通常连新变体都不是。
-不要为了少建记录而合并真正不同的资产。详见
-`references/identity-vs-variant.md` 与 `assets/decisions.example.jsonl`。
-
-### 4. 写最小可识别 设定集
-
-按类别沉淀，身份锚点与临时状态绝不混写：
-
-- Character / Look：`references/character-and-look.md`；例见
-  `assets/character-look.example.jsonl`
-- 声音方向（可选，项目需要跨集保持声音时）：`references/voice-direction.md`；
-  音色载体是参考音频；该文件同时说明 `设定集/voice-casting.md` 怎么渲染。只在处理声音时加载
-- Location / View：`references/location-and-view.md`；例见
-  `assets/location-view.example.jsonl`
-- Prop / State：`references/prop-and-state.md`；例见
-  `assets/prop-state.example.jsonl`
-
-每个新变体记录 base、变化、原因与有效范围。只写能帮助再次认出、复用、提示词
-编写或连续性检查的事实；不堆砌“高级、精致、电影感”等泛化修饰。
-
-### 5. 写变化，不复制整本 设定集
-
-为交接所需的资产状态变化记录 before、after、剧本原因、开始/结束边界和受影响 binding。
-重点检查造型/伤势、持物/所有权、道具状态、地点时段/天气/光态以及跨集 outgoing。
-若为审查需要把知识或关系状态放进 ledger，只保存指向权威字段的引用（`src` 加
-`record_id`、`field`）及必要投影；修订仍路由到 develop/write owner。
-镜头内部姿势、视线、左右手和站位由 storyboard 边界拥有；资产记录只引用，不抢写。
-
-详见 `references/continuity-delta.md` 与 `assets/continuity.example.jsonl`。
-
-### 6. 给创作者看“决定”，而非只给清单
-
-提交接受预览，按以下顺序呈现：
-
-1. 建议复用（为什么是同一个）；
-2. 建议新增变体（没变什么、变了什么、原因与有效期）；
-3. 建议新增身份（区分它的持久证据）；
-4. 未决项（原文证据、候选、每个选择的下游影响）；
-5. 连续性变化与需带入下一集的 outgoing。
-
-创作者可逐项接受、改名、合并、拆分或暂缓。**creator acceptance 是独立事实**：
-抽取完成、结构校验通过、review 通过都不能替代创作者接受。只发布被接受的身份和
-变体；任何 unresolved 都不得编译到图片提示词或分镜 binding。
-若用户要求一次查看全链而中间没有接受回合，可生成待确认的候选预览；不得伪造创作者决定，且不得交付。
-
-### 7. 发布与修订
-
-发布至 `设定集/*.jsonl` 及 `剧集/<EP>/assets/{occurrences,decisions,continuity}.jsonl`。
-项目记录了 `voice_direction` 时，`设定集/voice-casting.md` 由已接受记录重新渲染——
-它是派生文本，手改不会改变任何身份，下一次渲染就会被覆盖。参考音频本身留在 `输入/`。
-每个文件在首行 `sources` 里声明一次它引用到的上游快照，引用本身写 `src` 加稳定 ID/field，
-形状见[阶段契约](references/stage-contract.md#跨产物引用)。资产修改后只列出直接读取该
-ID/variant 的提示词、镜头和 review，由相应 owner 按需刷新；不要重写无关资产或 screenplay。
-
-## 规则分类与阻断
-
-- `structural_invariant`：occurrence 必有已声明的来源快照与 block ID；decision 必属四类；
-  variant 有 base/cause/validity；binding 必须解析到已接受 ID。可机械阻断。
-- `reviewed_invariant`：不可猜含混指代；不可把临时状态混入身份；delta 的剧情原因
-  必须由证据支持。reviewer 引用证据判定，owner 负责修改。
-- `craft_default`：身份不变时优先复用/变体；只跟踪下游有用事实。创作者可说明覆盖。
-- `taste_option`：群演建为个体还是群组、同址空间拆分颗粒度、蒙太奇式跳变方式，
-  由制作策略选择，不单独阻断。
-
-## 完成条件
-
-完成当前有界范围前使用 `references/asset-review-checklist.md`：来源和引用可解析；每个
-occurrence 有明确 decision；未决项保持未决；身份/变体边界可信；连续性能够从
-incoming 走到 outgoing；创作者已经接受本次变更。本 skill 只修订自己拥有的资产事实；
-需要 delivery verdict 时另行请求 `short-drama-review`，不得从这里自动启动。
-
-创作者要求实际合成声音时，把已接受的声音身份、参考音频和录音表交给
-`$short-drama-produce`。该技能会先展示精确任务预览并等待创作者明确确认；本技能不调用
-语音服务，也不把资产接受状态当作生产授权。
+只有安装、升级或排障时运行 `python3 scripts/selftest.py`。

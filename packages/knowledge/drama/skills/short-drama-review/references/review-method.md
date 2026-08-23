@@ -19,9 +19,9 @@
 
 ## Review scope
 
-Start from the current artifact files and accepted creator constraints. Prefer an uninvolved reviewer or isolated
-context when available; otherwise perform an honest self-check. The project CLI stores only a verdict, optional
-reviewer label and note. It does not authenticate reviewer identity or require runtime provenance.
+Start from the current creator-visible files and the constraints the creator has explicitly chosen. Prefer an
+uninvolved reviewer or isolated context when available; otherwise perform an honest self-check and say so in the
+review Markdown. A reviewer label is disclosure, not authenticated identity.
 
 If a target changes during review, reread that target before recording the verdict. Do not recursively invalidate
 unrelated findings.
@@ -30,11 +30,11 @@ unrelated findings.
 
 Mechanical examples:
 
-- invalid JSON/JSONL, missing or duplicate IDs, unresolved references;
+- missing or duplicate Markdown IDs, broken links or unresolved references;
 - unknown asset variants or contradictory camera flags;
 - explicit segments not matching their declared duration;
 - readable text conflicting with the accepted text policy;
-- owner writing outside its authority;
+- a stage document silently taking over facts owned by another document;
 - delivery containing private or unapproved material.
 
 Semantic examples:
@@ -51,7 +51,7 @@ Semantic examples:
 A useful finding contains:
 
 1. stable diagnostic/rule ID when one exists;
-2. project-relative target plus record, field, block or shot when useful;
+2. project-relative file plus heading ID, line number or shot when useful;
 3. bounded quotation or conflicting facts;
 4. audience, continuity or production impact;
 5. required outcome and preserve set, not ghostwritten replacement prose;
@@ -60,9 +60,8 @@ A useful finding contains:
 “The dialogue is weak” is invalid. A finding should identify the exact exchange, say what fails to change, and tell
 the write owner what outcome must be restored.
 
-A findings or verdict file declares each upstream snapshot once under `sources`, and every reference names that
-snapshot key plus the record. Those source references are archival review metadata, not lifecycle inputs and not proof
-of reviewer independence.
+The review Markdown cites the current file name, heading ID, line number or a necessary short quotation directly.
+It does not copy upstream snapshots, invent record IDs or create another version of the source material.
 
 ## Cross-layer synthesis
 

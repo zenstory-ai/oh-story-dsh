@@ -89,26 +89,21 @@ Reviewer 必须说明：重复是否是 creator choice、第二次新增了什�
 
 ## 4. Finding 示例
 
-~~~json
-{
-  "diagnostic_code": "SCR_REPEATED_STRATEGY",
-  "knowhow_rule_id": "SCR-04",
-  "classification": "craft_default",
-  "enforcer": "reviewer",
-  "evidence": "EP002-SC003 与 EP003-SC002 均以主管主动说出隐藏事实结束，主角没有选择",
-  "impact": "主角策略不参与揭示，连续两集回报来自对手自曝",
-  "required_change": "保留两项事实，但让至少一项揭示由主角有代价的策略触发",
-  "owner_skill": "short-drama-write",
-  "severity": "warning"
-}
+~~~markdown
+## Major · REV-003 · 连续两集用同一种自曝完成揭示
+- 位置：剧本.md / EP002-SC003；剧本.md / EP003-SC002
+- 证据：两场都由主管主动说出隐藏事实，主角没有选择。
+- 影响：主角策略不参与揭示，连续两集的回报来自对手自曝。
+- 修订结果：保留两项事实，但让至少一项揭示由主角有代价的策略触发。
+- Owner：short-drama-write
+- 规则：SCR-04 · craft_default
 ~~~
 
-真实 finding 还要在 `evidence_refs` 和 `target_ref` 写出上游引用：
-`{"src": "<sources 键>", "record_id": "<记录 ID>"}`，快照由文件的 `sources` 声明绑定。
+位置只使用文件名、标题 ID、行号或必要短引文。不要复制上游快照，也不要为审查另建记录 ID。
 
 ## 5. 分级
 
-- structural_invariant：finding 元数据、上游引用、owner/status 可解析。
+- structural_invariant：finding 的位置、严重程度、owner 与结论明确且可复核。
 - reviewed_invariant：下游没有改写 source meaning；需证据判断。
 - craft_default：避免无意义的因果/策略/表达/镜头重复；可由创作者说明覆盖。
 - taste_option：类型惯例、仪式重复、running gag、固定镜头风格本身不阻断。

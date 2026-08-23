@@ -1,82 +1,56 @@
-# Creator Workflow
+# Creator-first 工作流
 
-## Creator authority
+## 唯一落盘
 
-`short-drama.json#/creator_authority` stores accepted creator constraints, visual direction and production
-profile choices. A skill may draft choices, but only the creator or an explicitly authorized delegate can accept
-them. If nobody has decided, keep the artifact pending; do not infer acceptance from silence or from a request to
-preview the whole pipeline.
+每集按需维护五份创作者可读 Markdown：
 
-Use project-relative paths and stable record IDs when one artifact points to another. Human-facing records do not
-need lifecycle digests. Deterministic source indexes may still carry byte spans because their job
-is exact source extraction, not workflow state.
-
-## Entry points
-
-| Creator asks for | Owner | Minimum input |
+| 阶段 | owner | 文件 |
 |---|---|---|
-| Develop an idea or episode map | `short-drama-develop` | brief or conversation |
-| Analyze a long source | `short-drama-novel-analyze` | preserved source file |
-| Write or revise an episode | `short-drama-write` | idea, episode card, outline or script |
-| Extract assets | `short-drama-assets` | current script |
-| Create image prompt specs | `short-drama-image-prompts` | current asset facts |
-| Design shots/keyframes | `short-drama-storyboard` | current script and asset facts |
-| Create video prompt specs | `short-drama-video-prompts` | current shots/keyframes |
-| Produce images, video or TTS | `short-drama-produce` | current bounded job plus explicit confirmation after preview |
-| Review | `short-drama-review` | bounded artifact set |
-| Initialize, continue, show or deliver | `short-drama` | project path or target path |
+| 剧本 | `short-drama-write` | `剧集/<EP>/剧本.md` |
+| 视觉资产 | `short-drama-assets` | `剧集/<EP>/视觉设定.md` |
+| 分镜与冻结关键帧 | `short-drama-storyboard` | `剧集/<EP>/分镜.md` |
+| 图片提示词 | `short-drama-image-prompts` | `剧集/<EP>/图片提示词.md` |
+| 视频提示词 | `short-drama-video-prompts` | `剧集/<EP>/视频提示词.md` |
 
-Direct entry is valid. Do not fabricate upstream files merely to make a nominal pipeline complete.
+没有内容时不预建空文件。一个请求只创建它实际需要的文档；从剧本、视觉设定、分镜或提示词任一
+阶段直接进入都合法，不为补齐名义流水线伪造上游。
 
-## Branches
+单集创作主链不落盘 JSON/JSONL、索引、指纹、覆盖表、QA 报告、审核表、交接胶囊或恢复状态。
+需要 ID 时写进 Markdown 标题；结构检查和批次状态留在本轮上下文，不成为第六份创作文档。建议
+写法见 [五份创作文档](creator-documents.md)。
 
-```text
-direction / story development (when needed)
-              |
-           screenplay
-              |
-            assets
-          /        \
- image prompts   storyboard -> video prompts
-          \        /
-       confirmed production
-                |
-             review -> delivery
-```
+长篇原著拆解或多集材料识别可以在 `项目开发/` 使用机器索引；它们是用户点名时才建立的可选分析
+工作区，不是单集创作真相。其存在不会改变 `剧集/<EP>/` 的五文档布局，也不能要求单集 owner
+补造并行结构化产物。
 
-Look Development is optional. Image prompts and storyboard are sibling branches after asset facts exist.
+创作者说明跟随项目语言。图片、关键帧和视频的可复制正文跟随 `prompt_language`；没有
+`short-drama.json` 时默认使用 `en`，同一任务保持一致。两种语言互相独立，不能用一个推断另一个。
 
-## Preview, confirmation and revision
+## 请求范围
 
-A request for an end-to-end preview authorizes drafting, not acceptance. Its runtime contract is **one bounded work unit per turn**:
+用户点名的范围就是本轮范围。“写完这一集”完成整集；“从剧本做到视频提示词”依次完成所点名
+阶段。场次、资产组和镜头组只是内部上下文批次，通过后自动继续，不逐批交还控制权，也不为每个
+中间文件另开接受、审查或 QA 回合。
 
-1. choose one owner stage; for a high-fanout stage, choose one explicit contiguous batch;
-2. read only that unit's direct inputs, draft or revise it, and run its local structural checks;
-3. persist a candidate without inventing creator acceptance;
-4. report the included scope, remaining scope and next useful action, then **return control to the creator**.
+只在三处停下：
 
-The turn ends at step 4. A creator message such as “continue” authorizes the next bounded unit. The next owner
-stage, review and production each begin on their own explicit request; review also runs when an explicitly
-requested delivery needs a verdict. Undecided work stays in `needs_confirmation`, and delivery waits until the
-creator accepts the relevant outputs.
+1. 点名范围已经完成；
+2. 缺失事实形成会显著改变剧情或视觉方向的真实创作分叉；
+3. 下一步会调用外部生产，必须先展示精确 job 并取得显式确认。
 
-For a revision:
+结构检查服务于发现错误，不是创作门禁。能在当前文档直接修正的问题直接修正；审查、归档和媒体
+生产只有用户点名时开始。安装 selftest、全量 QA 和 demo 验证属于技能维护，不属于普通创作请求。
 
-1. identify the artifact and owner;
-2. read only its direct current inputs;
-3. show the semantic change and what should remain unchanged;
-4. let the owner publish the revision;
-5. request creator acceptance when canonical meaning changed;
-6. report whether a separate bounded review is still needed; do not start it automatically.
+## 创作质量
 
-Changing an upstream file does not recursively rewrite project state. A consumer that directly recorded that file
-shows `update_needed`; republish the consumer when the creator actually wants it refreshed.
+简化文件数量不等于降低内容标准。各 owner 按具体问题读取自己的 craft references，检查剧情因果、
+人物声音、资产身份、空间连续性、镜头职责、可生成性和提示词边界。规则与路由总表见
+[knowhow-index.md](knowhow-index.md)。最终回报只说明已完成范围、关键创作决定、真实未决问题和可选
+下一步，不汇报内部流水线噪音。
 
-Rendered prompt Markdown is a view of its structured spec. If someone edits the rendered view, either regenerate
-it, adopt the change into the spec, or reconcile both explicitly.
+## 生产边界
 
-## Delivery boundary
-
-Deliver only explicitly selected, current, approved text and JSON in the text package. Produced media remains in
-its project production directory and may be exported by a separate creator-approved media handoff. Exclude private
-sources, credentials, absolute paths and machine state. `verify` checks checksums; it does not judge creative quality.
+图片、视频、TTS 和音乐生产仍遵守 `preview -> explicit confirm -> run`。生产工具可以在隐藏运行目录
+保存 job、确认和审计记录；这些是付费/外部副作用的必要边界，不要求模型把创作内容再抄成长期
+JSON/JSONL。job 必须把拥有当前提示词的 Markdown 写入 `source`，输出写到
+`剧集/<EP>/制作成果/`；任何提示词、参数、输入或输出路径变化都需要重新预览和确认。

@@ -3,6 +3,11 @@ import type { ContentBlock } from "@deepseek-ai/dsh-llm";
 import type { JsonValue } from "@deepseek-ai/dsh-session";
 import type { SubagentRuntime } from "@deepseek-ai/dsh-subagent";
 import { defineTool, type ToolDefinition } from "@deepseek-ai/dsh-tools";
+import {
+  bundledReferenceGuard,
+  createOhStoryReferenceTool,
+  OH_STORY_REFERENCE_TOOL_NAME
+} from "./reference-tool.js";
 import { OH_STORY_ROLE_NAMES, loadBundledRole, type OhStoryRoleName } from "./role-provider.js";
 
 export const OH_STORY_ROLE_TOOL_NAME = "oh_story_role";
@@ -10,10 +15,10 @@ export type OhStoryRoleSubagents = Pick<SubagentRuntime, "start">;
 
 const roleTools: Readonly<Record<OhStoryRoleName, readonly string[]>> = {
   "chapter-extractor": ["read", "glob", "grep"],
-  "character-designer": ["read", "glob", "grep", "write", "edit"],
-  "consistency-checker": ["read", "glob", "grep"],
-  "narrative-writer": ["read", "glob", "grep", "write", "edit", "bash"],
-  "story-architect": ["read", "glob", "grep", "write", "edit"],
+  "character-designer": [OH_STORY_REFERENCE_TOOL_NAME, "read", "glob", "grep", "write", "edit"],
+  "consistency-checker": [OH_STORY_REFERENCE_TOOL_NAME, "read", "glob", "grep"],
+  "narrative-writer": [OH_STORY_REFERENCE_TOOL_NAME, "read", "glob", "grep", "write", "edit", "bash"],
+  "story-architect": [OH_STORY_REFERENCE_TOOL_NAME, "read", "glob", "grep", "write", "edit"],
   "story-explorer": ["read", "glob", "grep"],
   "story-researcher": ["read", "glob", "grep", "bash", "write", "web_search", "web_fetch"]
 };
@@ -95,7 +100,12 @@ export async function createOhStoryRoleTool(subagents?: OhStoryRoleSubagents): P
 }
 
 export async function registerOhStoryRoleTool(context: Context): Promise<void> {
-  const definition = await createOhStoryRoleTool(context.subagents);
+  const [definition, referenceDefinition] = await Promise.all([
+    createOhStoryRoleTool(context.subagents),
+    createOhStoryReferenceTool()
+  ]);
+  context.tools.register(referenceDefinition);
+  context.tools.guard(bundledReferenceGuard(referenceDefinition, context.tools));
   let dispose: (() => void) | undefined;
   const mount = (): void => { dispose ??= context.tools.register(definition); };
   const unmount = (): void => { dispose?.(); dispose = undefined; };

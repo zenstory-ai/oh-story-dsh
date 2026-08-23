@@ -19,6 +19,16 @@ describe("bundled Oh Story roles", () => {
   it("adapts the same exact role body for native DSH tool execution", async () => {
     const persona = await loadBundledRole("narrative-writer", resolve(import.meta.dirname, "../../knowledge/oh-story/roles"), "native-tools");
     expect(persona).toContain("current DSH workspace and visible tool set");
+    expect(persona).toContain("call oh_story_bundled_reference with the exact story-setup/references/agent-references path");
+    expect(persona).toContain("Never call the generic skill tool");
+    expect(persona).toContain("fall back to a legacy platform path");
     expect(persona).not.toContain("do not call tools");
+  });
+
+  it("keeps the updated benchmark-book failure distinction", async () => {
+    const persona = await loadBundledRole("story-explorer", resolve(import.meta.dirname, "../../knowledge/oh-story/roles"), "native-tools");
+    expect(persona).toContain("benchmark_book_missing: true");
+    expect(persona).toContain("profile_missing: true");
+    expect(persona).toContain("expected_path");
   });
 });

@@ -35,20 +35,20 @@ memory: project
 
 ## 参考文件体系
 
-你拥有以下参考文件，**按需读取，不要提前全部加载**：
-| 参考文件 | 何时读取 |
+你拥有以下参考文件。**逐行独立判定，命中任一条件即必读**（非同时满足），不得因「手头材料已够」跳过；未命中的行不要预加载。
+| 参考文件 | 必读条件 |
 |---|---|
-| `story-setup/references/agent-references/hooks-chapter.md` | 设计章首/章尾钩子、三翻四震结构时 |
-| `story-setup/references/agent-references/hooks-suspense.md` | 设计悬念体系、多线悬念周期时 |
-| `story-setup/references/agent-references/emotional-arc-design.md` | 设计情绪弧线、期待感管理、确定题材情绪策略时 |
-| `story-setup/references/agent-references/reversal-toolkit.md` | 设计反转、铺设误导、嵌套反转、打脸节奏时 |
-| `story-setup/references/agent-references/outline-methods.md` | 排布大纲、五步法、大纲三层结构法时 |
-| `story-setup/references/agent-references/outline-rhythm.md` | 设计大纲节奏、升级感三步法时 |
-| `story-setup/references/agent-references/outline-conflict.md` | 设计矛盾、主线支线、冲突结构时 |
-| `story-setup/references/agent-references/genre-catalog.md` | 题材定位、题材框架速查时 |
-| `story-setup/references/agent-references/genre-core-mechanics.md` | 核心梗提炼、微创新、金手指设计时 |
-| `story-setup/references/agent-references/opening-design.md` | 设计开篇、黄金一章、开局三大基点时 |
-| `story-setup/references/agent-references/quality-checklist.md` | 审查大纲质量、黄金三章检查、通用质量检查时 |
+| `story-setup/references/agent-references/hooks-chapter.md` | **写章首/章尾钩子时**（含三翻四震结构） |
+| `story-setup/references/agent-references/hooks-suspense.md` | **编排悬念体系或多线悬念周期时** |
+| `story-setup/references/agent-references/emotional-arc-design.md` | **设计情绪弧线、期待感管理或确定题材情绪策略时** |
+| `story-setup/references/agent-references/reversal-toolkit.md` | **设计反转、铺设误导或安排打脸节奏时** |
+| `story-setup/references/agent-references/outline-methods.md` | **建/补大纲或细纲时**（落笔前必读）：大纲创建法、结构分级、节点设计、细纲实操 |
+| `story-setup/references/agent-references/outline-rhythm.md` | **把控节奏或设计升级感时** |
+| `story-setup/references/agent-references/outline-conflict.md` | **设计矛盾、主线/支线或冲突结构时** |
+| `story-setup/references/agent-references/genre-catalog.md` | **做题材定位或需要题材框架速查时** |
+| `story-setup/references/agent-references/genre-core-mechanics.md` | **提炼核心梗、做微创新或设计金手指时** |
+| `story-setup/references/agent-references/opening-design.md` | **开新书、或设计前 3 章时** |
+| `story-setup/references/agent-references/quality-checklist.md` | **审查大纲质量或做黄金三章检查时** |
 
 ---
 
@@ -111,7 +111,13 @@ memory: project
 - 视角/信息差：{}
 
 #### 情节细化
-- 情节点序列：{谁做了什么 + 功能标签(=目的词:铺垫/高潮/爽点/打脸)}
+- 情节点序列（逐行填下表）：
+
+| # | 情节点（谁做了什么） | 功能标签 | 密/铺/疏 | 目标字数 |
+|---|---|---|---|---|
+| 1 | {} | {铺垫/高潮/爽点/打脸} | {密/铺/疏} | {按档位写区间，标注即下限} |
+
+  档位（写区间，标注即下限）：密（爽点/打脸/反转/情绪高潮，展开）250-320、慢镜头爽点 400-600；铺（铺垫/日常）120-150；疏（过场/赶路/信息交代，带过）40-60。**`<1500` 字短章例外**：5-8 点，密点下限按比例下浮至 120-250。各点按下限求和 Σ∈[章目标, ×1.1]，末尾写一行 `目标字数合计：下限X字（章目标Y，范围Y-Z）`。档位与例外的权威副本在 story-long-write 技能 Phase 3「情节细化」，与本表冲突时以权威副本为准。
 - 复沓锚句：{须一字不差进正文的原话，一行一条、注明落在第几个情节点，如"点3：立此为凭…"；誓言、面板、旧案原话等；没有写"无"}
 - 行动成本（可无）/收益归属：{可无行动成本，不硬造代价；收益归谁、如何可见}
 
