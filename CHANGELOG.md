@@ -4,6 +4,8 @@
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-08-23
+
 ### Changed
 
 - 同步 Oh Story `9d0bd5f`，区分对标书目录缺失与文风缺失，并采用五列表格的细纲字数合计契约。
@@ -12,6 +14,7 @@
 
 ### Fixed
 
+- `oh_story_role` 现在稳定使用插件持有的 DSH subagent runtime；即使调用 Agent 的 Cordis Fiber 未注入该服务，也能正常启动并回收专业子 Agent。
 - 明确禁止把 v0.5 结构化短剧项目原地迁移或与 v0.6 五文档混放，避免遗留脚本重新生成并行 JSON/JSONL 创作真相。
 - 上游资产同步会排除 `__pycache__`、Python bytecode、`.DS_Store` 与仅用于平台部署的脚本，避免本地 checkout 污染发布包。
 
@@ -66,7 +69,8 @@
 - 提供 13 个 Oh Story 小说 Skills、7 个专业 Roles 与 10 个 Drama Skills。
 - 提供文件树、Markdown/JSONL 编辑预览与官方 DSH Chat 同屏的三栏工作台。
 
-[Unreleased]: https://github.com/worldwonderer/oh-story-dsh/compare/v0.1.3...HEAD
+[Unreleased]: https://github.com/worldwonderer/oh-story-dsh/compare/v0.1.4...HEAD
+[0.1.4]: https://github.com/worldwonderer/oh-story-dsh/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/worldwonderer/oh-story-dsh/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/worldwonderer/oh-story-dsh/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/worldwonderer/oh-story-dsh/compare/v0.1.0...v0.1.1
