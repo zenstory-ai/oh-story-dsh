@@ -9,6 +9,7 @@ import {
   fileMutations,
   latestSettledMutation,
   mutatingCallIds,
+  preferredWorkbenchFile,
   previewMutation,
   streamingAssistant,
   workbenchModeForPath,
@@ -133,18 +134,6 @@ function handleTabKey<T extends string>(
 
 function groupForPath(path: string): string {
   return path === "short-drama.json" ? "项目" : path.split("/", 1)[0] ?? "其他";
-}
-
-function preferredFile(files: readonly WorkspaceFile[], mode: WorkbenchMode): string | undefined {
-  const matching = files.filter((file) => workbenchModeForPath(file.path) === mode);
-  const preferences = mode === "story"
-    ? [/^正文\/.*\.md$/u, /^大纲\/.*\.md$/u, /\.md$/u]
-    : [/^剧集\/EP0*1\/screenplay\.md$/iu, /^剧集\/.*\/screenplay\.md$/iu, /^项目开发\/creative-brief\.md$/u, /^输入\/.*\.md$/u, /\.md$/u, /^short-drama\.json$/u];
-  for (const pattern of preferences) {
-    const match = matching.find((file) => pattern.test(file.path));
-    if (match !== undefined) return match.path;
-  }
-  return matching[0]?.path;
 }
 
 function endpoint(path: string, sessionId: string, file?: string): string {
@@ -386,7 +375,7 @@ function CreativeWorkbench({
       (workspace?.files.some((file) => file.path === selected) ?? false)
       || buffers[selected] !== undefined
     ) && workbenchModeForPath(selected) === workbench) return;
-    setSelected(workspace === undefined ? undefined : preferredFile(workspace.files, workbench));
+    setSelected(workspace === undefined ? undefined : preferredWorkbenchFile(workspace.files, workbench));
   }, [activityPath, buffers, selected, workbench, workspace, workspaceLoading]);
 
   useEffect(() => {
@@ -658,7 +647,7 @@ function CreativeWorkbench({
 
   const selectWorkbench = (next: WorkbenchMode): void => {
     setWorkbench(next);
-    const target = workspace === undefined ? undefined : preferredFile(workspace.files, next);
+    const target = workspace === undefined ? undefined : preferredWorkbenchFile(workspace.files, next);
     if (target === undefined) setSelected(undefined);
     else revealPath(target);
   };
@@ -768,7 +757,7 @@ function CreativeWorkbench({
               delete next[selected];
               return next;
             });
-            setSelected(workspace === undefined ? undefined : preferredFile(workspace.files, workbench));
+            setSelected(workspace === undefined ? undefined : preferredWorkbenchFile(workspace.files, workbench));
           }}>放弃本地草稿</button></div>
         : previewable && editorMode === "preview"
           ? markdown

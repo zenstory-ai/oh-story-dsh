@@ -22,7 +22,7 @@ The deterministic packaged Role path is part of the correctness gate. The paid r
 | Area | Evidence |
 | --- | --- |
 | Capability catalog | Native DSH Session exposes 13 Oh Story Skills and 10 Drama Skills |
-| Upstream integrity | Both knowledge manifests verify pinned commits, catalogs and every bundled file hash |
+| Upstream integrity | Both knowledge manifests verify pinned commits, catalogs, every bundled file hash, portable-source exclusions and the Drama 0.6 creator-first contract; all 10 bundled Drama selftests run without bytecode writes and the five demo documents verify recorded upstream hashes |
 | Plugin boundary | Host bundle and source audit keep all DSH imports inside `@oh-story/dsh` |
 | Workspace safety | Unit tests cover Host/Origin/Fetch Metadata trust, while the packaged route rejects traversal and exercises session-scoped reads plus atomic writes; child-session, absolute-path and symbolic-link negative cases remain follow-up contracts |
 | Editor concurrency | Versioned GET/PUT rejects stale saves; Chrome edits, saves, rereads and restores a real workspace file |
@@ -31,8 +31,8 @@ The deterministic packaged Role path is part of the correctness gate. The paid r
 | JSONL rendering | Component tests cover typed record summaries, source line numbers, scalar records and per-line parse failures |
 | Three-column layout | Native DSH Chrome smoke checks ordered tree/editor/Chat geometry and minimum usable widths |
 | Composer stability | Browser interaction contracts run `scrollIntoView()` and verify dynamic Composer clearance in wide, medium and 500 px compact layouts |
-| Dual workbench | Native smoke switches 小说/短剧 and opens Markdown and JSONL preview/source modes |
-| Roles and hooks | Real Cordis Fiber contracts cover plugin-runtime capture, `Context.get()` fallback and missing-runtime failure; packaged DSH deterministically completes one child-Agent Role invocation |
+| Dual workbench | Native smoke switches 小说/短剧, opens all five creator-first document types, and exercises Markdown preview/source modes |
+| Roles and hooks | Real Cordis Fiber contracts cover plugin-runtime capture, `Context.get()` fallback and missing-runtime failure; packaged DSH deterministically completes one child-Agent Role invocation; unit contracts cover pinned reference reads, path escape and scoped-shadow rejection |
 | Package contents | Build and pack include both pinned knowledge sets, package metadata and license while omitting source tests and the standalone Drama Dashboard |
 
 The gate discovers all `*.test.ts` and `*.contract.test.ts` files. Coverage claims below are tied to executable behavior, not a manually maintained test-count snapshot.
@@ -48,7 +48,7 @@ The gate discovers all `*.test.ts` and `*.contract.test.ts` files. Coverage clai
 
 ## Native DSH Web audit
 
-`pnpm test:dsh` creates an isolated DSH installation and profile, packs `@oh-story/dsh`, installs the tarball through `dsh plugin --profile web add`, and starts the official Web UI. It copies the pinned public demo projects from Oh Story (`让你管账号，你高燃混剪炸全网`) and Drama Skills (`善意不结账`) into temporary workspaces; their source repositories, commits and paths are recorded in `scripts/demo-fixtures/sources.json`. The Chrome pass verifies:
+`pnpm test:dsh` creates an isolated DSH installation and profile, packs `@oh-story/dsh`, installs the tarball through `dsh plugin --profile web add`, and starts the official Web UI. It copies the pinned public demo projects from Oh Story (`让你管账号，你高燃混剪炸全网`) and Drama Skills 0.6 (`让你管账号`) into temporary workspaces; their source repositories, commits and paths are recorded in `scripts/demo-fixtures/sources.json`. The Chrome pass verifies:
 
 - 13 Oh Story Skills and 10 Drama Skills in the Session catalog;
 - Session-scoped workspace reads, a 20-writer atomic CAS race, stale-write rejection and path-traversal rejection;
@@ -56,7 +56,7 @@ The gate discovers all `*.test.ts` and `*.contract.test.ts` files. Coverage clai
 - published Browser module and official UI slot registrations;
 - a real DSH Agent `write` tool call, incremental editor content, authoritative disk reconciliation and official tool-file navigation;
 - a deterministic `oh_story_role` call that starts a packaged `story-explorer` child, returns its result to the parent and completes the parent turn;
-- 小说/短剧 navigation, recursive project directories, Markdown structure and JSONL structured rendering;
+- 小说/短剧 navigation, recursive project directories, creator-first five-document exclusivity and Markdown rendering;
 - blank-session mounting, Session-switch draft recovery, source editing, conflict isolation and saved-state behavior;
 - ordered tree/editor/Chat geometry at desktop and 500 px widths, a Composer that remains fixed during long-message scrolling, and anchor clearance in wide, medium and compact layouts.
 

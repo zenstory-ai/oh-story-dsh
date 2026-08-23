@@ -1,7 +1,14 @@
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import type { Agent } from "@deepseek-ai/dsh-agent";
-import type { ToolRunContext } from "@deepseek-ai/dsh-tools";
+import type { ToolExecution, ToolRunContext, ToolRuntime } from "@deepseek-ai/dsh-tools";
 import { describe, expect, it, vi } from "vitest";
 import { createOhStoryRoleTool, OH_STORY_ROLE_TOOL_NAME, roleToolFilter, type OhStoryRoleSubagents } from "../src/role-tool.js";
+import {
+  bundledReferenceGuard,
+  createOhStoryReferenceTool,
+  OH_STORY_REFERENCE_TOOL_NAME
+} from "../src/reference-tool.js";
 
 function roleSubagents(start: unknown): OhStoryRoleSubagents {
   return { start } as unknown as OhStoryRoleSubagents;
@@ -15,7 +22,9 @@ describe("native Oh Story Role tool", () => {
       properties: { role: { enum: expect.arrayContaining(["chapter-extractor", "story-researcher"]) } }
     });
     expect(roleToolFilter("story-explorer")).toEqual({ allow: ["read", "glob", "grep"] });
-    expect(roleToolFilter("narrative-writer")).toEqual({ allow: ["read", "glob", "grep", "write", "edit", "bash"] });
+    expect(roleToolFilter("narrative-writer")).toEqual({
+      allow: [OH_STORY_REFERENCE_TOOL_NAME, "read", "glob", "grep", "write", "edit", "bash"]
+    });
     expect(roleToolFilter("story-researcher")).toEqual({
       allow: ["read", "glob", "grep", "bash", "write", "web_search", "web_fetch"]
     });
@@ -55,12 +64,64 @@ describe("native Oh Story Role tool", () => {
       label: "oh-story:narrative-writer",
       parent: agent,
       persona: expect.stringContaining("OH_STORY_DSH_ROLE:narrative-writer"),
-      toolFilter: { allow: ["read", "glob", "grep", "write", "edit", "bash"] },
+      toolFilter: { allow: [OH_STORY_REFERENCE_TOOL_NAME, "read", "glob", "grep", "write", "edit", "bash"] },
       maxDepth: 1,
       signal
     }));
     expect(result).toMatchObject({ role: "narrative-writer", runId: "role-run-1" });
     expect(dispose).toHaveBeenCalledOnce();
+  });
+
+  it("removes unavailable bundled-reference access instead of promising unreadable Role references", async () => {
+    const dispose = vi.fn(async () => {});
+    const start = vi.fn(async () => ({
+      id: "role-run-no-reference",
+      result: Promise.resolve({
+        output: [{ type: "text", text: "降级结果" }],
+        stopReason: "completed" as const
+      }),
+      dispose
+    }));
+    const agent = {
+      ctx: {
+        tools: { get: vi.fn((name: string) => name === OH_STORY_REFERENCE_TOOL_NAME ? undefined : {}) }
+      }
+    } as unknown as Agent;
+    const callId = "call-no-reference" as ToolRunContext["callId"];
+    const tool = await createOhStoryRoleTool(roleSubagents(start));
+    const execute = tool.execute as (args: { readonly role: "narrative-writer"; readonly prompt: string }, exec: ToolRunContext) => Promise<unknown>;
+    await execute({ role: "narrative-writer", prompt: "不读取不可达资源" }, {
+      agent,
+      signal: new AbortController().signal,
+      callId,
+      rootCallId: callId,
+      name: OH_STORY_ROLE_TOOL_NAME,
+      arguments: {},
+      token: Symbol("tool") as ToolRunContext["token"],
+      deferContext: vi.fn(),
+      concludeTurn: vi.fn()
+    });
+    expect(start).toHaveBeenCalledWith("spawn", expect.objectContaining({
+      toolFilter: { allow: ["read", "glob", "grep", "write", "edit", "bash"] }
+    }));
+    expect(dispose).toHaveBeenCalledOnce();
+  });
+
+  it("reads only pinned references and rejects path escape or scoped shadowing", async () => {
+    const storySetupRoot = resolve(import.meta.dirname, "../../knowledge/oh-story/skills/story-setup");
+    const definition = await createOhStoryReferenceTool(storySetupRoot);
+    const reference = "story-setup/references/agent-references/writing-craft.md";
+    const result = await definition.execute({ reference }, {} as ToolRunContext) as { readonly reference: string; readonly content: string };
+    expect(result.reference).toBe(reference);
+    expect(result.content).toBe(await readFile(resolve(storySetupRoot, "references/agent-references/writing-craft.md"), "utf8"));
+    await expect(definition.execute({ reference: "story-setup/references/agent-references/../../SKILL.md" }, {} as ToolRunContext))
+      .rejects.toThrow(/must be one of/u);
+
+    const shadow = { ...definition };
+    const guard = bundledReferenceGuard(definition, { get: vi.fn(() => shadow) } as unknown as ToolRuntime);
+    expect(guard({ name: OH_STORY_REFERENCE_TOOL_NAME, agent: {} } as ToolExecution)).toMatch(/shadowed/u);
+    const pinnedGuard = bundledReferenceGuard(definition, { get: vi.fn(() => definition) } as unknown as ToolRuntime);
+    expect(pinnedGuard({ name: OH_STORY_REFERENCE_TOOL_NAME, agent: {} } as ToolExecution)).toBeUndefined();
   });
 
   it("fails closed and still disposes an incomplete role run", async () => {

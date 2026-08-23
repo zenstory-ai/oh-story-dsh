@@ -22,6 +22,7 @@ const platformGlue = [
   "skills/story-setup/references/zcode/",
   "skills/story-setup/scripts/merge-claude-settings.py",
   "skills/story-setup/scripts/merge-codex-hooks.py",
+  "skills/story-setup/scripts/copy-path-safety.py",
   "skills/story-setup/UPGRADING.md"
 ] as const;
 
@@ -101,7 +102,8 @@ await cp(dramaRoot, resolve(outputRoot, "drama"), {
 for (const excluded of [
   "oh-story/skills/browser-cdp/scripts/setup-cdp-chrome.js",
   "oh-story/skills/story-long-scan/scripts",
-  "oh-story/skills/story-short-scan/scripts"
+  "oh-story/skills/story-short-scan/scripts",
+  "oh-story/skills/story-setup/scripts/copy-path-safety.py"
 ]) {
   const present = await access(resolve(outputRoot, excluded)).then(() => true, () => false);
   if (present) throw new Error(`Release bundle retained excluded platform/scraper code: ${excluded}`);

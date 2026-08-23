@@ -103,17 +103,17 @@ pan 同时微调焦点、handheld 带自然呼吸、dolly 配合轻微 tilt 未�
 
 ## 4. 对白、口型与声音
 
-若上游有 accepted `scene_visual_plan.sound_strategy`，先把整场主导声源、撤出/恢复、距离变化、
+若分镜已经明确整场声音策略，先把主导声源、撤出/恢复、距离变化、
 主动留白与 sound bridge 分配到准确镜头，再写本镜 audio。逐镜实现必须能与相邻镜接上，不能
 让每镜各自重新启动一套环境音。场次计划没有登记的故事声源不得由本层发明；音乐仍服从下文的
 时间线边界，也不能替代表演或转向。
 
 ### 精确引用
 
-Motion spec 存 dialogue/VO/SFX/audio 的引用：`src` 指向文件头 `sources` 声明的那个快照，
-再加记录与字段；copyable prompt 可呈现 exact accepted line 或引用标记，取决于交付需要，但不得改字、增删、交换说话人或把对白改 VO。
+每个 `MOTION-...` 直接引用 `剧本.md` 的场景 ID、准确对白/VO/OS/SFX 和对应 `SHOT-...`。可复制正文
+按交付需要呈现逐字台词或声源说明，但不得改字、增删、交换说话人或把对白改成 VO。
 
-同一句 accepted dialogue 跨镜延续时，把相邻提示词串读，说明它在本镜是开始、画外延续、
+同一句对白跨镜延续时，把相邻提示词串读，说明它在本镜是开始、画外延续、
 被打断还是到此结束；不得在前镜声称已经说完，后镜又让同一句继续。没有逐字原句时只保留
 准确引用和延续关系，不为填满节奏补写台词。
 
@@ -225,16 +225,18 @@ Resolvable ref/显式否定可结构检查；delivery 是否语义背离则要 r
 
 ```markdown
 - **请求 owner**：`storyboard | write | assets`
-- **source evidence**：src + 记录/字段，以及该 `sources` 条目的 artifact
+- **来源证据**：文件、场景/镜头 ID 与必要短引文
 - **当前边界**：精确值
 - **motion 需要**：期望变化与原因
 - **影响**：purpose/feasibility/continuity
 - **建议**：split | extend | reblock | amend dialogue | reconcile asset
-- **未执行**：列明保持 byte-identical 的 owner files
+- **未执行**：列明本轮没有修改的 owner 文件
 ```
 
-Video-prompts 可以提议，不能应用。若 reported end 不同于 source end：先判断是 prompt 没实现（video-prompts 修）还是创作确需新边界（storyboard 修）；无论哪种都不把 reported end 当成下一镜 authority。
+Video-prompts 可以提议，不能替 owner 应用。若实际终点不同于分镜终点：先判断是提示词没实现
+（video-prompts 修）还是创作确需新边界（storyboard 修）；无论哪种都不把观察到的终点当成下一镜权威。
 
 ### Handoff 核对
 
-逐字段比较 motion end report 与 shot continuity out；next shot 仍直接读取 storyboard-owned start。Match 才是实现证据，不能用一句“保持连续”代替 position/gaze/hands/prop 等关键字段核对。
+逐字段比较运动终点与镜头终点；下一镜仍直接读取分镜拥有的起点。匹配才是实现证据，不能用一句
+“保持连续”代替位置、目光、双手、持物等关键事实核对。

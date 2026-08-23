@@ -2,11 +2,11 @@
   "schemaVersion": 2,
   "upstream": {
     "repository": "git@github.com:worldwonderer/oh-story-claudecode.git",
-    "commit": "6af052974fd86fbdbbafce3e363d643221c6ce27",
+    "commit": "9d0bd5f5aead707ddcdcf7d5f141b237e2ac464c",
     "releaseVersion": "0.7.6",
     "agentsVersion": 25
   },
-  "generatedAt": "2026-08-20T13:49:01.049Z",
+  "generatedAt": "2026-08-23T14:45:57.000Z",
   "skills": [
     "browser-cdp",
     "story",
@@ -44,8 +44,8 @@
     },
     {
       "path": "roles/character-designer.md",
-      "sha256": "3c2a8025f31a7182f1d3f2233282b1e7ebed3aee9fdef8c289cf00636a4f7222",
-      "bytes": 9363
+      "sha256": "d223ed1a0038dfb4295cdbfe6763bb4223c720ab8fc16a9b9888f5116f229bd1",
+      "bytes": 9347
     },
     {
       "path": "roles/consistency-checker.md",
@@ -54,18 +54,18 @@
     },
     {
       "path": "roles/narrative-writer.md",
-      "sha256": "290f5858a464998c5c4a7a6d4e3b7bdfd1a0056c177e527fadffcb870fae48ed",
-      "bytes": 30669
+      "sha256": "dbdc696a4e6c4e1bb9e22e9c102d9018c575811d7f033eee3d95eb80f9e375cb",
+      "bytes": 30981
     },
     {
       "path": "roles/story-architect.md",
-      "sha256": "d09de3f0dd7f2d63c7ef17c52072a822cfba1e9a9e05611015a6d6897e61fb1c",
-      "bytes": 11910
+      "sha256": "9b0258b76954bd5a45826fce2c09390337bd6b3f43762696f9a00621b9009cbe",
+      "bytes": 12788
     },
     {
       "path": "roles/story-explorer.md",
-      "sha256": "cbec04802591a6b4411098feefb8320a0c73d299482dc8160b71b2130a220b93",
-      "bytes": 20459
+      "sha256": "5c26390f9d54037cd70098b1b600f8eb52e9991ca8ca16bc16d0a896e9a0ac24",
+      "bytes": 22086
     },
     {
       "path": "roles/story-researcher.md",
@@ -124,8 +124,8 @@
     },
     {
       "path": "skills/story-import/SKILL.md",
-      "sha256": "d81c297ff09e3f549ccdf31d9d2ac0941954fde834d2d772d3ade009895c84d8",
-      "bytes": 41724
+      "sha256": "ded07fb520b5d6dfa3b94ceacf984af429c64620360bb1f211ce5418e385a405",
+      "bytes": 41904
     },
     {
       "path": "skills/story-import/references/character-state-reverse.md",
@@ -149,8 +149,8 @@
     },
     {
       "path": "skills/story-import/references/structure-mapping-long.md",
-      "sha256": "587ce97d6426a7727ea6a0b29acd9c44af9f5b27b98fcaf56653fff2383b0ee2",
-      "bytes": 20144
+      "sha256": "f6856dc294184990b95d62caef02594ebb0fd3f5fa13c8bb9e81194fdacac0b9",
+      "bytes": 20225
     },
     {
       "path": "skills/story-import/references/structure-mapping-short.md",
@@ -274,8 +274,8 @@
     },
     {
       "path": "skills/story-long-write/references/artifact-protocols.md",
-      "sha256": "a62c1efdfe79d2b91f94b72fd146462ae94287e67211fc424c28e9400479b0f9",
-      "bytes": 16864
+      "sha256": "64c9c027a6b6e4f5565fcdfa58bade57fbcc4a1b7091ce22950a12baad659650",
+      "bytes": 16913
     },
     {
       "path": "skills/story-long-write/references/banned-words.md",
@@ -554,8 +554,8 @@
     },
     {
       "path": "skills/story-long-write/references/outline-structure-theory.md",
-      "sha256": "5f4cbe6806c6cc50f089267e010d3ba573532592b61f0e93d6e4812e60d28498",
-      "bytes": 22121
+      "sha256": "98f012698491cddf03f0176b8501bd132435f9ad62b4f9d7fab902d94614a3a3",
+      "bytes": 22122
     },
     {
       "path": "skills/story-long-write/references/plot-core-methods.md",
@@ -619,13 +619,13 @@
     },
     {
       "path": "skills/story-long-write/references/workflow-chapter.md",
-      "sha256": "1f23ff4faf406dd7b579fe9b95dfb1e850e8e27bbf420f0c9faefcb0d8cabea6",
-      "bytes": 27047
+      "sha256": "160c539f956ea8cb69f945d24af1ab21d0715367abc1b2e182d1c4568120adfb",
+      "bytes": 27056
     },
     {
       "path": "skills/story-long-write/references/workflow-daily.md",
-      "sha256": "76bb18b47f0ee9006a7e827ea27afdf931f13a09ca7499afbf415c21509e9dba",
-      "bytes": 25092
+      "sha256": "28479f89d22286196dda75b432d08cafbdf2c76fd7ae82c8b9fe29c4cbe0e4e6",
+      "bytes": 25247
     },
     {
       "path": "skills/story-long-write/references/workflow-revision.md",
@@ -634,8 +634,8 @@
     },
     {
       "path": "skills/story-long-write/references/workflow-setup.md",
-      "sha256": "ecefc83b5b38a3abfc01cbcc4fabb7229302fbe65b4f1fc122d49fc33c60dd99",
-      "bytes": 30149
+      "sha256": "719e68845bd81153e755ed5188859a4ffb646f83e3fd2bd0e15dcba782485d6f",
+      "bytes": 30111
     },
     {
       "path": "skills/story-long-write/references/writing-craft.md",
@@ -749,8 +749,8 @@
     },
     {
       "path": "skills/story-setup/SKILL.md",
-      "sha256": "bcae5429af949cc8b697c0f54217046241985b41afc973fcd628cbec4e85de9c",
-      "bytes": 50392
+      "sha256": "ecd2216e803c771a00b322f32f6782cb719a35ee9814ccd296f1576b33b0b415",
+      "bytes": 51900
     },
     {
       "path": "skills/story-setup/references/agent-references/anti-ai-writing.md",

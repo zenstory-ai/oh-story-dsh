@@ -6,6 +6,7 @@ import {
   jsonStringPrefix,
   latestSettledMutation,
   mutatingCallIds,
+  preferredWorkbenchFile,
   previewMutation,
   streamingAssistant,
   workbenchModeForPath
@@ -176,5 +177,17 @@ describe("official DSH file activity", () => {
     expect(creativeRelativePath(".short-drama/private.json", cwd)).toBeUndefined();
     expect(workbenchModeForPath("剧集/第01集.md")).toBe("drama");
     expect(workbenchModeForPath("正文/第001章.md")).toBe("story");
+  });
+
+  it("prefers the v0.6 creator-first screenplay without dropping v0.5 read-only fallback", () => {
+    expect(preferredWorkbenchFile([
+      { path: "剧集/EP001/screenplay.md" },
+      { path: "项目开发/creative-brief.md" },
+      { path: "剧集/EP001/剧本.md" }
+    ], "drama")).toBe("剧集/EP001/剧本.md");
+    expect(preferredWorkbenchFile([
+      { path: "short-drama.json" },
+      { path: "剧集/EP001/screenplay.md" }
+    ], "drama")).toBe("剧集/EP001/screenplay.md");
   });
 });

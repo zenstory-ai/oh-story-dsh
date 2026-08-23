@@ -4,16 +4,23 @@
     {
       "kind": "story",
       "repository": "https://github.com/worldwonderer/oh-story-claudecode",
-      "commit": "6af052974fd86fbdbbafce3e363d643221c6ce27",
+      "commit": "9d0bd5f5aead707ddcdcf7d5f141b237e2ac464c",
       "sourcePath": "demo/长篇/让你管账号，你高燃混剪炸全网",
       "localPath": "story/让你管账号，你高燃混剪炸全网"
     },
     {
       "kind": "drama",
       "repository": "https://github.com/worldwonderer/drama-skills",
-      "commit": "3b9f807cd384cd63324d0856d92950be4c95b40d",
-      "sourcePath": "examples/golden-project",
-      "localPath": "drama/善意不结账"
+      "commit": "7811065c171f8b0a83230bb2e0ccfe2c2b5b337a",
+      "sourcePath": "examples/creator-first/EP001",
+      "localPath": "drama/让你管账号/剧集/EP001",
+      "files": [
+        { "path": "剧本.md", "sha256": "1593c04479ad660117b54ff1ec2c2aaf62b2c25c3f04926632fa9daeefff911d", "bytes": 2259 },
+        { "path": "视觉设定.md", "sha256": "97c50b40d824520965cf008e60920a137cd30bc6a7f458b4f3f34a7f0c3dec51", "bytes": 2049 },
+        { "path": "分镜.md", "sha256": "3e1d6ffe38dafeb9413cf10921fcf5478c3e07f892abd6a70ceddcf674143c09", "bytes": 7780 },
+        { "path": "图片提示词.md", "sha256": "3df4c7fa6bb9bdf2099bd514fb69f5315fca785b9ce9f1a03cdad224c81cb4ae", "bytes": 3545 },
+        { "path": "视频提示词.md", "sha256": "3a17b9c42f2d06afa67acfc870730859e41cbb2e0b4df940feb9a699b24479bd", "bytes": 5669 }
+      ]
     }
   ]
 }

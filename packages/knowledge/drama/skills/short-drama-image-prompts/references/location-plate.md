@@ -117,13 +117,12 @@ Location plate 的价值是让后续镜头共享同一可导航空间。输入�
 | 同一 Location 同一 state 各 View 的主光、色温与光比是否对齐 | `reviewed_invariant` | 并排比同组 View，差异需成因与 delta |
 | 镜头审美与构图 | `taste_option` | 保留创作者选择 |
 
-输出一条 location-plate spec 和 copyable prompt；ID 留在元信息，正文用清楚自然语言。不得生成 plate 图片。
+输出一个 `IMG-...` 地点板条目和可复制正文；ID 留在标题，正文用清楚自然语言。不得生成地点板图片。
 
 ## 6. 制作形态投影
 
-已接受的 `short-drama.json#/creator_authority/{visual_direction,production_profile}` 决定这张
-场景板用什么词汇表达空间，不决定空间长什么样。形态词表见
-本阶段需要从制作形态取得哪些输入，见 [阶段契约](stage-contract.md) 的“制作形态需要什么”。
+`视觉设定.md` 的项目视觉方向与已明确制作形态决定这张场景板用什么词汇表达空间，不决定空间
+长什么样。
 
 ### 从形态取什么
 

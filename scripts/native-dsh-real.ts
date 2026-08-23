@@ -136,29 +136,24 @@ async function main(): Promise<void> {
       mkdir(join(projectRoot, "大纲"), { recursive: true }),
       mkdir(join(projectRoot, "设定", "角色"), { recursive: true }),
       mkdir(join(projectRoot, "追踪"), { recursive: true }),
-      mkdir(join(projectRoot, "剧集", "EP001"), { recursive: true }),
-      mkdir(join(projectRoot, "项目开发"), { recursive: true })
+      mkdir(join(projectRoot, "剧集", "EP001"), { recursive: true })
     ]);
     await Promise.all([
       writeFile(join(projectRoot, "正文", "第001章_雨夜.md"), "# 第一章 雨夜\n\n林舟握着铜钥匙走进废弃车站。雨棚下没有脚印，售票窗却亮着灯。\n"),
       writeFile(join(projectRoot, "大纲", "细纲_第001章.md"), "# 第一章细纲\n\n- 林舟进入废弃车站。\n- 铜钥匙与异常灯光构成悬念。\n"),
       writeFile(join(projectRoot, "设定", "角色", "林舟.md"), "# 林舟\n\n谨慎，随身携带一把来历不明的铜钥匙。\n"),
       writeFile(join(projectRoot, "追踪", "_tracking-state.json"), '{"state_revision":1,"last_committed_chapter":1}\n'),
-      writeFile(join(projectRoot, "short-drama.json"), `${JSON.stringify({
-        schema_version: "1.0.0-draft",
-        project_id: "REAL-DRAMA",
-        title: "雨停之前",
-        language: "zh-CN",
-        format: { aspect_ratio: "9:16", episode_count: 1 }
-      }, null, 2)}\n`),
-      writeFile(join(projectRoot, "项目开发", "creative-brief.md"), "# 创作简报\n\n旧渡站悬疑竖屏短剧，以一张跨越二十三年的车票作为本集钩子。\n"),
-      writeFile(join(projectRoot, "剧集", "EP001", "screenplay.md"), [
+      writeFile(join(projectRoot, "剧集", "EP001", "剧本.md"), [
         "# EP001 雨夜车票", "", "## EP001-SC001 内 · 旧渡站售票厅 · 夜 / 暴雨", "",
         "林舟推开锈死的玻璃门。售票窗后的灯突然亮起，一张湿漉漉的车票从缝隙里滑出来。", "",
         "林舟（压低声音）：谁在里面？", "",
         "扩音器：请持票人准时上车。", "", "[画面文字] 车票：旧渡站 → 临江，2003 年 8 月 20 日。", "",
         "林舟摊开掌心。铜钥匙正在发热。"
-      ].join("\n") + "\n")
+      ].join("\n") + "\n"),
+      writeFile(join(projectRoot, "剧集", "EP001", "视觉设定.md"), "# EP001 视觉设定\n\n## 人物 · 林舟\n- 识别锚点：瘦高，眉骨有浅疤，掌心握铜钥匙。\n\n## 地点 · 旧渡站\n- 识别锚点：锈蚀玻璃门、单个亮灯售票窗、暴雨夜。\n"),
+      writeFile(join(projectRoot, "剧集", "EP001", "分镜.md"), "# EP001 分镜\n\n## SHOT-EP001-001 · 车票滑出\n- 来源：EP001-SC001\n- 时长：4s\n- 起点：空售票窗亮灯。\n- 终点：湿车票滑到林舟面前。\n\n### 冻结关键帧提示词\n> A vertical cinematic frame of an abandoned ticket booth glowing in a storm.\n"),
+      writeFile(join(projectRoot, "剧集", "EP001", "图片提示词.md"), "# EP001 图片提示词\n\n## IMG-LINZHOU-SHEET · 林舟角色板\n- 用途：锁定人物身份与造型。\n\n### 可复制提示词\n> A lean young man with a faint eyebrow scar holding an antique brass key.\n"),
+      writeFile(join(projectRoot, "剧集", "EP001", "视频提示词.md"), "# EP001 视频提示词\n\n## MOTION-EP001-001 · 车票滑出\n- 分镜：SHOT-EP001-001\n- 时长：4s\n- 终点：湿车票滑到人物面前。\n\n### 可复制提示词\n> The ticket booth light switches on and a wet ticket slides through the slot.\n")
     ]);
     const before = await treeDigest(projectRoot);
     run("pnpm", ["--filter", "@oh-story/dsh", "build"]);
@@ -226,7 +221,7 @@ async function main(): Promise<void> {
       mode: "queue",
       content: [{
         type: "text",
-        text: "/short-drama-review story_script 只读审查 剧集/EP001/screenplay.md。只输出审查结论，不修改文件，不生成 findings 或 verdict 文件，也不调用任何生产步骤。"
+        text: "/short-drama-review story_script 只读审查 creator-first 文档 剧集/EP001/剧本.md。只输出审查结论，不修改文件，不生成审查文件或任何 JSON/JSONL，也不调用生产步骤。"
       }],
       clientTimeZone: "America/Los_Angeles"
     });

@@ -10,6 +10,12 @@ const actualFiles = await currentOhStoryFiles();
 if (JSON.stringify(actualFiles) !== JSON.stringify(manifest.files)) {
   throw new Error("Bundled knowledge files differ from manifest; run pnpm assets:sync.");
 }
+const forbiddenPortableAssets = manifest.files.filter(({ path }) =>
+  path.includes("/__pycache__/") || path.endsWith(".pyc") || path.endsWith("/.DS_Store")
+    || path === "skills/story-setup/scripts/copy-path-safety.py");
+if (forbiddenPortableAssets.length > 0) {
+  throw new Error(`Bundled knowledge retained upstream workspace/platform artifacts: ${forbiddenPortableAssets.map(({ path }) => path).join(", ")}`);
+}
 
 const skills = (await readdir(join(ohStoryRoot, "skills"), { withFileTypes: true }))
   .filter((entry) => entry.isDirectory())
