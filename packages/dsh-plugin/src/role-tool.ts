@@ -1,10 +1,12 @@
 import type { Context } from "@deepseek-ai/cordis";
 import type { ContentBlock } from "@deepseek-ai/dsh-llm";
 import type { JsonValue } from "@deepseek-ai/dsh-session";
+import type { SubagentRuntime } from "@deepseek-ai/dsh-subagent";
 import { defineTool, type ToolDefinition } from "@deepseek-ai/dsh-tools";
 import { OH_STORY_ROLE_NAMES, loadBundledRole, type OhStoryRoleName } from "./role-provider.js";
 
 export const OH_STORY_ROLE_TOOL_NAME = "oh_story_role";
+export type OhStoryRoleSubagents = Pick<SubagentRuntime, "start">;
 
 const roleTools: Readonly<Record<OhStoryRoleName, readonly string[]>> = {
   "chapter-extractor": ["read", "glob", "grep"],
@@ -24,7 +26,7 @@ function resultText(output: readonly ContentBlock[]): string {
   return output.map((block) => block.type === "text" ? block.text : JSON.stringify(block)).join("\n");
 }
 
-export async function createOhStoryRoleTool(): Promise<ToolDefinition> {
+export async function createOhStoryRoleTool(subagents?: OhStoryRoleSubagents): Promise<ToolDefinition> {
   const personas = new Map<OhStoryRoleName, string>();
   await Promise.all(OH_STORY_ROLE_NAMES.map(async (role) => {
     personas.set(role, await loadBundledRole(role, undefined, "native-tools"));
@@ -64,7 +66,9 @@ export async function createOhStoryRoleTool(): Promise<ToolDefinition> {
       if (persona === undefined) throw new Error(`Oh Story Role ${args.role} is not bundled.`);
       const allowed = roleToolFilter(args.role).allow.filter((name) =>
         exec.agent?.ctx.tools.get(name, exec.agent) !== undefined);
-      const run = await exec.agent.ctx.subagents.start("spawn", {
+      const runtime = subagents ?? exec.agent.ctx.get("subagents");
+      if (runtime === undefined) throw new Error("oh_story_role requires the DSH subagent runtime.");
+      const run = await runtime.start("spawn", {
         label: `oh-story:${args.role}`,
         prompt: [{ type: "text", text: args.prompt }],
         parent: exec.agent,
@@ -91,7 +95,7 @@ export async function createOhStoryRoleTool(): Promise<ToolDefinition> {
 }
 
 export async function registerOhStoryRoleTool(context: Context): Promise<void> {
-  const definition = await createOhStoryRoleTool();
+  const definition = await createOhStoryRoleTool(context.subagents);
   let dispose: (() => void) | undefined;
   const mount = (): void => { dispose ??= context.tools.register(definition); };
   const unmount = (): void => { dispose?.(); dispose = undefined; };
