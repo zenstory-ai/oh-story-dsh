@@ -15,6 +15,7 @@
   overflow-y: auto;
   position: relative;
   scrollbar-gutter: stable;
+  scroll-padding-bottom: calc(var(--dsh-composer-height, 152px) + 16px);
 }
 
 /* Keep the final Chat flow above the overlapping official Composer. */

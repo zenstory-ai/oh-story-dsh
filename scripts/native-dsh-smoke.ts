@@ -11,6 +11,7 @@ const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const dshVersion = "0.1.1-rc.1";
 const demoFramesDirectory = process.env.OH_STORY_DEMO_FRAMES_DIR;
 const useRealDeepSeek = process.env.OH_STORY_DEMO_USE_REAL_DEEPSEEK === "1";
+const browserChannel = process.env.DSH_SMOKE_BROWSER_CHANNEL ?? (process.platform === "win32" ? "msedge" : "chrome");
 const storyProjectName = "让你管账号，你高燃混剪炸全网";
 const dramaProjectName = "善意不结账";
 const storyFixture = join(repositoryRoot, "scripts", "demo-fixtures", "story", storyProjectName);
@@ -47,7 +48,15 @@ async function prepareDemoSurface(page: Page): Promise<void> {
 
 function run(command: string, args: readonly string[], env: NodeJS.ProcessEnv = process.env): void {
   const result = spawnSync(command, args, { cwd: repositoryRoot, env, encoding: "utf8", stdio: "pipe" });
-  if (result.status !== 0) throw new Error(`Command failed: ${command} ${args.join(" ")}\n${result.stdout}\n${result.stderr}`);
+  if (result.status !== 0) throw new Error(`Command failed: ${command} ${args.join(" ")}\n${result.error?.message ?? ""}\n${result.stdout ?? ""}\n${result.stderr ?? ""}`);
+}
+
+function runPnpm(args: readonly string[]): void {
+  if (process.platform === "win32") {
+    run(process.env.ComSpec ?? "cmd.exe", ["/d", "/s", "/c", "pnpm", ...args]);
+    return;
+  }
+  run("pnpm", args);
 }
 
 async function freePort(): Promise<number> {
@@ -295,8 +304,8 @@ async function main(): Promise<void> {
       cp(storyFixture, storyRoot, { recursive: true }),
       cp(dramaFixture, dramaRoot, { recursive: true })
     ]);
-    run("pnpm", ["--filter", "@oh-story/dsh", "build"]);
-    run("pnpm", ["--filter", "@oh-story/dsh", "pack", "--pack-destination", packDirectory]);
+    runPnpm(["--filter", "@oh-story/dsh", "build"]);
+    runPnpm(["--filter", "@oh-story/dsh", "pack", "--pack-destination", packDirectory]);
     await mkdir(installation, { recursive: true });
     await writeFile(join(installation, "package.json"), `${JSON.stringify({ private: true, dependencies: { "@deepseek-ai/dsh": dshVersion } }, null, 2)}\n`);
     await writeFile(join(installation, "pnpm-workspace.yaml"), [
@@ -304,15 +313,15 @@ async function main(): Promise<void> {
       "  '@deepseek-ai/dsh-subprocess-local': true", "  '@google/genai': false", "  koffi: true",
       "  node-addon-require-builtin: false", "  node-pty: true", "  protobufjs: false", ""
     ].join("\n"));
-    try { run("pnpm", ["--dir", installation, "install", "--offline"]); }
-    catch { run("pnpm", ["--dir", installation, "install"]); }
+    try { runPnpm(["--dir", installation, "install", "--offline"]); }
+    catch { runPnpm(["--dir", installation, "install"]); }
     const dshBin = join(installation, "node_modules", "@deepseek-ai", "dsh", "lib", "bin.js");
     const tarball = (await readdir(packDirectory)).find((entry) => entry.endsWith(".tgz"));
     if (tarball === undefined) throw new Error("Plugin pack did not create a tarball.");
     const archivePath = join(packDirectory, tarball);
     const archive = spawnSync("tar", ["-tzf", archivePath], { cwd: repositoryRoot, encoding: "utf8", stdio: "pipe" });
     if (archive.status !== 0) throw new Error(`Could not inspect plugin tarball:\n${archive.stderr}`);
-    const entries = new Set(archive.stdout.split("\n").filter((entry) => entry !== ""));
+    const entries = new Set(archive.stdout.split(/\r?\n/u).filter((entry) => entry !== ""));
     for (const required of [
       "package/LICENSE", "package/README.md", "package/cordis.patch.yml", "package/package.json",
       "package/lib/index.js", "package/lib/client.js", "package/lib/oh-story/manifest.json", "package/lib/drama/manifest.json"
@@ -331,6 +340,7 @@ async function main(): Promise<void> {
     if (!useRealDeepSeek) mockDeepSeek = await startMockDeepSeek();
     const env = {
       ...process.env,
+      COREPACK_ENABLE_PROJECT_SPEC: "0",
       DSH_HOME: dshHome,
       DSH_TELEMETRY_DISABLED: "1",
       DEEPSEEK_API_KEY: realApiKey ?? "oh-story-local-fixture",
@@ -471,7 +481,7 @@ async function main(): Promise<void> {
       if (client.includes(forbidden)) throw new Error(`Browser module still contains legacy surface ${forbidden}.`);
     }
 
-    const browser = await chromium.launch({ channel: "chrome", headless: true });
+    const browser = await chromium.launch({ channel: browserChannel, headless: true });
     try {
       const page = await browser.newPage({ viewport: { width: 1_440, height: 900 } });
       const pageErrors: string[] = [];
@@ -486,10 +496,15 @@ async function main(): Promise<void> {
       }
       await page.locator('[class*="onboardingOverlay"]').waitFor({ state: "detached", timeout: 10_000 }).catch(() => undefined);
       await selectSession(page, storyWorkspace.workspace.title, storySessionTitle);
-      const blankSession = page.getByRole("button", { name: /^(?:New session|新会话)$/u }).first();
-      await blankSession.waitFor({ state: "visible", timeout: 10_000 });
+      const blankSession = page.locator("button").filter({ hasText: /^\s*(?:New Session|新会话)\s*$/iu }).first();
+      try { await blankSession.waitFor({ state: "visible", timeout: 10_000 }); }
+      catch (error) {
+        const buttons = await page.getByRole("button").allTextContents();
+        const body = (await page.locator("body").innerText()).slice(0, 4_000);
+        throw new Error(`New Session action was not visible; buttons=${JSON.stringify(buttons)}; pageErrors=${JSON.stringify(pageErrors)}; body=${JSON.stringify(body)}`, { cause: error });
+      }
       await blankSession.click();
-      await page.getByRole("treeitem", { selected: true }).filter({ hasText: /^(?:New Session|新会话)$/u })
+      await page.getByRole("treeitem", { selected: true }).filter({ hasText: /^(?:New Session|新会话)$/iu })
         .waitFor({ state: "visible", timeout: 10_000 });
       await page.getByRole("navigation", { name: "小说项目文件" }).waitFor({ state: "visible", timeout: 20_000 });
       if (await page.locator(".oh-story-split-surface").count() !== 1) {
@@ -829,6 +844,18 @@ async function main(): Promise<void> {
       const scrollerLocator = page.locator("[data-conversation-scroll]");
       if (await scrollerLocator.getAttribute("data-oh-story-layout") !== "wide") {
         throw new Error("Workbench did not derive its wide layout from the conversation container.");
+      }
+      const anchoredChatRow = page.locator("[data-chat-flow-key]").last();
+      await anchoredChatRow.evaluate((element) => { element.scrollIntoView({ block: "end" }); });
+      await page.waitForTimeout(50);
+      const [anchoredChatBox, anchoredComposerBox, scrollPaddingBottom] = await Promise.all([
+        anchoredChatRow.boundingBox(), composerLocator.boundingBox(),
+        scrollerLocator.evaluate((element) => Number.parseFloat(getComputedStyle(element).scrollPaddingBottom))
+      ]);
+      if (anchoredChatBox === null || anchoredComposerBox === null
+        || anchoredChatBox.y + anchoredChatBox.height > anchoredComposerBox.y - 15
+        || scrollPaddingBottom < anchoredComposerBox.height + 15) {
+        throw new Error(`Chat anchor scrolled behind the official Composer: ${JSON.stringify({ anchoredChatBox, anchoredComposerBox, scrollPaddingBottom })}`);
       }
       const scrollViewport = await scrollerLocator.boundingBox();
       if (scrollViewport === null) throw new Error("Missing conversation scroll viewport.");
