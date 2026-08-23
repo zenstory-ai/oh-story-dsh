@@ -4,6 +4,13 @@
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-08-23
+
+### Fixed
+
+- 展开的 Todo、流式状态与消息流末尾现在会为官方 Composer 的动态高度预留空间，不再被底部输入区遮挡。
+- Chat 锚点恢复、`scrollIntoView` 与浏览器焦点滚动会停在 Composer 上方，并保持目标消息可见。
+
 ## [0.1.2] - 2026-08-21
 
 ### Changed
@@ -48,7 +55,8 @@
 - 提供 13 个 Oh Story 小说 Skills、7 个专业 Roles 与 10 个 Drama Skills。
 - 提供文件树、Markdown/JSONL 编辑预览与官方 DSH Chat 同屏的三栏工作台。
 
-[Unreleased]: https://github.com/worldwonderer/oh-story-dsh/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/worldwonderer/oh-story-dsh/compare/v0.1.3...HEAD
+[0.1.3]: https://github.com/worldwonderer/oh-story-dsh/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/worldwonderer/oh-story-dsh/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/worldwonderer/oh-story-dsh/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/worldwonderer/oh-story-dsh/releases/tag/v0.1.0
