@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
   "upstream": {
-    "repository": "https://github.com/worldwonderer/drama-skills.git",
-    "commit": "7811065c171f8b0a83230bb2e0ccfe2c2b5b337a"
+    "repository": "git@github.com:zenstory-ai/drama-skills.git",
+    "commit": "db69caa238ee1dab5514589319a83f0778e6b4db"
   },
-  "generatedAt": "2026-08-23T14:48:42.386Z",
+  "generatedAt": "2026-08-24T15:28:14.083Z",
   "skills": [
     "short-drama",
     "short-drama-assets",

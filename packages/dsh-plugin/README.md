@@ -1,8 +1,8 @@
 # @oh-story/dsh
 
-[GitHub](https://github.com/worldwonderer/oh-story-dsh) · [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) · [MIT](LICENSE)
+[GitHub](https://github.com/zenstory-ai/oh-story-dsh) · [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) · [MIT](LICENSE)
 
-![oh-story-dsh 小说工作台](https://raw.githubusercontent.com/worldwonderer/oh-story-dsh/main/docs/images/oh-story-dsh-demo.gif)
+![oh-story-dsh 小说工作台](https://raw.githubusercontent.com/zenstory-ai/oh-story-dsh/main/docs/images/oh-story-dsh-demo.gif)
 
 `oh-story-dsh` 是基于 DeepSeek Harness（DSH）构建的社区小说与短剧创作插件，提供：
 
@@ -25,7 +25,7 @@ npx -y @deepseek-ai/dsh@0.1.1-rc.1 web
 也可以直接安装 GitHub Release 中的预构建包：
 
 ```bash
-npx -y @deepseek-ai/dsh@0.1.1-rc.1 plugin --profile web add https://github.com/worldwonderer/oh-story-dsh/releases/download/v0.1.4/oh-story-dsh-0.1.4.tgz
+npx -y @deepseek-ai/dsh@0.1.1-rc.1 plugin --profile web add https://github.com/zenstory-ai/oh-story-dsh/releases/download/v0.1.4/oh-story-dsh-0.1.4.tgz
 npx -y @deepseek-ai/dsh@0.1.1-rc.1 web
 ```
 
@@ -37,4 +37,4 @@ Drama Skills 0.6.0 不支持把 v0.5 结构化项目原地升级为 creator-firs
 
 ## License
 
-[Changelog](https://github.com/worldwonderer/oh-story-dsh/blob/main/CHANGELOG.md) · [MIT](LICENSE)
+[Changelog](https://github.com/zenstory-ai/oh-story-dsh/blob/main/CHANGELOG.md) · [MIT](LICENSE)

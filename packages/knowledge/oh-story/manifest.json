@@ -1,12 +1,12 @@
 {
   "schemaVersion": 2,
   "upstream": {
-    "repository": "git@github.com:worldwonderer/oh-story-claudecode.git",
-    "commit": "9d0bd5f5aead707ddcdcf7d5f141b237e2ac464c",
+    "repository": "git@github.com:zenstory-ai/oh-story-claudecode.git",
+    "commit": "a78f75a234f084c6b5469b301eecbea103c1ecae",
     "releaseVersion": "0.7.6",
     "agentsVersion": 25
   },
-  "generatedAt": "2026-08-23T14:45:57.000Z",
+  "generatedAt": "2026-08-24T15:28:10.874Z",
   "skills": [
     "browser-cdp",
     "story",
@@ -74,13 +74,13 @@
     },
     {
       "path": "skills/browser-cdp/SKILL.md",
-      "sha256": "b6b899779654add6e823c4580439e1960bae814284e1fd41df4273bfb46366b4",
-      "bytes": 6964
+      "sha256": "aa594fbec8ba42f0eb46458a926286c3154b9d92bfb329241efd3344dd0dda3c",
+      "bytes": 6962
     },
     {
       "path": "skills/story-cover/SKILL.md",
-      "sha256": "98902e125ace61b0059fa27f94a50608c919767a50deda3bec1818ce95b73cb5",
-      "bytes": 16284
+      "sha256": "2b3ecdd288671f8cc566a54dd13a75ec3d600d72307dc6c0d76e456760a1a6e7",
+      "bytes": 16282
     },
     {
       "path": "skills/story-cover/references/cover-styles.md",
@@ -89,8 +89,8 @@
     },
     {
       "path": "skills/story-deslop/SKILL.md",
-      "sha256": "7b767fd9cc3d3aacbc2f05d6bfd8f86da7fa04f6d77ba1fb05e66f35bfc82fab",
-      "bytes": 29421
+      "sha256": "622581a30c30c66b41ec3e76a004fef6fab51157288db08bd9793adeb1f09984",
+      "bytes": 29419
     },
     {
       "path": "skills/story-deslop/references/anti-ai-writing.md",
@@ -124,8 +124,8 @@
     },
     {
       "path": "skills/story-import/SKILL.md",
-      "sha256": "ded07fb520b5d6dfa3b94ceacf984af429c64620360bb1f211ce5418e385a405",
-      "bytes": 41904
+      "sha256": "ac8854f3447cf0b41bb1799fbb13aa2749f6bf08d099f61f64e49a3382c944d4",
+      "bytes": 41902
     },
     {
       "path": "skills/story-import/references/character-state-reverse.md",
@@ -169,8 +169,8 @@
     },
     {
       "path": "skills/story-long-analyze/SKILL.md",
-      "sha256": "6b23ee7e04c424bdb7170031106328a705eba7a541587325c0a5c51056b6fd4d",
-      "bytes": 30113
+      "sha256": "e7e5b9e4613f19b376bc470ca19398a264b6132ea2a194047b4b14618199087b",
+      "bytes": 30111
     },
     {
       "path": "skills/story-long-analyze/references/deconstruction-notes.md",
@@ -204,8 +204,8 @@
     },
     {
       "path": "skills/story-long-scan/SKILL.md",
-      "sha256": "faac5fccf052dcbcb49ca26315977424e9a662f2eed80d6c5fd19eba7f765d55",
-      "bytes": 16432
+      "sha256": "aedbfc25b66d525a08a806554a6aeb51eb2d3cf5a9ef6647a20a25d3b276e2c8",
+      "bytes": 16430
     },
     {
       "path": "skills/story-long-scan/references/genre-trends.md",
@@ -264,8 +264,8 @@
     },
     {
       "path": "skills/story-long-write/SKILL.md",
-      "sha256": "1bd0991c4054a280f49abb0d2cec26fc74582851e19f34e5b397abd4ef7a9f17",
-      "bytes": 27252
+      "sha256": "1a0dc6b6e3faed84d0c0ddea4e541613f0a22004c1bd9be4be6271c16324f358",
+      "bytes": 27250
     },
     {
       "path": "skills/story-long-write/references/anti-ai-writing.md",
@@ -669,8 +669,8 @@
     },
     {
       "path": "skills/story-review/SKILL.md",
-      "sha256": "7292e49968309050a26617f2037cd0ec1d1301b9fe9676e2006ff87c404e0c8b",
-      "bytes": 38654
+      "sha256": "3a4f4c4b9ada336f3a1dc0df6e9b0e51414ce59aefbf8bfff56ccf9ae22cd40d",
+      "bytes": 38652
     },
     {
       "path": "skills/story-review/references/anti-ai-writing.md",
@@ -749,8 +749,8 @@
     },
     {
       "path": "skills/story-setup/SKILL.md",
-      "sha256": "ecd2216e803c771a00b322f32f6782cb719a35ee9814ccd296f1576b33b0b415",
-      "bytes": 51900
+      "sha256": "106d4ed2364b3d7e46c63d1fa1cc66c348ef42e428f3690c414c35f912cb7ce4",
+      "bytes": 51896
     },
     {
       "path": "skills/story-setup/references/agent-references/anti-ai-writing.md",
@@ -1044,8 +1044,8 @@
     },
     {
       "path": "skills/story-short-analyze/SKILL.md",
-      "sha256": "be345bfd3731e7eafc846a3922628d1ba52febb7dd6b1ebde1c77b47c6e8e396",
-      "bytes": 17011
+      "sha256": "da56247c85ae43d85d39ab905101522b99a0147923b33e8a64acf668cd5e6e98",
+      "bytes": 17009
     },
     {
       "path": "skills/story-short-analyze/references/anti-ai-writing.md",
@@ -1149,8 +1149,8 @@
     },
     {
       "path": "skills/story-short-scan/SKILL.md",
-      "sha256": "ae9563681b649e8c03cea39c8e508587dc410b3e797dffda7b020d55450de7e3",
-      "bytes": 8991
+      "sha256": "def39be0868b47260e9ed4101bceac32a7582b63c903b8efb98514021e835f8a",
+      "bytes": 8989
     },
     {
       "path": "skills/story-short-scan/references/real-market-data.md",
@@ -1174,8 +1174,8 @@
     },
     {
       "path": "skills/story-short-write/SKILL.md",
-      "sha256": "bc9e649f00da62cae39887b3a82d9ec47bea93ebefeabaa3e12f7efb71173fef",
-      "bytes": 36117
+      "sha256": "2dc4fca047754bf1ed1db63a556a78d26a0e6cb4c27e11281a9da803e0214957",
+      "bytes": 36115
     },
     {
       "path": "skills/story-short-write/references/banned-words.md",
@@ -1339,8 +1339,8 @@
     },
     {
       "path": "skills/story/SKILL.md",
-      "sha256": "ee6af57e46d2b2a29ca1e760f566b32360388baa1c12dd656cb31cf8bff7183f",
-      "bytes": 9598
+      "sha256": "da0a5f7bc35b0d838b3e28b271a353065bb0e9ba043b13d64be226be282c1fbc",
+      "bytes": 9584
     },
     {
       "path": "skills/story/VERSION",
