@@ -14,11 +14,11 @@
     "screenwriting",
     "ai-agents"
   ],
-  "homepage": "https://github.com/worldwonderer/oh-story-dsh#readme",
-  "bugs": "https://github.com/worldwonderer/oh-story-dsh/issues",
+  "homepage": "https://github.com/zenstory-ai/oh-story-dsh#readme",
+  "bugs": "https://github.com/zenstory-ai/oh-story-dsh/issues",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/worldwonderer/oh-story-dsh.git",
+    "url": "git+https://github.com/zenstory-ai/oh-story-dsh.git",
     "directory": "packages/dsh-plugin"
   },
   "publishConfig": {

@@ -7,7 +7,7 @@ Security fixes land on the latest published `@oh-story/dsh` release. Report issu
 ## Reporting a vulnerability
 
 Please do not open a public issue for a suspected vulnerability. Use GitHub's private
-[Report a vulnerability](https://github.com/worldwonderer/oh-story-dsh/security/advisories/new)
+[Report a vulnerability](https://github.com/zenstory-ai/oh-story-dsh/security/advisories/new)
 form instead. Include the DSH version, the plugin version, and a reproduction. We aim to
 acknowledge within 72 hours.
 

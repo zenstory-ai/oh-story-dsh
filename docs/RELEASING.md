@@ -12,7 +12,7 @@ release note.
 
 After the first publication, configure npm Trusted Publishing for:
 
-- repository: `worldwonderer/oh-story-dsh`
+- repository: `zenstory-ai/oh-story-dsh`
 - workflow: `release.yml`
 
 The workflow requests an OpenID Connect identity and publishes with provenance.
@@ -51,5 +51,5 @@ npx -y @deepseek-ai/dsh@0.1.1-rc.1 plugin --profile web add "@oh-story/dsh@$VERS
 The GitHub Release tarball remains a registry-independent installation path:
 
 ```bash
-npx -y @deepseek-ai/dsh@0.1.1-rc.1 plugin --profile web add "https://github.com/worldwonderer/oh-story-dsh/releases/download/v$VERSION/oh-story-dsh-$VERSION.tgz"
+npx -y @deepseek-ai/dsh@0.1.1-rc.1 plugin --profile web add "https://github.com/zenstory-ai/oh-story-dsh/releases/download/v$VERSION/oh-story-dsh-$VERSION.tgz"
 ```

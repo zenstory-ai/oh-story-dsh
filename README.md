@@ -4,7 +4,7 @@
 
 **小说与短剧创作工作台**
 
-[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) · [Oh Story](https://github.com/worldwonderer/oh-story-claudecode) · [Drama Skills](https://github.com/worldwonderer/drama-skills) · [MIT](LICENSE)
+[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) · [Oh Story](https://github.com/zenstory-ai/oh-story-claudecode) · [Drama Skills](https://github.com/zenstory-ai/drama-skills) · [MIT](LICENSE)
 
 </div>
 
@@ -39,8 +39,8 @@
 
 | 工作台 | 上游能力 | 主要入口 |
 | --- | --- | --- |
-| 小说 | [Oh Story 0.7.6](https://github.com/worldwonderer/oh-story-claudecode) · 13 Skills · 7 Roles | `/story`、`/story-long-write`、`/story-review` |
-| 短剧 | [Drama Skills 0.6.0](https://github.com/worldwonderer/drama-skills/releases/tag/v0.6.0) · 10 Skills | `/short-drama`、`/short-drama-write`、`/short-drama-storyboard` |
+| 小说 | [Oh Story 0.7.6](https://github.com/zenstory-ai/oh-story-claudecode) · 13 Skills · 7 Roles | `/story`、`/story-long-write`、`/story-review` |
+| 短剧 | [Drama Skills 0.6.0](https://github.com/zenstory-ai/drama-skills/releases/tag/v0.6.0) · 10 Skills | `/short-drama`、`/short-drama-write`、`/short-drama-storyboard` |
 
 ## 安装
 
@@ -56,7 +56,7 @@ npx -y @deepseek-ai/dsh@0.1.1-rc.1 web
 也可以直接安装 GitHub Release 中经过同一套测试的预构建包：
 
 ```bash
-npx -y @deepseek-ai/dsh@0.1.1-rc.1 plugin --profile web add https://github.com/worldwonderer/oh-story-dsh/releases/download/v0.1.4/oh-story-dsh-0.1.4.tgz
+npx -y @deepseek-ai/dsh@0.1.1-rc.1 plugin --profile web add https://github.com/zenstory-ai/oh-story-dsh/releases/download/v0.1.4/oh-story-dsh-0.1.4.tgz
 npx -y @deepseek-ai/dsh@0.1.1-rc.1 web
 ```
 

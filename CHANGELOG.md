@@ -69,9 +69,9 @@
 - 提供 13 个 Oh Story 小说 Skills、7 个专业 Roles 与 10 个 Drama Skills。
 - 提供文件树、Markdown/JSONL 编辑预览与官方 DSH Chat 同屏的三栏工作台。
 
-[Unreleased]: https://github.com/worldwonderer/oh-story-dsh/compare/v0.1.4...HEAD
-[0.1.4]: https://github.com/worldwonderer/oh-story-dsh/compare/v0.1.3...v0.1.4
-[0.1.3]: https://github.com/worldwonderer/oh-story-dsh/compare/v0.1.2...v0.1.3
-[0.1.2]: https://github.com/worldwonderer/oh-story-dsh/compare/v0.1.1...v0.1.2
-[0.1.1]: https://github.com/worldwonderer/oh-story-dsh/compare/v0.1.0...v0.1.1
-[0.1.0]: https://github.com/worldwonderer/oh-story-dsh/releases/tag/v0.1.0
+[Unreleased]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.4...HEAD
+[0.1.4]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.3...v0.1.4
+[0.1.3]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.2...v0.1.3
+[0.1.2]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.1...v0.1.2
+[0.1.1]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.0...v0.1.1
+[0.1.0]: https://github.com/zenstory-ai/oh-story-dsh/releases/tag/v0.1.0
