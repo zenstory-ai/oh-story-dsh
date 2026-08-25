@@ -2,13 +2,13 @@
 
 # oh-story-dsh
 
-**小说与短剧创作工作台**
+**小说、短剧与互动游戏创作工作台**
 
-[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) · [Oh Story](https://github.com/zenstory-ai/oh-story-claudecode) · [Drama Skills](https://github.com/zenstory-ai/drama-skills) · [MIT](LICENSE)
+[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) · [Oh Story](https://github.com/zenstory-ai/oh-story-claudecode) · [Drama Skills](https://github.com/zenstory-ai/drama-skills) · [NovelToGame](https://github.com/zenstory-ai/novel-to-game) · [MIT](LICENSE)
 
 </div>
 
-`oh-story-dsh` 是基于 DeepSeek Harness（DSH）构建的社区插件，将 Oh Story 的小说方法库与 Drama Skills 的短剧生产流程带入 DSH。DSH 管理 Agent、会话、模型、权限和 Chat；插件提供创作 Skills、专业 Roles、项目协议与三栏工作台。
+`oh-story-dsh` 是基于 DeepSeek Harness（DSH）构建的社区插件，将 Oh Story 的小说方法库、Drama Skills 的短剧流程与 NovelToGame 的互动游戏生产线带入 DSH。DSH 管理 Agent、会话、模型、权限和 Chat；插件提供创作 Skills、专业 Roles、项目协议与对应工作台。
 
 > 本项目与 DeepSeek 官方无隶属、合作或背书关系；DeepSeek Harness 名称与品牌素材归其权利人所有。
 
@@ -26,9 +26,18 @@
 
 > Drama Skills 0.6.0 是破坏性升级：v0.5 结构化项目应继续锁定 v0.5 并只读保留；迁移时新建项目根，逐集人工确认当前工作所需文档，不要在同一目录混用旧 JSON/JSONL 与新文档。
 
+## 游戏制作面板
+
+![oh-story-dsh 金瓶梅实时试玩](docs/images/game-studio-jin-ping-mei.png)
+
+游戏模式采用聚焦的两列布局：左侧是隔离运行、可直接操作的实时游戏预览，右侧保留完整 DSH Chat。使用 `/novel-to-game quick` 后，生成物写入 `game-adaptations/<project>/`；当 `build/app/index.html` 就绪时会自动进入项目列表，可在不离开对话的情况下刷新、全屏和试玩。
+
+内置完整的《金瓶梅 · 风月总账》上游示例，方便开箱验证输入、核心循环、结局与重开流程。试玩 iframe 在切换项目文件或窄屏对话时保持挂载，不会丢失当前进度；新构建就绪后由创作者主动载入，不会因为转去 Chat 而静默覆盖正在玩的版本。正式 QA 继续由 `/game-qa`、原生 Agent 工具结果与 `qa/verification.json` 承担，不在制作面板增加独立 QA 页。
+
 ## 核心体验
 
-- **原生三栏布局**：项目文件树、编辑器与官方 Chat 同屏，Trajectory、工具执行、Todo、审批和 Composer 保持 DSH 原生交互。
+- **按任务优化的布局**：小说/短剧保留文件树、编辑器、Chat 三栏；游戏使用“左侧实时试玩 + 右侧 Chat”两列，主流程不被辅助面板挤占。
+- **实时游戏预览**：Agent 生成 `build/app/` 后自动发现可试玩版本；预览隔离运行，支持刷新、全屏、项目切换与构建期间保留上一版。
 - **实时文件跟随**：Agent 调用官方文件工具时，目标文件自动定位，编辑器同步呈现生成中的内容。
 - **Chat 文件导航**：点击官方 Chat 中的作品文件名，文件树会定位并在编辑器打开对应文件。
 - **创作文档预览**：Markdown 支持标题、表格、任务列表、引用和代码块；JSONL 以带行号、类型和状态的结构化记录呈现。
@@ -41,6 +50,7 @@
 | --- | --- | --- |
 | 小说 | [Oh Story 0.7.6](https://github.com/zenstory-ai/oh-story-claudecode) · 13 Skills · 7 Roles | `/story`、`/story-long-write`、`/story-review` |
 | 短剧 | [Drama Skills 0.6.0](https://github.com/zenstory-ai/drama-skills/releases/tag/v0.6.0) · 10 Skills | `/short-drama`、`/short-drama-write`、`/short-drama-storyboard` |
+| 游戏 | [NovelToGame 0.3.0](https://github.com/zenstory-ai/novel-to-game) · 7 Skills · 完整《金瓶梅》示例 | `/novel-to-game quick`、`/game-build`、`/game-qa` |
 
 ## 安装
 
@@ -68,7 +78,7 @@ npx -y @deepseek-ai/dsh@0.1.1-rc.1 web
 
 **3. 开始创作**
 
-添加作品目录为 workspace，新建或打开 Session 后使用 `/story` 或 `/short-drama`。小说与短剧工作台可随时通过左栏 Tab 切换。
+添加作品目录为 workspace，新建或打开 Session 后使用 `/story`、`/short-drama` 或 `/novel-to-game quick`。小说、短剧与游戏工作台可随时通过顶部 Tab 切换。
 
 ## 致谢
 

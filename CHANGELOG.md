@@ -4,6 +4,26 @@
 
 ## [Unreleased]
 
+### Added
+
+- 完整嵌入 NovelToGame 0.3.0 的 7 个 Skills、固定上游资产清单、`game-adaptations/<project>` 产物协议与《金瓶梅 · 风月总账》可试玩示例。
+- 新增游戏制作面板：桌面端左侧实时试玩、右侧 DSH 原生 Chat；支持项目切换、刷新、全屏、构建版本提示与只读项目文件检查。
+- 原生 DSH E2E 现在会操作生成的 workspace 游戏、进入《金瓶梅》首日场景、验证制作面板状态保活，并输出截图证据。
+
+### Changed
+
+- 游戏试玩运行时在切换项目文件与 500px 窄屏对话时保持挂载；窄屏改为可触控的“制作 / 对话”单区切换。
+- 新构建不再因用户转去 Chat 导致 iframe 失焦而静默替换；状态文案区分文件更新、预览载入与载入失败。
+- QA 保留为 Skill、项目产物和自动化质量门，不在游戏制作面板展示独立 Tab、卡片、徽标或营销截图。
+
+### Fixed
+
+- 退出全屏后焦点返回“全屏试玩”，游戏 Tab 补齐 `aria-controls` / `tabpanel` 关系，并移除未提供退出提示的 pointer-lock 权限。
+
+### Security
+
+- 生成游戏通过独立 loopback origin 与 iframe sandbox 隔离；预览路由执行路径收敛、大小限制、CSP 与浏览器来源检查。
+
 ## [0.1.4] - 2026-08-23
 
 ### Changed

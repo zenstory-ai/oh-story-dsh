@@ -1,0 +1,583 @@
+{
+  "schemaVersion": 1,
+  "upstream": {
+    "repository": "https://github.com/zenstory-ai/novel-to-game.git",
+    "commit": "02d7663fb141773bc4d8b5b6a499c998c0971c5c",
+    "releaseVersion": "0.3.0"
+  },
+  "generatedAt": "2026-08-25T14:42:35.686Z",
+  "skills": [
+    "game-art-direction",
+    "game-build",
+    "game-concept",
+    "game-qa",
+    "game-world-design",
+    "novel-game-analyze",
+    "novel-to-game"
+  ],
+  "examples": [
+    "jin-ping-mei"
+  ],
+  "files": [
+    {
+      "path": "LICENSE",
+      "sha256": "8624846d707ae75855b7ac2a18e65d11d29738caeb0a4c4c5cedf88066f2f5b1",
+      "bytes": 1081
+    },
+    {
+      "path": "README.md",
+      "sha256": "fecd7996a83f86bf0d4ca8e7341c3d4ded92f6994c4202bff10e76d70730e34a",
+      "bytes": 10870
+    },
+    {
+      "path": "README_ZH.md",
+      "sha256": "3c8cb2f5182e420721a2f0bae8a444d4e8cc05e32277e503d01bb1402de09336",
+      "bytes": 9938
+    },
+    {
+      "path": "VERSION",
+      "sha256": "d915cc95d6ca8f47ae297713ed46d4e5c5d99ddd29fc3c61e263bdf305f2b5b0",
+      "bytes": 6
+    },
+    {
+      "path": "examples/jin-ping-mei/PRODUCT_BRIEF.md",
+      "sha256": "732afa5ef031bca0e6f35128dad3ee22836e903dca25412ca5cb09ad85aaed1d",
+      "bytes": 40633
+    },
+    {
+      "path": "examples/jin-ping-mei/_progress.md",
+      "sha256": "8f991df23ba810ae2f09a0ab9fedca4dc6e4abfccf0802293562a353b04b7632",
+      "bytes": 97804
+    },
+    {
+      "path": "examples/jin-ping-mei/analysis/SOURCE_BIBLE.md",
+      "sha256": "19d7ec1d42017c81fd4224462148e3bd0d7285bb612bf4e5ececa6808993f4c5",
+      "bytes": 53033
+    },
+    {
+      "path": "examples/jin-ping-mei/build/BUILD_BRIEF.md",
+      "sha256": "1adb0dc4db5c30ef56b5c43d479ba5ba10a9fa156d1d8a60c87da41a34f0beff",
+      "bytes": 68478
+    },
+    {
+      "path": "examples/jin-ping-mei/build/app/.gitignore",
+      "sha256": "56537ebe03160a28fdb6e59ae18f408d6f8aba609df73c45917c9358fd3bad52",
+      "bytes": 8
+    },
+    {
+      "path": "examples/jin-ping-mei/build/app/.vercelignore",
+      "sha256": "9d9c205f180165a62954ec9d12705e18fa8a20fe0f99709cd4bfe141243ea677",
+      "bytes": 17
+    },
+    {
+      "path": "examples/jin-ping-mei/build/app/RUN.md",
+      "sha256": "868389cb9863f9d5f260a5f7e798bd2d0661751b504cda78f4c45e8b989d3b61",
+      "bytes": 27574
+    },
+    {
+      "path": "examples/jin-ping-mei/build/app/assets/bg/compound_act1.jpg",
+      "sha256": "3daea8b210eed853d1564055f54e5930f0a2850b90ca3536e1160e5796ebfe3f",
+      "bytes": 316060
+    },
+    {
+      "path": "examples/jin-ping-mei/build/app/assets/cg/finale/fate_coda.webp",
+      "sha256": "784fadd98f19b9513e2f9d0b5e5583eb7c9aae673c1ec7fbc9f5a1296379a448",
+      "bytes": 178398
+    },
+    {
+      "path": "examples/jin-ping-mei/build/app/assets/cg/finale/meng.webp",
+      "sha256": "f7ade3df0303bb7fe0764ebc41b27cfd2acdd000379b9b5cf7523610cb72f0f7",
+      "bytes": 195590
+    },
+    {
+      "path": "examples/jin-ping-mei/build/app/assets/cg/finale/pan.webp",
+      "sha256": "1fd487739f0ecd26e81948cfe7a96512d4d0c5755e47019e658e1b56b3c7f010",
+      "bytes": 221412
+    },
+    {
+      "path": "examples/jin-ping-mei/build/app/assets/cg/finale/pinger.webp",
+      "sha256": "d7e9ba9df2de952e65dff71739a9f65cb09347d9612c3dda4515f4c96ec7300c",
+      "bytes": 158266
+    },
+    {
+      "path": "examples/jin-ping-mei/build/app/assets/cg/finale/xuee.webp",
+      "sha256": "4fd29e0cb247f2d73e8e409d291c13fabce6b996dbdc02707f0139261fe922b4",
+      "bytes": 213768
+    },
+    {
+      "path": "examples/jin-ping-mei/build/app/assets/cg/finale/yue.webp",
+      "sha256": "ed821efbe2cb85c33c5f303b4852596924f735e20ace92ecdc332d8b63a66237",
+      "bytes": 144760
+    },
+    {
+      "path": "examples/jin-ping-mei/build/app/assets/cg/group/banquet_conflict.webp",
+      "sha256": "2f3930bc25a8fcb95f27658c2e8093dd3368942c940b3a460c944f10d35ffdcc",
+      "bytes": 500858
+    },
+    {
+      "path": "examples/jin-ping-mei/build/app/assets/cg/group/inner_court_accord.webp",
+      "sha256": "4ae9bc699629c84ba28cdbd0e8f178441a6fd8d6530b66f7fd5a19d9f59753b1",
+      "bytes": 394524
+    },
+    {
+      "path": "examples/jin-ping-mei/build/app/assets/cg/group/inner_court_accord_five.webp",
+      "sha256": "77e93ae2ffe883c25667a974d3ae8a89d2f7c73e38d8d0fd641cf4340af99770",
+      "bytes": 371144
+    },
+    {
+      "path": "examples/jin-ping-mei/build/app/assets/cg/group/inner_court_afterglow.webp",
+      "sha256": "a6af57b39214a5023f5425a2445579f3d1470acf2444bb036d635e148912d902",
+      "bytes": 301388
+    },
+    {
+      "path": "examples/jin-ping-mei/build/app/assets/cg/group/inner_court_afterglow_five.webp",
+      "sha256": "9c07c6919b046941f46fdd156b42ecbca9e18fde41b947a3be30730b61c5e887",
+      "bytes": 401956
+    },
+    {
+      "path": "examples/jin-ping-mei/build/app/assets/cg/group/inner_court_alliance.webp",
+      "sha256": "72bbaa903c0fe0fdad36a4ee0b2455ca9fc3d5c919d7dd3a9879c0e0a0999270",
+      "bytes": 159898
+    },
+    {
+      "path": "examples/jin-ping-mei/build/app/assets/cg/group/public_day10.webp",
+      "sha256": "f8da2a04de7e4402d329a3dc1a7dfa9e3fa2cb24d0cf3bf03933345c949d981f",
+      "bytes": 388386
+    },
+    {
+      "path": "examples/jin-ping-mei/build/app/assets/cg/group/public_day15.webp",
+      "sha256": "a1dc2563a22f765ad7fc94fb008c05fbeaa98c8460b53e2dcd4d25bcfabec601",
+      "bytes": 423644
+    },
+    {
+      "path": "examples/jin-ping-mei/build/app/assets/cg/group/public_day5.webp",
+      "sha256": "a129c123a32cc1c18a4f398992c96ac2cf952be23e9e1ec7f18fe38a4340d678",
+      "bytes": 403228
+    },
+    {
+      "path": "examples/jin-ping-mei/build/app/assets/cg/group/title_five.webp",
+      "sha256": "36c54b04b9eff1e1af31bb681e22aa218931f34d14042f8a286ac889bf5fb386",
+      "bytes": 337890
+    },
+    {
+      "path": "examples/jin-ping-mei/build/app/assets/cg/group/title_three.webp",
+      "sha256": "2dfb42fe0b2f44e8d65f5353485016958668b2fed3a8baf9f886650c4c288a4e",
+      "bytes": 286184
+    },
+    {
+      "path": "examples/jin-ping-mei/build/app/assets/cg/joint/pan_pinger.webp",
+      "sha256": "d8cf2e6350b8166b894bbd04a3ca3b693c8c56faea62423291475eb7acba5545",
+      "bytes": 343516
+    },
+    {
+      "path": "examples/jin-ping-mei/build/app/assets/cg/joint/pan_xuee.webp",
+      "sha256": "f92cacd6d129f639f9e80696893580370d44e67a74fe56f9e67a97b0e7dd0b9c",
+      "bytes": 299686
+    },
+    {
+      "path": "examples/jin-ping-mei/build/app/assets/cg/joint/yue_meng.webp",
+      "sha256": "50944b6754adfc99f886dffed108f6373f9a62d087d82c0f9e4e8053bedb618c",
+      "bytes": 213364
+    },
+    {
+      "path": "examples/jin-ping-mei/build/app/assets/cg/joint/yue_pan.webp",
+      "sha256": "d85a05dd16aebbad7f99d5b4b85c3c238eec442a5bc57045ee5d975594fb6aca",
+      "bytes": 338786
+    },
+    {
+      "path": "examples/jin-ping-mei/build/app/assets/cg/joint/yue_pinger.webp",
+      "sha256": "2a88c56e4f860a9be44825448bfdeaa7f794d3039419ffa7dd79b2aef063dc5d",
+      "bytes": 374790
+    },
+    {
+      "path": "examples/jin-ping-mei/build/app/assets/cg/meng/explicit.webp",
+      "sha256": "527a7f72aaa9935dc7223d7a4f649538f56c74235c3ba3644fff416279575879",
+      "bytes": 255476
+    },
+    {
+      "path": "examples/jin-ping-mei/build/app/assets/cg/meng/prelude.webp",
+      "sha256": "0fe0d93151ec777670838ce4df0530e6e7a5daec66a66b6836f770911236b0e4",
+      "bytes": 234278
+    },
+    {
+      "path": "examples/jin-ping-mei/build/app/assets/cg/milestone/meng.webp",
+      "sha256": "1af188f97d1711c3771cc94c7075aad26a1edbde48fe99c24ca79948167b2449",
+      "bytes": 167128
+    },
+    {
+      "path": "examples/jin-ping-mei/build/app/assets/cg/milestone/pan.webp",
+      "sha256": "5f81d9f1e0827382768c140cf02eb927cf684c8737388ae77bd24e05022cb53a",
+      "bytes": 147686
+    },
+    {
+      "path": "examples/jin-ping-mei/build/app/assets/cg/milestone/pinger.webp",
+      "sha256": "687580d8ada2160eb747edb93d5c2f735ffb8cc25e60d1a6fe3ed591f780ab7a",
+      "bytes": 153784
+    },
+    {
+      "path": "examples/jin-ping-mei/build/app/assets/cg/milestone/xuee.webp",
+      "sha256": "79b92a5086823967d232054cea3eb8fa601152a3763fdc0494c920d74831b0df",
+      "bytes": 137750
+    },
+    {
+      "path": "examples/jin-ping-mei/build/app/assets/cg/milestone/yue.webp",
+      "sha256": "dc79be0cc647bcf78b17360b6ea7672beebaeea44d95da065c56b0815e969027",
+      "bytes": 128808
+    },
+    {
+      "path": "examples/jin-ping-mei/build/app/assets/cg/pan/explicit.webp",
+      "sha256": "4f8e7c14de1230f25ecbe737fe3f9cb52ce11437a6d674efb97151824facb81a",
+      "bytes": 383466
+    },
+    {
+      "path": "examples/jin-ping-mei/build/app/assets/cg/pan/prelude.webp",
+      "sha256": "675d206c5f55fed4d932d8274e19e38c7d942bdc639036847f41031771e1ee0d",
+      "bytes": 336926
+    },
+    {
+      "path": "examples/jin-ping-mei/build/app/assets/cg/pinger/explicit.webp",
+      "sha256": "2afb4dc2e46d9075b28a51988d574e1257e54b47d80e2b241a41294b0503819d",
+      "bytes": 336178
+    },
+    {
+      "path": "examples/jin-ping-mei/build/app/assets/cg/pinger/prelude.webp",
+      "sha256": "dd263392dbbe30597089b4f93086d892dadbd1c4d8ba9e95fcf441c1d856dd56",
+      "bytes": 227296
+    },
+    {
+      "path": "examples/jin-ping-mei/build/app/assets/cg/xuee/explicit.webp",
+      "sha256": "95e3be1279a5dc61d4fad547e0da569b68e59a19d9a7122471051a5ce6cbf920",
+      "bytes": 161570
+    },
+    {
+      "path": "examples/jin-ping-mei/build/app/assets/cg/xuee/prelude.webp",
+      "sha256": "3ca84571b0b123d285e9b9872a0b4ba30defd800cd26983cc9ac71543a95aebc",
+      "bytes": 206782
+    },
+    {
+      "path": "examples/jin-ping-mei/build/app/assets/cg/yue/explicit.webp",
+      "sha256": "7d9098761a42ce51fcf54494137f02fe5758bc3786cac2de2e850a1f2a38ea66",
+      "bytes": 273688
+    },
+    {
+      "path": "examples/jin-ping-mei/build/app/assets/cg/yue/prelude.webp",
+      "sha256": "194e73f73688a5cfdcec4467445d660f372b8de372ed7dc343fa9488e453ccc2",
+      "bytes": 363378
+    },
+    {
+      "path": "examples/jin-ping-mei/build/app/assets/heroine/meng/night.webp",
+      "sha256": "c3abe8bb6d93964c831b3551f684de96e8b116b60b1c5bc504c79df94cc83cd6",
+      "bytes": 289326
+    },
+    {
+      "path": "examples/jin-ping-mei/build/app/assets/heroine/pan/night.webp",
+      "sha256": "e7d56f607f5b941127f36ac7f9c2b6d45645231f018544f50b294e369e475d99",
+      "bytes": 169430
+    },
+    {
+      "path": "examples/jin-ping-mei/build/app/assets/heroine/pinger/night.webp",
+      "sha256": "60ec95dab6c9f0a4f28eb2237ba56da2f8cfa6f928c5f9196d2bb1589ad85836",
+      "bytes": 133612
+    },
+    {
+      "path": "examples/jin-ping-mei/build/app/assets/heroine/xuee/night.webp",
+      "sha256": "5be5890d9902fc6de82f239aed527cd139d1c5fcae9e3a700bf1b47328eeee45",
+      "bytes": 241600
+    },
+    {
+      "path": "examples/jin-ping-mei/build/app/assets/heroine/yue/night.webp",
+      "sha256": "6692dc38c8a9298dfeadb630b678acdb117baeea26b80794baa1ceafb94f6e5b",
+      "bytes": 163128
+    },
+    {
+      "path": "examples/jin-ping-mei/build/app/assets/household/li_jiaoer.webp",
+      "sha256": "61e9c40ee832a6fde838115229c261d8b40d0b4c7c5db4ceb77a4422f76b919b",
+      "bytes": 280502
+    },
+    {
+      "path": "examples/jin-ping-mei/build/app/assets/scene/gate_collector.jpg",
+      "sha256": "1156858b64cbf77098ad59adabc87161893d24169b1afe1c01b2fdc579780a83",
+      "bytes": 449757
+    },
+    {
+      "path": "examples/jin-ping-mei/build/app/css/style.css",
+      "sha256": "8368c30c69f2b99e3e9ade0ada729e52123bcd18b5ccec200b0e0267ed4de4d1",
+      "bytes": 241795
+    },
+    {
+      "path": "examples/jin-ping-mei/build/app/index.html",
+      "sha256": "4623ba350a865319f9ed4177a216d4e1be6b277b02e2e0633d235ab5eca29477",
+      "bytes": 670
+    },
+    {
+      "path": "examples/jin-ping-mei/build/app/js/assets.js",
+      "sha256": "bbc9fb77fcabaffe9c8a1f5a8a626b46763126f37ad4027eef6011bf6869b859",
+      "bytes": 7804
+    },
+    {
+      "path": "examples/jin-ping-mei/build/app/js/audio.js",
+      "sha256": "68bf052a442b4ce5c6339b2aa50512036dd37578053a4c712bf213fdb8b32234",
+      "bytes": 12119
+    },
+    {
+      "path": "examples/jin-ping-mei/build/app/js/data.js",
+      "sha256": "cec2e782a30ec767fe452add0cdb8faecafc80952d2f16b336636d10f9cd7cea",
+      "bytes": 1100837
+    },
+    {
+      "path": "examples/jin-ping-mei/build/app/js/engine.js",
+      "sha256": "7062e322b11b59a0e00a16bb9820317f8e55070362fdb1938155bbcf208487ec",
+      "bytes": 707856
+    },
+    {
+      "path": "examples/jin-ping-mei/build/app/js/main.js",
+      "sha256": "d4602fe3af1f4f8b84ba863bd0967e9fae08b93c36ce2d37f3c0d0b211bbd241",
+      "bytes": 274429
+    },
+    {
+      "path": "examples/jin-ping-mei/build/app/js/text.js",
+      "sha256": "274b5c13173abf25d6d8fd28671997de660aa54701d1794f886d104ef87dbacc",
+      "bytes": 2018
+    },
+    {
+      "path": "examples/jin-ping-mei/build/app/package.json",
+      "sha256": "3a852d0aebc54e1f58d71ceea8563ca9870c897e3e4b43e9a2bbe45168f2085b",
+      "bytes": 364
+    },
+    {
+      "path": "examples/jin-ping-mei/build/app/vercel.json",
+      "sha256": "d95ad8642f998ce32f0e2edc60e768e821201a5eca3ca3fbeb2331c70e86e4d9",
+      "bytes": 448
+    },
+    {
+      "path": "examples/jin-ping-mei/build/art/generated-art.json",
+      "sha256": "e392e93698c6f63a3e2c7f674fe08b36df04c527d4240fa18d30e6dbe0e4e997",
+      "bytes": 25759
+    },
+    {
+      "path": "examples/jin-ping-mei/concepts/CONCEPT.md",
+      "sha256": "e7ab4fbaaf032c88f3b1992e77dcc82c752f685478af8e8198faafb62d8526cd",
+      "bytes": 4444
+    },
+    {
+      "path": "examples/jin-ping-mei/design/ART_DIRECTION.md",
+      "sha256": "6d799a6464383880d840c9e2b5f45961b84f2c9de9043fdee21c95a790a43d24",
+      "bytes": 19244
+    },
+    {
+      "path": "examples/jin-ping-mei/design/GAME_DESIGN.md",
+      "sha256": "5e5fedcafb17701cc68f0b8f37a7d27c73782e0e68642707f5a64460728f1091",
+      "bytes": 92095
+    },
+    {
+      "path": "examples/jin-ping-mei/example.json",
+      "sha256": "619c52e46823705d882d75c81d6851082f074c08ca742c3896b9ece9ead194dc",
+      "bytes": 384
+    },
+    {
+      "path": "examples/jin-ping-mei/qa/README.md",
+      "sha256": "e7e2c839deddf88e6c9e323e1689e68559f22286636dbfcd6930b41598c68b22",
+      "bytes": 1686
+    },
+    {
+      "path": "examples/jin-ping-mei/qa/evidence/final-screen.webp",
+      "sha256": "f19fc0d013e5c6e67053c7af1bbad13c12f4f06cfebeb79255fa15409c784f7b",
+      "bytes": 25860
+    },
+    {
+      "path": "examples/jin-ping-mei/qa/evidence/run.json",
+      "sha256": "c40ac2856504553bf665422f8f5a55b287814a65fa8f4b896eb7a0e218eaf0b6",
+      "bytes": 5209
+    },
+    {
+      "path": "examples/jin-ping-mei/qa/playable-model.json",
+      "sha256": "f65c270a11f5821b1d61ca86c776d6daa01d0aaef4291b755481d936bd772012",
+      "bytes": 2480
+    },
+    {
+      "path": "examples/jin-ping-mei/qa/verification.json",
+      "sha256": "6e4ad1bd9e681eb14baad08d6a9865115ae9c3e6c6daeb3d6d1d912b3bb2d128",
+      "bytes": 1254
+    },
+    {
+      "path": "examples/jin-ping-mei/qa/verify_playable_model.mjs",
+      "sha256": "dffebea3dfae2310f088d031760bb1088e93fdd3061213af7e8ecea383b93b63",
+      "bytes": 6629
+    },
+    {
+      "path": "examples/jin-ping-mei/screenshots/title.jpg",
+      "sha256": "ac0cd9a8247c8d919da045a3ef591eabad1d933bc1208e19bc61955732b0e0be",
+      "bytes": 201589
+    },
+    {
+      "path": "examples/jin-ping-mei/source/SOURCE.md",
+      "sha256": "f1490fa2d7e39d8bc4fb9649fa08bbe15732ebdf2a9ffaa8ce9664dc391b78d1",
+      "bytes": 3818
+    },
+    {
+      "path": "examples/jin-ping-mei/source/expurgate.py",
+      "sha256": "a5925e1ae0acc7f38932220538c6fb93f618afa5fe9085baffb3101761347ea5",
+      "bytes": 9858
+    },
+    {
+      "path": "examples/jin-ping-mei/source/金瓶梅.txt",
+      "sha256": "e9cca57a0a2faaa8ea5ce777593ef9422d5b128eadd3a40b2dcd38fa8836cbf5",
+      "bytes": 2159088
+    },
+    {
+      "path": "skills/game-art-direction/SKILL.md",
+      "sha256": "5e5fca8897419abffe3ebcb3f6cdd4f8ee697e22e1193d38fdc8256c6ccf5d15",
+      "bytes": 4524
+    },
+    {
+      "path": "skills/game-art-direction/agents/openai.yaml",
+      "sha256": "6340d41c7dbcacc55aefef0faf795a5eda0cb38a8b83589b053ea43812b71490",
+      "bytes": 283
+    },
+    {
+      "path": "skills/game-art-direction/references/art-direction-method.md",
+      "sha256": "0dae87065ec035cf736fd761223c6624c45c15fd6fa40828d1dcc736b8bf0ce6",
+      "bytes": 5955
+    },
+    {
+      "path": "skills/game-build/SKILL.md",
+      "sha256": "6b97acc82536c1e4776a5d71a152bf4fd7899d433746bd0af8b4f4bd369ce2ba",
+      "bytes": 5807
+    },
+    {
+      "path": "skills/game-build/agents/openai.yaml",
+      "sha256": "4fea64c3910933415a5e601bc3f423d22f0e5cfed8d7ab5c2aa38f60a3105cf0",
+      "bytes": 272
+    },
+    {
+      "path": "skills/game-build/references/build-brief-contract.md",
+      "sha256": "4e1aec89259c1b88c060f2be269a8f7e9ec9a93d58be91b12aeba23350df6dc2",
+      "bytes": 5276
+    },
+    {
+      "path": "skills/game-build/references/generative-media-pipeline.md",
+      "sha256": "4ae1c7a5b398bbd8fe26f26f0ac6136ce726e0c976549d3d0778cbf4bc9afb13",
+      "bytes": 3746
+    },
+    {
+      "path": "skills/game-build/references/playable-model-contract.md",
+      "sha256": "60ff29961d3890147a60eab6c2cd54fe4fd1955a7ab4c10ee134e65abfbd48c9",
+      "bytes": 5457
+    },
+    {
+      "path": "skills/game-build/references/tts-production-contract.md",
+      "sha256": "77987e7ad36eff7e719c8228909947651182154448710e6be642362e53dc8b89",
+      "bytes": 2463
+    },
+    {
+      "path": "skills/game-concept/SKILL.md",
+      "sha256": "7080002eb9aaf684192f3dfaf3feb81446ea35ba3297b9e8b86402456043b099",
+      "bytes": 4912
+    },
+    {
+      "path": "skills/game-concept/agents/openai.yaml",
+      "sha256": "51747ea4fcaa7f82dbc5c208e878deab47f2ce68f0514606f8571e684bd4fc0b",
+      "bytes": 256
+    },
+    {
+      "path": "skills/game-concept/references/concept-method.md",
+      "sha256": "ebde9084e0f4d26860723329026a958085d75de601b9506edf70dde5162d3b29",
+      "bytes": 5696
+    },
+    {
+      "path": "skills/game-qa/SKILL.md",
+      "sha256": "6835e17fcdec987bc10a3091716e953033442388aca7824f87553f9a7e5a8e01",
+      "bytes": 3767
+    },
+    {
+      "path": "skills/game-qa/agents/openai.yaml",
+      "sha256": "b04450a57e3d9a33ba38f4057ccac85a7ea6af4cea2f4c11c94485ec62ec462d",
+      "bytes": 271
+    },
+    {
+      "path": "skills/game-qa/references/qa-contract.md",
+      "sha256": "996387404cad4a22555c9e752cb7ccfa8a4e5a40550942fc53893b45c6109e45",
+      "bytes": 3067
+    },
+    {
+      "path": "skills/game-qa/references/test-design-method.md",
+      "sha256": "5e720bfd7cf955998fb4f6beb73b1236b22d7e73d13fceb10515cab59b11b96a",
+      "bytes": 3558
+    },
+    {
+      "path": "skills/game-world-design/SKILL.md",
+      "sha256": "357cbc9ec023796a92179cd7044c23b2de8318482cf70b5f29bd7dedc4efae19",
+      "bytes": 5284
+    },
+    {
+      "path": "skills/game-world-design/agents/openai.yaml",
+      "sha256": "4447bb4f6905cc367d6bfc45827877e16c5b3bf4b3ddc00fd3547fe31397bebd",
+      "bytes": 280
+    },
+    {
+      "path": "skills/game-world-design/references/dialogue-design-method.md",
+      "sha256": "61202bd7c9ba310f56375ad962d61caa51870ccfb0d2356e52ebad28bde4f34d",
+      "bytes": 3291
+    },
+    {
+      "path": "skills/game-world-design/references/game-writing-craft.md",
+      "sha256": "17503d22bda5d857087b8b64f73dc7bcb8fd3f2f7e366f81a9fd80fc9713bc3b",
+      "bytes": 3041
+    },
+    {
+      "path": "skills/game-world-design/references/narrative-design-method.md",
+      "sha256": "e32ead9a30de62e5b3fe582ff82661e7db3a8594fc01de835cf48320998856ab",
+      "bytes": 5279
+    },
+    {
+      "path": "skills/game-world-design/references/numeric-design-method.md",
+      "sha256": "18fdef3fbdf71d6b01a6a5b6c120bb051e42266bc95ec617c08e7c4c9ed4933d",
+      "bytes": 2817
+    },
+    {
+      "path": "skills/game-world-design/references/world-design-method.md",
+      "sha256": "05eed07c25a2524c41b7730215e6370b2f535acd7cac5ca5437cd11b58e543eb",
+      "bytes": 7750
+    },
+    {
+      "path": "skills/novel-game-analyze/SKILL.md",
+      "sha256": "d0bd415c694c92c1f7d15ab85fe7cff9a848a70e6cf8bf2e24ff49f85a8847b1",
+      "bytes": 6044
+    },
+    {
+      "path": "skills/novel-game-analyze/agents/openai.yaml",
+      "sha256": "2d52ae8bb8e854e0f255d8d429e106fe9ccc5c318b5ba8daff3896ba2f841432",
+      "bytes": 263
+    },
+    {
+      "path": "skills/novel-game-analyze/references/gameability-protocol.md",
+      "sha256": "d14e8f3c1845c6e877d986a3feb78e4f6551c3bf5b313d2d2c08ce8b48c9a2d3",
+      "bytes": 4127
+    },
+    {
+      "path": "skills/novel-to-game/SKILL.md",
+      "sha256": "15b8bcaa2cf13d53de86f871add34c8ffcc8ea7c40682941b50a5405fd4ae2d1",
+      "bytes": 5725
+    },
+    {
+      "path": "skills/novel-to-game/agents/openai.yaml",
+      "sha256": "b889e01866e06d9e019c8714758e5b18c25e8f7eb4d52e7696c6fec2dfc11c32",
+      "bytes": 255
+    },
+    {
+      "path": "skills/novel-to-game/references/intake-benchmark-reference.md",
+      "sha256": "4aada4b5b5d24558e295aec8febc93a8c1e7181b5a510923275cfcb73e99c9e7",
+      "bytes": 2428
+    },
+    {
+      "path": "skills/novel-to-game/references/intake-method.md",
+      "sha256": "dd75a46879ee88e8bf5461e570d15eb91583a37d574333d5fda75332839203b4",
+      "bytes": 3119
+    },
+    {
+      "path": "skills/novel-to-game/references/pipeline-contract.md",
+      "sha256": "b77b8ec9229d01ee56c3b42a9069c11bc69c821462ffcbac69ab8cdbd09e1d2a",
+      "bytes": 3390
+    }
+  ]
+}

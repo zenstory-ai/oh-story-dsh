@@ -179,6 +179,21 @@ describe("official DSH file activity", () => {
     expect(workbenchModeForPath("正文/第001章.md")).toBe("story");
   });
 
+  it("recognizes NovelToGame artifacts and prefers the product brief", () => {
+    const cwd = "/games/demo";
+    expect(creativeRelativePath("/games/demo/game-adaptations/ledger/build/app/index.html", cwd))
+      .toBe("game-adaptations/ledger/build/app/index.html");
+    expect(creativeRelativePath("game-adaptations/ledger/build/app/js/main.js", cwd))
+      .toBe("game-adaptations/ledger/build/app/js/main.js");
+    expect(creativeRelativePath("game-adaptations/../secrets.txt", cwd)).toBeUndefined();
+    expect(workbenchModeForPath("game-adaptations/ledger/qa/verification.json")).toBe("game");
+    expect(preferredWorkbenchFile([
+      { path: "game-adaptations/ledger/design/GAME_DESIGN.md" },
+      { path: "game-adaptations/ledger/PRODUCT_BRIEF.md" },
+      { path: "game-adaptations/ledger/qa/verification.json" }
+    ], "game")).toBe("game-adaptations/ledger/PRODUCT_BRIEF.md");
+  });
+
   it("prefers the v0.6 creator-first screenplay without dropping v0.5 read-only fallback", () => {
     expect(preferredWorkbenchFile([
       { path: "剧集/EP001/screenplay.md" },

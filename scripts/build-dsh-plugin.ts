@@ -7,6 +7,7 @@ const packageRoot = resolve(root, "packages/dsh-plugin");
 const outputRoot = resolve(packageRoot, "lib");
 const ohStoryRoot = resolve(root, "packages/knowledge/oh-story");
 const dramaRoot = resolve(root, "packages/knowledge/drama");
+const novelToGameRoot = resolve(root, "packages/knowledge/novel-to-game");
 const platformGlue = [
   "skills/story/assets/",
   "skills/story/scripts/",
@@ -90,6 +91,16 @@ await cp(ohStoryRoot, resolve(outputRoot, "oh-story"), {
 });
 
 await cp(dramaRoot, resolve(outputRoot, "drama"), {
+  recursive: true,
+  filter: (source) => {
+    return !source.includes("/__pycache__/")
+      && !source.endsWith("/__pycache__")
+      && !source.endsWith(".pyc")
+      && !source.endsWith("/.DS_Store");
+  }
+});
+
+await cp(novelToGameRoot, resolve(outputRoot, "novel-to-game"), {
   recursive: true,
   filter: (source) => {
     return !source.includes("/__pycache__/")
