@@ -667,6 +667,43 @@
 [data-conversation-scroll][data-oh-story-workbench="game"][data-oh-story-layout="compact"] .oh-game-preview-status { padding-left: 8px; }
 [data-conversation-scroll][data-oh-story-workbench="game"][data-oh-story-layout="compact"] .oh-game-preview-status > span { max-width: 40%; }
 
+/* DSH may keep its navigation drawer open at a 500 px browser viewport,
+   leaving the conversation center close to 212 px wide. The Studio publishes
+   its measured width because a container style query cannot style the
+   container itself. Row one stays clear for the 制作 / 对话 switch. */
+[data-conversation-scroll][data-oh-story-workbench="game"][data-oh-story-layout="compact"] .oh-game-studio[data-oh-game-narrow] .oh-game-toolbar {
+  min-height: 193px;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: repeat(4, 44px);
+  align-content: center;
+  padding: 4px 8px;
+}
+[data-conversation-scroll][data-oh-story-workbench="game"][data-oh-story-layout="compact"] .oh-game-studio[data-oh-game-narrow] .oh-game-mode-tabs {
+  grid-column: 1;
+  grid-row: 2;
+  justify-self: start;
+}
+[data-conversation-scroll][data-oh-story-workbench="game"][data-oh-story-layout="compact"] .oh-game-studio[data-oh-game-narrow] .oh-game-tabs {
+  grid-column: 1;
+  grid-row: 3;
+  justify-self: start;
+}
+[data-conversation-scroll][data-oh-story-workbench="game"][data-oh-story-layout="compact"] .oh-game-studio[data-oh-game-narrow] .oh-game-project {
+  grid-column: 1;
+  grid-row: 4;
+}
+[data-conversation-scroll][data-oh-story-workbench="game"][data-oh-story-layout="compact"] .oh-game-studio[data-oh-game-narrow] .oh-game-project select {
+  width: 100%;
+  max-width: none;
+  min-height: 44px;
+}
+[data-conversation-scroll][data-oh-story-workbench="game"][data-oh-story-layout="compact"] .oh-game-studio[data-oh-game-narrow] .oh-game-preview-status {
+  gap: 4px;
+  padding-right: 6px;
+  padding-left: 6px;
+}
+[data-conversation-scroll][data-oh-story-workbench="game"][data-oh-story-layout="compact"] .oh-game-studio[data-oh-game-narrow] .oh-game-preview-status > span { max-width: 36%; }
+
 @media (prefers-reduced-motion: reduce) {
   .oh-game-preview-shell[data-state="building"] { animation: none; }
 }

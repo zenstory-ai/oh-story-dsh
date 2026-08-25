@@ -193,7 +193,7 @@ Owns the left column, current Studio tab, project-local UI state, and responsive
 - Leading: low-emphasis 小说/游戏 switch followed by a project selector grouped as `我的项目` and `内置示例`.
 - Center/right: `试玩` plus workspace `项目文件` or bundled-example `说明`.
 - Preview status row: text `刷新`, fullscreen, and explicit `载入新版本` when a changed digest exists. Audio remains owned by the running game in MVP.
-- Full toolbar minimum height: 56 px. The two-row compact toolbar grows to approximately 101 px and coexists with the higher-level `制作 / 对话` switch.
+- Full toolbar minimum height: 56 px. The two-row compact toolbar grows to approximately 101 px and coexists with the higher-level `制作 / 对话` switch. If the host navigation drawer leaves at most 300 px for Studio, controls reflow below that switch into a four-row, approximately 193 px toolbar instead of clipping.
 
 ### `GameContextStrip`
 

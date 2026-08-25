@@ -413,13 +413,25 @@ function GameStudio({
   readonly onSelect: (path: string) => void;
 }) {
   const project = workspace.games.find((value) => value.id === gameProjectId) ?? workspace.games[0];
+  const studioRef = useRef<HTMLElement>(null);
   const tabsId = useId();
+  useLayoutEffect(() => {
+    const studio = studioRef.current;
+    if (studio === null) return;
+    const publishWidth = () => {
+      studio.toggleAttribute("data-oh-game-narrow", studio.clientWidth <= 300);
+    };
+    publishWidth();
+    const observer = new ResizeObserver(publishWidth);
+    observer.observe(studio);
+    return () => { observer.disconnect(); };
+  }, []);
   useEffect(() => {
     if (project !== undefined && project.id !== gameProjectId) onGameProject(project.id);
   }, [gameProjectId, onGameProject, project]);
-  if (project === undefined) return <main id={paneId} className="oh-game-studio" role="tabpanel" aria-labelledby={labelledBy} hidden={hidden}><div className="oh-game-design-empty">游戏能力正在载入…</div></main>;
+  if (project === undefined) return <main ref={studioRef} id={paneId} className="oh-game-studio" role="tabpanel" aria-labelledby={labelledBy} hidden={hidden}><div className="oh-game-design-empty">游戏能力正在载入…</div></main>;
   const tabs = ["preview", "design"] as const;
-  return <main id={paneId} className="oh-game-studio" data-source={project.source} role="tabpanel" aria-labelledby={labelledBy} hidden={hidden}>
+  return <main ref={studioRef} id={paneId} className="oh-game-studio" data-source={project.source} role="tabpanel" aria-labelledby={labelledBy} hidden={hidden}>
     <header className="oh-game-toolbar">
       {workbenches.length > 1 && <div className="oh-game-mode-tabs" role="tablist" aria-label="创作工作台">
         {workbenches.map((mode) => <button
