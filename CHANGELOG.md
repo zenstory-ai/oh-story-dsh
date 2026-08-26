@@ -1,6 +1,13 @@
 # Changelog
 
-本文件记录 `@oh-story/dsh` 的用户可见变更。版本遵循 [Semantic Versioning](https://semver.org/)。
+本文件记录 `@oh-story/dsh` 的用户可见变更。
+
+格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
+版本号遵循 [Semantic Versioning](https://semver.org/lang/zh-CN/)。
+
+小节名使用 Keep a Changelog 的六个英文类别（`Added` / `Changed` / `Deprecated` /
+`Removed` / `Fixed` / `Security`），正文为中文。收紧到会拒绝旧输入的改动记入 `Changed`。
+同步上游时写清上游版本号与提交，便于定位。
 
 ## [Unreleased]
 
