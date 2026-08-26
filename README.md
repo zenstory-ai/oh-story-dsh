@@ -70,6 +70,41 @@ npx -y @deepseek-ai/dsh@0.1.1-rc.1 web
 
 添加作品目录为 workspace，新建或打开 Session 后使用 `/story` 或 `/short-drama`。小说与短剧工作台可随时通过左栏 Tab 切换。
 
+## 按需加载
+
+插件装进哪个 profile，那个 profile 的每个 Session 就都会加载创作 Skills 与三栏工作台。想让原版 `web` 保持干净、只在创作时打开工作台，就把插件装进独立 profile。
+
+**1. 装进独立 profile**
+
+```bash
+npx -y @deepseek-ai/dsh@0.1.1-rc.1 plugin --profile story add @oh-story/dsh@0.1.4
+```
+
+**2. 补上界面**
+
+新 profile 默认没有界面。编辑 `~/.dsh/profiles/story/package.json`，把 `dsh.profile.bundles` 改成：
+
+```jsonc
+"bundles": [
+  "@deepseek-ai/dsh-base",
+  "@deepseek-ai/dsh-web-app",
+  "@oh-story/dsh"
+]
+```
+
+顺序照抄，这个包不用另外安装。
+
+**3. 按需启动**
+
+```bash
+npx -y @deepseek-ai/dsh@0.1.1-rc.1 web                          # 原版 DSH
+npx -y @deepseek-ai/dsh@0.1.1-rc.1 --profile story --port 3081  # 创作工作台
+```
+
+两个 profile 用不同端口可以同时运行。模型、凭据、workspace 与历史会话由 DSH 统一保存，切换 profile 不会丢。
+
+安装与启动请使用同一个 dsh 版本；混用会报 `unknown option '--no-open'` 一类的错。
+
 ## 致谢
 
 - [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)：提供原生插件运行时、Agent、会话、权限审批与 Web 工作台基础。
