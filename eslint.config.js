@@ -10,6 +10,7 @@ export default tseslint.config(
       "**/lib/**",
       "**/coverage/**",
       "**/node_modules/**",
+      ".claude/worktrees/**",
       "docs/blueprint/**",
       "packages/knowledge/oh-story/**",
       "release/**"

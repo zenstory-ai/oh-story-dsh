@@ -31,7 +31,9 @@ python3 {技能目录}/scripts/production_tool.py prepare <project> --job <临�
    overwrite 与 adapter。
 3. 等创作者在**看到这份预览之后**明确确认。只有明确同意这项当前任务，才运行 `confirm`；
    “继续”“都做完”“预算没问题”、上游内容已接受或之前确认过另一版，都不算本次生产确认。
-4. 运行 `run`。它会在启动 adapter 前消费一次确认；成功或失败后再次执行都必须重新确认，
+4. 如果当前 DSH 提供 `oh_story_production`，在确认有效后、`run` 之前用 `track_job` 登记预览中的
+   原始 job ID、对象、modality 和数量；不得在 `prepare` 阶段登记为运行中。随后运行 `run`。它会在
+   启动 adapter 前消费一次确认；成功或失败后再次执行都必须重新确认，
    防止失败重试意外产生第二笔费用。
 
 job、prompt、参数、输出路径或直接输入任一变化，旧确认立即失效。不得代替创作者填写确认。
