@@ -60,7 +60,7 @@ const fixtureSources = JSON.parse(await readFile(join(import.meta.dirname, "demo
     readonly commit: string;
     readonly sourcePath: string;
     readonly localPath: string;
-    readonly files?: readonly { readonly path: string; readonly sha256: string; readonly bytes: number }[];
+    readonly files?: readonly { readonly path: string; readonly sha256: string; readonly bytes: number; readonly localExtension?: string }[];
   }[];
 };
 const dramaFixture = fixtureSources.fixtures.find((fixture) => fixture.kind === "drama");
@@ -100,6 +100,9 @@ if (process.env.DRAMA_SKILLS_UPSTREAM_DIR !== undefined && (await stat(source).c
   const { stdout } = await execFileAsync("git", ["-C", source, "rev-parse", "HEAD"], { encoding: "utf8" });
   if (stdout.trim() !== manifest.upstream.commit) throw new Error("Drama Skills upstream commit differs from the pinned manifest.");
   for (const expected of dramaFixture.files) {
+    // A file marked localExtension deliberately diverges from upstream; its
+    // recorded sha256 above still pins the local content against silent drift.
+    if (expected.localExtension !== undefined) continue;
     const upstream = await readFile(join(source, dramaFixture.sourcePath, expected.path));
     const local = await readFile(join(fixtureRoot, expected.path));
     if (!upstream.equals(local)) throw new Error(`Drama demo fixture ${expected.path} differs from the pinned upstream example.`);

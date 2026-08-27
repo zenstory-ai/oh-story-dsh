@@ -47,9 +47,11 @@ const DSH_DRAMA_BRIDGE = [
   "Production credentials remain outside project files. Never treat a prior acceptance, preview, continuation request, or budget discussion as confirmation for a paid production run.",
   "</short-drama-dsh-integration>"
 ].join("\n");
+const DSH_VISUAL_ID_CONVENTION = "视觉设定.md 中每个人物、造型、地点、道具或状态条目都保留一行唯一的 `- ID：VISUAL-*`，例如 `- ID：VISUAL-CHAR-JIANGCHEN`。ID 在当前项目内唯一且稳定；修改标题或文案时不得更换 ID，因为下游引用和生产画布都以 ID 识别资产。缺少 ID 的旧文档仍可阅读，工作台只会提示节点身份不稳定。";
 const DSH_DRAMA_OVERRIDES: Readonly<Partial<Record<string, string>>> = {
-  "short-drama": "A dashboard request means focus or use the native 短剧 tab in this DSH Session. Do not run the bundled standalone Dashboard script. New projects follow only the v0.6 creator-first contract and create only documents required by the current request.",
-  "short-drama-produce": "Use an upstream adapter only after the creator explicitly confirms the exact current job. Its source must be the current creator-first Markdown and its output belongs under 剧集/<EP>/制作成果/. DSH permissions and approval UI remain authoritative."
+  "short-drama": `A dashboard request means focus or use the native 短剧 tab in this DSH Session. Do not run the bundled standalone Dashboard script. New projects follow only the v0.6 creator-first contract and create only documents required by the current request. ${DSH_VISUAL_ID_CONVENTION}`,
+  "short-drama-assets": DSH_VISUAL_ID_CONVENTION,
+  "short-drama-produce": "Use an upstream adapter only after the creator explicitly confirms the exact current job. Its source must be the current creator-first Markdown and its output belongs under 剧集/<EP>/制作成果/. DSH permissions and approval UI remain authoritative. 如果当前 DSH 提供 `oh_story_production`：在创作者确认生效之后、运行 `run` 之前，用 `track_job` 登记预览中的原始 job ID、投产对象与数量；不得在 `prepare` 阶段登记为运行中。`jobKind` 只接受 image、video 或 composition —— tts 与 music 任务继续按上游契约执行，但不登记到生产任务板。"
 };
 
 const DSH_NATIVE_SKILLS: Readonly<Partial<Record<string, string>>> = {

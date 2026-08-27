@@ -21,6 +21,7 @@ const MEDIA_TYPES: ReadonlyMap<string, string> = new Map([
 ]);
 const MEDIA_MAX_BYTES = 256 * 1_024 * 1_024;
 const FILE_LIMIT = 1_000;
+const MEDIA_FILE_LIMIT = 1_000;
 
 interface WorkspaceRouteOptions {
   readonly maxBytes: number;
@@ -64,30 +65,58 @@ function send(response: ServerResponse, status: number, value: unknown): void {
   response.end(body);
 }
 
-function sendMedia(request: IncomingMessage, response: ServerResponse, bytes: Uint8Array, mimeType: string): void {
-  const range = request.headers.range;
-  let start = 0;
-  let end = bytes.byteLength - 1;
-  let status = 200;
-  if (typeof range === "string") {
-    const match = /^bytes=(\d*)-(\d*)$/u.exec(range.trim());
-    if (match !== null) {
-      const requestedStart = match[1] === "" ? 0 : Number(match[1]);
-      const requestedEnd = match[2] === "" ? end : Number(match[2]);
-      if (Number.isSafeInteger(requestedStart) && Number.isSafeInteger(requestedEnd) && requestedStart >= 0 && requestedStart <= requestedEnd && requestedStart < bytes.byteLength) {
-        start = requestedStart;
-        end = Math.min(requestedEnd, end);
-        status = 206;
-      }
-    }
+export type MediaRange =
+  | { readonly kind: "full" }
+  | { readonly kind: "partial"; readonly start: number; readonly end: number }
+  | { readonly kind: "unsatisfiable" };
+
+/**
+ * Resolve a single RFC 7233 byte range against a known size. A suffix range
+ * (`bytes=-N`) means the LAST N bytes, not the first N. Anything malformed or
+ * multi-range degrades to the full body; a range that starts past EOF is 416.
+ */
+export function resolveMediaRange(header: string | undefined, size: number): MediaRange {
+  if (header === undefined) return { kind: "full" };
+  const match = /^bytes=(\d*)-(\d*)$/u.exec(header.trim());
+  if (match === null) return { kind: "full" };
+  const rawStart = match[1] ?? "";
+  const rawEnd = match[2] ?? "";
+  if (rawStart === "" && rawEnd === "") return { kind: "full" };
+  if (rawStart === "") {
+    const suffix = Number(rawEnd);
+    if (!Number.isSafeInteger(suffix) || suffix <= 0 || size === 0) return { kind: "unsatisfiable" };
+    return { kind: "partial", start: Math.max(0, size - suffix), end: size - 1 };
   }
+  const start = Number(rawStart);
+  if (!Number.isSafeInteger(start)) return { kind: "full" };
+  if (size === 0 || start >= size) return { kind: "unsatisfiable" };
+  const end = rawEnd === "" ? size - 1 : Number(rawEnd);
+  if (!Number.isSafeInteger(end) || end < start) return { kind: "full" };
+  return { kind: "partial", start, end: Math.min(end, size - 1) };
+}
+
+function sendMedia(request: IncomingMessage, response: ServerResponse, bytes: Uint8Array, mimeType: string): void {
+  const size = bytes.byteLength;
+  const resolved = resolveMediaRange(request.headers.range, size);
+  if (resolved.kind === "unsatisfiable") {
+    response.writeHead(416, {
+      "content-range": `bytes */${String(size)}`,
+      "content-length": 0,
+      "accept-ranges": "bytes",
+      "x-content-type-options": "nosniff"
+    });
+    response.end();
+    return;
+  }
+  const start = resolved.kind === "partial" ? resolved.start : 0;
+  const end = resolved.kind === "partial" ? resolved.end : size - 1;
   const body = bytes.subarray(start, end + 1);
-  response.writeHead(status, {
+  response.writeHead(resolved.kind === "partial" ? 206 : 200, {
     "content-type": mimeType,
     "content-length": body.byteLength,
     "cache-control": "private, max-age=60",
     "accept-ranges": "bytes",
-    ...(status === 206 ? { "content-range": `bytes ${String(start)}-${String(end)}/${String(bytes.byteLength)}` } : {}),
+    ...(resolved.kind === "partial" ? { "content-range": `bytes ${String(start)}-${String(end)}/${String(size)}` } : {}),
     "x-content-type-options": "nosniff"
   });
   response.end(Buffer.from(body));
@@ -186,18 +215,32 @@ async function readVersionedFile(fs: FileSystem, target: FsTarget, maxBytes: num
 
 async function listFiles(realm: WorkspaceRealm): Promise<WorkspaceFile[]> {
   const files: WorkspaceFile[] = [];
+  let textCount = 0;
+  let mediaCount = 0;
+  const exhausted = (): boolean => textCount >= FILE_LIMIT && mediaCount >= MEDIA_FILE_LIMIT;
   const walk = async (path: string, directory: FsTarget): Promise<void> => {
     for (const entry of await realm.fs.listDir(directory)) {
       if (entry.name.startsWith(".") || !realm.fs.contains(realm.root, entry.target)) continue;
       const childPath = `${path}/${entry.name}`;
       if (entry.type === "directory") await walk(childPath, entry.target);
-      else if (entry.type === "file" && (EDITABLE_EXTENSIONS.has(extname(entry.name).toLocaleLowerCase()) || MEDIA_TYPES.has(extname(entry.name).toLocaleLowerCase()))) {
-        const info = entry.version === undefined || entry.size === undefined ? await realm.fs.stat(entry.target) : undefined;
-        const version = entry.version ?? info?.version;
-        const mimeType = MEDIA_TYPES.get(extname(entry.name).toLocaleLowerCase());
-        if (version !== undefined) files.push({ path: childPath, bytes: entry.size ?? info?.size ?? 0, version, kind: mimeType === undefined ? "text" : "media", mimeType });
+      else if (entry.type === "file") {
+        const extension = extname(entry.name).toLocaleLowerCase();
+        const mimeType = MEDIA_TYPES.get(extension);
+        const media = mimeType !== undefined;
+        // Creator documents and generated media hold separate budgets, so a
+        // production-heavy episode can never push creator text out of the tree.
+        const room = media ? mediaCount < MEDIA_FILE_LIMIT : textCount < FILE_LIMIT;
+        if ((media || EDITABLE_EXTENSIONS.has(extension)) && room) {
+          const info = entry.version === undefined || entry.size === undefined ? await realm.fs.stat(entry.target) : undefined;
+          const version = entry.version ?? info?.version;
+          if (version !== undefined) {
+            files.push({ path: childPath, bytes: entry.size ?? info?.size ?? 0, version, kind: media ? "media" : "text", mimeType });
+            if (media) mediaCount += 1;
+            else textCount += 1;
+          }
+        }
       }
-      if (files.length >= FILE_LIMIT) return;
+      if (exhausted()) return;
     }
   };
   for (const directory of CREATIVE_DIRECTORIES) {
@@ -205,7 +248,7 @@ async function listFiles(realm: WorkspaceRealm): Promise<WorkspaceFile[]> {
     if (!realm.fs.contains(realm.root, target)) continue;
     const info = await realm.fs.stat(target);
     if (info?.type === "directory") await walk(directory, target);
-    if (files.length >= FILE_LIMIT) break;
+    if (exhausted()) break;
   }
   for (const path of ROOT_FILES) {
     const target = await creativeTarget(realm, path);

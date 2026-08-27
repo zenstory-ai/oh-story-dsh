@@ -25,8 +25,8 @@
     },
     {
       "path": "skills/short-drama-assets/SKILL.md",
-      "sha256": "7a7248a90fd55f12016bdde99af1484b3eda4f46672dd6b434b1b9df9d40c3a6",
-      "bytes": 3660
+      "sha256": "4c350f8b19d4c0cbfd8193c9695423471f345cea67ba65b176b93e7ef53e9efb",
+      "bytes": 3528
     },
     {
       "path": "skills/short-drama-assets/agents/openai.yaml",
@@ -440,8 +440,8 @@
     },
     {
       "path": "skills/short-drama-produce/SKILL.md",
-      "sha256": "1ca173eaab2b39866efad2f19feb85948352126cf5dfc35b63464b06f21d97ae",
-      "bytes": 8213
+      "sha256": "806ede77cb1deb80cf0dacce07f0c22702c1ad1d3ea34d4f8b5d96cda091797e",
+      "bytes": 7991
     },
     {
       "path": "skills/short-drama-produce/agents/openai.yaml",
@@ -935,8 +935,8 @@
     },
     {
       "path": "skills/short-drama/references/creator-documents.md",
-      "sha256": "1341a8c4c273628bb353db64d42211fe502e3a4b58ff3e8509ae0ef4ab76bdfc",
-      "bytes": 3473
+      "sha256": "b317579f8061bc72c64e71f14d2b06670fa1efd3a5bc158f9489df2ee0174439",
+      "bytes": 3200
     },
     {
       "path": "skills/short-drama/references/creator-workflow.md",

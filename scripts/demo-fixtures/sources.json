@@ -16,7 +16,7 @@
       "localPath": "drama/让你管账号/剧集/EP001",
       "files": [
         { "path": "剧本.md", "sha256": "1593c04479ad660117b54ff1ec2c2aaf62b2c25c3f04926632fa9daeefff911d", "bytes": 2259 },
-        { "path": "视觉设定.md", "sha256": "3497a199b1f33954a3f045ea9b3a713e39b328836dc5833d02e72a4662bf1dc9", "bytes": 2232 },
+        { "path": "视觉设定.md", "sha256": "3497a199b1f33954a3f045ea9b3a713e39b328836dc5833d02e72a4662bf1dc9", "bytes": 2232, "localExtension": "Adds the optional `- ID：VISUAL-*` lines the DSH production projection uses for stable asset identity. Deliberately diverges from the pinned upstream example; the sha256 above pins the local content." },
         { "path": "分镜.md", "sha256": "3e1d6ffe38dafeb9413cf10921fcf5478c3e07f892abd6a70ceddcf674143c09", "bytes": 7780 },
         { "path": "图片提示词.md", "sha256": "3df4c7fa6bb9bdf2099bd514fb69f5315fca785b9ce9f1a03cdad224c81cb4ae", "bytes": 3545 },
         { "path": "视频提示词.md", "sha256": "3a17b9c42f2d06afa67acfc870730859e41cbb2e0b4df940feb9a699b24479bd", "bytes": 5669 }
