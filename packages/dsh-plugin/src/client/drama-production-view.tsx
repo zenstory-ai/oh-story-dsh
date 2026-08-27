@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
 import { productionCompleteness, type DramaDocumentTarget, type DramaEpisodeProduction, type DramaProductionSection } from "./drama-production.js";
 import { nativeBatchPrompt, nativeCompositionPrompt, nativeProductionPrompt } from "./production-prompts.js";
+import type { ProductionAdapterReadiness } from "../production-credentials.js";
 import { activeProductionJobId, createPendingJob, queuedItemForJob, reconcileProductionJobs, reconcileSequence, referencesForTarget, reorderSequence, selectionKey, sequenceIssues, selectedVersionForTarget, type CanvasPoint, type ProductionJob, type ProductionMediaVersion, type ProductionQueueEntry, type ProductionSequenceItem } from "./production-runtime.js";
 
 interface Props {
@@ -12,6 +13,7 @@ interface Props {
   readonly jobs: readonly ProductionJob[];
   readonly versions: readonly ProductionMediaVersion[];
   readonly libraryVersions: readonly ProductionMediaVersion[];
+  readonly adapters: readonly ProductionAdapterReadiness[];
   readonly selections: Readonly<Record<string, string>>;
   readonly manualReferences: Readonly<Record<string, readonly string[]>>;
   readonly sequence: readonly ProductionSequenceItem[];
@@ -122,7 +124,7 @@ export function DramaProductionView(props: Props) {
     {props.production.diagnostics.length > 0 && <details className="oh-story-production-diagnostics"><summary>{protocolErrors > 0 ? `${String(protocolErrors)} 个协议错误` : `${String(props.production.diagnostics.length)} 个格式提醒`}</summary><ul>{props.production.diagnostics.slice(0, 8).map((item) => <li data-severity={item.severity} key={`${item.path}:${String(item.offset)}:${item.code}`}><button type="button" onClick={() => { props.onNavigate({ path: item.path, offset: item.offset, id: item.targetId ?? item.code }); }}>{item.path.split("/").at(-1)}:{item.line}</button><span>{item.message}</span></li>)}</ul>{props.production.diagnostics.length > 8 && <p>另有 {props.production.diagnostics.length - 8} 项，请按文档位置修复。</p>}</details>}
     {props.section === "shots" && <ShotBoard {...props} onCreateJob={createJob} onBatch={createBatch} />}
     {props.section === "assets" && <AssetBoard {...props} onCreateJob={createJob} />}
-    {props.section === "tasks" && <TaskBoard jobs={props.jobs} queue={props.queue} sessionRunning={props.sessionRunning} onCancel={cancelJob} onRemoveQueued={removeQueuedJob} />}
+    {props.section === "tasks" && <TaskBoard jobs={props.jobs} queue={props.queue} sessionRunning={props.sessionRunning} adapters={props.adapters} onCancel={cancelJob} onRemoveQueued={removeQueuedJob} />}
     {props.section === "sequence" && <SequenceBoard {...props} onCompose={composeSequence} />}
     {props.section === "canvas" && <ProductionCanvas {...props} />}
   </div>;
@@ -156,16 +158,30 @@ function AssetBoard(props: Props & { readonly onCreateJob: (targetId: string, ki
   return <section className="oh-story-assets"><div className="oh-story-asset-grid">{assets.map((asset) => { const prompt = "prompt" in asset ? asset.prompt : asset.description; const versions = props.versions.filter((version) => version.targetId === asset.id); const selected = selectedVersionForTarget(asset.id, props.versions, props.selections, "image"); return <article className="oh-story-asset-card" key={asset.id}>{selected === undefined ? <div className="oh-story-asset-placeholder">{asset.kind === "character" ? "人" : asset.kind === "scene" ? "景" : asset.kind === "prop" ? "物" : "设"}</div> : <MediaPreview version={selected} />}<div><small>{ASSET_KIND_LABEL[asset.kind]}</small><h3>{asset.title}</h3><button type="button" onClick={() => { props.onNavigate({ path: asset.path, offset: asset.offset, id: asset.id }); }}>{asset.id}</button></div>{prompt !== undefined && <p className="oh-story-asset-description">{prompt}</p>}<div className="oh-story-card-actions">{prompt !== undefined && <button type="button" onClick={() => { void props.onCreateJob(asset.id, "image", prompt); }}>准备素材</button>}</div>{versions.length > 0 && <VersionStrip targetId={asset.id} versions={versions} selections={props.selections} onSelectionsChange={props.onSelectionsChange} />}</article>; })}</div><div className="oh-story-media-library"><header><div><strong>项目媒体库</strong><span>{library.length}/{props.libraryVersions.length} 项 · 可跨集复用</span></div><div><input aria-label="搜索项目媒体" value={query} placeholder="搜索 ID 或路径" onChange={(event) => { setQuery(event.target.value); }} /><select aria-label="筛选媒体类型" value={kind} onChange={(event) => { setKind(event.target.value as typeof kind); }}><option value="all">全部</option><option value="image">图片</option><option value="video">视频</option></select></div></header>{referenceTarget === undefined && <p className="oh-story-projection-note">先在镜头页选中一个镜头，再回到这里把已有图片设为该镜头的额外参考。</p>}<div className="oh-story-media-library-grid">{library.map((version) => { const selected = referenceTarget !== undefined && (props.manualReferences[referenceTarget] ?? []).includes(version.id); return <article key={version.id}><MediaPreview version={version} /><strong>{version.targetId}</strong><span title={version.path}>{version.path}</span><footer>{version.path !== undefined && <button type="button" onClick={() => { props.onOpenMedia(version.path!); }}>打开文件</button>}{referenceTarget !== undefined && version.kind === "image" && <button type="button" aria-pressed={selected} aria-label={`${selected ? "取消" : "设为"} ${referenceTarget} 参考 ${version.targetId}`} onClick={() => { toggleReference(version.id); }}>{selected ? "已引用" : "作为参考"}</button>}</footer></article>; })}</div></div></section>;
 }
 
-function TaskBoard({ jobs, queue, sessionRunning, onCancel, onRemoveQueued }: {
+function TaskBoard({ jobs, queue, sessionRunning, adapters, onCancel, onRemoveQueued }: {
   readonly jobs: readonly ProductionJob[];
+  readonly adapters: readonly ProductionAdapterReadiness[];
   readonly queue: readonly ProductionQueueEntry[];
   readonly sessionRunning: boolean;
   readonly onCancel: (job: ProductionJob) => Promise<void>;
   readonly onRemoveQueued: (job: ProductionJob, itemId: string) => Promise<void>;
 }) {
   const activeJobId = activeProductionJobId(jobs, queue, sessionRunning);
+  const unconfigured = adapters.filter((adapter) => adapter.credential === "missing");
   return <section className="oh-story-task-board">
     <div className="oh-story-projection-note">图片与视频先预检、后确认。内置契约支持 GPT Image 2 / Seedance；实际账号、模型与可用性由当前 DSH 运行环境决定。</div>
+    {/* The upstream adapters only read credentials inside `run`, after the
+        confirmation has been consumed, so a missing key would otherwise cost
+        the creator a confirmation before anything explains why. */}
+    {unconfigured.length > 0 && <div className="oh-story-production-readiness" role="status">
+      <strong>以下投产通道尚未配置，确认后会直接失败</strong>
+      <ul>{unconfigured.map((adapter) => <li key={adapter.adapter}>
+        <b>{adapter.adapter}</b>
+        <span>{adapter.jobKinds.map((kind) => kind === "image" ? "图片" : kind === "video" ? "视频" : "音乐").join(" / ")}</span>
+        <code>{adapter.credentialVariable}</code>
+      </li>)}</ul>
+      <p>在启动 DSH 的宿主进程上设置这些环境变量后重启 DSH。密钥只保留在宿主进程，工作台不读取也不回传其取值。自建网关另设 <code>{unconfigured[0]?.baseUrlVariable}</code>（必须是 https，且不能带用户名密码）。</p>
+    </div>}
     {jobs.length === 0 ? <div className="oh-story-production-empty">还没有生产任务。可从镜头或素材页提交单个或批量任务。</div> : [...jobs].reverse().map((job) => {
       const queued = queuedItemForJob(job.id, queue);
       const displayStatus = queued === undefined ? STATUS_LABELS[job.status] : "DSH Queue";

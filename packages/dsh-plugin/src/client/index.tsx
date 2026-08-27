@@ -16,6 +16,7 @@ import {
   workbenchModeForPath,
   type WorkbenchMode
 } from "./file-activity.js";
+import type { ProductionAdapterReadiness } from "../production-credentials.js";
 import { buildFileTree, type FileTreeNode } from "./file-tree.js";
 import { JsonlPreview } from "./jsonl-preview.js";
 import { MarkdownPreview } from "./markdown-preview.js";
@@ -61,6 +62,7 @@ interface WorkspacePayload {
   readonly files: readonly WorkspaceFile[];
   readonly shortDrama: Record<string, unknown> | null;
   readonly metadataErrors: readonly string[];
+  readonly production?: { readonly adapters: readonly ProductionAdapterReadiness[] } | undefined;
   readonly mode: "dsh-session";
 }
 interface FilePayload {
@@ -1052,6 +1054,7 @@ function CreativeWorkbench({
               jobs={productionJobs}
               versions={productionVersions}
               libraryVersions={productionLibrary}
+              adapters={workspace?.production?.adapters ?? []}
               selections={productionSelections}
               manualReferences={productionReferences}
               sequence={productionSequence}

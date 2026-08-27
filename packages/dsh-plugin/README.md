@@ -53,6 +53,35 @@ npx -y @deepseek-ai/dsh@0.1.1-rc.1 --profile story --port 3081  # 创作工作�
 
 模型、凭据、workspace 与历史会话由 DSH 统一保存，切换 profile 不会丢。安装与启动请使用同一个 dsh 版本。
 
+## 生产凭据
+
+短剧「生产」视图里的图片、视频与音乐任务，最终由上游 Drama Skills 的 adapter
+（`short-drama-produce/scripts/provider_adapters.py`）执行。adapter 从**运行 DSH 的宿主进程环境变量**
+读取凭据，凭据不进入项目文件，工作台也不读取、不回传其取值。
+
+| 用途 | 凭据（必填） | Base URL（选填） | 默认值 |
+| --- | --- | --- | --- |
+| 图片 `gpt-image-2` | `OPENAI_API_KEY` | `OPENAI_BASE_URL` | `https://api.openai.com/v1` |
+| 视频 `seedance` | `ARK_API_KEY` | `SEEDANCE_BASE_URL` | `https://ark.cn-beijing.volces.com/api/v3` |
+| 音乐 `minimax-music` | `MINIMAX_API_KEY` | `MINIMAX_BASE_URL` | `https://api.minimax.io/v1` |
+
+Base URL 覆盖必须是 `https`，且不能带内联用户名密码，否则 adapter 会以 `invalid_base_url` 拒绝。
+`seedance` 另可用 `SEEDANCE_MODEL`、`SEEDANCE_ALLOWED_RATIOS`、`SEEDANCE_MIN_DURATION`、
+`SEEDANCE_MAX_DURATION`、`SEEDANCE_POLL_INTERVAL`、`SEEDANCE_TIMEOUT_SECONDS` 调整取值范围与轮询。
+
+```bash
+export OPENAI_API_KEY=...   # 图片
+export ARK_API_KEY=...      # 视频
+dsh web
+```
+
+设置后需要重启 DSH：环境变量在宿主进程启动时固定。未配置的通道会在「生产 · 任务」页顶部列出，
+**在创作者确认之前**给出提示 —— `production_tool.py` 会先消耗确认再启动 adapter，所以缺凭据时
+一次确认会被白白用掉。
+
+该提示读取的是 DSH 宿主进程的环境。使用 remote 或 sandbox provider 时，adapter 实际看到的环境
+可能与宿主不同，此时提示只作参考。
+
 ## License
 
 [Changelog](https://github.com/zenstory-ai/oh-story-dsh/blob/main/CHANGELOG.md) · [MIT](LICENSE)

@@ -7,6 +7,7 @@ import type {} from "@deepseek-ai/dsh-host-webserver";
 import type { SandboxPolicyService } from "@deepseek-ai/dsh-sandbox-policy";
 import { SessionId } from "@deepseek-ai/dsh-session";
 import type {} from "@deepseek-ai/dsh-typert-registry";
+import { productionReadiness } from "./production-credentials.js";
 import { isTrustedWorkspaceRequest } from "./workspace-request-trust.js";
 
 const STORY_DIRECTORIES = ["正文", "大纲", "设定", "追踪", "对标", "参考资料"] as const;
@@ -294,7 +295,7 @@ async function handle(context: Context, request: IncomingMessage, response: Serv
       const tracking = await metadata(realm, files, "追踪/_tracking-state.json", options.maxBytes);
       const shortDrama = await metadata(realm, files, "short-drama.json", options.maxBytes);
       const metadataErrors = [tracking.error, shortDrama.error].filter((value): value is string => value !== undefined);
-      send(response, 200, { cwd: realm.cwd, files, tracking: tracking.value, shortDrama: shortDrama.value, metadataErrors, mode: "dsh-session" });
+      send(response, 200, { cwd: realm.cwd, files, tracking: tracking.value, shortDrama: shortDrama.value, metadataErrors, production: { adapters: productionReadiness(process.env) }, mode: "dsh-session" });
       return;
     }
     if (url.pathname === "/oh-story/file" && request.method === "GET") {
