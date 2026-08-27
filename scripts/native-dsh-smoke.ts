@@ -431,6 +431,9 @@ async function main(): Promise<void> {
       writeFile(join(generatedGameRoot, "PRODUCT_BRIEF.md"), "# PRODUCT_BRIEF · DSH Game Studio Smoke\n\ntargetFinish: playable-prototype\n"),
       writeFile(join(generatedGameRoot, "_progress.md"), "# Progress\n\n- playable: complete\n"),
       writeFile(join(generatedGameRoot, "build", "app", "index.html"), "<!doctype html><html lang=zh-CN><meta charset=utf-8><title>DSH Game Smoke</title><button id=play>试玩成功</button><script>document.querySelector('#play').addEventListener('click',event=>event.currentTarget.textContent='输入已验证')</script></html>"),
+      // A scriptable non-HTML document: navigating to it must not yield an
+      // unpoliced context on the real loopback origin.
+      writeFile(join(generatedGameRoot, "build", "app", "asset.svg"), "<svg xmlns=\"http://www.w3.org/2000/svg\"><script>document.title='svg-ran'</script></svg>"),
       writeFile(join(generatedGameRoot, "qa", "verification.json"), `${JSON.stringify({
         schemaVersion: 3,
         status: "PASS",
@@ -586,6 +589,28 @@ async function main(): Promise<void> {
     if (!generatedPreview.ok || !(await generatedPreview.text()).includes("试玩成功")
       || !generatedCsp.includes("/oh-story/game-preview/") || generatedCsp.includes("connect-src 'self'")) {
       throw new Error(`Workspace game preview route failed: ${String(generatedPreview.status)}.`);
+    }
+    // The preview trust gate has to accept cross-site Origin-less navigations,
+    // so the unguessable path guard is what actually keeps other sites out.
+    const guardSegments = generatedGame.previewUrl.split("/");
+    const guardIndex = guardSegments.indexOf("game-preview") + 2;
+    const forgedGuard = [...guardSegments];
+    forgedGuard[guardIndex] = "AAAAAAAAAAAAAAAAAAAAAA";
+    const forgedPreview = await fetch(`${origin}${forgedGuard.join("/")}`);
+    if (forgedPreview.ok) throw new Error("Workspace game preview accepted a forged path guard.");
+    const strippedPreview = await fetch(`${origin}${guardSegments.filter((_, index) => index !== guardIndex).join("/")}`);
+    if (strippedPreview.ok) throw new Error("Workspace game preview accepted a URL with no path guard.");
+    const forgedExample = [...bundledGame.previewUrl.split("/")];
+    forgedExample[forgedExample.indexOf("game-preview") + 2] = "AAAAAAAAAAAAAAAAAAAAAA";
+    if ((await fetch(`${origin}${forgedExample.join("/")}`)).ok) {
+      throw new Error("Bundled game preview accepted a forged path guard.");
+    }
+    // A non-HTML asset navigated to directly would otherwise run script on the
+    // real loopback origin with no policy at all.
+    const assetPreview = await fetch(`${origin}${generatedGame.previewUrl.replace(/index\.html$/u, "asset.svg")}`);
+    const assetCsp = assetPreview.headers.get("content-security-policy") ?? "";
+    if (!assetCsp.includes("sandbox") || !assetCsp.includes("default-src 'none'")) {
+      throw new Error(`Non-HTML preview asset is served without a sandbox CSP: "${assetCsp}".`);
     }
     const dramaWorkspaceResponse = await fetch(`${origin}/oh-story/workspace?sessionId=${encodeURIComponent(dramaSession.sessionId)}`);
     const dramaWorkspacePayload = await dramaWorkspaceResponse.json() as { readonly mode?: string; readonly cwd?: string; readonly files?: readonly { readonly path: string }[]; readonly shortDrama?: unknown };

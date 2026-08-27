@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { readFile as readNodeFile, stat as nodeStat } from "node:fs/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { extname, isAbsolute, relative, resolve } from "node:path";
@@ -228,6 +228,25 @@ async function metadata(realm: WorkspaceRealm, files: readonly WorkspaceFile[], 
   }
 }
 
+/**
+ * `isTrustedPreviewNavigation` has to accept cross-site, Origin-less document
+ * navigations, because the loopback-alias flip that isolates the preview looks
+ * exactly like a remote page framing it. An unguessable per-process guard in
+ * the path is what actually keeps other sites from loading a preview: they can
+ * derive the base64url identity segments, but not this.
+ */
+const PREVIEW_GUARD_SECRET = randomBytes(32);
+
+function previewGuard(identity: string): string {
+  return createHmac("sha256", PREVIEW_GUARD_SECRET).update(identity).digest("base64url").slice(0, 22);
+}
+
+function previewGuardMatches(identity: string, candidate: string): boolean {
+  const expected = Buffer.from(previewGuard(identity), "utf8");
+  const actual = Buffer.from(candidate, "utf8");
+  return expected.byteLength === actual.byteLength && timingSafeEqual(expected, actual);
+}
+
 function token(value: string): string {
   return Buffer.from(value, "utf8").toString("base64url");
 }
@@ -345,7 +364,7 @@ async function workspaceGameProjects(
       source: "workspace" as const,
       previewReady: preview.ready,
       previewUrl: preview.ready
-        ? `/oh-story/game-preview/workspace/${token(sessionId)}/${token(root)}/index.html`
+        ? `/oh-story/game-preview/workspace/${previewGuard(`${sessionId}\u0000${root}`)}/${token(sessionId)}/${token(root)}/index.html`
         : undefined,
       previewVersion: preview.version,
       verification: normalizedVerification(verification, freshness.binding, freshness.verifiedPreviewVersion)
@@ -373,7 +392,7 @@ async function bundledGameExample(): Promise<GameProjectSummary> {
     title: typeof exampleJson.title === "string" ? exampleJson.title : "金瓶梅 · 风月总账",
     source: "example",
     previewReady: true,
-    previewUrl: `/oh-story/game-preview/example/${BUNDLED_GAME_EXAMPLE}/index.html`,
+    previewUrl: `/oh-story/game-preview/example/${previewGuard(BUNDLED_GAME_EXAMPLE)}/${BUNDLED_GAME_EXAMPLE}/index.html`,
     previewVersion,
     verification: normalizedVerification(JSON.parse(verification) as unknown, "PINNED", previewVersion)
   };
@@ -408,9 +427,27 @@ function previewAssetSources(request: IncomingMessage): string {
   return `http://${prefix} https://${prefix}`;
 }
 
-function sendPreview(request: IncomingMessage, response: ServerResponse, path: string, bytes: Uint8Array): void {
+/**
+ * A generated game that reads localStorage during module evaluation throws
+ * SecurityError whenever the preview cannot be given its own loopback origin,
+ * which kills the whole module graph and renders a blank pane. Serving an
+ * in-memory fallback keeps such a game playable (without persistence) instead
+ * of dead, and never edits the pinned upstream example in place.
+ */
+const PREVIEW_STORAGE_SHIM = `<script>(function(){for(var k of["localStorage","sessionStorage"]){try{window[k].getItem("__oh_story_probe");}catch(e){var m=new Map();Object.defineProperty(window,k,{configurable:true,value:{getItem:function(n){return m.has(String(n))?m.get(String(n)):null;},setItem:function(n,v){m.set(String(n),String(v));},removeItem:function(n){m.delete(String(n));},clear:function(){m.clear();},key:function(i){return Array.from(m.keys())[i]||null;},get length(){return m.size;}}});}}})();</script>`;
+
+export function withStorageShim(bytes: Uint8Array): Uint8Array {
+  const source = Buffer.from(bytes).toString("utf8");
+  const head = /<head[^>]*>/iu.exec(source);
+  if (head === null) return Buffer.from(`${PREVIEW_STORAGE_SHIM}${source}`, "utf8");
+  const at = head.index + head[0].length;
+  return Buffer.from(`${source.slice(0, at)}${PREVIEW_STORAGE_SHIM}${source.slice(at)}`, "utf8");
+}
+
+function sendPreview(request: IncomingMessage, response: ServerResponse, path: string, raw: Uint8Array): void {
   const html = extname(path).toLocaleLowerCase() === ".html";
   const assets = previewAssetSources(request);
+  const bytes = html ? withStorageShim(raw) : raw;
   response.writeHead(200, {
     "content-type": previewContentType(path),
     "content-length": bytes.byteLength,
@@ -418,6 +455,10 @@ function sendPreview(request: IncomingMessage, response: ServerResponse, path: s
     "x-content-type-options": "nosniff",
     "cross-origin-resource-policy": "cross-origin",
     "access-control-allow-origin": "*",
+    // Every non-HTML asset still gets a policy: an SVG (or any file navigated
+    // to directly) would otherwise run script on the real loopback origin with
+    // no CSP at all, where /oh-story/file is same-origin. `sandbox` forces an
+    // opaque origin for documents and is ignored for subresources.
     ...(html ? {
       "content-security-policy": [
         "default-src 'none'",
@@ -434,7 +475,9 @@ function sendPreview(request: IncomingMessage, response: ServerResponse, path: s
         "form-action 'none'",
         "frame-ancestors 'self' http://127.0.0.1:* http://localhost:*"
       ].join("; ")
-    } : {})
+    } : {
+      "content-security-policy": "default-src 'none'; sandbox"
+    })
   });
   response.end(bytes);
 }
@@ -442,8 +485,11 @@ function sendPreview(request: IncomingMessage, response: ServerResponse, path: s
 async function previewBytes(context: Context, pathname: string): Promise<{ readonly path: string; readonly bytes: Uint8Array }> {
   const segments = pathname.split("/").slice(3).map((segment) => decodeURIComponent(segment));
   const kind = segments.shift();
+  const guard = segments.shift();
+  if (guard === undefined) throw new WorkspaceHttpError(404, "游戏预览不存在。");
   if (kind === "example") {
     const id = segments.shift();
+    if (id === undefined || !previewGuardMatches(id, guard)) throw new WorkspaceHttpError(404, "游戏示例不存在。");
     const path = segments.join("/") || "index.html";
     if (id !== BUNDLED_GAME_EXAMPLE || !safeRelativePath(path)) throw new WorkspaceHttpError(404, "游戏示例不存在。");
     const appRoot = resolve(bundledExampleRoot(), "build/app");
@@ -460,8 +506,10 @@ async function previewBytes(context: Context, pathname: string): Promise<{ reado
     const project = segments.shift();
     const path = segments.join("/") || "index.html";
     if (session === undefined || project === undefined || !safeRelativePath(path)) throw new WorkspaceHttpError(400, "游戏预览地址无效。");
-    const realm = await workspaceRealmForSession(context, untoken(session));
+    const sessionId = untoken(session);
     const root = untoken(project);
+    if (!previewGuardMatches(`${sessionId}\u0000${root}`, guard)) throw new WorkspaceHttpError(404, "游戏预览不存在。");
+    const realm = await workspaceRealmForSession(context, sessionId);
     if (!gameRoot(root)) throw new WorkspaceHttpError(403, "游戏项目路径无效。");
     const appRoot = await realm.fs.resolve(`${root}/build/app`, { cwd: realm.cwd });
     const target = await realm.fs.resolve(`${root}/build/app/${path}`, { cwd: realm.cwd });

@@ -279,13 +279,29 @@ function GamePreview({ project, building }: { readonly project: GameProject; rea
     document.addEventListener("fullscreenchange", restore);
     return () => { document.removeEventListener("fullscreenchange", restore); };
   }, []);
-  if (!project.previewReady || project.previewUrl === undefined) return <div className="oh-game-preview-empty">
+  const previewUrl = project.previewReady && project.previewUrl !== undefined
+    ? isolatedPreviewUrl(project.previewUrl, loadedVersion, revision)
+    : undefined;
+  const previewHref = previewUrl?.href;
+  // An iframe fires `load` for a browser error page and never fires `error` for
+  // an HTTP failure, so onError alone can never report a broken preview. The
+  // route sets access-control-allow-origin, so the parent can ask the server
+  // directly whether this build is actually being served.
+  useEffect(() => {
+    if (previewHref === undefined) return;
+    const controller = new AbortController();
+    fetch(previewHref, { signal: controller.signal, cache: "no-store" })
+      .then((response) => { if (!response.ok) setLoadError(true); })
+      .catch(() => { if (!controller.signal.aborted) setLoadError(true); });
+    return () => { controller.abort(); };
+  }, [previewHref]);
+  if (previewUrl === undefined) return <div className="oh-game-preview-empty">
     <span aria-hidden>◫</span>
     <strong>还没有可试玩版本</strong>
     <p>在右侧 Chat 使用 <code>/novel-to-game quick</code>，产物写入 <code>game-adaptations/&lt;project&gt;/build/app/</code> 后会自动出现在这里。</p>
     <div className="oh-game-prompt-example"><span>描述示例</span><q>把《作品名》改编成网页互动游戏，目标玩家是……，核心玩法是……，希望整体风格……</q></div>
   </div>;
-  const preview = isolatedPreviewUrl(project.previewUrl, loadedVersion, revision);
+  const preview = previewUrl;
   const pending = project.previewVersion !== loadedVersion;
   const reload = (): void => {
     setLoaded(false);
@@ -464,7 +480,7 @@ function GameStudio({
     </header>
     <div className="oh-game-panels">
       <div className="oh-game-panel" role="tabpanel" id={`${tabsId}-preview-panel`} aria-labelledby={`${tabsId}-preview-tab`} hidden={gameTab !== "preview"}>
-        <GamePreview key={`${project.id}:${String(project.previewReady)}`} project={project} building={building} />
+        <GamePreview key={project.id} project={project} building={building} />
       </div>
       <div className="oh-game-panel" role="tabpanel" id={`${tabsId}-design-panel`} aria-labelledby={`${tabsId}-design-tab`} hidden={gameTab !== "design"}>
         <GameDesign project={project} files={workspace.files} selected={selected} sessionId={sessionId} onSelect={onSelect} />
@@ -501,6 +517,11 @@ function CreativeWorkbench({
   const activityPath = primaryActivity?.path;
   const workbench = useStore((memory) => memory.workbench);
   const setWorkbench = actions.setWorkbench;
+  // The studio owns a live iframe, so mounting it for every Session would boot a
+  // game nobody asked for. Mount on the first visit to 游戏, then keep it mounted
+  // (only hidden) so the running game survives every later switch.
+  const [gameStudioMounted, setGameStudioMounted] = useState(workbench === "game");
+  useEffect(() => { if (workbench === "game") setGameStudioMounted(true); }, [workbench]);
   const gameTab = useStore((memory) => memory.gameTab);
   const setGameTab = actions.setGameTab;
   const gameProjectId = useStore((memory) => memory.gameProjectId);
@@ -596,11 +617,13 @@ function CreativeWorkbench({
     });
   }, []);
 
-  const revealPath = useCallback((path: string): void => {
+  const revealPath = useCallback((path: string, agentDriven = false): void => {
     rememberEditorPosition();
     const nextWorkbench = workbenchModeForPath(path) ?? "story";
     setWorkbench(nextWorkbench);
-    if (nextWorkbench === "game" && !path.includes("/build/app/")) setGameTab("design");
+    // Only a deliberate selection moves the game pane off 试玩. An Agent writing
+    // project files while the creator is playing must not yank the tab away.
+    if (!agentDriven && nextWorkbench === "game" && !path.includes("/build/app/")) setGameTab("design");
     setSelected(path);
     expandPath(path);
   }, [expandPath, rememberEditorPosition]);
@@ -613,7 +636,7 @@ function CreativeWorkbench({
       && current.content !== current.saved
       && surfaceRef.current?.ownerDocument.activeElement === textareaRef.current;
     if (preserveFocusedDraft) return;
-    revealPath(path);
+    revealPath(path, true);
   }, [expandPath, revealPath, selected]);
 
   useEffect(() => {
@@ -987,7 +1010,7 @@ function CreativeWorkbench({
       >{pane === "studio" ? "制作" : "对话"}</button>)}
     </div>}
     {workbench === "game" && workspace === undefined && <main id={compactStudioId} className="oh-game-studio" role="tabpanel" aria-labelledby={`${compactTabsId}-studio-tab`}><div className="oh-game-design-empty">{error ?? "正在连接游戏工作台…"}</div></main>}
-    {workspace !== undefined && <GameStudio
+    {workspace !== undefined && gameStudioMounted && <GameStudio
           sessionId={sessionId}
           workspace={workspace}
           building={gameBuilding}

@@ -19,10 +19,17 @@
 ### Fixed
 
 - 退出全屏后焦点返回“全屏试玩”，游戏 Tab 补齐 `aria-controls` / `tabpanel` 关系，并移除未提供退出提示的 pointer-lock 权限。
+- DSH 不在 `localhost` / `127.0.0.1` 上提供服务时，预览无法取得独立 origin、iframe 因此缺少 `allow-same-origin`；此时读取 `localStorage` 会抛出 SecurityError 并中断整个模块图，游戏渲染为空白。预览路由现在为 HTML 注入内存版 storage 兜底，游戏在两种 sandbox 下都可运行（无独立 origin 时不持久化存档）。
+- 预览载入失败现在真的可以被发现：iframe 对 HTTP 错误只触发 `load`、从不触发 `error`，因此改为由父页面直接请求预览地址来判断，不再在空白画面上显示“预览已载入”。
+- 游戏预览 iframe 不再以 `previewReady` 作为 key，避免工作区轮询恰好读到缺少 `index.html` 的 `build/app` 时销毁正在运行的游戏。
+- Agent 写入 `game-adaptations/` 下的非构建文件时不再把创作者从「试玩」拽到「项目文件」；只有创作者主动选择才切换。
+- 游戏工作台改为首次进入「游戏」时才挂载，之后保持挂载（仅隐藏）；空白会话不再在后台静默启动内置示例。
 
 ### Security
 
 - 生成游戏通过独立 loopback origin 与 iframe sandbox 隔离；预览路由执行路径收敛、大小限制、CSP 与浏览器来源检查。
+- 预览地址加入按进程随机派生的不可猜测路径守卫。预览的信任闸门必须放行跨站、无 Origin 的文档导航（隔离用的 loopback 别名切换与远端站点内嵌在报文上完全一致），因此实际阻止其他站点载入预览的是该守卫，而不是来源判断。
+- 非 HTML 预览资源改为一律下发 `default-src 'none'; sandbox`。此前 CSP 只附加在 `.html` 上，而预览路由不限制扩展名，导致 `build/app` 下的 SVG 被直接导航时可在真实 loopback origin 上无策略执行脚本，而 `/oh-story/file` 对该 origin 属于同源。
 
 ## [0.1.4] - 2026-08-23
 
