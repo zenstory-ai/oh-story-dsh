@@ -16,8 +16,9 @@ export const ohStoryRoot = join(repoRoot, "packages/knowledge/oh-story");
 export const generatedRoot = join(repoRoot, "packages/knowledge/generated");
 const platformGlue = [
   "story/assets/",
-  "story/scripts/",
+  "story/scripts/dashboard-server.mjs",
   "browser-cdp/scripts/setup-cdp-chrome.js",
+  "story-setup/references/antigravity/",
   "story-setup/references/codex/",
   "story-setup/references/generic/",
   "story-setup/references/openclaw/",
@@ -25,6 +26,9 @@ const platformGlue = [
   "story-setup/references/reasonix/",
   "story-setup/references/templates/",
   "story-setup/references/zcode/",
+  "story-setup/scripts/deploy-antigravity-skills.py",
+  "story-setup/scripts/generate-antigravity-agents.mjs",
+  "story-setup/scripts/merge-antigravity-hooks.py",
   "story-setup/scripts/merge-claude-settings.py",
   "story-setup/scripts/merge-codex-hooks.py",
   "story-setup/scripts/copy-path-safety.py",

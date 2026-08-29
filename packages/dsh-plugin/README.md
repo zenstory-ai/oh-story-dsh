@@ -7,7 +7,7 @@
 `oh-story-dsh` 是基于 DeepSeek Harness（DSH）构建的社区小说与短剧创作插件，提供：
 
 - 13 个 Oh Story 小说 Skills 与 7 个专业 Roles；
-- 10 个 Drama Skills 0.6.0 短剧流程，每集按请求维护最多五份 creator-first Markdown；
+- 10 个 Drama Skills 0.6.1 短剧流程，每集按请求维护最多五份 creator-first Markdown；
 - 小说协议 hooks 与安全的 Session workspace 文件路由；
 - 文件树、创作文档编辑器和 DSH Chat 组成的三栏工作台；
 - Markdown 与 JSONL 结构化预览；

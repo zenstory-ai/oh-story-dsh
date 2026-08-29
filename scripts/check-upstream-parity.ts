@@ -12,7 +12,12 @@ if (JSON.stringify(actualFiles) !== JSON.stringify(manifest.files)) {
 }
 const forbiddenPortableAssets = manifest.files.filter(({ path }) =>
   path.includes("/__pycache__/") || path.endsWith(".pyc") || path.endsWith("/.DS_Store")
-    || path === "skills/story-setup/scripts/copy-path-safety.py");
+    || path === "skills/story-setup/scripts/copy-path-safety.py"
+    || path === "skills/story/scripts/dashboard-server.mjs"
+    || path.startsWith("skills/story-setup/references/antigravity/")
+    || path === "skills/story-setup/scripts/deploy-antigravity-skills.py"
+    || path === "skills/story-setup/scripts/generate-antigravity-agents.mjs"
+    || path === "skills/story-setup/scripts/merge-antigravity-hooks.py");
 if (forbiddenPortableAssets.length > 0) {
   throw new Error(`Bundled knowledge retained upstream workspace/platform artifacts: ${forbiddenPortableAssets.map(({ path }) => path).join(", ")}`);
 }
