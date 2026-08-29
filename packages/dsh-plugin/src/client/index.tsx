@@ -329,8 +329,30 @@ function isolatedPreviewUrl(path: string, version: string, revision: number): { 
   return { href: url.toString(), isolated: url.origin !== globalThis.location.origin };
 }
 
+/**
+ * An iframe fires `load`, not `error`, when a navigation commits an HTTP error response, so the
+ * frame's own events cannot tell a working preview from the route's JSON error body. Probe the
+ * same URL out of band and report a non-OK or non-HTML answer as a real failure.
+ */
+function PreviewProbe({ href, onFailed }: { readonly href: string; readonly onFailed: () => void }) {
+  // Hold the callback in a ref so an inline arrow from the caller cannot re-trigger the probe.
+  const failedRef = useRef(onFailed);
+  useEffect(() => { failedRef.current = onFailed; }, [onFailed]);
+  useEffect(() => {
+    const controller = new AbortController();
+    void fetch(href, { signal: controller.signal })
+      .then((response) => {
+        if (controller.signal.aborted) return;
+        const type = response.headers.get("content-type") ?? "";
+        if (!response.ok || !type.includes("text/html")) failedRef.current();
+      })
+      .catch(() => { if (!controller.signal.aborted) failedRef.current(); });
+    return () => { controller.abort(); };
+  }, [href]);
+  return null;
+}
+
 function GamePreview({ project, building }: { readonly project: GameProject; readonly building: boolean }) {
-  const frameRef = useRef<HTMLIFrameElement>(null);
   const shellRef = useRef<HTMLDivElement>(null);
   const fullscreenButtonRef = useRef<HTMLButtonElement>(null);
   const restoreFullscreenFocus = useRef(false);
@@ -358,12 +380,24 @@ function GamePreview({ project, building }: { readonly project: GameProject; rea
   </div>;
   const preview = isolatedPreviewUrl(project.previewUrl, loadedVersion, revision);
   const pending = project.previewVersion !== loadedVersion;
+  /** Accept the newer build the creator just chose. */
   const reload = (): void => {
     setLoaded(false);
     setLoadError(false);
     setLoadedVersion(project.previewVersion);
     setRevision((value) => value + 1);
   };
+  /** Re-run the build the creator already accepted; never silently adopt a newer one. */
+  const refresh = (): void => {
+    setLoaded(false);
+    setLoadError(false);
+    setRevision((value) => value + 1);
+  };
+  const runtimeState = loadError ? "预览载入失败 · 可重新载入"
+    : building ? "Agent 正在更新游戏文件 · 当前预览保持不变"
+      : pending ? "新版本已就绪 · 由你决定何时载入"
+        : loaded ? (preview.isolated ? "预览已载入" : "预览已载入 · 当前部署无法隔离来源，存档功能不可用")
+          : "正在载入预览…";
   const fullscreen = (): void => {
     const shell = shellRef.current;
     if (shell === null) return;
@@ -372,15 +406,15 @@ function GamePreview({ project, building }: { readonly project: GameProject; rea
   };
   return <div ref={shellRef} className="oh-game-preview-shell" data-state={loadError ? "error" : building ? "building" : loaded ? "ready" : "loading"}>
     <div className="oh-game-preview-status">
-      <span className="oh-game-runtime-state" role="status" aria-live="polite"><i aria-hidden />{loadError ? "预览载入失败 · 可重新载入" : building ? "Agent 正在更新游戏文件 · 当前预览保持不变" : pending ? "新版本已就绪 · 由你决定何时载入" : loaded ? "预览已载入" : "正在载入预览…"}</span>
+      <span className="oh-game-runtime-state" role="status" aria-live="polite" title={runtimeState}><i aria-hidden /><em>{runtimeState}</em></span>
       <div>
-        {pending && <button type="button" onClick={reload}>载入新版本</button>}
-        <button className="oh-game-reload" type="button" onClick={reload} aria-label="重新载入游戏"><span aria-hidden>↻</span><b>刷新</b></button>
+        {pending && !building && <button type="button" onClick={reload}>载入新版本</button>}
+        <button className="oh-game-reload" type="button" onClick={refresh} aria-label="重新载入游戏"><span aria-hidden>↻</span><b>刷新</b></button>
         <button ref={fullscreenButtonRef} type="button" onClick={fullscreen}>全屏试玩</button>
       </div>
     </div>
+    <PreviewProbe href={preview.href} onFailed={() => { setLoaded(false); setLoadError(true); }} />
     <iframe
-      ref={frameRef}
       key={`${project.id}:${loadedVersion}:${String(revision)}`}
       src={preview.href}
       title={`《${project.title}》可试玩预览`}
@@ -841,6 +875,13 @@ function CreativeWorkbench({
     }));
   }, [actions, expandPath, productionIntentCalls, productionIntents, setEditorMode, setProductionSection, setSelected, setWorkbench, workspace]);
 
+  // Latch first entry into the game workbench: before that the Studio must not mount, or every
+  // session downloads and runs the bundled example in a display:none iframe. Once mounted it
+  // stays mounted so the running game survives later navigation.
+  const openedGame = useRef(false);
+  if (workbench === "game") openedGame.current = true;
+  const gameStudioMounted = openedGame.current;
+
   const followAgentPath = useCallback((path: string): void => {
     expandPath(path);
     const current = selected === undefined ? undefined : buffersRef.current[selected];
@@ -849,8 +890,11 @@ function CreativeWorkbench({
       && current.content !== current.saved
       && surfaceRef.current?.ownerDocument.activeElement === textareaRef.current;
     if (preserveFocusedDraft) return;
+    // The editor textarea is not mounted in the Game Studio, so the draft guard above can never
+    // fire there. Never preempt a running game: agent writes may expand the tree, not navigate.
+    if (workbench === "game" && gameTab === "preview") return;
     revealPath(path);
-  }, [expandPath, revealPath, selected]);
+  }, [expandPath, gameTab, revealPath, selected, workbench]);
 
   useEffect(() => {
     if (workspace === undefined || initializedWorkbench.current) return;
@@ -1264,7 +1308,7 @@ function CreativeWorkbench({
       >{pane === "studio" ? "制作" : "对话"}</button>)}
     </div>}
     {workbench === "game" && workspace === undefined && <main id={compactStudioId} className="oh-game-studio" role="tabpanel" aria-labelledby={`${compactTabsId}-studio-tab`}><div className="oh-game-design-empty">{error ?? "正在连接游戏工作台…"}</div></main>}
-    {workspace !== undefined && <GameStudio
+    {workspace !== undefined && gameStudioMounted && <GameStudio
           sessionId={sessionId}
           workspace={workspace}
           building={gameBuilding}

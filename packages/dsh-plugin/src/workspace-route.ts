@@ -279,9 +279,14 @@ function untoken(value: string): string {
   catch { throw new WorkspaceHttpError(400, "游戏预览标识无效。"); }
 }
 
-function gameRoot(path: string): boolean {
+export function gameRoot(path: string): boolean {
+  // Reject only what is actually unsafe; fs.resolve + fs.contains remain the real boundary.
+  // A stricter slug allowlist silently hid legitimate project names (spaces, ·, leading _, NFD).
   const parts = path.split("/");
-  return parts.length === 2 && parts[0] === GAME_DIRECTORY && parts[1] !== undefined && /^[\p{L}\p{N}][\p{L}\p{N}._-]*$/u.test(parts[1]);
+  const name = parts[1];
+  return parts.length === 2 && parts[0] === GAME_DIRECTORY && name !== undefined
+    && name !== "" && name !== "." && name !== ".." && name.length <= 128
+    && !name.startsWith(".") && !name.includes("\\");
 }
 
 function normalizedVerification(
@@ -371,10 +376,13 @@ async function workspaceGameProjects(
     const id = root.slice(`${GAME_DIRECTORY}/`.length);
     const qaPath = `${root}/qa/verification.json`;
     const qaFile = files.find((file) => file.path === qaPath);
+    // Isolate per-project metadata failures: an unreadable brief, a non-UTF-8 or oversized
+    // verification file, or a build/app subtree removed mid-rebuild must degrade this one card,
+    // never abort the shared workspace listing (which also carries the story and drama trees).
     const [brief, qa, preview] = await Promise.all([
-      workspaceText(realm, `${root}/PRODUCT_BRIEF.md`, maxBytes),
-      workspaceText(realm, qaPath, maxBytes),
-      previewDigest(realm, root)
+      workspaceText(realm, `${root}/PRODUCT_BRIEF.md`, maxBytes).catch(() => undefined),
+      workspaceText(realm, qaPath, maxBytes).catch(() => undefined),
+      previewDigest(realm, root).catch(() => ({ ready: false, version: "unavailable" }))
     ]);
     let verification: unknown;
     try { verification = qa === undefined ? undefined : JSON.parse(qa) as unknown; }
@@ -450,8 +458,33 @@ function previewAssetSources(request: IncomingMessage): string {
   return `http://${prefix} https://${prefix}`;
 }
 
+/**
+ * Emitted for EVERY preview response, not just HTML. previewContentType serves .svg as
+ * image/svg+xml — an active document type — so a game that self-navigates its frame to a scripted
+ * SVG would otherwise land in a document with no policy at all, while the iframe sandbox flags
+ * (which do persist across that navigation) still grant it script execution. The `sandbox`
+ * directive makes each response self-confining regardless of the iframe attribute.
+ */
+export function previewContentSecurityPolicy(assets: string): string {
+  return [
+    "sandbox allow-scripts allow-forms allow-modals allow-downloads allow-same-origin",
+    "default-src 'none'",
+    `script-src 'unsafe-inline' 'wasm-unsafe-eval' blob: ${assets}`,
+    `style-src 'unsafe-inline' ${assets}`,
+    `img-src data: blob: ${assets}`,
+    `media-src data: blob: ${assets}`,
+    `font-src data: ${assets}`,
+    `connect-src ${assets}`,
+    `worker-src blob: ${assets}`,
+    `manifest-src ${assets}`,
+    "object-src 'none'",
+    "base-uri 'none'",
+    "form-action 'none'",
+    "frame-ancestors 'self' http://127.0.0.1:* http://localhost:*"
+  ].join("; ");
+}
+
 function sendPreview(request: IncomingMessage, response: ServerResponse, path: string, bytes: Uint8Array): void {
-  const html = extname(path).toLocaleLowerCase() === ".html";
   const assets = previewAssetSources(request);
   response.writeHead(200, {
     "content-type": previewContentType(path),
@@ -460,29 +493,18 @@ function sendPreview(request: IncomingMessage, response: ServerResponse, path: s
     "x-content-type-options": "nosniff",
     "cross-origin-resource-policy": "cross-origin",
     "access-control-allow-origin": "*",
-    ...(html ? {
-      "content-security-policy": [
-        "default-src 'none'",
-        `script-src 'unsafe-inline' 'wasm-unsafe-eval' blob: ${assets}`,
-        `style-src 'unsafe-inline' ${assets}`,
-        `img-src data: blob: ${assets}`,
-        `media-src data: blob: ${assets}`,
-        `font-src data: ${assets}`,
-        `connect-src ${assets}`,
-        `worker-src blob: ${assets}`,
-        `manifest-src ${assets}`,
-        "object-src 'none'",
-        "base-uri 'none'",
-        "form-action 'none'",
-        "frame-ancestors 'self' http://127.0.0.1:* http://localhost:*"
-      ].join("; ")
-    } : {})
+    "content-security-policy": previewContentSecurityPolicy(assets),
   });
   response.end(bytes);
 }
 
 async function previewBytes(context: Context, pathname: string): Promise<{ readonly path: string; readonly bytes: Uint8Array }> {
-  const segments = pathname.split("/").slice(3).map((segment) => decodeURIComponent(segment));
+  let segments: string[];
+  try {
+    segments = pathname.split("/").slice(3).map((segment) => decodeURIComponent(segment));
+  } catch {
+    throw new WorkspaceHttpError(400, "游戏预览地址无效。");
+  }
   const kind = segments.shift();
   if (kind === "example") {
     const id = segments.shift();
