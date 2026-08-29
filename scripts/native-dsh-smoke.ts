@@ -857,7 +857,13 @@ async function main(): Promise<void> {
         const streamedEditor = page.getByRole("textbox", { name: agentMutationPath });
         const streamedValues = new Set<string>();
         for (let sample = 0; sample < 120; sample += 1) {
-          if (await streamedEditor.isVisible()) streamedValues.add(await streamedEditor.inputValue());
+          // Check-then-act: the editor can re-render between isVisible() and inputValue(), leaving
+          // the resolved handle detached and the read blocked for the full default timeout. Bound
+          // the read and skip the sample instead of failing the whole run on a transient rerender.
+          if (await streamedEditor.isVisible()) {
+            try { streamedValues.add(await streamedEditor.inputValue({ timeout: 2_000 })); }
+            catch { /* sampled mid-rerender; the next iteration picks the value up */ }
+          }
           if (streamedValues.size > 1 && await page.getByText(agentMutationReply, { exact: true }).isVisible()) break;
           await page.waitForTimeout(75);
         }
