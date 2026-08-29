@@ -4,22 +4,22 @@
     {
       "kind": "story",
       "repository": "https://github.com/zenstory-ai/oh-story-claudecode",
-      "commit": "a78f75a234f084c6b5469b301eecbea103c1ecae",
+      "commit": "70c294b20ce89440e70edb766b0446d3057bc077",
       "sourcePath": "demo/长篇/让你管账号，你高燃混剪炸全网",
       "localPath": "story/让你管账号，你高燃混剪炸全网"
     },
     {
       "kind": "drama",
       "repository": "https://github.com/zenstory-ai/drama-skills",
-      "commit": "db69caa238ee1dab5514589319a83f0778e6b4db",
+      "commit": "3ab6b8550bbccef71001d2187e2b2ac9a74ab917",
       "sourcePath": "examples/creator-first/EP001",
       "localPath": "drama/让你管账号/剧集/EP001",
       "files": [
         { "path": "剧本.md", "sha256": "1593c04479ad660117b54ff1ec2c2aaf62b2c25c3f04926632fa9daeefff911d", "bytes": 2259 },
-        { "path": "视觉设定.md", "sha256": "3497a199b1f33954a3f045ea9b3a713e39b328836dc5833d02e72a4662bf1dc9", "bytes": 2232 },
-        { "path": "分镜.md", "sha256": "3e1d6ffe38dafeb9413cf10921fcf5478c3e07f892abd6a70ceddcf674143c09", "bytes": 7780 },
-        { "path": "图片提示词.md", "sha256": "3df4c7fa6bb9bdf2099bd514fb69f5315fca785b9ce9f1a03cdad224c81cb4ae", "bytes": 3545 },
-        { "path": "视频提示词.md", "sha256": "3a17b9c42f2d06afa67acfc870730859e41cbb2e0b4df940feb9a699b24479bd", "bytes": 5669 }
+        { "path": "视觉设定.md", "sha256": "97c50b40d824520965cf008e60920a137cd30bc6a7f458b4f3f34a7f0c3dec51", "bytes": 2049 },
+        { "path": "分镜.md", "sha256": "7d1602507109ec038254a2b2783ed24b2859e3931802c49a374de3c36dc19ef3", "bytes": 9668 },
+        { "path": "图片提示词.md", "sha256": "1fc8f433e3ce4fbfc76f75de7dcf5e4e9ad3384ca80f6d0c5115d3daf4ebd8d0", "bytes": 3581 },
+        { "path": "视频提示词.md", "sha256": "b6969b9509fa3e7700b97c28ec65eb0cdae0bc7db7bfc804aaa6469e2c889fef", "bytes": 9343 }
       ]
     }
   ],

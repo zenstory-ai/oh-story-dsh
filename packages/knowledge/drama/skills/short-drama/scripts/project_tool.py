@@ -620,13 +620,26 @@ def _project_path(root: Path, relative: str, *, create_parent: bool = False) -> 
     current = root
     for part in PurePosixPath(relative).parts[:-1]:
         current /= part
-        if current.exists() and current.is_symlink():
+        # ``is_symlink`` misses the reparse points that are not name
+        # surrogates, and a Windows creator can make those without any extra
+        # privilege. Ask about the attribute directly instead.
+        try:
+            details = os.lstat(current)
+        except FileNotFoundError:
+            details = None
+        if details is not None and _is_link_or_reparse(details):
             raise ProjectConflictError(f"project parent cannot be a symlink: {part}")
-        if current.exists() and not current.is_dir():
+        if details is not None and not stat.S_ISDIR(details.st_mode):
             raise ProjectConflictError(f"project parent is not a directory: {part}")
-        if create_parent and not current.exists():
+        if create_parent and details is None:
             current.mkdir()
-    if target.exists() and (target.is_symlink() or not target.is_file()):
+    try:
+        target_details = os.lstat(target)
+    except (FileNotFoundError, NotADirectoryError):
+        target_details = None
+    if target_details is not None and (
+        _is_link_or_reparse(target_details) or not stat.S_ISREG(target_details.st_mode)
+    ):
         raise ProjectConflictError(f"project target is not a regular file: {relative}")
     if not target.parent.resolve().is_relative_to(root):
         raise ValueError(f"path escapes project root: {relative}")
@@ -1005,6 +1018,113 @@ def project_path_lifecycle_at(
         if isinstance(record, Mapping) and normalized in record.get("outputs", []):
             return {"artifact_state": _artifact_state_at(directory_fd, record)}
     return None
+
+
+# The three functions below are the path-based half of the dashboard contract.
+# Windows has no ``openat``, so the dashboard pins a project root by verified
+# path there instead of by directory descriptor and calls these. They compose
+# the same rules the descriptor twins do -- ``_build_status``,
+# ``_artifact_state_from``, ``_normalize_state`` -- so the two halves cannot
+# drift on what a status or a lifecycle state means; they differ only in how a
+# file is reached.
+
+
+def _read_regular(root: Path, relative: str) -> bytes:
+    """Read one project file, refusing every link and reparse point on the way.
+
+    ``os.lstat`` never follows, so a component swapped for a symlink or a
+    junction is rejected rather than traversed. This is the Windows stand-in
+    for opening each component with ``O_NOFOLLOW``.
+    """
+
+    pure = PurePosixPath(relative)
+    current = root
+    for part in pure.parts[:-1]:
+        current = current / part
+        details = os.lstat(current)
+        if _is_link_or_reparse(details) or not stat.S_ISDIR(details.st_mode):
+            raise ProjectConflictError(f"project parent is unsafe: {part}")
+    target = current / pure.name
+    details = os.lstat(target)
+    if _is_link_or_reparse(details) or not stat.S_ISREG(details.st_mode):
+        raise ProjectConflictError(f"project file is unsafe: {relative}")
+    with open(target, "rb") as handle:
+        return handle.read()
+
+
+def project_status_from_root(root: Path, *, project_root: str) -> dict[str, Any]:
+    """Report status for an already-pinned project root.
+
+    ``project_status`` locates the project first and requires recorded state;
+    this twin takes the root the caller pinned and tolerates a project that has
+    never been tracked, matching ``project_status_at``.
+    """
+
+    project = json.loads(_read_regular(root, PROJECT_FILE).decode("utf-8"))
+    try:
+        raw_state = json.loads(
+            _read_regular(root, STATE_FILE.as_posix()).decode("utf-8")
+        )
+    except FileNotFoundError:
+        raw_state = {
+            "schema_version": STATE_SCHEMA,
+            "project_id": project.get("project_id"),
+            "project_layout_mode": "auto",
+            "last_action": "untracked",
+            "artifacts": {},
+        }
+    if not isinstance(project, dict) or not isinstance(raw_state, dict):
+        raise ValueError("project files must contain objects")
+    state = _normalize_state(raw_state)
+    return _build_status(
+        project=project,
+        state=state,
+        layout=_project_layout_from_root(root, state),
+        project_root=project_root,
+        artifact_state=lambda record: _artifact_state(root, record),
+    )
+
+
+def project_path_lifecycle(root: Path, relative: str) -> dict[str, str] | None:
+    """Return the one creator-facing state for a tracked path."""
+
+    normalized = _relative_path(relative, allow_operations=True)
+    try:
+        raw_state = json.loads(
+            _read_regular(root, STATE_FILE.as_posix()).decode("utf-8")
+        )
+    except (OSError, ProjectConflictError, UnicodeError, json.JSONDecodeError):
+        return None
+    if not isinstance(raw_state, Mapping):
+        return None
+    state = _normalize_state(raw_state)
+    for record in state["artifacts"].values():
+        if isinstance(record, Mapping) and normalized in record.get("outputs", []):
+            return {"artifact_state": _artifact_state(root, record)}
+    return None
+
+
+@contextlib.contextmanager
+def coordinated_project_text_edit(
+    root: Path, relative: str, expected_version: str
+) -> Iterator[None]:
+    normalized = _relative_path(relative)
+    if not re.fullmatch(r"[0-9a-f]{64}", expected_version):
+        raise ValueError("expected version must be a SHA-256 digest")
+    # The descriptor twin opens the operations directory with O_NOFOLLOW. Match
+    # it: a lock taken through a redirected `.short-drama` would leave two
+    # dashboards each believing they hold the project.
+    try:
+        operations = os.lstat(root / ".short-drama")
+    except FileNotFoundError:
+        operations = None
+    if operations is not None and _is_link_or_reparse(operations):
+        raise OSError("project operations directory is unsafe")
+    with _project_lock(root):
+        current = sha256_bytes(_read_regular(root, normalized))
+        if current != expected_version:
+            raise ProjectConflictError("file changed since it was opened")
+        yield
 
 
 def _validate_structured_content(relative: str, content: bytes) -> None:

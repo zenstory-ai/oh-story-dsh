@@ -17,17 +17,17 @@ const DSH_SKILL_BRIDGE = [
   "DSH owns the workspace, model, preset, permissions, Session Log, tools, subagents, cancellation, resume, and Agent UI.",
   "Never start another Agent runtime, session transport, Dashboard, SSE stream, polling loop, or model configuration.",
   "All seven upstream Oh Story specialist Roles are bundled. Invoke one with oh_story_role and a self-contained prompt.",
-  "Never inspect .claude/agents, .codex/agents, .opencode/agents, or .story-deployed to decide whether a Role is available.",
+  "Never inspect .claude/agents, .codex/agents, .opencode/agents, .agents/agents, .zcode, or .story-deployed to decide whether a Role is available, and never call invoke_subagent with a TypeName.",
   "Use only DSH-visible tools. DSH sandbox and permission policy remain authoritative.",
   "</oh-story-dsh-integration>"
 ].join("\n");
 const DSH_SKILL_OVERRIDES: Readonly<Partial<Record<string, string>>> = {
   story: "The 小说 workspace is an official DSH conversation view. Never start or open a second web application.",
-  "story-setup": "Initialize or validate novel project data only. DSH already supplies Skills, Roles, hooks, tools, permissions, sessions, and UI; never deploy Claude/OpenCode/Codex/ZCode/OpenClaw/Reasonix files or a .story-deployed marker.",
+  "story-setup": "Initialize or validate novel project data only. DSH already supplies Skills, Roles, hooks, tools, permissions, sessions, and UI; never deploy Claude/OpenCode/Codex/Antigravity/ZCode/OpenClaw/Reasonix files or a .story-deployed marker.",
   "story-long-analyze": "Use oh_story_role for chapter extraction or specialist analysis. Never inspect platform agent directories or require a deployed external Agent definition.",
   "story-long-write": "All named Roles are provided through oh_story_role. Do not check platform agent files. Keep the upstream writing, Tracking, lint, outline, revision, and quality workflows.",
   "story-review": "All named reviewer Roles are provided through oh_story_role. Do not check platform agent files; full/lean review may use the bundled Roles directly.",
-  "story-import": "All named Roles are provided through oh_story_role. Do not require story-setup to deploy them.",
+  "story-import": "All named Roles are provided through oh_story_role. Do not require story-setup to deploy them, and never inspect platform agent directories.",
   "story-deslop": "Use the bundled narrative-writer Role through oh_story_role when specialist review is useful. Never inspect platform agent directories.",
   "story-short-analyze": "Use oh_story_role for specialist analysis. Never inspect platform agent directories or require external Agent deployment.",
   "story-short-write": "All named Roles are provided through oh_story_role. Do not inspect platform agent files; preserve the upstream short-fiction workflow and quality gates.",
@@ -49,7 +49,8 @@ const DSH_DRAMA_BRIDGE = [
 ].join("\n");
 const DSH_DRAMA_OVERRIDES: Readonly<Partial<Record<string, string>>> = {
   "short-drama": "A dashboard request means focus or use the native 短剧 tab in this DSH Session. Do not run the bundled standalone Dashboard script. New projects follow only the v0.6 creator-first contract and create only documents required by the current request.",
-  "short-drama-produce": "Use an upstream adapter only after the creator explicitly confirms the exact current job. Its source must be the current creator-first Markdown and its output belongs under 剧集/<EP>/制作成果/. DSH permissions and approval UI remain authoritative."
+  "short-drama-produce": "Use an upstream adapter only after the creator explicitly confirms the exact current job. Its source must be the current creator-first Markdown and its output belongs under 剧集/<EP>/制作成果/. DSH permissions and approval UI remain authoritative. When oh_story_production is visible, register the previewed job with track_job after the confirmation is valid and before run — never at prepare time — passing the same job ID, target, modality and count the creator just approved.",
+  "short-drama-assets": "Keep one stable `- ID：VISUAL-*` line on every 人物/造型/地点/道具/状态 entry in 视觉设定.md, and never change an existing ID when editing its heading or text. The 生产 view identifies canvas nodes by that ID; entries without one still render, but the workbench reports their node identity as unstable."
 };
 
 const DSH_NATIVE_SKILLS: Readonly<Partial<Record<string, string>>> = {
@@ -63,6 +64,9 @@ const DSH_NATIVE_SKILLS: Readonly<Partial<Record<string, string>>> = {
 - 导入已有作品：story-import
 - 审稿与去 AI 味：story-review、story-deslop
 - 封面：story-cover
+- 管理作者习惯（记住/查看/确认/替换/忘掉写作偏好）：加载本 skill 的
+  references/author-memory.md，只用本 skill 的 scripts/author_memory_commit.py 管理
+  工作区级 .story/作者记忆/；工具未返回 Author Memory Receipt 前不得声称已记住。
 
 意图明确时直接进入对应 Skill；不明确时只问一个会改变流程的问题。项目文件、
 Agent、模型、权限、Session Log 和 UI 均由当前 DSH 会话管理。小说文件通过“小说”
@@ -76,7 +80,7 @@ Agent、模型、权限、Session Log 和 UI 均由当前 DSH 会话管理。小
 3. 长篇按需建立 正文/、设定/、大纲/、追踪/，并准备追踪/_tracking-state.json；
    第一章正文落盘前必须有对应细纲。短篇保持轻量结构，不强加长篇 Tracking。
 4. 需要架构、角色或研究工作时，通过 oh_story_role 调用已打包 Role；不要检查或
-   生成 .claude、.codex、.opencode、.zcode、AGENTS.md 或 .story-deployed。
+   生成 .claude、.codex、.opencode、.agents、.zcode、AGENTS.md 或 .story-deployed。
 5. 复述创建、保留和待用户确认的文件。不要配置模型、权限、Hooks 或 Session。
 
 题材、角色、节奏、冲突、开篇和写作方法资料位于 references/agent-references/；

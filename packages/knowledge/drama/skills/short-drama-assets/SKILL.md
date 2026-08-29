@@ -35,7 +35,6 @@ license: MIT
 
 ## 内容要求
 
-- 每个人物、造型、地点、道具或状态条目都保留一行唯一的 `- ID：VISUAL-*`；修改标题时不更换 ID。
 - 每项先写什么不变使它仍是同一资产，再写本集变化。
 - 识别锚点必须可见、可生成、可比较，不用空泛质量词替代事实。
 - 服装、伤势、湿污、道具开合和光态通常是变体，不是新身份。
@@ -52,7 +51,7 @@ license: MIT
 - 新身份、复用、变体或未决：[身份与变体](references/identity-vs-variant.md)
 - 人物识别与造型层次：[人物与造型](references/character-and-look.md)
 - 地点地理、视图和固定锚点：[地点与视图](references/location-and-view.md)
-- 功能道具、所有权和状态变化：[道具与状态](references/prop-and-state.md)
+- 功能道具、所有权、状态变化，或画面上的可读文字与标识：[道具与状态](references/prop-and-state.md)
 - 声音参考的身份与授权边界：[声音方向](references/voice-direction.md)
 - 跨场、跨镜、跨集状态：[连续性变化](references/continuity-delta.md)
 - 完成前做一次资产漏项检查：[资产审查清单](references/asset-review-checklist.md)
@@ -61,6 +60,7 @@ license: MIT
 
 所有明确出场都已复用、新建、变体化或标为真实未决；需要保持的视觉事实与状态变化已写入唯一
 视觉设定文档，即完成。图片提示词、分镜、审查和生产不自动开始。
+五份创作文档齐备后，可转 `$short-drama` 对跨文档结构做一次机械核对；内容质量仍由创作者审查。
 
 ## 安装维护
 

@@ -55,9 +55,9 @@ license: MIT
 可以分别读取，但不遍历无关引用：
 
 - 阶段边界与规则分级：[阶段契约](references/stage-contract.md)
-- 场景标题、对白和生产标签语法：[剧本格式](references/screenplay-format.md)
+- 场景标题、对白和生产标签语法，或把创作者带来的现成剧本[规范化](references/screenplay-format.md#7-现有文本的规范化入口)：[剧本格式](references/screenplay-format.md)
 - 项目特有的制作稿方言：[制作格式方言](references/production-format-dialect.md)
-- 输入含核心选择、有限次数/轮次/呼吸/节拍、精确倒计时或会改变人物判断的关键物证：[剧作手艺](references/script-craft.md)
+- 输入含[核心选择](references/script-craft.md#35-把一拍写成艰难选择时两个方向都要活着)、[有限次数/轮次/呼吸/节拍](references/script-craft.md#64-有限单位按完成状态计数)、[精确倒计时](references/script-craft.md#63-倒计时先算动作不要只写数字)或[会改变人物判断的关键物证](references/script-craft.md#53-证据先改变判断再改变关系)：[剧作手艺](references/script-craft.md)
 - 过去关系必须通过对白进入，或关键人物容易只剩说明功能：[对白手艺](references/dialogue-craft.md)
 - 声源、留白与 sound bridge：[场景声音戏剧](references/scene-sound-dramaturgy.md)
 - 同一故事义务的不同可拍实现：[可替代实现](references/substitutable-realization.md)
@@ -83,6 +83,7 @@ python3 "{技能目录}/scripts/duration_estimate.py" "剧集/EP001/剧本.md" -
 
 点名范围已写入、场景因果连贯、对白与行动可表演、承诺有兑现或有意延迟、结尾完成本集预定的戏剧或情绪功能，即完成。最后一拍可以推进，也可以安静收束、形成余韵或让既有动作变义；判断它是否有效，不用“是否又发生一件事”代替。
 资产、分镜、审查与生产只有用户点名时开始。
+五份创作文档齐备后，可转 `$short-drama` 对跨文档结构做一次机械核对；内容质量仍由创作者审查。
 
 ## 安装维护
 

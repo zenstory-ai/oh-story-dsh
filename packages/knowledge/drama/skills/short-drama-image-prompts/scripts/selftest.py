@@ -51,9 +51,11 @@ def main() -> int:
     leaked[0]["provider"] = "example"
     fail(leaked, sources, "provider execution fields")
 
-    # A/B Round 2: the suite forbids weight syntax and one engine's quality words,
+    # A/B Round 2: the suite forbids provider control syntax in a generic prompt,
     # but nothing enforced it — the only prompt check was for leaked hashes.
-    for syntax in ("--ar 9:16", "masterpiece, 8k", "(red coat:1.2)", "cat::2"):
+    # Generic quality language is `IMG-02`, a `craft_default`; it is not checked
+    # here, because a validator cannot block delivery on a fixed word list.
+    for syntax in ("--ar 9:16", "(red coat:1.2)", "cat::2"):
         engine_syntax = copy.deepcopy(records)
         engine_syntax[0]["generic_prompt"] += f" {syntax}"
         fail(engine_syntax, sources, "engine-specific syntax")

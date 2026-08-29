@@ -22,7 +22,7 @@
 
 ![oh-story-dsh 短剧工作台](docs/images/short-drama-dsh-demo.gif)
 
-内置 Drama Skills 0.6.0 的 creator-first 工作流。每集按请求维护最多五份可读 Markdown：`剧本.md`、`视觉设定.md`、`分镜.md`、`图片提示词.md`、`视频提示词.md`；不预建空文档，也不倒补用户未点名的阶段。「生产」视图按轻量 `short-drama/v1` 协议把这些文档投影为镜头板、素材板、任务/版本、成片顺序和关系画布，并就地提示重复 ID、悬空引用和格式错误，不建立第二份创作真相。审查与生产交付继续使用 DSH 原生会话、当前 Preset 工具、权限和确认界面。
+内置 Drama Skills 0.6.1 的 creator-first 工作流。每集按请求维护最多五份可读 Markdown：`剧本.md`、`视觉设定.md`、`分镜.md`、`图片提示词.md`、`视频提示词.md`；不预建空文档，也不倒补用户未点名的阶段。「生产」视图按轻量 `short-drama/v1` 协议把这些文档投影为镜头板、素材板、任务/版本、成片顺序和关系画布，并就地提示重复 ID、悬空引用和格式错误，不建立第二份创作真相。审查与生产交付继续使用 DSH 原生会话、当前 Preset 工具、权限和确认界面。
 
 > Drama Skills 0.6.0 是破坏性升级：v0.5 结构化项目应继续锁定 v0.5 并只读保留；迁移时新建项目根，逐集人工确认当前工作所需文档，不要在同一目录混用旧 JSON/JSONL 与新文档。
 
@@ -43,8 +43,8 @@
 
 | 工作台 | 上游能力 | 主要入口 |
 | --- | --- | --- |
-| 小说 | [Oh Story 0.7.6](https://github.com/zenstory-ai/oh-story-claudecode) · 13 Skills · 7 Roles | `/story`、`/story-long-write`、`/story-review` |
-| 短剧 | [Drama Skills 0.6.0](https://github.com/zenstory-ai/drama-skills/releases/tag/v0.6.0) · 10 Skills | `/short-drama`、`/short-drama-write`、`/short-drama-storyboard` |
+| 小说 | [Oh Story 0.7.8](https://github.com/zenstory-ai/oh-story-claudecode/releases/tag/v0.7.8) · 13 Skills · 7 Roles | `/story`、`/story-long-write`、`/story-review` |
+| 短剧 | [Drama Skills 0.6.1](https://github.com/zenstory-ai/drama-skills/releases/tag/v0.6.1) · 10 Skills | `/short-drama`、`/short-drama-write`、`/short-drama-storyboard` |
 
 ## 安装
 
