@@ -64,3 +64,23 @@ export function isTrustedWorkspaceRequest(
   try { return new URL(origin).host === host.host; }
   catch { return false; }
 }
+
+/**
+ * Permit a generated-game document to navigate from one loopback alias to
+ * another (127.0.0.1 ↔ localhost). Subresources then become same-origin with
+ * the isolated preview document and use the stricter path above.
+ */
+export function isTrustedPreviewNavigation(
+  request: WorkspaceTrustRequest,
+  trustedHosts: readonly string[]
+): boolean {
+  if (isTrustedWorkspaceRequest(request, trustedHosts)) return true;
+  const authority = header(request.headers, "host");
+  if (authority === undefined) return false;
+  const host = parseAuthority(authority);
+  if (host === undefined || (!isLoopbackHostname(host.hostname) && !isTrustedAuthority(host, trustedHosts))) return false;
+  return header(request.headers, "origin") === undefined
+    && header(request.headers, "sec-fetch-site") === "cross-site"
+    && header(request.headers, "sec-fetch-mode") === "navigate"
+    && ["document", "iframe"].includes(header(request.headers, "sec-fetch-dest") ?? "");
+}

@@ -179,6 +179,21 @@ describe("official DSH file activity", () => {
     expect(workbenchModeForPath("正文/第001章.md")).toBe("story");
   });
 
+  it("recognizes NovelToGame artifacts and prefers the product brief", () => {
+    const cwd = "/games/demo";
+    expect(creativeRelativePath("/games/demo/game-adaptations/ledger/build/app/index.html", cwd))
+      .toBe("game-adaptations/ledger/build/app/index.html");
+    expect(creativeRelativePath("game-adaptations/ledger/build/app/js/main.js", cwd))
+      .toBe("game-adaptations/ledger/build/app/js/main.js");
+    expect(creativeRelativePath("game-adaptations/../secrets.txt", cwd)).toBeUndefined();
+    expect(workbenchModeForPath("game-adaptations/ledger/qa/verification.json")).toBe("game");
+    expect(preferredWorkbenchFile([
+      { path: "game-adaptations/ledger/design/GAME_DESIGN.md" },
+      { path: "game-adaptations/ledger/PRODUCT_BRIEF.md" },
+      { path: "game-adaptations/ledger/qa/verification.json" }
+    ], "game")).toBe("game-adaptations/ledger/PRODUCT_BRIEF.md");
+  });
+
   it("prefers the v0.6 creator-first screenplay without dropping v0.5 read-only fallback", () => {
     expect(preferredWorkbenchFile([
       { path: "剧集/EP001/screenplay.md" },
@@ -189,5 +204,15 @@ describe("official DSH file activity", () => {
       { path: "short-drama.json" },
       { path: "剧集/EP001/screenplay.md" }
     ], "drama")).toBe("剧集/EP001/screenplay.md");
+  });
+});
+
+describe("agent path resolution before the workspace loads", () => {
+  it("cannot resolve an absolute mutation path without a cwd", () => {
+    // Why the settled-mutation effect waits for workspace.cwd instead of consuming the signal:
+    // the mutation carries an absolute path, so resolving it early yields undefined and the
+    // follow-the-agent selection would be dropped permanently.
+    expect(creativeRelativePath("/home/runner/work/story/设定/角色/a.md", undefined)).toBeUndefined();
+    expect(creativeRelativePath("/home/runner/work/story/设定/角色/a.md", "/home/runner/work/story")).toBe("设定/角色/a.md");
   });
 });

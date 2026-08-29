@@ -10,24 +10,32 @@ import { chromium, type Locator, type Page } from "@playwright/test";
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const dshVersion = "0.1.1-rc.1";
 const demoFramesDirectory = process.env.OH_STORY_DEMO_FRAMES_DIR;
+const gameEvidenceDirectory = process.env.OH_STORY_GAME_E2E_DIR;
 const useRealDeepSeek = process.env.OH_STORY_DEMO_USE_REAL_DEEPSEEK === "1";
 const browserChannel = process.env.DSH_SMOKE_BROWSER_CHANNEL ?? (process.platform === "win32" ? "msedge" : "chrome");
 const storyProjectName = "让你管账号，你高燃混剪炸全网";
 const dramaProjectName = "让你管账号";
 const storyFixture = join(repositoryRoot, "scripts", "demo-fixtures", "story", storyProjectName);
 const dramaFixture = join(repositoryRoot, "scripts", "demo-fixtures", "drama", dramaProjectName);
+const generatedGameId = "smoke-game";
 const keyframeMediaFixture = join(repositoryRoot, "scripts", "demo-fixtures", "media", "shot-ep001-001-keyframe.png");
 const keyframeV2MediaFixture = join(repositoryRoot, "scripts", "demo-fixtures", "media", "shot-ep001-001-keyframe-v2.png");
 const videoMediaFixture = join(repositoryRoot, "scripts", "demo-fixtures", "media", "shot-ep001-002-video.mp4");
 const storyPrompt = `请只读检查《${storyProjectName}》当前工程，简要概览正文、大纲、设定与追踪状态，不修改任何文件。`;
 const dramaPrompt = `请只读检查短剧《${dramaProjectName}》EP001 的 creator-first 五份创作文档，简要概览剧本、视觉设定、分镜、图片提示词与视频提示词，不修改任何文件。`;
+const gamePrompt = "请打开 Game Studio，检查当前可试玩版本与设计产物；保留左侧试玩、右侧对话的工作方式。";
 const storyReply = `已读取《${storyProjectName}》工程。正文、大纲、设定与追踪文件已就绪。`;
 const dramaReply = `已读取《${dramaProjectName}》EP001。creator-first 五份 Markdown 创作文档已就绪，未发现并行 JSON/JSONL 创作真相。`;
+const gameReply = "Game Studio 已就绪。左侧可以直接试玩、检查设计并切换《金瓶梅 · 风月总账》示例；右侧继续使用原生对话。";
 const dramaCreatorFiles = ["剧本.md", "视觉设定.md", "分镜.md", "图片提示词.md", "视频提示词.md"] as const;
 const agentMutationPrompt = "AGENT_WRITE_SMOKE：请使用 write 工具创建指定测试文件。";
 const agentMutationPath = "设定/角色/_agent-write-smoke.md";
 const agentMutationContent = "# Agent 写入验证\n\n这段正文由真实 DSH Agent 工具调用流式写入。\n\n- 文件树自动定位\n- 编辑器同步更新\n";
 const agentMutationReply = "测试文件已通过 write 工具创建。";
+const gameUpdatePrompt = "GAME_BUILD_UPDATE_SMOKE：请使用 write 工具写入游戏构建版本标记。";
+const gameUpdatePath = `game-adaptations/${generatedGameId}/build/app/version.txt`;
+const gameUpdateContent = "game-build-update-smoke\n";
+const gameUpdateReply = "游戏构建版本标记已更新。";
 const todoLayoutPrompt = "TODO_LAYOUT_SMOKE：写入十一条已完成任务。";
 const todoLayoutItems = Array.from({ length: 11 }, (_, index) => ({ content: `布局任务 ${String(index + 1)}`, status: "completed" }));
 const roleReference = "story-setup/references/agent-references/writing-craft.md";
@@ -40,7 +48,7 @@ const productionIntentSmokePrompt = "PRODUCTION_INTENT_SMOKE：必须调用 oh_s
 const productionIntentReply = "PRODUCTION_INTENT_RESULT：生产目标聚焦意图已发送。";
 const productionIntentArgs = { action: "focus_target", episode: "剧集/EP001", targetId: "SHOT-EP001-008", section: "shots" } as const;
 
-async function captureDemoFrame(page: Page, workbench: "story" | "drama", index: number): Promise<void> {
+async function captureDemoFrame(page: Page, workbench: "story" | "drama" | "game", index: number): Promise<void> {
   if (demoFramesDirectory === undefined) return;
   await mkdir(demoFramesDirectory, { recursive: true });
   await page.waitForTimeout(180);
@@ -48,6 +56,18 @@ async function captureDemoFrame(page: Page, workbench: "story" | "drama", index:
     path: join(demoFramesDirectory, `${workbench}-${String(index).padStart(2, "0")}.png`),
     animations: "disabled"
   });
+}
+
+async function captureGameEvidence(page: Page, name: string): Promise<void> {
+  if (gameEvidenceDirectory === undefined) return;
+  await mkdir(gameEvidenceDirectory, { recursive: true });
+  const collapse = page.getByRole("button", { name: /^(?:Collapse sidebar|收起侧边栏)$/u }).first();
+  if (await collapse.isVisible()) {
+    await collapse.click();
+    await page.getByRole("button", { name: /^(?:Open sidebar|打开侧边栏)$/u }).first().waitFor({ state: "visible", timeout: 10_000 });
+    await page.waitForTimeout(250);
+  }
+  await page.screenshot({ path: join(gameEvidenceDirectory, `${name}.png`), animations: "disabled" });
 }
 
 async function prepareDemoSurface(page: Page): Promise<void> {
@@ -107,7 +127,8 @@ async function startMockDeepSeek(): Promise<MockDeepSeek> {
       const messages = (payload as { readonly messages?: readonly { readonly role?: string }[] }).messages ?? [];
       const lastUserIndex = messages.findLastIndex((message) => message.role === "user");
       const currentTurn = JSON.stringify(messages.slice(Math.max(lastUserIndex, 0)));
-      const mutationTurn = currentTurn.includes(agentMutationPrompt);
+      const gameUpdateTurn = currentTurn.includes(gameUpdatePrompt);
+      const mutationTurn = currentTurn.includes(agentMutationPrompt) || gameUpdateTurn;
       const todoLayoutTurn = currentTurn.includes(todoLayoutPrompt);
       const productionTurn = currentTurn.includes("/short-drama-produce");
       const roleParentTurn = currentTurn.includes(roleSmokePrompt);
@@ -149,8 +170,10 @@ async function startMockDeepSeek(): Promise<MockDeepSeek> {
             ? { id: "call_oh_story_production_smoke", name: "oh_story_production", args: productionIntentArgs }
           : todoLayoutTurn
             ? { id: "call_todo_layout", name: "todo_write", args: { todos: todoLayoutItems } }
-            : { id: "call_oh_story_write_smoke", name: "write", args: { file_path: agentMutationPath, content: agentMutationContent } };
-        requests.push(roleParentTurn ? "role-parent-start" : productionIntentTurn ? "production-intent" : todoLayoutTurn ? "todo" : "write");
+            : gameUpdateTurn
+              ? { id: "call_game_build_update_smoke", name: "write", args: { file_path: gameUpdatePath, content: gameUpdateContent } }
+              : { id: "call_oh_story_write_smoke", name: "write", args: { file_path: agentMutationPath, content: agentMutationContent } };
+        requests.push(roleParentTurn ? "role-parent-start" : productionIntentTurn ? "production-intent" : todoLayoutTurn ? "todo" : gameUpdateTurn ? "game-write" : "write");
         const argumentsJson = JSON.stringify(tool.args);
         const chunks = argumentsJson.match(/.{1,14}/gu) ?? [argumentsJson];
         events = [
@@ -175,8 +198,10 @@ async function startMockDeepSeek(): Promise<MockDeepSeek> {
           : productionIntentTurn
             ? productionIntentReply
           : mutationTurn
-            ? agentMutationReply
-            : serialized.includes(storyProjectName) ? storyReply : dramaReply;
+            ? gameUpdateTurn ? gameUpdateReply : agentMutationReply
+            : serialized.includes("Game Studio")
+              ? gameReply
+              : serialized.includes(storyProjectName) ? storyReply : dramaReply;
         events = [
           JSON.stringify({ choices: [{ delta: { role: "assistant", content: null, reasoning_content: "" } }] }),
           JSON.stringify({ choices: [{ delta: { content } }] }),
@@ -411,6 +436,24 @@ async function main(): Promise<void> {
       cp(storyFixture, storyRoot, { recursive: true }),
       cp(dramaFixture, dramaRoot, { recursive: true })
     ]);
+    const generatedGameRoot = join(storyRoot, "game-adaptations", generatedGameId);
+    await Promise.all([
+      mkdir(join(generatedGameRoot, "build", "app"), { recursive: true }),
+      mkdir(join(generatedGameRoot, "qa"), { recursive: true })
+    ]);
+    await Promise.all([
+      writeFile(join(generatedGameRoot, "PRODUCT_BRIEF.md"), "# PRODUCT_BRIEF · DSH Game Studio Smoke\n\ntargetFinish: playable-prototype\n"),
+      writeFile(join(generatedGameRoot, "_progress.md"), "# Progress\n\n- playable: complete\n"),
+      writeFile(join(generatedGameRoot, "build", "app", "index.html"), "<!doctype html><html lang=zh-CN><meta charset=utf-8><title>DSH Game Smoke</title><button id=play>试玩成功</button><script>document.querySelector('#play').addEventListener('click',event=>event.currentTarget.textContent='输入已验证')</script></html>"),
+      writeFile(join(generatedGameRoot, "qa", "verification.json"), `${JSON.stringify({
+        schemaVersion: 3,
+        status: "PASS",
+        completeRun: { id: "dsh-game-studio-smoke" },
+        checks: { launch: "PASS", render: "PASS", input: "PASS", coreLoop: "PASS", outcome: "PASS", restart: "PASS" },
+        limitations: []
+      }, null, 2)}\n`)
+    ]);
+
     const secondEpisode = join(dramaRoot, "剧集", "EP002");
     await cp(join(dramaRoot, "剧集", "EP001"), secondEpisode, { recursive: true });
     await Promise.all(dramaCreatorFiles.map(async (name) => {
@@ -439,9 +482,13 @@ async function main(): Promise<void> {
     for (const required of [
       "package/LICENSE", "package/README.md", "package/cordis.patch.yml", "package/package.json",
       "package/lib/index.js", "package/lib/client.js", "package/lib/oh-story/manifest.json", "package/lib/drama/manifest.json",
+      "package/lib/novel-to-game/manifest.json",
       "package/lib/oh-story/skills/story-setup/references/agent-references/writing-craft.md",
       "package/lib/drama/skills/short-drama/references/creator-documents.md",
-      "package/lib/drama/skills/short-drama-storyboard/references/comic-keyframe-lexicon.md"
+      "package/lib/drama/skills/short-drama-storyboard/references/comic-keyframe-lexicon.md",
+      "package/lib/novel-to-game/skills/novel-to-game/references/pipeline-contract.md",
+      "package/lib/novel-to-game/examples/jin-ping-mei/build/app/index.html",
+      "package/lib/novel-to-game/examples/jin-ping-mei/qa/verification.json"
     ]) {
       if (!entries.has(required)) throw new Error(`Plugin tarball is missing ${required}.`);
     }
@@ -481,15 +528,22 @@ async function main(): Promise<void> {
     const storyWorkspace = await rpc<{ readonly workspace: { readonly workspaceId: string; readonly title: string } }>(origin, "workspace.create", { path: storyRoot });
     const dramaWorkspace = await rpc<{ readonly workspace: { readonly workspaceId: string; readonly title: string } }>(origin, "workspace.create", { path: dramaRoot });
     const storySession = await rpc<{ readonly sessionId: string }>(origin, "session.create", { workspaceId: storyWorkspace.workspace.workspaceId });
+    const gameSession = await rpc<{ readonly sessionId: string }>(origin, "session.create", { workspaceId: storyWorkspace.workspace.workspaceId });
     const dramaSession = await rpc<{ readonly sessionId: string }>(origin, "session.create", { workspaceId: dramaWorkspace.workspace.workspaceId });
     const catalog = await rpc<{ readonly skills: readonly { readonly name: string }[] }>(origin, "skill.list", { sessionId: storySession.sessionId });
     const ohStorySkills = catalog.skills.filter((skill) => skill.name === "story" || skill.name.startsWith("story-") || skill.name === "browser-cdp");
     const dramaSkills = catalog.skills.filter((skill) => skill.name === "short-drama" || skill.name.startsWith("short-drama-"));
+    const gameSkills = catalog.skills.filter((skill) => [
+      "novel-to-game", "novel-game-analyze", "game-concept", "game-world-design", "game-art-direction", "game-build", "game-qa"
+    ].includes(skill.name));
     if (ohStorySkills.length !== 13) throw new Error(`Expected 13 Oh Story Skills, found ${String(ohStorySkills.length)}.`);
     if (dramaSkills.length !== 10) throw new Error(`Expected 10 Drama Skills, found ${String(dramaSkills.length)}.`);
+    if (gameSkills.length !== 7) throw new Error(`Expected 7 NovelToGame Skills, found ${String(gameSkills.length)}.`);
     const storySessionTitle = `小说 · ${storyProjectName}`;
+    const gameSessionTitle = "游戏 · Live Game Lab";
     const dramaSessionTitle = `短剧 · ${dramaProjectName}`;
     await prepareSession(origin, storySession.sessionId, storyPrompt, storySessionTitle);
+    await prepareSession(origin, gameSession.sessionId, gamePrompt, gameSessionTitle);
     await prepareSession(origin, dramaSession.sessionId, dramaPrompt, dramaSessionTitle);
 
     if (!useRealDeepSeek) {
@@ -546,10 +600,32 @@ async function main(): Promise<void> {
     }
 
     const storyWorkspaceResponse = await fetch(`${origin}/oh-story/workspace?sessionId=${encodeURIComponent(storySession.sessionId)}`);
-    const storyWorkspacePayload = await storyWorkspaceResponse.json() as { readonly mode?: string; readonly cwd?: string; readonly files?: readonly { readonly path: string }[]; readonly shortDrama?: unknown };
+    const storyWorkspacePayload = await storyWorkspaceResponse.json() as {
+      readonly mode?: string;
+      readonly cwd?: string;
+      readonly files?: readonly { readonly path: string }[];
+      readonly games?: readonly { readonly id: string; readonly title: string; readonly source: string; readonly previewUrl?: string; readonly verification?: { readonly status?: string; readonly binding?: string } }[];
+      readonly shortDrama?: unknown;
+    };
+    const bundledGame = storyWorkspacePayload.games?.find((game) => game.id === "example:jin-ping-mei");
+    const generatedGame = storyWorkspacePayload.games?.find((game) => game.id === `workspace:${generatedGameId}`);
     if (!storyWorkspaceResponse.ok || storyWorkspacePayload.mode !== "dsh-session" || storyWorkspacePayload.cwd !== await realpath(storyRoot)
-      || !storyWorkspacePayload.files?.some((file) => file.path.startsWith("正文/")) || storyWorkspacePayload.shortDrama !== null) {
+      || !storyWorkspacePayload.files?.some((file) => file.path.startsWith("正文/")) || storyWorkspacePayload.shortDrama !== null
+      || bundledGame?.title !== "金瓶梅 · 风月总账" || bundledGame.source !== "example" || bundledGame.verification?.status !== "PASS"
+      || bundledGame.verification.binding !== "PINNED"
+      || bundledGame.previewUrl === undefined || generatedGame?.source !== "workspace" || generatedGame.previewUrl === undefined
+      || generatedGame.verification?.status !== "PASS" || generatedGame.verification.binding !== "UNBOUND") {
       throw new Error(`Story Session workspace route failed: ${JSON.stringify(storyWorkspacePayload)}`);
+    }
+    const bundledPreview = await fetch(`${origin}${bundledGame.previewUrl}`);
+    if (!bundledPreview.ok || !(await bundledPreview.text()).includes("金瓶梅·风月总账")) {
+      throw new Error(`Bundled Jin Ping Mei preview route failed: ${String(bundledPreview.status)}.`);
+    }
+    const generatedPreview = await fetch(`${origin}${generatedGame.previewUrl}`);
+    const generatedCsp = generatedPreview.headers.get("content-security-policy") ?? "";
+    if (!generatedPreview.ok || !(await generatedPreview.text()).includes("试玩成功")
+      || !generatedCsp.includes("/oh-story/game-preview/") || generatedCsp.includes("connect-src 'self'")) {
+      throw new Error(`Workspace game preview route failed: ${String(generatedPreview.status)}.`);
     }
     const dramaWorkspaceResponse = await fetch(`${origin}/oh-story/workspace?sessionId=${encodeURIComponent(dramaSession.sessionId)}`);
     const dramaWorkspacePayload = await dramaWorkspaceResponse.json() as { readonly mode?: string; readonly cwd?: string; readonly files?: readonly { readonly path: string; readonly kind?: string; readonly mimeType?: string }[]; readonly shortDrama?: unknown };
@@ -712,7 +788,11 @@ async function main(): Promise<void> {
       try {
       const page = await browser.newPage({ viewport: { width: 1_440, height: 900 } });
       const pageErrors: string[] = [];
+      const gamePreviewResponses: { readonly status: number; readonly url: string }[] = [];
       page.on("pageerror", (error) => pageErrors.push(error.message));
+      page.on("response", (response) => {
+        if (response.url().includes("/oh-story/game-preview/")) gamePreviewResponses.push({ status: response.status(), url: response.url() });
+      });
       await page.goto(origin, { waitUntil: "networkidle" });
       for (const name of [/^(?:Continue|继续)$/u, /^(?:Configure later|稍后配置)$/u]) {
         const button = page.getByRole("button", { name });
@@ -747,8 +827,13 @@ async function main(): Promise<void> {
       }
       const storyKind = page.locator(".oh-story-kind");
       await storyKind.waitFor({ state: "visible", timeout: 10_000 });
-      if (await storyKind.textContent() !== "小说" || await page.getByRole("tablist", { name: "创作工作台" }).count() !== 0) {
-        throw new Error("A story-only workspace still rendered a redundant type switcher.");
+      const storyWorkbenchTabs = page.getByRole("tablist", { name: "创作工作台" });
+      await storyWorkbenchTabs.waitFor({ state: "visible", timeout: 10_000 });
+      if (await storyKind.textContent() !== "小说"
+        || await storyWorkbenchTabs.getByRole("tab", { name: "小说", exact: true }).count() !== 1
+        || await storyWorkbenchTabs.getByRole("tab", { name: "游戏", exact: true }).count() !== 1
+        || await storyWorkbenchTabs.getByRole("tab", { name: "短剧", exact: true }).count() !== 0) {
+        throw new Error("Story workspace did not expose the dedicated Game Studio switcher.");
       }
       if (await page.getByRole("button", { name: "刷新项目文件", exact: true }).count() !== 1) {
         throw new Error("The workspace refresh control has no descriptive accessible name.");
@@ -772,7 +857,13 @@ async function main(): Promise<void> {
         const streamedEditor = page.getByRole("textbox", { name: agentMutationPath });
         const streamedValues = new Set<string>();
         for (let sample = 0; sample < 120; sample += 1) {
-          if (await streamedEditor.isVisible()) streamedValues.add(await streamedEditor.inputValue());
+          // Check-then-act: the editor can re-render between isVisible() and inputValue(), leaving
+          // the resolved handle detached and the read blocked for the full default timeout. Bound
+          // the read and skip the sample instead of failing the whole run on a transient rerender.
+          if (await streamedEditor.isVisible()) {
+            try { streamedValues.add(await streamedEditor.inputValue({ timeout: 2_000 })); }
+            catch { /* sampled mid-rerender; the next iteration picks the value up */ }
+          }
           if (streamedValues.size > 1 && await page.getByText(agentMutationReply, { exact: true }).isVisible()) break;
           await page.waitForTimeout(75);
         }
@@ -863,9 +954,9 @@ async function main(): Promise<void> {
         await page.getByRole("button", { name: "刷新项目文件", exact: true }).click();
         const workbenchTabs = page.getByRole("tablist", { name: "创作工作台" });
         await workbenchTabs.waitFor({ state: "visible", timeout: 10_000 });
-        if (await page.locator(".oh-story-kind").count() !== 0) throw new Error("A mixed workspace rendered both a type badge and switcher.");
         const storyTab = workbenchTabs.getByRole("tab", { name: "小说", exact: true });
         const dramaTab = workbenchTabs.getByRole("tab", { name: "短剧", exact: true });
+        await dramaTab.waitFor({ state: "visible", timeout: 10_000 });
         await storyTab.focus();
         await storyTab.press("ArrowRight");
         if (await dramaTab.getAttribute("aria-selected") !== "true" || !await dramaTab.evaluate((element) => document.activeElement === element)) {
@@ -877,7 +968,8 @@ async function main(): Promise<void> {
         }
         await rm(mixedMarker);
         await page.getByRole("button", { name: "刷新项目文件", exact: true }).click();
-        await workbenchTabs.waitFor({ state: "detached", timeout: 10_000 });
+        await workbenchTabs.getByRole("tab", { name: "短剧", exact: true }).waitFor({ state: "detached", timeout: 10_000 });
+        await workbenchTabs.getByRole("tab", { name: "游戏", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
         await page.locator(".oh-story-kind").filter({ hasText: "小说" }).waitFor({ state: "visible", timeout: 10_000 });
       }
       await prepareDemoSurface(page);
@@ -1007,13 +1099,191 @@ async function main(): Promise<void> {
       await page.getByRole("textbox", { name: "追踪/_tracking-state.json" }).waitFor({ state: "visible", timeout: 10_000 });
       await captureDemoFrame(page, "story", 4);
 
+      await selectSession(page, storyWorkspace.workspace.title, gameSessionTitle);
+      if (!useRealDeepSeek) await page.getByText("Game Studio 已就绪。", { exact: false }).waitFor({ state: "visible", timeout: 10_000 });
+      const gameWorkbenchTabs = page.getByRole("tablist", { name: "创作工作台" });
+      await gameWorkbenchTabs.getByRole("tab", { name: "游戏", exact: true }).click();
+      const gameStudio = page.locator(".oh-game-studio");
+      await gameStudio.waitFor({ state: "visible", timeout: 20_000 });
+      const gameTabs = page.getByRole("tablist", { name: "游戏工作台", exact: true });
+      await gameTabs.getByRole("tab", { name: "试玩", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+      if (await gameTabs.getByRole("tab", { name: "QA", exact: true }).count() !== 0 || await page.locator(".oh-game-qa").count() !== 0) {
+        throw new Error("Game Studio still exposed the removed QA surface.");
+      }
+      const projectSelect = page.getByRole("combobox", { name: "游戏项目" });
+      await projectSelect.selectOption(`workspace:${generatedGameId}`);
+      const generatedFrame = page.frameLocator('iframe[title="《DSH Game Studio Smoke》可试玩预览"]');
+      const generatedPlay = generatedFrame.getByRole("button", { name: "试玩成功", exact: true });
+      try { await generatedPlay.waitFor({ state: "visible", timeout: 20_000 }); }
+      catch (error) {
+        const iframe = page.locator('iframe[title="《DSH Game Studio Smoke》可试玩预览"]');
+        const iframeCount = await iframe.count();
+        const diagnostics = {
+          project: await projectSelect.inputValue(),
+          options: await projectSelect.locator("option").allTextContents(),
+          studio: (await gameStudio.innerText()).slice(0, 2_000),
+          iframeCount,
+          iframeSrc: iframeCount === 0 ? undefined : await iframe.getAttribute("src"),
+          iframeTitles: await page.locator("iframe").evaluateAll((frames) => frames.map((frame) => ({ title: frame.title, src: frame.src }))),
+          frames: page.frames().map((frame) => frame.url()),
+          responses: gamePreviewResponses,
+          pageErrors
+        };
+        throw new Error(`Generated workspace game was not playable: ${JSON.stringify(diagnostics)}`, { cause: error });
+      }
+      await generatedPlay.click();
+      await generatedFrame.getByRole("button", { name: "输入已验证", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+      const generatedIframe = page.locator('iframe[title="《DSH Game Studio Smoke》可试玩预览"]');
+      await generatedIframe.evaluate((element) => { element.setAttribute("data-e2e-instance", "generated-preserved"); });
+      await gameTabs.getByRole("tab", { name: "项目文件", exact: true }).click();
+      await page.locator(".oh-game-design").waitFor({ state: "visible", timeout: 10_000 });
+      await gameTabs.getByRole("tab", { name: "试玩", exact: true }).click();
+      if (await generatedIframe.getAttribute("data-e2e-instance") !== "generated-preserved") {
+        throw new Error("Preview/Design switching remounted the generated game iframe.");
+      }
+      await generatedFrame.getByRole("button", { name: "输入已验证", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+      const generatedBrowserFrame = page.frames().find((frame) => frame.url().includes("/oh-story/game-preview/workspace/"));
+      if (generatedBrowserFrame === undefined) throw new Error("Generated workspace game frame was not attached.");
+      const previewEscapeBlocked = await generatedBrowserFrame.evaluate(async (sessionId) => {
+        try {
+          await fetch(`/oh-story/workspace?sessionId=${encodeURIComponent(sessionId)}`);
+          return false;
+        } catch { return true; }
+      }, gameSession.sessionId);
+      if (!previewEscapeBlocked) throw new Error("Generated game CSP allowed access to the workspace API outside its preview asset prefix.");
+      await projectSelect.selectOption("example:jin-ping-mei");
+      if (!await projectSelect.inputValue().then((value) => value === "example:jin-ping-mei")) {
+        throw new Error("Game Studio did not select the bundled Jin Ping Mei example.");
+      }
+      const gameFrame = page.frameLocator('iframe[title="《金瓶梅 · 风月总账》可试玩预览"]');
+      const ageGate = gameFrame.getByRole("button", { name: "我已成年", exact: true });
+      await ageGate.waitFor({ state: "visible", timeout: 30_000 });
+      const gameScroller = page.locator("[data-conversation-scroll]");
+      const gameChat = page.locator('[data-slot="conversation.session"] > :not(.oh-story-split-surface)');
+      const [studioBox, gameChatBox] = await Promise.all([gameStudio.boundingBox(), gameChat.boundingBox()]);
+      if (studioBox === null || gameChatBox === null
+        || await gameScroller.getAttribute("data-oh-story-workbench") !== "game"
+        || studioBox.x + studioBox.width > gameChatBox.x + 1
+        || studioBox.width <= gameChatBox.width) {
+        throw new Error(`Game Studio did not render as preview-left/chat-right: ${JSON.stringify({ studioBox, gameChatBox })}`);
+      }
+      await captureGameEvidence(page, "game-studio-age-gate");
+      await captureDemoFrame(page, "game", 1);
+      await ageGate.click();
+      const enterGame = gameFrame.getByRole("button", { name: "进宅", exact: true });
+      await enterGame.waitFor({ state: "visible", timeout: 10_000 });
+      await captureGameEvidence(page, "game-studio-title");
+      await captureDemoFrame(page, "game", 2);
+      await enterGame.click();
+      await gameFrame.getByText("第一日 · 正堂", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+      const gameIframe = page.locator('iframe[title="《金瓶梅 · 风月总账》可试玩预览"]');
+      await gameIframe.evaluate((element) => { element.setAttribute("data-e2e-instance", "jin-ping-mei-preserved"); });
+      await captureGameEvidence(page, "game-studio-playable");
+      await captureDemoFrame(page, "game", 3);
+      await gameTabs.getByRole("tab", { name: "说明", exact: true }).click();
+      await page.locator(".oh-game-design-empty").filter({ hasText: "内置完整示例" }).waitFor({ state: "visible", timeout: 10_000 });
+      await captureGameEvidence(page, "game-studio-design");
+      await captureDemoFrame(page, "game", 4);
+      await gameTabs.getByRole("tab", { name: "试玩", exact: true }).click();
+      if (await gameIframe.getAttribute("data-e2e-instance") !== "jin-ping-mei-preserved") {
+        throw new Error("Preview/Design switching remounted the Jin Ping Mei iframe.");
+      }
+      await gameFrame.getByText("第一日 · 正堂", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+      const fullscreenButton = gameStudio.getByRole("button", { name: "全屏试玩", exact: true });
+      await fullscreenButton.click();
+      await page.waitForFunction(() => document.fullscreenElement?.classList.contains("oh-game-preview-shell") === true);
+      await page.evaluate(async () => { await document.exitFullscreen(); });
+      await page.waitForFunction(() => document.fullscreenElement === null);
+      if (!await fullscreenButton.evaluate((element) => document.activeElement === element)) {
+        throw new Error("Exiting fullscreen did not restore focus to the fullscreen control.");
+      }
+
+      await page.setViewportSize({ width: 500, height: 900 });
+      await page.waitForFunction(() => document.querySelector("[data-conversation-scroll]")?.getAttribute("data-oh-story-layout") === "compact");
+      const compactGameTabs = page.getByRole("tablist", { name: "窄屏游戏工作台" });
+      await compactGameTabs.waitFor({ state: "visible", timeout: 10_000 });
+      const compactStudioTab = compactGameTabs.getByRole("tab", { name: "制作", exact: true });
+      const compactChatTab = compactGameTabs.getByRole("tab", { name: "对话", exact: true });
+      const compactAria = await Promise.all([compactStudioTab, compactChatTab].map(async (tab) => {
+        const controlled = await tab.getAttribute("aria-controls");
+        return controlled !== null && await page.locator(`[id=${JSON.stringify(controlled)}]`).getAttribute("role") === "tabpanel";
+      }));
+      const compactGameOverflow = await page.evaluate(() => Math.max(document.body.scrollWidth, document.documentElement.scrollWidth) - document.documentElement.clientWidth);
+      const compactGameBoxes = await Promise.all([
+        gameStudio.boundingBox(),
+        gameStudio.locator(".oh-game-toolbar").boundingBox(),
+        projectSelect.boundingBox(),
+        gameTabs.boundingBox(),
+        compactGameTabs.boundingBox()
+      ]);
+      if (compactAria.some((value) => !value) || compactGameOverflow > 1 || compactGameBoxes.some((box) => box === null)
+        || compactGameBoxes.some((box) => box !== null && (box.x < -1 || box.x + box.width > 501))) {
+        throw new Error(`500px Game Studio clipped controls or broke its tab contract: ${JSON.stringify({ compactAria, compactGameOverflow, compactGameBoxes })}`);
+      }
+      await compactChatTab.click();
+      const composer = page.locator('[data-composer-seat] textarea, [data-composer-seat] [contenteditable="true"]').first();
+      await composer.waitFor({ state: "visible", timeout: 10_000 });
+      await composer.fill("窄屏对话草稿");
+      if (!await composer.evaluate((element) => element instanceof HTMLTextAreaElement || element instanceof HTMLInputElement ? element.value === "窄屏对话草稿" : element.textContent === "窄屏对话草稿")) {
+        throw new Error("500px Game Studio Chat pane did not accept Composer input.");
+      }
+      await composer.fill("");
+      await compactStudioTab.click();
+      await gameStudio.waitFor({ state: "visible", timeout: 10_000 });
+      if (await gameIframe.getAttribute("data-e2e-instance") !== "jin-ping-mei-preserved") {
+        throw new Error("Compact Studio/Chat switching remounted the game iframe.");
+      }
+      await gameFrame.getByText("第一日 · 正堂", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+      await captureGameEvidence(page, "game-studio-compact");
+      await page.setViewportSize({ width: 1_440, height: 900 });
+      await page.waitForFunction(() => document.querySelector("[data-conversation-scroll]")?.getAttribute("data-oh-story-layout") === "wide");
+      await gameStudio.getByRole("tab", { name: "小说", exact: true }).click();
+      await storyTree.waitFor({ state: "visible", timeout: 10_000 });
+      await page.getByRole("tablist", { name: "创作工作台" }).getByRole("tab", { name: "游戏", exact: true }).click();
+      await gameStudio.waitFor({ state: "visible", timeout: 10_000 });
+      if (await gameIframe.getAttribute("data-e2e-instance") !== "jin-ping-mei-preserved") {
+        throw new Error("Novel/Game switching remounted the active game iframe.");
+      }
+      await gameFrame.getByText("第一日 · 正堂", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+      if (!useRealDeepSeek) {
+        await projectSelect.selectOption(`workspace:${generatedGameId}`);
+        await generatedFrame.getByRole("button", { name: "试玩成功", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+        await generatedFrame.getByRole("button", { name: "试玩成功", exact: true }).click();
+        await generatedFrame.getByRole("button", { name: "输入已验证", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+        await generatedIframe.evaluate((element) => { element.setAttribute("data-e2e-instance", "new-build-preserved"); });
+        const beforeGameUpdate = (await sessionEvents(origin, gameSession.sessionId)).at(-1)?.seq ?? -1;
+        await rpc(origin, "session.prompt", {
+          sessionId: gameSession.sessionId,
+          mode: "queue",
+          content: [{ type: "text", text: gameUpdatePrompt }]
+        });
+        await waitForCompletedTurn(origin, gameSession.sessionId, beforeGameUpdate);
+        await page.getByText("新版本已就绪 · 由你决定何时载入", { exact: true }).waitFor({ state: "visible", timeout: 20_000 });
+        if (await generatedIframe.getAttribute("data-e2e-instance") !== "new-build-preserved") {
+          throw new Error("A newly built preview silently remounted after the game iframe lost focus.");
+        }
+        await generatedFrame.getByRole("button", { name: "输入已验证", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+        await gameStudio.getByRole("button", { name: "载入新版本", exact: true }).click();
+        await generatedFrame.getByRole("button", { name: "试玩成功", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+        if (await generatedIframe.getAttribute("data-e2e-instance") !== null) {
+          throw new Error("Explicit new-version loading did not replace the generated game iframe.");
+        }
+      }
+      await gameStudio.getByRole("tab", { name: "小说", exact: true }).click();
+      await storyTree.waitFor({ state: "visible", timeout: 10_000 });
+
       await selectSession(page, dramaWorkspace.workspace.title, dramaSessionTitle);
       const dramaTree = page.getByRole("navigation", { name: "短剧项目文件" });
       await dramaTree.waitFor({ state: "visible", timeout: 10_000 });
       const dramaKind = page.locator(".oh-story-kind");
       await dramaKind.waitFor({ state: "visible", timeout: 10_000 });
-      if (await dramaKind.textContent() !== "短剧" || await page.getByRole("tablist", { name: "创作工作台" }).count() !== 0) {
-        throw new Error("A drama-only workspace still rendered a redundant type switcher.");
+      const dramaWorkbenchTabs = page.getByRole("tablist", { name: "创作工作台" });
+      await dramaWorkbenchTabs.waitFor({ state: "visible", timeout: 10_000 });
+      if (await dramaKind.textContent() !== "短剧"
+        || await dramaWorkbenchTabs.getByRole("tab", { name: "短剧", exact: true }).count() !== 1
+        || await dramaWorkbenchTabs.getByRole("tab", { name: "游戏", exact: true }).count() !== 1
+        || await dramaWorkbenchTabs.getByRole("tab", { name: "小说", exact: true }).count() !== 0) {
+        throw new Error("Drama workspace did not expose the dedicated Game Studio switcher.");
       }
       await selectFile(page, "剧集/EP001/剧本.md");
       await page.getByRole("tab", { name: "预览", exact: true }).click();
@@ -1441,10 +1711,21 @@ async function main(): Promise<void> {
       sessionApi: true,
       skills: ohStorySkills.length,
       dramaSkills: dramaSkills.length,
+      gameSkills: gameSkills.length,
       provider: useRealDeepSeek ? "deepseek-official" : "local-fixture",
-      fixtures: [storyProjectName, dramaProjectName],
+      fixtures: [storyProjectName, dramaProjectName, "金瓶梅 · 风月总账"],
       uiSlots: ["shell.overlay", "tool.call.toolview"],
       threeColumn: true,
+      gameStudio: "preview-left-chat-right",
+      playableIframe: true,
+      previewCsp: "asset-prefix-only",
+      gameModeExit: true,
+      gameModeState: "preserved",
+      qaArtifactChecks: 6,
+      qaSurface: "hidden",
+      gamePreviewState: "preserved-across-tabs",
+      qaArtifactBinding: "current-build-aware",
+      compactGameViewport: 500,
       agentWriteStreaming: !useRealDeepSeek,
       roleToolE2e: !useRealDeepSeek,
       atomicCasWriters: candidates.length,

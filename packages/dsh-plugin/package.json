@@ -1,17 +1,20 @@
 {
   "name": "@oh-story/dsh",
   "version": "0.1.4",
-  "description": "A DSH plugin for fiction and short-drama production",
+  "description": "A DSH plugin for fiction, short-drama, and interactive-game production",
   "keywords": [
     "deepseek-harness",
     "dsh-plugin",
     "oh-story",
     "drama-skills",
+    "novel-to-game",
     "creative-writing",
     "fiction-writing",
     "novel-writing",
     "short-drama",
     "screenwriting",
+    "interactive-fiction",
+    "game-development",
     "ai-agents"
   ],
   "homepage": "https://github.com/zenstory-ai/oh-story-dsh#readme",

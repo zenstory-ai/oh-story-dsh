@@ -10,6 +10,7 @@ import {
 
 const STORY_PROVIDER_NAME = "oh-story";
 const DRAMA_PROVIDER_NAME = "short-drama";
+const GAME_PROVIDER_NAME = "novel-to-game";
 const INVOCATION = { modelInvocable: true, userInvocable: true } as const;
 const DSH_SKILL_BRIDGE = [
   "<oh-story-dsh-integration>",
@@ -52,6 +53,17 @@ const DSH_DRAMA_OVERRIDES: Readonly<Partial<Record<string, string>>> = {
   "short-drama-produce": "Use an upstream adapter only after the creator explicitly confirms the exact current job. Its source must be the current creator-first Markdown and its output belongs under 剧集/<EP>/制作成果/. DSH permissions and approval UI remain authoritative. When oh_story_production is visible, register the previewed job with track_job after the confirmation is valid and before run — never at prepare time — passing the same job ID, target, modality and count the creator just approved.",
   "short-drama-assets": "Keep one stable `- ID：VISUAL-*` line on every 人物/造型/地点/道具/状态 entry in 视觉设定.md, and never change an existing ID when editing its heading or text. The 生产 view identifies canvas nodes by that ID; entries without one still render, but the workbench reports their node identity as unstable."
 };
+const DSH_GAME_BRIDGE = [
+  "<novel-to-game-dsh-integration>",
+  "This Skill is a native contribution to the current DeepSeek Harness session.",
+  "DSH owns the workspace, model, preset, permissions, Session Log, tools, approvals, cancellation, resume, Todo, and Chat UI.",
+  "The 游戏 tab is the playable Game Studio. Never start a second Agent runtime, dashboard, session transport, or model configuration.",
+  "Keep the complete upstream seven-Skill pipeline and write adaptation artifacts under game-adaptations/<project>/ exactly as the upstream contracts specify.",
+  "For a web target, keep the authoritative playable entry at build/app/index.html so Game Studio can preview it. Do not silently replace a requested non-web runtime with a web build.",
+  "Use only DSH-visible tools and approvals. qa/verification.json remains the sole machine QA truth and must cover launch, render, input, coreLoop, outcome, and restart with real execution evidence.",
+  "The bundled Jin Ping Mei project is a read-only example, not a template to copy mechanically and not proof that another adaptation passed QA.",
+  "</novel-to-game-dsh-integration>"
+].join("\n");
 
 const DSH_NATIVE_SKILLS: Readonly<Partial<Record<string, string>>> = {
   story: `# story — DSH 小说流程入口
@@ -175,6 +187,13 @@ export function defaultDramaSkillRoot(): string {
     : resolve(current, "drama/skills");
 }
 
+export function defaultNovelToGameSkillRoot(): string {
+  const current = dirname(fileURLToPath(import.meta.url));
+  return basename(current) === "src"
+    ? resolve(current, "../../knowledge/novel-to-game/skills")
+    : resolve(current, "novel-to-game/skills");
+}
+
 function createBundledSkillProvider(
   providerName: string,
   skillRoot: string,
@@ -239,4 +258,12 @@ export function dshDramaSkillContent(name: string, content: string): string {
 
 export function createDramaSkillProvider(skillRoot = defaultDramaSkillRoot()): SkillProvider {
   return createBundledSkillProvider(DRAMA_PROVIDER_NAME, skillRoot, dshDramaSkillContent);
+}
+
+export function dshNovelToGameSkillContent(_name: string, content: string): string {
+  return `${DSH_GAME_BRIDGE}\n\n${content}`;
+}
+
+export function createNovelToGameSkillProvider(skillRoot = defaultNovelToGameSkillRoot()): SkillProvider {
+  return createBundledSkillProvider(GAME_PROVIDER_NAME, skillRoot, dshNovelToGameSkillContent);
 }

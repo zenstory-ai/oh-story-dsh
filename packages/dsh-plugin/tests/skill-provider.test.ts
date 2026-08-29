@@ -2,10 +2,11 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { renderSkillContent } from "@deepseek-ai/dsh-skill";
 import { describe, expect, it } from "vitest";
-import { createDramaSkillProvider, createOhStorySkillProvider, parseBundledSkill } from "../src/skill-provider.js";
+import { createDramaSkillProvider, createNovelToGameSkillProvider, createOhStorySkillProvider, parseBundledSkill } from "../src/skill-provider.js";
 
 const skillRoot = resolve(import.meta.dirname, "../../knowledge/oh-story/skills");
 const dramaRoot = resolve(import.meta.dirname, "../../knowledge/drama/skills");
+const gameRoot = resolve(import.meta.dirname, "../../knowledge/novel-to-game/skills");
 
 describe("Oh Story bundled skill provider", () => {
   it("publishes the complete upstream capability catalog with a DSH bridge", async () => {
@@ -116,5 +117,38 @@ describe("Drama Skills bundled provider", () => {
     expect(production?.content).toContain("DSH permissions and approval UI");
     expect(production?.content).toContain("source must be the current creator-first Markdown");
     expect(production?.content).toContain("剧集/<EP>/制作成果/");
+  });
+});
+
+describe("NovelToGame bundled provider", () => {
+  it("publishes the complete seven-Skill playable adaptation pipeline through DSH", async () => {
+    const provider = createNovelToGameSkillProvider(gameRoot);
+    const listed = await provider.list({});
+    if (!Array.isArray(listed)) throw new Error("Expected a complete NovelToGame catalog.");
+    expect(listed.map((candidate) => candidate.name)).toEqual([
+      "game-art-direction",
+      "game-build",
+      "game-concept",
+      "game-qa",
+      "game-world-design",
+      "novel-game-analyze",
+      "novel-to-game"
+    ]);
+    for (const candidate of listed) {
+      const skill = await provider.get(candidate, {});
+      expect(skill?.content).toContain("The 游戏 tab is the playable Game Studio");
+      expect(skill?.content).toContain("game-adaptations/<project>/");
+      expect(skill?.content).toContain("qa/verification.json remains the sole machine QA truth");
+      expect(skill?.resourceBase).toEqual({ kind: "directory", path: resolve(gameRoot, candidate.name) });
+    }
+    const route = await provider.get(listed.find((candidate) => candidate.name === "novel-to-game")!, {});
+    expect(route?.content).toContain("# NovelToGame 总入口");
+    expect(route?.content).toContain("quick");
+    expect(route?.content).toContain("director");
+    expect(route?.content).toContain("resume");
+    const qa = await provider.get(listed.find((candidate) => candidate.name === "game-qa")!, {});
+    for (const check of ["launch", "render", "input", "coreLoop", "outcome", "restart"]) {
+      expect(qa?.content).toContain(check);
+    }
   });
 });

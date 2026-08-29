@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   assertTrustedWorkspaceAuthority,
+  isTrustedPreviewNavigation,
   isTrustedWorkspaceRequest
 } from "../src/workspace-request-trust.js";
 
@@ -36,5 +37,27 @@ describe("workspace browser trust", () => {
     for (const entry of ["studio.internal/path", "user@studio.internal", " studio.internal", "studio.internal:"]) {
       expect(() => { assertTrustedWorkspaceAuthority(entry); }).toThrow(/bare host\[:port\] authority/u);
     }
+  });
+
+  it("allows only loopback cross-origin preview navigations, not opaque subresource reads", () => {
+    expect(isTrustedPreviewNavigation(request({
+      host: "localhost:3080",
+      "sec-fetch-site": "cross-site",
+      "sec-fetch-mode": "navigate",
+      "sec-fetch-dest": "iframe"
+    }), [])).toBe(true);
+    expect(isTrustedPreviewNavigation(request({
+      host: "localhost:3080",
+      origin: "null",
+      "sec-fetch-site": "cross-site",
+      "sec-fetch-mode": "cors",
+      "sec-fetch-dest": "script"
+    }), [])).toBe(false);
+    expect(isTrustedPreviewNavigation(request({
+      host: "evil.example:3080",
+      "sec-fetch-site": "cross-site",
+      "sec-fetch-mode": "navigate",
+      "sec-fetch-dest": "iframe"
+    }), [])).toBe(false);
   });
 });

@@ -12,6 +12,7 @@ export default tseslint.config(
       "**/node_modules/**",
       "docs/blueprint/**",
       "packages/knowledge/oh-story/**",
+      "packages/knowledge/novel-to-game/**",
       "release/**"
     ]
   },
