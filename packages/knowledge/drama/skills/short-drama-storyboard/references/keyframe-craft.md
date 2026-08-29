@@ -81,8 +81,8 @@ composition, camera/lens, frame-only staging, and exclusions.
 排除：无动作过程，无雨丝拖影。
 ```
 
-The keyframe must name the matching text policy or `IMG-...` entry in
-`视觉设定.md` / `图片提示词.md`. A frozen frame may determine whether the surface
+The keyframe must name the matching visible entry in `视觉设定.md`, or the `IMG-...` prompt item in
+`图片提示词.md`; `视觉设定.md` itself does not define `IMG-...` IDs. A frozen frame may determine whether the surface
 is legible in this composition; it may not replace the exact wording or policy
 with an untraceable prose instruction. If the policy is still undecided, say so
 instead of inventing a hidden candidate state.

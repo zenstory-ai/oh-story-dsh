@@ -11,6 +11,29 @@
 
 ## [Unreleased]
 
+### Added
+
+- 同步 Oh Story 0.7.8（`70c294b`，v0.7.8 之后 3 个提交）：新增工作区级作者记忆 `.story/作者记忆/` 与随包脚本 `author_memory_commit.py`；新增细纲结构验收 `check-outline-contract.js`、短篇 Phase 2 与交付验收 `check-phase2-contract.js` 与 `check-delivery-contract.js`；长篇字数改用 `storyctl.py` 的 `visible_chars_v1` 口径。上游 `agents_version` 升到 28，DSH 的七个 Role 随插件打包，用户无需重新部署。
+- 同步 Drama Skills 0.6.1（`3ab6b85`，v0.6.1 之后 3 个提交，含尚未发版的 0.6.2 修复）：新增 `creator_markdown_check.py`，按剧集校验 creator-first 五份 Markdown 的跨文档结构。
+
+### Changed
+
+- Oh Story 参考资料按消费者拆分改名为 `long-*`、`short-*`、`analysis-*` 三套，story-architect 按 `agent-reference-profiles.md` 选 profile。`oh_story_bundled_reference` 只接受精确路径，自定义流程中引用 `genre-catalog.md`、`reversal-toolkit.md`、`hooks-suspense.md`、`quality-checklist.md` 等旧文件名的地方需要改成新名字。
+- 长篇写正文与短篇构思前新增会阻断的 Reference Gate：当前阶段要求的 reference 必须读到 EOF，缺失或不可读时停止并报出路径，不允许先写正文再补读。
+- 长篇章节缺少合法「字数目标」时停止，不再静默回退到 3000；欠字不自动补写，超字最多一次净删压缩。短篇总字数以用户给定范围为准，未给范围时才用 8000-20000 默认值。
+- 细纲情节点改为四列表格（`#` / 情节点 / 功能标签 / 执行边界），不再要求逐点字数预算与「目标字数合计」行。
+- 短剧已确认的生产 job 必须用 `source_entry` 点名 `图片提示词.md` 或 `视频提示词.md` 中的 `IMG-*` / `MOTION-*` 条目，并逐张填写 `reference_bindings`；与 canonical 文档漂移即 fail closed。
+- DSH bridge 补齐 Google Antigravity：`.agents/agents` 与 `invoke_subagent` 进入平台探测禁令，story-setup 的禁止部署清单加入 Antigravity。上游 0.7.8 给每个 Skill 增加了第四条 canonical agent 路径，未补齐时 Skill 会误判 Role 不可用并降级 solo。
+- 上游资产同步排除 Antigravity 平台部署产物（`story-setup/references/antigravity/` 与三个 `*antigravity*` 脚本），与 Claude/Codex/OpenCode/ZCode/OpenClaw/Reasonix 的口径一致。
+
+### Fixed
+
+- `story` Skill 现在随包携带 `scripts/author_memory_commit.py`。此前 `story/scripts/` 被整目录排除，只有 `references/author-memory.md` 进包，作者记忆流程指向一个不存在的脚本；排除范围已收窄到 `dashboard-server.mjs`。
+- `story` 的 DSH 原生路由补上作者记忆入口。上游描述已宣告「记住我的写作习惯」，而替换后的路由正文没有对应分支。
+- 短剧分镜开篇不再默认补空镜建立镜头；图片提示词校验不再用固定质量词表阻断交付。
+- 章节大纲以 UTF-8 BOM 开头时不再漏识别「字数目标」。
+- Windows 上短剧校验脚本把 stdout 重定向到文件或管道时不再抛 `UnicodeEncodeError` 把已完成的工作报成失败；生产环节按二进制读取参考图，`references` 与 `reference_bindings` 在该平台恢复可用。
+
 ## [0.1.4] - 2026-08-23
 
 ### Changed

@@ -161,6 +161,53 @@ def _require_job(job: Mapping[str, Any], modality: str) -> tuple[str, dict[str, 
     return prompt, dict(parameters)
 
 
+def _prompt_with_reference_contract(prompt: str, job: Mapping[str, Any]) -> str:
+    bindings = job.get("reference_bindings", [])
+    references = job.get("references", [])
+    if not bindings:
+        return prompt
+    if (
+        not isinstance(bindings, list)
+        or not isinstance(references, list)
+        or len(bindings) != len(references)
+    ):
+        raise ValueError("reference bindings must match job references")
+    instructions: list[str] = []
+    for index, binding in enumerate(bindings, 1):
+        if not isinstance(binding, Mapping) or binding.get("order") != index:
+            raise ValueError("reference binding order is invalid")
+        if binding.get("path") != references[index - 1]:
+            raise ValueError("reference binding path does not match job references")
+        label = binding.get("label")
+        role = binding.get("role")
+        may_control = binding.get("may_control")
+        must_not_control = binding.get("must_not_control")
+        if (
+            not isinstance(label, str)
+            or not label.strip()
+            or not isinstance(role, str)
+            or not role.strip()
+            or not isinstance(may_control, list)
+            or not may_control
+            or not all(isinstance(item, str) and item.strip() for item in may_control)
+            or not isinstance(must_not_control, list)
+            or not must_not_control
+            or not all(isinstance(item, str) and item.strip() for item in must_not_control)
+        ):
+            raise ValueError("reference binding semantics are invalid")
+        instructions.append(
+            "Reference image {order} ({label}), role {role}. May control: {may}. "
+            "Must not control: {must}.".format(
+                order=index,
+                label=label.strip(),
+                role=role.strip(),
+                may=", ".join(item.strip() for item in may_control),
+                must=", ".join(item.strip() for item in must_not_control),
+            )
+        )
+    return f"{prompt}\n\nReference contract:\n" + "\n".join(instructions)
+
+
 def _take(parameters: dict[str, Any], allowed: set[str]) -> dict[str, Any]:
     unknown = set(parameters) - allowed
     if unknown:
@@ -217,7 +264,7 @@ def compile_seedance_payload(
             raise ValueError("Seedance ratio needs an explicit model profile")
         if not configured_ratios <= SEEDANCE_RATIOS or ratio.strip() not in configured_ratios:
             raise ValueError("Seedance ratio is outside the configured model profile")
-    text = prompt
+    text = _prompt_with_reference_contract(prompt, job)
     if ratio is not None:
         text += f" --ratio {ratio.strip()}"
     if duration is not None:
@@ -305,6 +352,7 @@ def compile_gpt_image_2_payload(job: Mapping[str, Any]) -> dict[str, Any]:
         parameters,
         {"width", "height", "size", "quality", "background", "moderation"},
     )
+    prompt = _prompt_with_reference_contract(prompt, job)
     if len(prompt) > 32000:
         raise ValueError("GPT Image prompt exceeds the provider limit")
     width = parameters.pop("width", None)
@@ -499,7 +547,9 @@ def _read_reference(path: Path) -> bytes:
         raise ValueError("reference is not a regular file")
     if before.st_size > MAX_REFERENCE_BYTES:
         raise ValueError("reference exceeds the provider input size limit")
-    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+    # Windows opens files in text mode unless told otherwise, which stops the
+    # read at the first 0x1A byte -- the seventh byte of every PNG signature.
+    flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0)
     descriptor = os.open(path, flags)
     try:
         opened = os.fstat(descriptor)

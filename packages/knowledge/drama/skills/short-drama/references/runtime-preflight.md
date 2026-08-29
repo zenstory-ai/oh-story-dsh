@@ -8,6 +8,9 @@
 python3 <core>/scripts/project_tool.py init <project> --title "项目名"
 ```
 
+本文各处写作 `python3`；Windows 原生环境没有这个名字，改用 `py -3` 或 `python`。
+套件脚本（含 Dashboard）在 macOS、Linux、WSL 与 Windows 原生都可运行。
+
 创作文档固定写入 `剧集/<EP>/`。只读取当前任务需要的直接输入；不要扫描整个项目寻找可补造的上游。
 
 ## 写入纪律

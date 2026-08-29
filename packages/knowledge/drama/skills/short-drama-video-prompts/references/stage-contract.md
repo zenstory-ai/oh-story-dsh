@@ -14,7 +14,7 @@
 |---|---|---|
 | VID-01 | structural_invariant | Motion reads but cannot rewrite shot start/end/duration/dialogue and next-shot state. |
 | VID-02 | craft_default | Write start anchor, ordered subject motion, camera behavior, timing, and end report; add performance change and environment/audio only when this shot actually carries them. |
-| VID-03 | craft_default | When a reference frame carries appearance/composition, focus prose on change instead of repeating the 设定集. |
+| VID-03 | structural_invariant | Choose text-to-video only when no real input image exists, and image-to-video only when the matching storyboard declares readable REF inputs. Copy those REF declarations unchanged. A text-to-video prompt carries a non-empty static visual anchor in the copyable text; only image-to-video may omit appearance/composition already carried by its real reference frame. |
 | VID-04 | structural_invariant | Explicit segment timing sums exactly to its shot's accepted duration—neither exceeding it nor leaving an unallocated remainder. |
 | VID-05 | reviewed_invariant | Untimed action load must be feasible enough to preserve the intended performance and story change. |
 | VID-06 | structural_invariant | Locked and moving camera instructions cannot govern the same interval without an explicit transition. |
