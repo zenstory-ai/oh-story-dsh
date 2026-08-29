@@ -43,12 +43,14 @@ const DSH_DRAMA_BRIDGE = [
   "For a v0.6 project, never create a parallel JSON/JSONL lifecycle truth, indexes, fingerprints, coverage tables, or QA records merely because legacy maintenance scripts and templates remain bundled.",
   "Never upgrade a v0.5 structured project in place or mix both contracts in one project root. Keep legacy production/audit artifacts read-only and pinned to v0.5; migrate only into a new creator-first root with manual per-episode creator confirmation.",
   "Use only tools visible in the current DSH preset and preserve the upstream project ownership, freshness, review, and explicit production-confirmation contracts.",
+  "Use oh_story_production only for semantic production-view intents (open/focus, explicit shot order, or tracking a job that this Agent is actually executing). Cosmetic canvas layout remains creator-controlled. The tool changes only the Session projection: it does not edit creator documents, generate media, or authorize production.",
   "Production credentials remain outside project files. Never treat a prior acceptance, preview, continuation request, or budget discussion as confirmation for a paid production run.",
   "</short-drama-dsh-integration>"
 ].join("\n");
 const DSH_DRAMA_OVERRIDES: Readonly<Partial<Record<string, string>>> = {
   "short-drama": "A dashboard request means focus or use the native 短剧 tab in this DSH Session. Do not run the bundled standalone Dashboard script. New projects follow only the v0.6 creator-first contract and create only documents required by the current request.",
-  "short-drama-produce": "Use an upstream adapter only after the creator explicitly confirms the exact current job. Its source must be the current creator-first Markdown and its output belongs under 剧集/<EP>/制作成果/. DSH permissions and approval UI remain authoritative."
+  "short-drama-produce": "Use an upstream adapter only after the creator explicitly confirms the exact current job. Its source must be the current creator-first Markdown and its output belongs under 剧集/<EP>/制作成果/. DSH permissions and approval UI remain authoritative. When oh_story_production is visible, register the previewed job with track_job after the confirmation is valid and before run — never at prepare time — passing the same job ID, target, modality and count the creator just approved.",
+  "short-drama-assets": "Keep one stable `- ID：VISUAL-*` line on every 人物/造型/地点/道具/状态 entry in 视觉设定.md, and never change an existing ID when editing its heading or text. The 生产 view identifies canvas nodes by that ID; entries without one still render, but the workbench reports their node identity as unstable."
 };
 
 const DSH_NATIVE_SKILLS: Readonly<Partial<Record<string, string>>> = {

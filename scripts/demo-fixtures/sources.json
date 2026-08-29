@@ -22,5 +22,38 @@
         { "path": "视频提示词.md", "sha256": "b6969b9509fa3e7700b97c28ec65eb0cdae0bc7db7bfc804aaa6469e2c889fef", "bytes": 9343 }
       ]
     }
+  ],
+  "mediaMocks": [
+    {
+      "kind": "image",
+      "localPath": "media/shot-ep001-001-keyframe.png",
+      "source": "OpenAI built-in image generation for this repository",
+      "description": "Vertical cinematic hand-and-folder keyframe with no text, logo or face",
+      "sha256": "db66475587c4aa7d2d9026c9223df5319461bf083d0b0b6393d8da656689ca87",
+      "bytes": 1831881,
+      "width": 941,
+      "height": 1672
+    },
+    {
+      "kind": "video",
+      "localPath": "media/shot-ep001-002-video.mp4",
+      "source": "Project-local office footage fixture",
+      "description": "Five-second vertical office establishing shot used as a real seekable MP4 mock",
+      "sha256": "1b5c14ab7c5d35328bd530afbb1823b205aec44b065b4abd40bfb2f59eef27c2",
+      "bytes": 1303921,
+      "width": 704,
+      "height": 1280,
+      "durationSeconds": 5.042
+    },
+    {
+      "kind": "image",
+      "localPath": "media/shot-ep001-001-keyframe-v2.png",
+      "source": "OpenAI built-in image generation for this repository",
+      "description": "Alternate tighter hand-and-folder take for result version-selection testing",
+      "sha256": "5d94874c905847c3481dea43532bd061940a66486a38fe550786fc5f9030d4eb",
+      "bytes": 1633298,
+      "width": 941,
+      "height": 1672
+    }
   ]
 }

@@ -1,5 +1,5 @@
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
-import { cp, mkdir, mkdtemp, readdir, realpath, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readFile, readdir, realpath, rm, writeFile } from "node:fs/promises";
 import { createServer as createHttpServer, request as httpRequest, type Server as HttpServer } from "node:http";
 import { createServer as createNetServer } from "node:net";
 import { tmpdir } from "node:os";
@@ -16,6 +16,9 @@ const storyProjectName = "让你管账号，你高燃混剪炸全网";
 const dramaProjectName = "让你管账号";
 const storyFixture = join(repositoryRoot, "scripts", "demo-fixtures", "story", storyProjectName);
 const dramaFixture = join(repositoryRoot, "scripts", "demo-fixtures", "drama", dramaProjectName);
+const keyframeMediaFixture = join(repositoryRoot, "scripts", "demo-fixtures", "media", "shot-ep001-001-keyframe.png");
+const keyframeV2MediaFixture = join(repositoryRoot, "scripts", "demo-fixtures", "media", "shot-ep001-001-keyframe-v2.png");
+const videoMediaFixture = join(repositoryRoot, "scripts", "demo-fixtures", "media", "shot-ep001-002-video.mp4");
 const storyPrompt = `请只读检查《${storyProjectName}》当前工程，简要概览正文、大纲、设定与追踪状态，不修改任何文件。`;
 const dramaPrompt = `请只读检查短剧《${dramaProjectName}》EP001 的 creator-first 五份创作文档，简要概览剧本、视觉设定、分镜、图片提示词与视频提示词，不修改任何文件。`;
 const storyReply = `已读取《${storyProjectName}》工程。正文、大纲、设定与追踪文件已就绪。`;
@@ -33,6 +36,9 @@ const roleSmokePrompt = "ROLE_RUNTIME_SMOKE：必须调用 oh_story_role 的 nar
 const roleChildPrompt = `ROLE_CHILD_SMOKE：必须先调用 oh_story_bundled_reference 读取 ${roleReference}，确认内容包含“${roleReferenceExcerpt}”，再回复指定验证文本。`;
 const roleChildReply = "ROLE_CHILD_RESULT：narrative-writer 子 Agent 已读取打包参考并完成。";
 const roleParentReply = "ROLE_PARENT_RESULT：已收到 narrative-writer 子 Agent 结果。";
+const productionIntentSmokePrompt = "PRODUCTION_INTENT_SMOKE：必须调用 oh_story_production，聚焦 EP001 的 SHOT-EP001-008 生产目标。";
+const productionIntentReply = "PRODUCTION_INTENT_RESULT：生产目标聚焦意图已发送。";
+const productionIntentArgs = { action: "focus_target", episode: "剧集/EP001", targetId: "SHOT-EP001-008", section: "shots" } as const;
 
 async function captureDemoFrame(page: Page, workbench: "story" | "drama", index: number): Promise<void> {
   if (demoFramesDirectory === undefined) return;
@@ -103,7 +109,9 @@ async function startMockDeepSeek(): Promise<MockDeepSeek> {
       const currentTurn = JSON.stringify(messages.slice(Math.max(lastUserIndex, 0)));
       const mutationTurn = currentTurn.includes(agentMutationPrompt);
       const todoLayoutTurn = currentTurn.includes(todoLayoutPrompt);
+      const productionTurn = currentTurn.includes("/short-drama-produce");
       const roleParentTurn = currentTurn.includes(roleSmokePrompt);
+      const productionIntentTurn = currentTurn.includes(productionIntentSmokePrompt);
       const roleChildTurn = serialized.includes(roleChildPrompt) && !serialized.includes(roleSmokePrompt);
       const hasToolResult = messages.slice(lastUserIndex + 1).some((message) => message.role === "tool");
       let events: string[];
@@ -134,13 +142,15 @@ async function startMockDeepSeek(): Promise<MockDeepSeek> {
           JSON.stringify({ choices: [{ delta: { content: "" }, finish_reason: "stop" }], usage: { prompt_tokens: 12, completion_tokens: 20 } }),
           "[DONE]"
         ];
-      } else if ((mutationTurn || todoLayoutTurn || roleParentTurn) && !hasToolResult) {
+      } else if ((mutationTurn || todoLayoutTurn || roleParentTurn || productionIntentTurn) && !hasToolResult) {
         const tool = roleParentTurn
           ? { id: "call_oh_story_role_smoke", name: "oh_story_role", args: { role: "narrative-writer", prompt: roleChildPrompt } }
+          : productionIntentTurn
+            ? { id: "call_oh_story_production_smoke", name: "oh_story_production", args: productionIntentArgs }
           : todoLayoutTurn
             ? { id: "call_todo_layout", name: "todo_write", args: { todos: todoLayoutItems } }
             : { id: "call_oh_story_write_smoke", name: "write", args: { file_path: agentMutationPath, content: agentMutationContent } };
-        requests.push(roleParentTurn ? "role-parent-start" : todoLayoutTurn ? "todo" : "write");
+        requests.push(roleParentTurn ? "role-parent-start" : productionIntentTurn ? "production-intent" : todoLayoutTurn ? "todo" : "write");
         const argumentsJson = JSON.stringify(tool.args);
         const chunks = argumentsJson.match(/.{1,14}/gu) ?? [argumentsJson];
         events = [
@@ -159,9 +169,11 @@ async function startMockDeepSeek(): Promise<MockDeepSeek> {
           response.writeHead(422, { "content-type": "application/json" }).end('{"error":"role child result was not returned to the parent"}');
           return;
         }
-        requests.push(roleParentTurn ? "role-parent-resume" : "other");
+        requests.push(roleParentTurn ? "role-parent-resume" : productionTurn ? "production" : "other");
         const content = roleParentTurn
           ? roleParentReply
+          : productionIntentTurn
+            ? productionIntentReply
           : mutationTurn
             ? agentMutationReply
             : serialized.includes(storyProjectName) ? storyReply : dramaReply;
@@ -181,7 +193,9 @@ async function startMockDeepSeek(): Promise<MockDeepSeek> {
       response.socket?.setNoDelay(true);
       for (const event of events) {
         response.write(`data: ${event}\n\n`);
-        if (todoLayoutTurn || (mutationTurn && !hasToolResult)) await new Promise((accept) => setTimeout(accept, todoLayoutTurn ? 500 : 180));
+        if (productionTurn || todoLayoutTurn || (mutationTurn && !hasToolResult)) {
+          await new Promise((accept) => setTimeout(accept, productionTurn ? 750 : todoLayoutTurn ? 500 : 180));
+        }
       }
       response.end();
     });
@@ -397,6 +411,13 @@ async function main(): Promise<void> {
       cp(storyFixture, storyRoot, { recursive: true }),
       cp(dramaFixture, dramaRoot, { recursive: true })
     ]);
+    const secondEpisode = join(dramaRoot, "剧集", "EP002");
+    await cp(join(dramaRoot, "剧集", "EP001"), secondEpisode, { recursive: true });
+    await Promise.all(dramaCreatorFiles.map(async (name) => {
+      const path = join(secondEpisode, name);
+      const source = await readFile(path, "utf8");
+      await writeFile(path, source.replaceAll("EP001", "EP002").replaceAll("空白账号", "百万倒计时"));
+    }));
     runPnpm(["--filter", "@oh-story/dsh", "build"]);
     runPnpm(["--filter", "@oh-story/dsh", "pack", "--pack-destination", packDirectory]);
     await mkdir(installation, { recursive: true });
@@ -504,6 +525,24 @@ async function main(): Promise<void> {
         || JSON.stringify(roleTrace) !== JSON.stringify(["role-parent-start", "role-child-reference-start", "role-child-reference-resume", "role-parent-resume"])) {
         throw new Error(`Packaged oh_story_role contract failed: ${JSON.stringify({ roleCalls, roleArguments, roleResult, roleTrace, eventTypes: roleEvents.map((event) => event.type), hasChildReply: serializedRoleEvents.includes(roleChildReply), hasParentReply: serializedRoleEvents.includes(roleParentReply) })}`);
       }
+
+      const dramaEventsBeforeIntent = await sessionEvents(origin, dramaSession.sessionId);
+      const intentAfterSeq = dramaEventsBeforeIntent.at(-1)?.seq ?? -1;
+      await rpc(origin, "session.prompt", {
+        sessionId: dramaSession.sessionId,
+        mode: "queue",
+        content: [{ type: "text", text: productionIntentSmokePrompt }]
+      });
+      const intentEvents = await waitForCompletedTurn(origin, dramaSession.sessionId, intentAfterSeq);
+      const intentCalls = intentEvents.filter((event) => event.type === "tool/call")
+        .map((event) => event.data as { readonly callId?: string; readonly name?: string; readonly arguments?: unknown })
+        .filter((call) => call.name === "oh_story_production");
+      const serializedIntentEvents = JSON.stringify(intentEvents);
+      if (intentCalls.length !== 1 || !serializedIntentEvents.includes(productionIntentReply)
+        || !serializedIntentEvents.includes("生产目标聚焦意图")
+        || !serializedIntentEvents.includes("SHOT-EP001-008")) {
+        throw new Error(`Packaged oh_story_production contract failed: ${JSON.stringify({ intentCalls, eventTypes: intentEvents.map((event) => event.type), serializedIntentEvents })}`);
+      }
     }
 
     const storyWorkspaceResponse = await fetch(`${origin}/oh-story/workspace?sessionId=${encodeURIComponent(storySession.sessionId)}`);
@@ -513,14 +552,54 @@ async function main(): Promise<void> {
       throw new Error(`Story Session workspace route failed: ${JSON.stringify(storyWorkspacePayload)}`);
     }
     const dramaWorkspaceResponse = await fetch(`${origin}/oh-story/workspace?sessionId=${encodeURIComponent(dramaSession.sessionId)}`);
-    const dramaWorkspacePayload = await dramaWorkspaceResponse.json() as { readonly mode?: string; readonly cwd?: string; readonly files?: readonly { readonly path: string }[]; readonly shortDrama?: unknown };
+    const dramaWorkspacePayload = await dramaWorkspaceResponse.json() as { readonly mode?: string; readonly cwd?: string; readonly files?: readonly { readonly path: string; readonly kind?: string; readonly mimeType?: string }[]; readonly shortDrama?: unknown };
     const dramaPaths = dramaWorkspacePayload.files?.map((file) => file.path).sort() ?? [];
-    const expectedDramaPaths = dramaCreatorFiles.map((name) => `剧集/EP001/${name}`).sort();
+    const expectedDramaPaths = ["EP001", "EP002"].flatMap((episode) => dramaCreatorFiles.map((name) => `剧集/${episode}/${name}`)).sort();
     if (!dramaWorkspaceResponse.ok || dramaWorkspacePayload.mode !== "dsh-session" || dramaWorkspacePayload.cwd !== await realpath(dramaRoot)
       || JSON.stringify(dramaPaths) !== JSON.stringify(expectedDramaPaths) || dramaWorkspacePayload.shortDrama !== null
       || dramaPaths.some((path) => /\.jsonl?$/u.test(path))) {
       throw new Error(`Drama Session workspace route failed: ${JSON.stringify(dramaWorkspacePayload)}`);
     }
+    const productionMediaPath = "剧集/EP001/制作成果/SHOT-EP001-001/SHOT-EP001-001-job-smoke.png";
+    const productionMediaV2Path = "剧集/EP001/制作成果/SHOT-EP001-001/SHOT-EP001-001-job-smoke-v2.png";
+    const productionVideoPath = "剧集/EP001/制作成果/SHOT-EP001-002/SHOT-EP001-002-job-video-smoke.mp4";
+    await Promise.all([
+      mkdir(join(dramaRoot, "剧集", "EP001", "制作成果", "SHOT-EP001-001"), { recursive: true }),
+      mkdir(join(dramaRoot, "剧集", "EP001", "制作成果", "SHOT-EP001-002"), { recursive: true })
+    ]);
+    await Promise.all([
+      cp(keyframeMediaFixture, join(dramaRoot, productionMediaPath)),
+      cp(keyframeV2MediaFixture, join(dramaRoot, productionMediaV2Path)),
+      cp(videoMediaFixture, join(dramaRoot, productionVideoPath))
+    ]);
+    const mediaWorkspaceResponse = await fetch(`${origin}/oh-story/workspace?sessionId=${encodeURIComponent(dramaSession.sessionId)}`);
+    const mediaWorkspace = await mediaWorkspaceResponse.json() as { readonly files?: readonly { readonly path: string; readonly kind?: string; readonly mimeType?: string }[] };
+    const listedMedia = mediaWorkspace.files?.find((file) => file.path === productionMediaPath);
+    const listedMediaV2 = mediaWorkspace.files?.find((file) => file.path === productionMediaV2Path);
+    const listedVideo = mediaWorkspace.files?.find((file) => file.path === productionVideoPath);
+    if (!mediaWorkspaceResponse.ok || listedMedia?.kind !== "media" || listedMedia.mimeType !== "image/png"
+      || listedMediaV2?.kind !== "media" || listedMediaV2.mimeType !== "image/png"
+      || listedVideo?.kind !== "media" || listedVideo.mimeType !== "video/mp4") {
+      throw new Error(`DSH workspace did not classify production media: ${JSON.stringify({ listedMedia, listedMediaV2, listedVideo })}`);
+    }
+    const productionMediaUrl = `${origin}/oh-story/media?sessionId=${encodeURIComponent(dramaSession.sessionId)}&path=${encodeURIComponent(productionMediaPath)}`;
+    const rangeResponse = await fetch(productionMediaUrl, { headers: { range: "bytes=0-7" } });
+    const rangeBytes = new Uint8Array(await rangeResponse.arrayBuffer());
+    const keyframeBytes = await readFile(keyframeMediaFixture);
+    if (rangeResponse.status !== 206 || rangeResponse.headers.get("content-range") !== `bytes 0-7/${String(keyframeBytes.byteLength)}`
+      || Buffer.from(rangeBytes).toString("hex") !== "89504e470d0a1a0a") {
+      throw new Error(`DSH media range route failed: ${JSON.stringify({ status: rangeResponse.status, range: rangeResponse.headers.get("content-range"), bytes: Buffer.from(rangeBytes).toString("hex") })}`);
+    }
+    const productionVideoUrl = `${origin}/oh-story/media?sessionId=${encodeURIComponent(dramaSession.sessionId)}&path=${encodeURIComponent(productionVideoPath)}`;
+    const videoRangeResponse = await fetch(productionVideoUrl, { headers: { range: "bytes=0-11" } });
+    const videoRangeBytes = Buffer.from(await videoRangeResponse.arrayBuffer());
+    const videoBytes = await readFile(videoMediaFixture);
+    if (videoRangeResponse.status !== 206 || videoRangeResponse.headers.get("content-range") !== `bytes 0-11/${String(videoBytes.byteLength)}`
+      || videoRangeBytes.subarray(4, 8).toString("ascii") !== "ftyp") {
+      throw new Error(`DSH video range route failed: ${JSON.stringify({ status: videoRangeResponse.status, range: videoRangeResponse.headers.get("content-range"), bytes: videoRangeBytes.toString("hex") })}`);
+    }
+    const escapedMedia = await fetch(`${origin}/oh-story/media?sessionId=${encodeURIComponent(dramaSession.sessionId)}&path=${encodeURIComponent("../secret.png")}`);
+    if (escapedMedia.status !== 403) throw new Error(`Media route allowed path traversal: ${String(escapedMedia.status)}.`);
     const escaped = await fetch(`${origin}/oh-story/file?sessionId=${encodeURIComponent(storySession.sessionId)}&path=${encodeURIComponent("../package.json")}`);
     if (escaped.ok) throw new Error("Workspace route allowed path traversal.");
     const chapterPath = "正文/第001章_军宣新星.md";
@@ -621,8 +700,16 @@ async function main(): Promise<void> {
       if (client.includes(forbidden)) throw new Error(`Browser module still contains legacy surface ${forbidden}.`);
     }
 
-    const browser = await chromium.launch({ channel: browserChannel, headless: true });
-    try {
+    if (process.env.OH_STORY_EXTERNAL_CAPTURE === "1") {
+      process.stdout.write(`OH_STORY_CAPTURE_READY ${JSON.stringify({ origin, dramaWorkspaceTitle: dramaWorkspace.workspace.title, dramaSessionTitle })}\n`);
+      await new Promise<void>((accept) => {
+        const stop = () => { accept(); };
+        process.once("SIGINT", stop);
+        process.once("SIGTERM", stop);
+      });
+    } else {
+      const browser = await chromium.launch({ channel: browserChannel, headless: true });
+      try {
       const page = await browser.newPage({ viewport: { width: 1_440, height: 900 } });
       const pageErrors: string[] = [];
       page.on("pageerror", (error) => pageErrors.push(error.message));
@@ -715,7 +802,14 @@ async function main(): Promise<void> {
         }
         const agentTreeFile = page.locator(`button[data-file-path=${JSON.stringify(agentMutationPath)}]`);
         await agentTreeFile.waitFor({ state: "visible", timeout: 10_000 });
-        if (await agentTreeFile.getAttribute("aria-current") !== "page") throw new Error("Agent write did not automatically select its file in the tree.");
+        // The tree button becomes visible one render before follow-the-agent sets aria-current, so read
+        // the attribute through an auto-retrying locator instead of a single racy getAttribute().
+        try {
+          await page.locator(`button[data-file-path=${JSON.stringify(agentMutationPath)}][aria-current="page"]`)
+            .waitFor({ state: "visible", timeout: 10_000 });
+        } catch {
+          throw new Error("Agent write did not automatically select its file in the tree.");
+        }
         await selectFile(page, chapterPath);
         const agentFolder = page.locator(".oh-story-file-folder > summary").filter({ hasText: /^角色\d+$/u }).first();
         await agentFolder.click();
@@ -921,6 +1015,8 @@ async function main(): Promise<void> {
       if (await dramaKind.textContent() !== "短剧" || await page.getByRole("tablist", { name: "创作工作台" }).count() !== 0) {
         throw new Error("A drama-only workspace still rendered a redundant type switcher.");
       }
+      await selectFile(page, "剧集/EP001/剧本.md");
+      await page.getByRole("tab", { name: "预览", exact: true }).click();
       await page.getByRole("article", { name: "剧集/EP001/剧本.md 渲染预览" }).waitFor({ state: "visible", timeout: 10_000 });
       await page.getByText(dramaPrompt, { exact: true }).waitFor({ state: "visible", timeout: 20_000 });
       if (!useRealDeepSeek) await page.getByText(dramaReply, { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
@@ -956,9 +1052,248 @@ async function main(): Promise<void> {
       await selectFile(page, "剧集/EP001/分镜.md");
       await page.getByRole("article", { name: "剧集/EP001/分镜.md 渲染预览" }).waitFor({ state: "visible", timeout: 10_000 });
       await captureDemoFrame(page, "drama", 3);
+      const productionTab = page.getByRole("tab", { name: "生产", exact: true });
+      await productionTab.click();
+      const productionTabs = page.getByRole("tablist", { name: "短剧生产视图" });
+      await productionTabs.waitFor({ state: "visible", timeout: 10_000 });
+      if (await page.locator(".oh-story-shot-card").count() !== 8
+        || await page.locator(".oh-story-shot-card img.oh-story-media-preview").count() < 1
+        || await page.locator(".oh-story-shot-card video.oh-story-media-preview").count() < 1
+        || await productionTabs.getByRole("tab").allTextContents().then((labels) => JSON.stringify(labels) !== JSON.stringify(["镜头", "素材", "任务", "成片", "画布"]))) {
+        throw new Error("Production shot board did not project the creator-first documents and DSH workspace media.");
+      }
+      if (!useRealDeepSeek && await page.locator(".oh-story-shot-card").filter({ hasText: productionIntentArgs.targetId }).first().getAttribute("data-selected") === null) {
+        throw new Error("Agent production intent did not focus the requested semantic shot target.");
+      }
+      // The Agent intent above focuses SHOT-EP001-008, so the board is scrolled to the last shot and
+      // the first card's loading="lazy" keyframe is deliberately still unloaded. Bring it into view and
+      // await decode before measuring, so this asserts fixture realism rather than scroll position.
+      const keyframePreview = page.locator(".oh-story-shot-card img.oh-story-media-preview").first();
+      await keyframePreview.scrollIntoViewIfNeeded();
+      await keyframePreview.evaluate(async (element) => {
+        const image = element as HTMLImageElement;
+        if (!image.complete || image.naturalWidth === 0) await image.decode();
+      });
+      const keyframeMetadata = await keyframePreview.evaluate((element) => ({
+        width: (element as HTMLImageElement).naturalWidth,
+        height: (element as HTMLImageElement).naturalHeight
+      }));
+      const videoPreview = page.locator(".oh-story-shot-card video.oh-story-media-preview").first();
+      const videoMetadata = await videoPreview.evaluate(async (element) => {
+        const video = element as HTMLVideoElement;
+        if (video.readyState === 0) await new Promise<void>((accept, reject) => {
+          video.addEventListener("loadedmetadata", () => { accept(); }, { once: true });
+          video.addEventListener("error", () => { reject(new Error("mock video metadata failed to load")); }, { once: true });
+        });
+        return { width: video.videoWidth, height: video.videoHeight, duration: video.duration };
+      });
+      if (keyframeMetadata.width < 500 || keyframeMetadata.height < 900
+        || videoMetadata.width < 500 || videoMetadata.height < 900 || videoMetadata.duration < 4) {
+        throw new Error(`Production mock media was not realistic: ${JSON.stringify({ keyframeMetadata, videoMetadata })}`);
+      }
+      const firstShotVersions = page.locator(".oh-story-shot-card").first().locator(".oh-story-version-strip").getByRole("button");
+      if (await firstShotVersions.count() !== 2) throw new Error("Production image versions were not grouped under their shot.");
+      await firstShotVersions.first().click();
+      if (await firstShotVersions.first().getAttribute("data-selected") === null) throw new Error("Production version selection did not update the Session projection.");
+      await page.locator(".oh-story-shot-card").first().locator("h3").click();
+      await productionTabs.getByRole("tab", { name: "素材", exact: true }).click();
+      if (await page.locator(".oh-story-asset-card").count() < 6) throw new Error("Production asset board omitted creator-facing assets.");
+      if (await page.locator(".oh-story-media-library-grid > article").count() !== 3) {
+        throw new Error("Project media library did not expose the three realistic workspace results.");
+      }
+      const reusableReference = page.locator(".oh-story-media-library-grid > article").filter({ hasText: productionMediaPath })
+        .getByRole("button", { name: /SHOT-EP001-001 参考/u });
+      await reusableReference.click();
+      await page.waitForTimeout(100);
+      if (await reusableReference.getAttribute("aria-pressed") !== "true") throw new Error("Project media could not be attached as an explicit shot reference.");
+      await page.locator(".oh-story-media-library").scrollIntoViewIfNeeded();
+      await productionTabs.getByRole("tab", { name: "成片", exact: true }).click();
+      if (await page.locator(".oh-story-sequence > ol > li").count() !== 8
+        || await page.locator(".oh-story-sequence-summary").getByText("7 个阻塞项", { exact: true }).count() !== 1
+        || await page.locator(".oh-story-sequence-issues li").count() !== 4
+        || await page.getByRole("button", { name: "合成成片", exact: true }).isEnabled()) {
+        throw new Error("Production sequence did not expose shot order and missing-video blockers.");
+      }
+      await page.getByRole("button", { name: "下移 SHOT-EP001-001", exact: true }).click();
+      if (await page.locator(".oh-story-sequence > ol > li strong").first().textContent() !== "SHOT-EP001-002") {
+        throw new Error("Production sequence did not apply an explicit shot reorder.");
+      }
+      await page.getByRole("button", { name: "上移 SHOT-EP001-001", exact: true }).click();
+      await productionTabs.getByRole("tab", { name: "画布", exact: true }).click();
+      if (await page.locator(".oh-story-canvas article").count() < 12 || await page.locator(".oh-story-canvas path").count() < 8) {
+        throw new Error("Production canvas omitted creator-document relationships.");
+      }
+      const firstCanvasNode = page.locator(".oh-story-canvas article").first();
+      const leftBeforeKeyboardMove = Number.parseFloat(await firstCanvasNode.evaluate((element) => getComputedStyle(element).left));
+      await firstCanvasNode.focus();
+      await firstCanvasNode.press("ArrowRight");
+      const leftAfterKeyboardMove = Number.parseFloat(await firstCanvasNode.evaluate((element) => getComputedStyle(element).left));
+      if (leftAfterKeyboardMove !== leftBeforeKeyboardMove + 10) {
+        throw new Error("Production canvas did not expose keyboard-operable Session layout controls.");
+      }
+      await productionTabs.getByRole("tab", { name: "镜头", exact: true }).click();
+      await page.locator(".oh-story-shot-card").first().getByRole("button", { name: "IMG-JIANGCHEN-SHEET", exact: true }).click();
+      await page.getByRole("textbox", { name: "剧集/EP001/图片提示词.md" }).waitFor({ state: "visible", timeout: 10_000 });
+      await selectFile(page, "剧集/EP001/分镜.md");
+      await productionTab.click();
+      await page.locator(".oh-story-shot-card").first().waitFor({ state: "visible", timeout: 10_000 });
+      if (!useRealDeepSeek) {
+        await page.locator(".oh-story-shot-card").first().getByRole("button", { name: "准备关键帧", exact: true }).click();
+        await productionTabs.getByRole("tab", { name: "任务", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+        await page.locator(".oh-story-task-board article").first().waitFor({ state: "visible", timeout: 10_000 });
+        await page.locator('[data-slot="conversation.session"]').getByText("/short-drama-produce", { exact: false }).last()
+          .waitFor({ state: "visible", timeout: 20_000 });
+        await page.getByText("等待确认", { exact: true })
+          .waitFor({ state: "visible", timeout: 10_000 });
+
+        const taskFor = (targetId: string) => page.locator(".oh-story-task-board article").filter({ hasText: targetId }).first();
+        const shotCards = page.locator(".oh-story-shot-card");
+
+        await productionTabs.getByRole("tab", { name: "镜头", exact: true }).click();
+        await shotCards.nth(1).getByRole("button", { name: "准备关键帧", exact: true }).click();
+        const runningQueueRemovalTask = taskFor("SHOT-EP001-002");
+        await runningQueueRemovalTask.getByRole("button", { name: "停止当前 DSH Turn", exact: true })
+          .waitFor({ state: "visible", timeout: 10_000 });
+        await productionTabs.getByRole("tab", { name: "镜头", exact: true }).click();
+        await shotCards.nth(2).getByRole("button", { name: "准备关键帧", exact: true }).click();
+        const removedQueuedTask = taskFor("SHOT-EP001-003");
+        const removeQueuedButton = removedQueuedTask.getByRole("button", { name: "从 DSH Queue 移除", exact: true });
+        await removeQueuedButton.waitFor({ state: "visible", timeout: 10_000 });
+        await removeQueuedButton.click();
+        await removedQueuedTask.getByText("已取消", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+        await runningQueueRemovalTask.getByText("等待确认", { exact: true })
+          .waitFor({ state: "visible", timeout: 10_000 });
+
+        const productionRequestsBeforeCancel = mockDeepSeek?.requests.filter((request) => request === "production").length ?? 0;
+        await productionTabs.getByRole("tab", { name: "镜头", exact: true }).click();
+        await shotCards.nth(3).getByRole("button", { name: "准备关键帧", exact: true }).click();
+        const canceledRunningTask = taskFor("SHOT-EP001-004");
+        await canceledRunningTask.getByRole("button", { name: "停止当前 DSH Turn", exact: true })
+          .waitFor({ state: "visible", timeout: 10_000 });
+        await productionTabs.getByRole("tab", { name: "镜头", exact: true }).click();
+        await shotCards.nth(4).getByRole("button", { name: "准备关键帧", exact: true }).click();
+        const preservedQueuedTask = taskFor("SHOT-EP001-005");
+        await preservedQueuedTask.getByRole("button", { name: "从 DSH Queue 移除", exact: true })
+          .waitFor({ state: "visible", timeout: 10_000 });
+        await canceledRunningTask.getByRole("button", { name: "停止当前 DSH Turn", exact: true }).click();
+        await canceledRunningTask.getByText("已取消", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+        await preservedQueuedTask.getByText("DSH Queue", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+        const preservedQueueRemove = preservedQueuedTask.getByRole("button", { name: "从 DSH Queue 移除", exact: true });
+        await preservedQueueRemove.waitFor({ state: "visible", timeout: 10_000 });
+        const productionRequestsAfterCancel = mockDeepSeek?.requests.filter((request) => request === "production").length ?? 0;
+        if (productionRequestsAfterCancel !== productionRequestsBeforeCancel + 1) {
+          throw new Error("Canceling the current DSH Turn unexpectedly dropped or executed the preserved queued task.");
+        }
+        await preservedQueueRemove.click();
+        await preservedQueuedTask.getByText("已取消", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+
+        await productionTabs.getByRole("tab", { name: "镜头", exact: true }).click();
+        await page.getByRole("button", { name: "准备批量视频", exact: true }).click();
+        const batchTask = taskFor("BATCH-VIDEOS");
+        await batchTask.getByRole("button", { name: "停止当前 DSH Turn", exact: true })
+          .waitFor({ state: "visible", timeout: 10_000 });
+        const batchJobId = await batchTask.getAttribute("data-job-id");
+        if (batchJobId === null) throw new Error("Batch production task did not expose its stable projection id.");
+        const partialBatchOutput = `剧集/EP001/制作成果/SHOT-EP001-003/SHOT-EP001-003-${batchJobId}.mp4`;
+        await mkdir(dirname(join(dramaRoot, partialBatchOutput)), { recursive: true });
+        await cp(videoMediaFixture, join(dramaRoot, partialBatchOutput));
+        const partialWorkspaceResponse = await fetch(`${origin}/oh-story/workspace?sessionId=${encodeURIComponent(dramaSession.sessionId)}`);
+        const partialWorkspace = await partialWorkspaceResponse.json() as { readonly files?: readonly { readonly path: string }[] };
+        if (!partialWorkspaceResponse.ok || !partialWorkspace.files?.some((file) => file.path === partialBatchOutput)) {
+          throw new Error(`Partial batch output was not visible through the Agent FileSystem: ${JSON.stringify({ batchJobId, partialBatchOutput, partialWorkspace })}`);
+        }
+        await page.getByRole("button", { name: "刷新", exact: true }).click();
+        try {
+          await batchTask.getByText("1/8 项成果", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+        } catch (error) {
+          const batchTaskCount = await batchTask.count();
+          const productionSummary = page.locator(".oh-story-production-summary");
+          const productionSummaryCount = await productionSummary.count();
+          const main = page.locator("main");
+          const mainCount = await main.count();
+          const diagnostic = {
+            batchJobId,
+            partialBatchOutput,
+            batchTaskCount,
+            taskText: batchTaskCount === 0 ? undefined : await batchTask.innerText(),
+            shotThreeVersions: await page.locator(".oh-story-version-strip[aria-label^='SHOT-EP001-003']").count(),
+            productionSummary: productionSummaryCount === 0 ? undefined : await productionSummary.textContent(),
+            selectedTabs: await page.getByRole("tab", { selected: true }).allTextContents(),
+            mainText: mainCount === 0 ? undefined : (await main.innerText()).slice(0, 4_000),
+            pageErrors
+          };
+          throw new Error(`Partial batch output did not reconcile in the Browser projection: ${JSON.stringify(diagnostic)}`, { cause: error });
+        }
+        await batchTask.getByText("DSH Turn 已结束，已发现 1/8 项成果；请刷新核对剩余输出。", { exact: true })
+          .waitFor({ state: "visible", timeout: 15_000 });
+
+        const readyVideoPaths = Array.from({ length: 8 }, (_, index) => {
+          const shotId = `SHOT-EP001-${String(index + 1).padStart(3, "0")}`;
+          return `剧集/EP001/制作成果/${shotId}/${shotId}-ready-smoke.mp4`;
+        });
+        await Promise.all(readyVideoPaths.map(async (path) => {
+          await mkdir(dirname(join(dramaRoot, path)), { recursive: true });
+          await cp(videoMediaFixture, join(dramaRoot, path));
+        }));
+        await page.getByRole("button", { name: "刷新", exact: true }).click();
+        await productionTabs.getByRole("tab", { name: "成片", exact: true }).click();
+        await page.getByText("已可合成", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+        const composeButton = page.getByRole("button", { name: "合成成片", exact: true });
+        if (!await composeButton.isEnabled()) throw new Error("A complete video sequence still blocked composition.");
+        await composeButton.click();
+        const compositionTask = page.locator(".oh-story-task-board article").filter({ hasText: "成片" }).first();
+        await compositionTask.getByRole("button", { name: "停止当前 DSH Turn", exact: true })
+          .waitFor({ state: "visible", timeout: 10_000 });
+        const compositionJobId = await compositionTask.getAttribute("data-job-id");
+        if (compositionJobId === null) throw new Error("Composition task did not expose its stable projection id.");
+        const compositionOutput = `剧集/EP001/制作成果/成片-${compositionJobId}.mp4`;
+        await cp(videoMediaFixture, join(dramaRoot, compositionOutput));
+        await page.getByRole("button", { name: "刷新", exact: true }).click();
+        await compositionTask.getByText("已完成", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+      }
       await selectFile(page, "剧集/EP001/视频提示词.md");
       await page.getByRole("article", { name: "剧集/EP001/视频提示词.md 渲染预览" }).waitFor({ state: "visible", timeout: 10_000 });
       await captureDemoFrame(page, "drama", 4);
+      await openFolder(page, "EP002");
+      await selectFile(page, "剧集/EP002/分镜.md");
+      await page.getByRole("article", { name: "剧集/EP002/分镜.md 渲染预览" }).waitFor({ state: "visible", timeout: 10_000 });
+      await productionTab.click();
+      await productionTabs.getByRole("tab", { name: "镜头", exact: true }).click();
+      await page.locator(".oh-story-shot-card").first().waitFor({ state: "visible", timeout: 10_000 });
+      if (await page.locator(".oh-story-shot-card").count() !== 8
+        || await page.locator(".oh-story-shot-card").first().getByRole("button", { name: "SHOT-EP002-001", exact: true }).count() !== 1
+        || await page.locator(".oh-story-shot-card .oh-story-media-preview").count() !== 0
+        || await page.locator(".oh-story-production-summary").textContent() !== "8 镜 · 10 素材 · 0 任务") {
+        throw new Error("EP002 production projection leaked EP001 media or task state.");
+      }
+      await page.locator(".oh-story-shot-card").first().locator("h3").click();
+      await productionTabs.getByRole("tab", { name: "素材", exact: true }).click();
+      const crossEpisodeMedia = page.locator(".oh-story-media-library-grid > article").filter({ hasText: "剧集/EP001/" });
+      if (await crossEpisodeMedia.count() < 3) throw new Error("EP002 could not discover reusable EP001 project media.");
+      const ep2Reference = crossEpisodeMedia.filter({ hasText: productionMediaPath })
+        .getByRole("button", { name: /SHOT-EP002-001 参考/u });
+      await ep2Reference.click();
+      await page.waitForTimeout(100);
+      if (await ep2Reference.getAttribute("aria-pressed") !== "true") throw new Error("EP002 could not attach an EP001 image as an explicit cross-episode reference.");
+      await productionTabs.getByRole("tab", { name: "画布", exact: true }).click();
+      const secondEpisodeCanvasLeft = Number.parseFloat(await page.locator(".oh-story-canvas article").first().evaluate((element) => getComputedStyle(element).left));
+      if (secondEpisodeCanvasLeft !== 80) throw new Error("EP002 inherited EP001 canvas coordinates.");
+      await openFolder(page, "EP001");
+      await selectFile(page, "剧集/EP001/分镜.md");
+      await productionTab.click();
+      await productionTabs.getByRole("tab", { name: "任务", exact: true }).click();
+      if (!useRealDeepSeek && await page.locator(".oh-story-task-board article").count() < 6) {
+        throw new Error("EP001 task projection was not restored after switching episodes.");
+      }
+      await productionTabs.getByRole("tab", { name: "画布", exact: true }).click();
+      const restoredFirstEpisodeCanvasLeft = Number.parseFloat(await page.locator(".oh-story-canvas article").first().evaluate((element) => getComputedStyle(element).left));
+      if (restoredFirstEpisodeCanvasLeft !== leftAfterKeyboardMove) throw new Error("EP001 canvas coordinates were not restored after switching episodes.");
+      await productionTabs.getByRole("tab", { name: "镜头", exact: true }).click();
+      if (await page.locator(".oh-story-shot-card").first().locator(".oh-story-version-strip").getByRole("button").first().getAttribute("data-selected") === null) {
+        throw new Error("EP001 media-version selection was not restored after switching episodes.");
+      }
+      await selectFile(page, "剧集/EP001/视频提示词.md");
+      await page.getByRole("article", { name: "剧集/EP001/视频提示词.md 渲染预览" }).waitFor({ state: "visible", timeout: 10_000 });
       if (await page.getByRole("complementary", { name: "Agent 工作详情" }).count() !== 0) {
         throw new Error("Novel workspace still duplicates the official Agent activity UI.");
       }
@@ -1069,6 +1404,14 @@ async function main(): Promise<void> {
         throw new Error(`500px viewport clipped the workbench or made its content unreadable: ${JSON.stringify({ compactScroller, compactBoxes, compactFileTextWidth, compactHeaderWidth, compactShotHeadingWidth, pageOverflow })}`);
       }
       await assertChatAnchorContract(page, chatLocator, scrollerLocator, composerLocator, "compact");
+      await page.getByRole("tab", { name: "生产", exact: true }).click();
+      await page.getByRole("tablist", { name: "短剧生产视图" }).getByRole("tab", { name: "镜头", exact: true }).click();
+      await page.locator(".oh-story-shot-card").first().waitFor({ state: "visible", timeout: 10_000 });
+      const compactProductionOverflow = await page.evaluate(() => Math.max(document.body.scrollWidth, document.documentElement.scrollWidth) - document.documentElement.clientWidth);
+      const compactProduction = await page.locator(".oh-story-production").evaluate((element) => ({ clientWidth: element.clientWidth, scrollWidth: element.scrollWidth }));
+      if (compactProductionOverflow > 1 || compactProduction.scrollWidth > compactProduction.clientWidth + 1) {
+        throw new Error(`500px production view overflowed its DSH editor column: ${JSON.stringify({ compactProductionOverflow, compactProduction })}`);
+      }
       await page.getByRole("tab", { name: "源码" }).click();
       const compactSource = page.getByRole("textbox", { name: compactPath });
       await compactSource.press("End");
@@ -1086,8 +1429,9 @@ async function main(): Promise<void> {
         throw new Error(`500px dirty editor controls overlapped or escaped the editor: ${JSON.stringify(compactHeaderControls)}`);
       }
       if (pageErrors.length > 0) throw new Error(`Browser module raised errors: ${pageErrors.join("; ")}`);
-    } finally {
-      await browser.close();
+      } finally {
+        await browser.close();
+      }
     }
 
     process.stdout.write(`${JSON.stringify({
