@@ -22,9 +22,7 @@
 
 ![oh-story-dsh 短剧工作台](docs/images/short-drama-dsh-demo.gif)
 
-内置 Drama Skills 0.6.0 的 creator-first 工作流。每集按请求维护最多五份可读 Markdown：`剧本.md`、`视觉设定.md`、`分镜.md`、`图片提示词.md`、`视频提示词.md`；不预建空文档，也不倒补用户未点名的阶段。审查与生产交付继续使用 DSH 原生工具、权限和确认界面。
-
-> Drama Skills 0.6.0 是破坏性升级：v0.5 结构化项目应继续锁定 v0.5 并只读保留；迁移时新建项目根，逐集人工确认当前工作所需文档，不要在同一目录混用旧 JSON/JSONL 与新文档。
+内置 Drama Skills 0.6.1 的 creator-first 工作流。每集按请求维护最多五份可读 Markdown：`剧本.md`、`视觉设定.md`、`分镜.md`、`图片提示词.md`、`视频提示词.md`；不预建空文档，也不倒补用户未点名的阶段。「生产」视图按轻量 `short-drama/v1` 协议把这些文档投影为镜头板、素材板、任务/版本、成片顺序和关系画布，并就地提示重复 ID、悬空引用和格式错误，不建立第二份创作真相。审查与生产交付继续使用 DSH 原生会话、当前 Preset 工具、权限和确认界面。
 
 ## 游戏制作面板
 
@@ -32,7 +30,7 @@
 
 游戏模式采用聚焦的两列布局：左侧是隔离运行、可直接操作的实时游戏预览，右侧保留完整 DSH Chat。使用 `/novel-to-game quick` 后，生成物写入 `game-adaptations/<project>/`；当 `build/app/index.html` 就绪时会自动进入项目列表，可在不离开对话的情况下刷新、全屏和试玩。
 
-内置完整的《金瓶梅 · 风月总账》上游示例，方便开箱验证输入、核心循环、结局与重开流程。试玩 iframe 在切换项目文件或窄屏对话时保持挂载，不会丢失当前进度；新构建就绪后由创作者主动载入，不会因为转去 Chat 而静默覆盖正在玩的版本。正式 QA 继续由 `/game-qa`、原生 Agent 工具结果与 `qa/verification.json` 承担，不在制作面板增加独立 QA 页。
+内置《金瓶梅 · 风月总账》的完整可玩构建，方便开箱验证输入、核心循环、结局与重开流程；上游的产品简报、分析、设计与源小说不随包分发。试玩 iframe 在切换项目文件或窄屏对话时保持挂载，不会丢失当前进度；新构建就绪后由创作者主动载入，不会因为转去 Chat 而静默覆盖正在玩的版本。正式 QA 继续由 `/game-qa`、原生 Agent 工具结果与 `qa/verification.json` 承担，不在制作面板增加独立 QA 页。
 
 ## 核心体验
 
@@ -41,6 +39,10 @@
 - **实时文件跟随**：Agent 调用官方文件工具时，目标文件自动定位，编辑器同步呈现生成中的内容。
 - **Chat 文件导航**：点击官方 Chat 中的作品文件名，文件树会定位并在编辑器打开对应文件。
 - **创作文档预览**：Markdown 支持标题、表格、任务列表、引用和代码块；JSONL 以带行号、类型和状态的结构化记录呈现。
+- **短剧生产工作台**：从五份 creator-first Markdown 联动镜头、角色/场景/道具与提示词，支持单项/批量预检、明确确认后投产、Queue 移除、当前 Turn 停止、成果回填、版本选择、缺镜检查和成片顺序；提示词仍在权威 Markdown 或普通 DSH Chat 中编辑。
+- **项目媒体库**：自动汇总当前 DSH workspace 中各集和交付目录的真实图片/视频成果，支持搜索、类型筛选、打开原文件，以及把跨集图片显式挂为某个镜头的额外参考。
+- **关系画布与 Agent 操作**：把视觉设定与镜头关系投影为可拖拽、键盘移动和缩放的画布；画布坐标由创作者控制，Agent 只通过显式 `oh_story_production` 工具打开/聚焦语义目标、设置顺序和登记实际任务。工具不改创作文档、不生成媒体，也不替代生产确认。
+- **真实生成契约**：可选内置 GPT Image 2、Seedance 与 MiniMax Music adapter；账号、模型、凭据和可用性仍由 DSH 运行环境与项目外配置决定。仓库媒体仅用于离线交互回归，不伪装成供应商成功。
 - **安全编辑**：支持源码编辑与快捷保存；人工未保存内容不会被并发 Agent 修改覆盖。
 - **稳定长对话**：消息区独立滚动，官方 Composer 固定在 Chat 栏底部。
 
@@ -48,9 +50,9 @@
 
 | 工作台 | 上游能力 | 主要入口 |
 | --- | --- | --- |
-| 小说 | [Oh Story 0.7.6](https://github.com/zenstory-ai/oh-story-claudecode) · 13 Skills · 7 Roles | `/story`、`/story-long-write`、`/story-review` |
-| 短剧 | [Drama Skills 0.6.0](https://github.com/zenstory-ai/drama-skills/releases/tag/v0.6.0) · 10 Skills | `/short-drama`、`/short-drama-write`、`/short-drama-storyboard` |
-| 游戏 | [NovelToGame 0.3.0](https://github.com/zenstory-ai/novel-to-game) · 7 Skills · 完整《金瓶梅》示例 | `/novel-to-game quick`、`/game-build`、`/game-qa` |
+| 小说 | [Oh Story 0.7.8](https://github.com/zenstory-ai/oh-story-claudecode/releases/tag/v0.7.8) · 13 Skills · 7 Roles | `/story`、`/story-long-write`、`/story-review` |
+| 短剧 | [Drama Skills 0.6.1](https://github.com/zenstory-ai/drama-skills/releases/tag/v0.6.1) · 10 Skills | `/short-drama`、`/short-drama-write`、`/short-drama-storyboard` |
+| 游戏 | [NovelToGame 0.3.0](https://github.com/zenstory-ai/novel-to-game) · 7 Skills · 《金瓶梅》可玩示例 | `/novel-to-game quick`、`/game-build`、`/game-qa` |
 
 ## 安装
 
@@ -79,6 +81,41 @@ npx -y @deepseek-ai/dsh@0.1.1-rc.1 web
 **3. 开始创作**
 
 添加作品目录为 workspace，新建或打开 Session 后使用 `/story`、`/short-drama` 或 `/novel-to-game quick`。小说、短剧与游戏工作台可随时通过顶部 Tab 切换。
+
+## 按需加载
+
+插件装进哪个 profile，那个 profile 的每个 Session 就都会加载创作 Skills 与三栏工作台。想让原版 `web` 保持干净、只在创作时打开工作台，就把插件装进独立 profile。
+
+**1. 装进独立 profile**
+
+```bash
+npx -y @deepseek-ai/dsh@0.1.1-rc.1 plugin --profile story add @oh-story/dsh@0.1.4
+```
+
+**2. 补上界面**
+
+新 profile 默认没有界面。编辑 `~/.dsh/profiles/story/package.json`，把 `dsh.profile.bundles` 改成：
+
+```jsonc
+"bundles": [
+  "@deepseek-ai/dsh-base",
+  "@deepseek-ai/dsh-web-app",
+  "@oh-story/dsh"
+]
+```
+
+顺序照抄，这个包不用另外安装。
+
+**3. 按需启动**
+
+```bash
+npx -y @deepseek-ai/dsh@0.1.1-rc.1 web                          # 原版 DSH
+npx -y @deepseek-ai/dsh@0.1.1-rc.1 --profile story --port 3081  # 创作工作台
+```
+
+两个 profile 用不同端口可以同时运行。模型、凭据、workspace 与历史会话由 DSH 统一保存，切换 profile 不会丢。
+
+安装与启动请使用同一个 dsh 版本；混用会报 `unknown option '--no-open'` 一类的错。
 
 ## 致谢
 

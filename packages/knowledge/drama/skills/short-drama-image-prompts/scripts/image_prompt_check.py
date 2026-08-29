@@ -106,17 +106,17 @@ def resolve_ref(
 
 SKILL_ROOT = Path(__file__).resolve().parents[1]
 HASH_RE = re.compile(r"[0-9a-f]{64}")
-# `common-recipe.md` forbids weight syntax and any one engine's control words, and
-# `keyframe-craft.md` rejects "cinematic, 8K, masterpiece" as a substitute for
-# subject identity. A generic prompt that carries them has stopped being generic.
+# `common-recipe.md` forbids weight syntax and any one engine's control words: a
+# generic prompt that carries provider control syntax has stopped being generic.
+# This checks syntax only. Whether the prose leans on generic quality language is
+# `IMG-02`, a `craft_default` a creator may override with a reason, so it is a
+# reviewer's call citing what the description actually lacks — see
+# `common-recipe.md`, which forbids blocking delivery on a fixed word list.
 ENGINE_SYNTAX_RE = re.compile(
     r"(?:^|[\s,，(（])--(?:ar|v|q|niji|style|no|seed|cref|sref)\b"
     r"|::-?\d"
     # Weight syntax is written (x:1.2); prose writes "(aperture: 1.8)" with a space.
-    r"|:[01]\.\d\s*[)）]"
-    # Quality words only count in a tag slot. A 4K monitor in shot is content.
-    r"|(?:^|,\s*)(?:8k|4k|uhd)\s*(?=,|$)"
-    r"|(?:^|,\s*)(?:masterpiece|best quality|ultra[- ]detailed|trending on artstation)\s*(?=,|$)",
+    r"|:[01]\.\d\s*[)）]",
     re.IGNORECASE,
 )
 PURPOSES = {
@@ -435,7 +435,7 @@ def main() -> int:
     except (OSError, ValidationError) as exc:
         print(f"image prompt check failed: {exc}", file=sys.stderr)
         return 2
-    print(json.dumps(result, ensure_ascii=False, indent=2))
+    print(json.dumps(result, ensure_ascii=True, indent=2))
     return 0
 
 

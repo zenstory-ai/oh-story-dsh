@@ -7,12 +7,15 @@ import z from "@deepseek-ai/schemastery";
 import { createDramaSkillProvider, createNovelToGameSkillProvider, createOhStorySkillProvider } from "./skill-provider.js";
 import { registerOhStoryHooks } from "./native-hooks.js";
 import { registerOhStoryRoleTool } from "./role-tool.js";
+import { registerOhStoryProductionTool } from "./production-tool.js";
 import { registerWorkspaceRoute } from "./workspace-route.js";
 import { assertTrustedWorkspaceAuthority } from "./workspace-request-trust.js";
 
 export { createDramaSkillProvider, createNovelToGameSkillProvider, createOhStorySkillProvider, parseBundledSkill } from "./skill-provider.js";
 export { OH_STORY_ROLE_NAMES, loadBundledRole } from "./role-provider.js";
 export { createOhStoryRoleTool, OH_STORY_ROLE_TOOL_NAME, registerOhStoryRoleTool, roleToolFilter, type OhStoryRoleSubagents } from "./role-tool.js";
+export { createOhStoryProductionTool, registerOhStoryProductionTool } from "./production-tool.js";
+export { OH_STORY_PRODUCTION_TOOL_NAME, validateProductionIntent, type ProductionIntentArgs } from "./production-intent.js";
 export { bundledReferenceGuard, createOhStoryReferenceTool, OH_STORY_REFERENCE_TOOL_NAME } from "./reference-tool.js";
 export { registerWorkspaceRoute } from "./workspace-route.js";
 export { registerOhStoryHooks } from "./native-hooks.js";
@@ -39,6 +42,7 @@ export async function apply(context: Context, config: Config = {}): Promise<void
   context.skills.registerProvider(() => createDramaSkillProvider());
   context.skills.registerProvider(() => createNovelToGameSkillProvider());
   registerOhStoryHooks(context);
+  registerOhStoryProductionTool(context);
   await registerOhStoryRoleTool(context);
   registerWorkspaceRoute(context, { maxBytes: config.editorMaxBytes ?? 2_097_152, trustedHosts });
 }

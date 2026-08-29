@@ -20,6 +20,12 @@ const CREATIVE_DIRECTORIES = [...STORY_DIRECTORIES, ...DRAMA_DIRECTORIES, GAME_D
 const ROOT_FILES = new Set(["short-drama.json"]);
 const EDITABLE_EXTENSIONS = new Set([".md", ".txt", ".json", ".jsonl"]);
 const GAME_EDITABLE_EXTENSIONS = new Set([...EDITABLE_EXTENSIONS, ".html", ".css", ".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx"]);
+const MEDIA_TYPES: ReadonlyMap<string, string> = new Map([
+  [".png", "image/png"], [".jpg", "image/jpeg"], [".jpeg", "image/jpeg"], [".webp", "image/webp"], [".gif", "image/gif"],
+  [".mp4", "video/mp4"], [".webm", "video/webm"], [".mov", "video/quicktime"],
+  [".mp3", "audio/mpeg"], [".wav", "audio/wav"], [".m4a", "audio/mp4"]
+]);
+const MEDIA_MAX_BYTES = 256 * 1_024 * 1_024;
 const FILE_LIMIT = 1_000;
 const PREVIEW_FILE_LIMIT = 32 * 1024 * 1024;
 const BUNDLED_GAME_EXAMPLE = "jin-ping-mei";
@@ -34,6 +40,8 @@ interface WorkspaceFile {
   readonly path: string;
   readonly bytes: number;
   readonly version: string;
+  readonly kind: "text" | "media";
+  readonly mimeType?: string | undefined;
 }
 
 interface GameVerificationSummary {
@@ -85,6 +93,35 @@ function send(response: ServerResponse, status: number, value: unknown): void {
   response.end(body);
 }
 
+function sendMedia(request: IncomingMessage, response: ServerResponse, bytes: Uint8Array, mimeType: string): void {
+  const range = request.headers.range;
+  let start = 0;
+  let end = bytes.byteLength - 1;
+  let status = 200;
+  if (typeof range === "string") {
+    const match = /^bytes=(\d*)-(\d*)$/u.exec(range.trim());
+    if (match !== null) {
+      const requestedStart = match[1] === "" ? 0 : Number(match[1]);
+      const requestedEnd = match[2] === "" ? end : Number(match[2]);
+      if (Number.isSafeInteger(requestedStart) && Number.isSafeInteger(requestedEnd) && requestedStart >= 0 && requestedStart <= requestedEnd && requestedStart < bytes.byteLength) {
+        start = requestedStart;
+        end = Math.min(requestedEnd, end);
+        status = 206;
+      }
+    }
+  }
+  const body = bytes.subarray(start, end + 1);
+  response.writeHead(status, {
+    "content-type": mimeType,
+    "content-length": body.byteLength,
+    "cache-control": "private, max-age=60",
+    "accept-ranges": "bytes",
+    ...(status === 206 ? { "content-range": `bytes ${String(start)}-${String(end)}/${String(bytes.byteLength)}` } : {}),
+    "x-content-type-options": "nosniff"
+  });
+  response.end(Buffer.from(body));
+}
+
 async function jsonBody(request: IncomingMessage, maxBytes: number): Promise<Record<string, unknown>> {
   const chunks: Buffer[] = [];
   let size = 0;
@@ -115,9 +152,9 @@ function editablePath(path: string): boolean {
   return extensions.has(extname(path).toLocaleLowerCase());
 }
 
-function assertCreativePath(path: string): void {
-  if (!editablePath(path)) {
-    throw new WorkspaceHttpError(415, "工作台不支持编辑该文件类型。");
+export function assertCreativePath(path: string, kind: "text" | "media"): void {
+  if (kind === "text" ? !editablePath(path) : !MEDIA_TYPES.has(extname(path).toLocaleLowerCase())) {
+    throw new WorkspaceHttpError(415, kind === "text" ? "工作台不支持编辑该文件类型。" : "目标不是受支持的短剧媒体文件。");
   }
   if (!safeRelativePath(path)) {
     throw new WorkspaceHttpError(403, "文件路径不在创作工作台中。");
@@ -126,6 +163,10 @@ function assertCreativePath(path: string): void {
   if (!CREATIVE_DIRECTORIES.some((directory) => directory === root) && !ROOT_FILES.has(path)) {
     throw new WorkspaceHttpError(403, "文件路径不在创作工作台中。");
   }
+}
+
+export function mediaMimeTypeForPath(path: string): string | undefined {
+  return MEDIA_TYPES.get(extname(path).toLocaleLowerCase());
 }
 
 async function workspaceRealmForSession(context: Context, rawId: string): Promise<WorkspaceRealm> {
@@ -156,8 +197,8 @@ async function workspaceRealm(context: Context, url: URL): Promise<WorkspaceReal
   return workspaceRealmForSession(context, rawId);
 }
 
-async function creativeTarget(realm: WorkspaceRealm, path: string): Promise<FsTarget> {
-  assertCreativePath(path);
+async function creativeTarget(realm: WorkspaceRealm, path: string, kind: "text" | "media" = "text"): Promise<FsTarget> {
+  assertCreativePath(path, kind);
   const target = await realm.fs.resolve(path, { cwd: realm.cwd });
   if (!realm.fs.contains(realm.root, target)) throw new WorkspaceHttpError(403, "文件路径离开了 DSH 工作目录。");
   return target;
@@ -195,10 +236,11 @@ async function listFiles(realm: WorkspaceRealm): Promise<WorkspaceFile[]> {
       if (entry.name.startsWith(".") || !realm.fs.contains(realm.root, entry.target)) continue;
       const childPath = `${path}/${entry.name}`;
       if (entry.type === "directory") await walk(childPath, entry.target);
-      else if (entry.type === "file" && editablePath(childPath)) {
+      else if (entry.type === "file" && (editablePath(childPath) || MEDIA_TYPES.has(extname(entry.name).toLocaleLowerCase()))) {
         const info = entry.version === undefined || entry.size === undefined ? await realm.fs.stat(entry.target) : undefined;
         const version = entry.version ?? info?.version;
-        if (version !== undefined) files.push({ path: childPath, bytes: entry.size ?? info?.size ?? 0, version });
+        const mimeType = MEDIA_TYPES.get(extname(entry.name).toLocaleLowerCase());
+        if (version !== undefined) files.push({ path: childPath, bytes: entry.size ?? info?.size ?? 0, version, kind: mimeType === undefined ? "text" : "media", mimeType });
       }
       if (files.length >= FILE_LIMIT) return;
     }
@@ -213,7 +255,7 @@ async function listFiles(realm: WorkspaceRealm): Promise<WorkspaceFile[]> {
   for (const path of ROOT_FILES) {
     const target = await creativeTarget(realm, path);
     const info = await realm.fs.stat(target);
-    if (info?.type === "file") files.push({ path, bytes: info.size ?? 0, version: info.version });
+    if (info?.type === "file") files.push({ path, bytes: info.size ?? 0, version: info.version, kind: "text" });
   }
   return files.sort((left, right) => left.path.localeCompare(right.path, "zh-Hans-CN"));
 }
@@ -525,6 +567,18 @@ async function handle(context: Context, request: IncomingMessage, response: Serv
       if (path === null) throw new WorkspaceHttpError(400, "缺少文件路径。");
       const file = await readVersionedFile(realm.fs, await creativeTarget(realm, path), options.maxBytes);
       send(response, 200, { path, ...file });
+      return;
+    }
+    if (url.pathname === "/oh-story/media" && request.method === "GET") {
+      const realm = await workspaceRealm(context, url);
+      const path = url.searchParams.get("path");
+      if (path === null) throw new WorkspaceHttpError(400, "缺少媒体文件路径。");
+      const mimeType = mediaMimeTypeForPath(path);
+      if (mimeType === undefined) throw new WorkspaceHttpError(415, "目标不是受支持的短剧媒体文件。");
+      const target = await creativeTarget(realm, path, "media");
+      const info = requireRegularFile(await realm.fs.stat(target));
+      if (info.size !== undefined && info.size > MEDIA_MAX_BYTES) throw new WorkspaceHttpError(413, "媒体文件超过工作台预览大小限制。");
+      sendMedia(request, response, await realm.fs.readBytes(target, undefined, MEDIA_MAX_BYTES), mimeType);
       return;
     }
     if (url.pathname === "/oh-story/file" && request.method === "PUT") {

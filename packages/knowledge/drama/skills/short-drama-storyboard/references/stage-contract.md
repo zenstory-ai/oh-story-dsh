@@ -1,10 +1,10 @@
 # 分镜阶段契约
 
-本阶段只拥有 `剧集/<EP>/分镜.md` 中的 `SHOT-...`、镜头职责、来源、时长、起止边界、声音、图片参考和
+本阶段只拥有 `剧集/<EP>/分镜.md` 中的 `SHOT-...`、镜头职责、来源、时长、起止边界、声音、视觉依据和
 冻结关键帧。它继承剧本事实与视觉设定，不改写剧情或资产身份。
 
 覆盖比较、场次视觉计划和调度推演都留在上下文；只有最终镜头与关键决定进入 `分镜.md`。来源使用
-场景 ID，资产参考使用 `IMG-...`，不建立 coverage、shots、keyframes、audition 或接受记录。
+场景 ID。已存在的图片提示词条目可用 `IMG-...` 可见标题引用；它不是已生成图片的证明，也不是分镜的前置门禁。没有条目时直接引用《视觉设定.md》，不建立 coverage、shots、keyframes、audition 或接受记录。
 
 ## 本阶段规则
 
@@ -16,7 +16,7 @@
 | SHT-02 | reviewed_invariant | Each shot has a dramatic/viewing purpose and preserves its source meaning. |
 | SHT-03 | craft_default | Keep a short shot focused on the smallest action/reaction unit that carries its purpose; combine or split it according to performance, information, and continuity rather than a fixed count. |
 | SHT-04 | craft_default | Change framing/camera because attention, pressure, alignment, reveal, or rhythm changes. |
-| SHT-05 | structural_invariant | A keyframe projects one shot boundary and the exact `IMG-...` references named by that shot. |
+| SHT-05 | structural_invariant | A keyframe projects one shot boundary and the shot's declared visual basis. Any `IMG-...` used is an existing image-prompt heading, not a claim that generated media exists; when none is suitable, the shot names the relevant textual visual-setting entries without inventing an ID. |
 | SHT-06 | reviewed_invariant | A keyframe is one freezeable instant, not an ordered action chain. |
 | SHT-07 | taste_option | Lens vocabulary, tempo, and locked/handheld/formal style follow visual direction. |
 | SHT-08 | reviewed_invariant | Each authoritative source action is realized once; repeated coverage adds reaction/detail/recontextualization rather than replaying it. |

@@ -4,14 +4,16 @@
 
 项目文件结构、产物映射表、缺失文件处理、对标分析权威优先级在 `SKILL.md` Phase 4 开头，本文件不重复（SKILL.md 恒在上下文里）。
 
+本文件提到的 agent 都只检查当前端 canonical 目录；Antigravity 使用 `.agents/agents/agent-name/agent.md`（`agent-name` 为目标 agent 名）和 `invoke_subagent` + 同名 `TypeName`，其余端使用各自 Agent 工具。
+
 ---
 
 ## 单章写作流程
 
 当用户准备写某一章时：
 
-1. **检查细纲**：读取 `大纲/细纲_第{N}章.md`，并从对应 `大纲/卷纲_第X卷.md` 读取当前剧情单元（单元ID/位置、卷契约、本卷主推线/战果、终局底牌边界、风险等级）。如果不存在或缺少当前章节蓝图的必需字段，**必须先补建细纲再写正文**，不允许跳过细纲直接写作。补建时参考卷纲中本章对应的事件规划和上下文，补齐阶段位置、结构公式、禁止提前释放、内容概括、情节安排、人物关系/出场顺序、情节细化、结尾设定；无法从已有证据判断的字段写 `[待补充]`，不杜撰副线或关系。
-2. **读取上下文**（按需选择；缺失时遵循各项及SKILL.md Phase 4 的「缺失文件处理」，仅明确标为可选的非主产物跳过。可选快捷路径：如果项目已部署 story-explorer agent（优先检查 `.claude/agents/story-explorer.md` 是否存在；不存在时再检查 `.opencode/agents/`，再不存在时检查 `.codex/agents/`），可 spawn `Agent(subagent_type: "story-explorer", prompt: "项目目录：{dir}\n查询类型：context_load\n查询参数：准备写第 {N} 章\n追踪状态：last_committed_chapter={check 的值}，state_revision={check 的值}")` 一次获取上下文）：
+1. **检查细纲**：读取 `大纲/细纲_第{N}章.md`，并从对应 `大纲/卷纲_第X卷.md` 读取当前剧情单元（单元ID/位置、卷契约、本卷主推线/战果、终局底牌边界、风险等级）。如果不存在或缺少当前章节蓝图的必需字段，**必须先补建细纲再写正文**，不允许跳过细纲直接写作。补建时参考卷纲中本章对应的事件规划和上下文，补齐阶段位置、结构公式、禁止提前释放、内容概括、情节安排、人物关系/出场顺序、情节细化、结尾设定；无法从已有证据判断的字段写 `[待补充]`，不杜撰副线或关系。补建后按 `artifact-protocols.md` 跑 `check-outline-contract.js` 结构验收，失败只补点名字段再复验。
+2. **读取上下文**（按需选择；缺失时遵循各项及SKILL.md Phase 4 的「缺失文件处理」，仅明确标为可选的非主产物跳过。可选快捷路径：对应 agent 已部署时 spawn story-explorer 一次获取上下文。Prompt：`项目目录：{dir}\n查询类型：context_load\n查询参数：准备写第 {N} 章\n追踪状态：last_committed_chapter={check 的值}，state_revision={check 的值}`）：
    - (1) `正文/第{N-1}章_*.md` — 上一章正文
    - (2) `大纲/细纲_第{N}章.md` — 本章细纲（含钩子设计）
    - (2a) `大纲/卷纲_第X卷.md` — 当前剧情单元、卷契约与终局储备（主推线/战果、终局底牌边界）
@@ -38,7 +40,7 @@
      - (f) **结构化模块召回**：从对标的结构化子目录（角色/剧情/设定）中按本章情节检索相关模块；若与 `剧情/情绪模块.md` / `剧情/节奏.md` 冲突，权威文件优先，记录 `conflict`
      - (g) 输出"主对标召回摘要 + 副对标召回摘要 + selected_emotion_module + rhythm_reference + genre_prose_card + 文风召回指令 + 原文锚点片段引用"，作为 narrative-writer 的输入。**多对标书时**参 `references/cross-book-recall.md`：主对标提供文风、原文锚点与 selected_emotion_module / rhythm_reference；副对标/参考对标按阶段预算提供结构化摘要，不限制登记书目，不读取副书 `文风.md` / 原文，超过预算时裁条目不裁书目记录。
      - **快捷路径**：项目已部署 story-explorer agent 时，可一次性召回文风/模块材料。
-       - 检查顺序：`.claude/agents/story-explorer.md` → `.opencode/agents/` → `.codex/agents/`。
+       - 按本文件顶部规则确认 story-explorer 已部署。
        - 查询类型：`benchmark_style_load`；传入项目目录、章节号、目标基调/字数和爽点类型。
        - 需要返回：`style_profile_path`、`style_profile_summary`、`selected_emotion_module`、`rhythm_reference`、来源路径、匹配章节、锚点片段、`gaps`。
        - `gaps.missing_primary_contract` 为 true 时先按 `repair_action` 修复，不进入正文生成。
@@ -52,12 +54,15 @@
 	     - 检查任务卡点：本章如果有“办事被卡住”，它必须卡出信息、关系、代价、选择或伏笔变化；没有就不强补。
 	     - 契约风险检查：按 `references/reader-contract-and-progression.md` 判定 契约安全 / 需补强 / 契约破坏；若高光/收益被配角、机构或偶然性拿走且没有可见交换，先修纲再写。
      - 例：「快节奏打脸——账单暴露→逼问→反证→公开代价；读者等了三章，这章必须一拳到位。」
-4. **资料研究**（按需）：如果写作中遇到需要查证的外部事实（历史年代、地理方位、职业细节等），如果项目已部署 story-researcher agent（优先检查 `.claude/agents/` 下的 `story-researcher.md` 是否存在；不存在时再检查 `.opencode/agents/`，再不存在时检查 `.codex/agents/`），spawn `story-researcher` agent 搜索并输出到 `参考资料/` 目录。如 agent 不可用，由主线程直接执行。研究完成后再继续写作。
+4. **资料研究**（按需）：遇到需查证的外部事实且 story-researcher 已部署时，spawn 搜索并输出到 `参考资料/`；不可用则主线程直接执行。研究完成后再继续写作。
 5. **标题预检**：写正文前从细纲读取章名；如与既有章节同名或明显重复，先按本章核心事件改名，并同步细纲标题与正文文件名。
-	6. **写作**：第 1 章如果以内心戏、设定认知或独处开场，必须先把内心变化外化为可见事件（决定、误判、对话、物件变化、外部压力），再按字数目标展开；不得用大段心理独白凑字。若第 1 章低于目标，或正文代入感/推进感偏薄，优先回到细纲补有用子事件、对话交锋或选择代价，不要补解释性内心戏；任务卡点只在角色本来有要办的事、且能卡出信息/关系/代价/选择/伏笔变化时使用，没有就不强补。
+6. **写作与唯一 checkpoint**：将批准情节点按叙事顺序分成连续两组，同一 session 先写前组临时 segment，再且只运行一次 `{PYTHON} {skill 根}/scripts/storyctl.py wordcount checkpoint --file {前组临时文件} --target {字数目标} --chapter {N}`。把 `actual`、`remaining_user_range` 和后组原始情节点交回 writer，并明确：
+   - 只完成剩余情节点，不得为字数新增独立事件、人物决定、关系变化、揭示或支线。
+   - 剩余情节点完成即停，即使仍欠长也不加剧情。
+   两段完成后一次组装最终正文；不做逐点配额、字数 retry、完整重写或落盘后扩写。
    - **正文元信息隔离**：`章节：第{N}章`、`上一章：正文/第{N-1}章_*.md`、`匹配第K章`、`细纲文件` 等只用于定位材料。标题行以外的正文不得出现 `第[一二三四五六七八九十百千万两0-9]+章|上一章|上章|前一章|本章|这一章|前文|后文|伏笔|细纲|读者` 这类写作工程词。需要承接前文时，改成角色能感知的事件锚点或相对时间，例如“比第一章那三秒开火更疼”必须写成“比那三秒开火更疼”。例外：角色在故事世界内真实阅读/讨论“第X章”文本，或真实身为作者/读者并谈论读者身份时，可保留相应词。
 7. **正文执行**：
-   - 先检查 narrative-writer agent：`.claude/agents/narrative-writer.md` → `.opencode/agents/` → `.codex/agents/`。
+   - 按本文件顶部规则确认 narrative-writer 已部署。
    - 如可用，spawn `Agent(subagent_type: "narrative-writer", prompt: ...)`，prompt 只传本章必需材料：
      - 项目目录、章节、细纲文件、上一章、输出路径。
      - 写前准备输出：本节速记、情绪目标、涉及角色、参考技法。
@@ -65,22 +70,23 @@
      - `selected_emotion_module`、`rhythm_reference` 及来源路径。
      - `genre_prose_card`（题材正文提示卡摘要，只含本章相关条目）。
      - 文风路径、文风召回指令、原文锚点片段。
+     - `author_preferences`：作者记忆 `query` 结果中匹配本章的 `prose_style` / `story_design` 项；无则不传，禁止把完整画像或待确认项塞进 prompt；作为低优先级倾向自然吸收，不逐条展示或最大化命中，不牺牲连贯、节奏和字数。
      - 阶段位置、本章结构公式、本章可释放信息、本章禁止提前释放信息。
-     - 字数目标、情节点预算、格式硬约束。
-     - 细纲优先边界（内容层）：只展开本章细纲，不自造新剧情；每条情节点都要独立落地，不许漏、不许两条并一句；若字数目标靠现有情节点无法达标，返回 `outline_underfilled` 欠账点，由主会话补纲/确认后再写。
+     - 字数目标、`visible_chars_v1` 口径、格式硬约束；前组后由机器给出一次剩余用户区间，不让 writer 心算或填写逐情节点配额。
+     - 细纲优先边界（内容层）：只展开本章细纲，不自造新剧情；每条情节点都要独立落地，不许漏、不许两条并一句。不得仅为追字数自动补纲、扩写或重写；实际长度统一留到步骤 8 测量。
      - 正文形状（形状层）：落地位置、顺序、拆成几处由子代理编排，可打散重排、把相邻几条缝进同一个连续动作；不要一条一段平推，不把细纲措辞原样搬进叙述。
    - 不把本文件整套规则复制进 prompt；细节以已加载 references 和 narrative-writer 模板为准。
-   - agent 输出写入 `正文/第XXX章_章名.md`。如 agent 未部署，由主线程直接写作。
-8. **字数验证**（写作完成后的第一件事）：用跨平台 Python 字符统计本章实际字数，探测顺序 `python3/python/py`；不要用 `wc -c` 或模型估算，Windows 不直接假定 `python3` 命令可用。macOS/Linux 可用 `wc -m` 备选。
-   - 字数 < 细纲目标 90%：对照情节点预算找欠账点。密点（爽点/打脸/反转）被写薄时，重写到该点目标区间内；低压/关系/信息整理章则补细纲内已有铺垫、互动或表演节拍，不硬塞爽点。若现有细纲没有足够可展开内容，停止并输出 `outline_underfilled` 欠账点，先补纲/确认，不能让正文自造新剧情。
-   - 字数 > 章目标×1.1：压过场、合并疏点、删多余过渡，不删主线爽点凑数。
-   - 90% 只是放行下限，目标仍是 `[章目标, 章目标×1.1]`；重写后重新统计，落进区间再进入步骤 9。
-9. **检查**：章尾是否有往下看的理由（低压/过场章弱钩子或留阶段目标即可，不强求爽点）、爽点是否到位（按章节定位，高压/推进章必查）。两条可证伪核对（不达标→修复）：① 爽点出手前是否有可指认的危机/期待段落（指到具体情节点）？指不出=空洞 → 回步骤 8 补铺垫情节点（plot-emotion-system 倒推法）；② 装逼/打脸/揭露章，在场配角是否写出差异化反应（集体震惊/各异），还是只写主角动作？没有 → 补在场配角反应（plot-core-methods）
+   - agent 在同一 session 内按上述流程写两个临时 segment；主会话确认二者只消费批准情节点后，组装并写入 `正文/第XXX章_章名.md` 一次。如 agent 未部署，由主线程执行同一流程。
+8. **非对称收口**：运行 `{PYTHON} {skill 根}/scripts/storyctl.py chapter check --project {项目根} --chapter {N}`；文件变更重跑，不存决议。
+   - 带内 + pass → `chapter commit`；fail / `invalid` → 停止。
+   - `under` + pass → 展示 `accept-current-length / revise-outline-or-target / discard`，不补/重试；接受命令会重读、重数、原子提交。
+   - `over` + pass → 删除区间随 `compress-once` 交 narrative-writer；一次净删，零新语义/契约改动。会话核对情节点与钩子后复检；带内提交，否则上述三动作。
+9. **检查**：章尾是否有往下看的理由（低压/过场章弱钩子或留阶段目标即可，不强求爽点）、爽点是否到位（按章节定位，高压/推进章必查）。两条可证伪核对（不达标→只修复细纲已批准内容）：① 爽点前是否有可指认的危机/期待段落？② 装逼/打脸/揭露章，在场配角是否有差异化反应？质量修复后重跑步骤 8，但不得借质量修复补新剧情追字数。
 10. **元信息扫描**：检查标题行以外的正文，命中 `第[一二三四五六七八九十百千万两0-9]+章|上一章|上章|前一章|本章|这一章|前文|后文|伏笔|细纲|读者` 时必须改写为场景内表达；只有角色在故事世界内真实阅读/讨论“第X章”文本，或真实身为作者/读者并谈论读者身份时例外。
 	11. **禁用词扫描**：先过**最毒句式速查**（实测最易漏，命中即改）：①「不是A，(而)是B」全家族——含「没有X，没有Y(，只是Z)」排比否定、「是B，不是A」反序、「他没X，也没有Y。他只是Z」先抑后扬，；②声线反差「声音不大/不高…却…」；③「，带着……」万能状语；④预告/总结收尾「没人知道…」「(这)才刚刚开始/开头」「正朝着…压过去」「即将拉开序幕」「这一刻…」；⑤叙述里短词加引号强调（他是被请来"把关"的）。再复核 detector 的 `formulaic-parallelism` advisory：跨段「不是A。/也不是B。/只是C。」、`至于X不X，怎么X`、同动词 `不V A，不V B` 即使写在台词里也不能跳过，确属人物当场的功能性表达才保留。然后对照 `references/banned-words.md` 全表：一级词（高频AI腔）命中即替换；二级词（低频/语境相关）高频出现时替换，偶发可参考 `references/anti-ai-writing.md` 定性裁定
-12. **更新追踪**：按 workflow-daily「每章提交一次追踪事务」构造 JSON，执行 `scripts/tracking_commit.py commit`。工具先在内存完成全部合并/渲染/容量校验，再生成逐章记录、角色/伏笔/时间线/上下文派生视图，最后原子替换 `_tracking-state.json`。失败按类型处理：**写入失败**（工具不可用、权限被拒、磁盘满）时 `_tracking-state.json` 未推进，保留原事务 JSON 直接重跑同一 `commit`；**校验失败**要按报错改事务本身再提交，重跑同一份结果不变；**派生视图被手改**导致 `check` 报不一致时，重新提交该章的 `mode=revision` 事务让工具整份重建（`expected_state_revision` 取 `追踪/_tracking-state.json` 的 `state_revision` 字段——`check` 失败时只往 stderr 打 ERROR，不输出 JSON）。任何情况都不手改派生文件。本章首次引入会复用的具名角色/势力时，仍按 `references/workflow-setup.md` 的 Phase 3 规则补建静态 `设定/` 档案。
+12. **更新追踪**：最终 `chapter check` 后取最新 `state_revision`，按 workflow-daily 构造不含 `wordcount` 的逐章 JSON。长度在用户带内执行 `storyctl.py chapter commit`；用户接受当前自然长度则执行 `storyctl.py chapter accept-current-length`。两条命令都在提交前重新读取正文和目标、重新计数、重跑 blocking quality，并把简短字数记录与追踪事务一起原子提交。写入失败保留原事务重跑；校验失败重构事务。派生视图损坏按 tracking 文档用 revision 修复，禁止手改。本章首次引入复用角色/势力时，仍按 workflow-setup Phase 3 补建静态档案。
 13. **中途快照**（长篇写作安全网）：每连续写完 3 章，在继续前执行以下快照操作：
-   - 执行 `scripts/tracking_commit.py check`，确认 `_tracking-state.json` 有效、逐章记录连续且未超限、所有派生视图一致、续写状态卡恰好 7 栏且 ≤12288 字节
+   - 执行 `scripts/tracking_commit.py check`，确认 `_tracking-state.json` 有效、逐章记录连续且未超限、所有派生视图一致、续写状态卡恰好 7 栏且 ≤12288 字节；通过后删除本章逐章事务 JSON 与临时 segment，失败时保留事务 JSON 供原样重跑
    - 用 `ls -la 正文/` 确认最近 3 个章节文件已成功写入磁盘且大小正常（>100 bytes）
    - 如果发现文件缺失或大小异常，立即重新写入
    - 快照完成后可继续写作
@@ -98,27 +104,27 @@
 | 任务卡点 | 角色办事被卡住，必须卡出信息/关系/代价/选择/伏笔变化；删掉无损就压缩或删除 |
 | 爽点释放 | 铺垫要充分、释放要干脆，读者等得越久释放越要爽 |
 | 爽点密度 | 高压/推进章每 3000-5000 字一个「爽」的情绪节点；低压/关系/修炼/信息整理章不强求，但每章仍要有往下看的理由（见 references/outline-structure-theory.md「章节定位与张弛」） |
-| 公式约束 | 参考 genre-writing-formulas.md 中的创作公式 |
+| 长篇结构约束 | 参考 genre-prose-cards.md 与当前题材卡的长线约束 |
 | 章尾 | 每章结尾都要有让读者想翻下一页的东西 |
 | 情绪验证 | 写完每章回头检查：读者到这里应该感受到什么？感受到了吗？没感受到 → 按章节定位补：高压/推进章补冲突或钩子，低压/关系章补关系或情绪质感，别一律加爽点 |
 
-## 字数验收权威
+## 字数测量权威
 
-长篇每章只按本章细纲的 `字数目标` 与步骤 8 的统一 90% 放行下限验收。节奏类型只决定情节点疏密和展开方式，不再叠加另一套静态最低字数。
-
-**细纲缺 `字数目标` 时**：按 3000 字/章代入，走同一条 90% 放行下限，并提示补纲。这是唯一兜底值，不按节奏类型分档。
+字数权威默认是细纲 `字数目标` + `visible_chars_v1`：内带 ±12%，用户带 ±15%；**本轮用户明确给出上下限时，原样范围优先于自动比例带**。无节奏下限，缺目标即 `invalid`。带内提交，`under` 不补，`over` 最多净删一次；仍带外由用户接受、改目标/细纲或放弃。下一章只看 tracking 提交。
 
 ---
 
 ## 质量检查
 
-检查三个维度：(1) **情绪交付**——每章是否交付了细纲中规划的目标情绪？(2) **契约风险**——按 `references/reader-contract-and-progression.md` 检查因果权 + 结算权、关键节点四问、期待所有权、期待债、终局储备（透支两问）与换书债；章级推进按权威文件的七类状态分档（快节奏保留可见事件/爽点下限），强弱相对本书题材与对标判断，标记 契约安全 / 需补强 / 契约破坏；契约破坏 先修正文或修后续纲。(3) **技术质量**——一致性、格式、禁用词。参考 [references/quality-checklist.md](quality-checklist.md) 中的通用检查和长篇专项清单。
+检查三个维度：(1) **情绪交付**——每章是否交付了细纲中规划的目标情绪？(2) **契约风险**——按 `references/reader-contract-and-progression.md` 检查因果权 + 结算权、关键节点四问、期待所有权、期待债、终局储备（透支两问）与换书债；章级推进按权威文件的七类状态分档（快节奏保留可见事件/爽点下限），强弱相对本书题材与对标判断，标记 契约安全 / 需补强 / 契约破坏；契约破坏 先修正文或修后续纲。(3) **技术质量**——一致性、格式、禁用词。参考 [references/long-chapter-quality.md](long-chapter-quality.md) 中的通用检查和长篇专项清单。
+
+**新增独立剧情 blocking**：新饭局、承诺、选择、关系变化、支线或后续义务均阻断；闲话、微连接允许。命中不自动修、不重试、不提交，并提示偏纲。
 
 **正文元信息扫描**：按上方步骤 10 清掉标题行以外的写作工程词，再进入其他检查。`check-degeneration.js` 会确定性复扫这一项。
 
 **写后同轮清零**：正文落盘不是汇报时机——每章落盘后必须在**同一轮**内跑完上方步骤 10-11 扫描、下方确定性收尾脚本与 narrative-writer 审查，blocking 清零才算本章完成；不得先汇报"已写完"再等指示。写后 hook 会对落盘正文自动扫描确定性毒句式并把命中推回——那是兜底网不是替代，hook 报出的命中当轮清零。**唯一豁免**：用户显式说"本章不去味/跳过检查"——豁免时在该章标题行下加一行 `<!-- 去味:跳过 -->`（写后 hook 的毒句式推回与写下一章前的欠账拦截都认这个标记；其余网照常）。
 
-**确定性收尾**：本批正文写完后，主会话对实际落盘文件运行 `node scripts/check-ai-patterns.js --check --fail-on=blocking 正文/第XXX章_*.md` 与 `node scripts/check-outline-copy.js 正文/第XXX章_*.md`（细纲照搬复扫）。blocking 命中先回正文改写并复扫；advisory 与细纲重合逐条读原文判断，确属问题才改，功能性写法标 `[需复核]`——每条都要有结论，不为归零机械改写；细纲重合里判定保留的补进细纲「复沓锚句」，下章起不再复报。其中 `formulaic-parallelism` 必须连同对话一起复核，不能因为 hook 不阻断台词就略过。
+**确定性收尾**：本批正文写完后，主会话对实际落盘文件运行 `node scripts/check-ai-patterns.js --check --fail-on=blocking 正文/第XXX章_*.md` 与 `node scripts/check-outline-copy.js 正文/第XXX章_*.md`（细纲照搬复扫）。blocking 命中先回正文改写并复扫；advisory 与细纲重合逐条读原文判断，确属问题才改，功能性写法标 `[需复核]`——每条都要有结论，不为归零机械改写；细纲重合里判定保留的补进细纲「复沓锚句」，下章起不再复报。其中 `formulaic-parallelism` 必须连同对话一起复核，不能因为 hook 不阻断台词就略过；`stock-reaction-tic` 必须按 `writing-craft.md`「反套话四问」逐处做删除测试，交付摘要写明候选数、删除数及每个保留项的叙事功能，不能只写“已检查”。
 随后运行 `node scripts/normalize-punctuation.js 正文/第XXX章_*.md`（默认 `--quote-mode keep`）清理无功能省略号、破折号、双连字符和独立分隔线；盐言「」不受影响。narrative-writer agent 不运行这些脚本。
 
 **退化防护**：正文落盘后运行 `node scripts/check-degeneration.js --check 正文/第XXX章_*.md`。blocking（复读、截断、拒绝语、tier1 工程词泄漏）只重写受影响章节，最多 2 次；仍失败就报告证据让用户定夺。
@@ -126,15 +132,14 @@ advisory 只提示可疑处，先看脚本给出的例外；故事内系统/界�
 
 ### Agent 调用：consistency-checker
 
-质量检查阶段，如果项目已部署 consistency-checker agent（优先检查 `.claude/agents/consistency-checker.md` 是否存在；不存在时再检查 `.opencode/agents/`，再不存在时检查 `.codex/agents/`），spawn `Agent(subagent_type: "consistency-checker", prompt: "项目目录：{dir}\n检查范围：{本次写作的章节}\n检查类型：事实冲突+伏笔断线+角色属性不一致")` 执行一致性检查，获取 S1-S4 分级报告。如 agent 不可用，由主线程参照 quality-checklist.md 直接检查。
+质量检查阶段，consistency-checker 已部署时，仅按当前运行时的 canonical agent 目录检查并 spawn，获取 S1-S4 报告。Prompt：`项目目录：{dir}\n检查范围：{本次写作的章节}\n检查类型：事实冲突+伏笔断线+角色属性不一致`。不可用则主线程参照 long-chapter-quality.md 直接检查。
 
 ### Agent 调用：narrative-writer（去AI味审查）
 
-质量检查阶段，如果项目已部署 narrative-writer agent（优先检查 `.claude/agents/` 下的 `narrative-writer.md` 是否存在；不存在时再检查 `.opencode/agents/`，再不存在时检查 `.codex/agents/`），可 spawn `Agent(subagent_type: "narrative-writer", prompt: "项目目录：{dir}\n任务描述：审查+去AI味\n检查范围：{本次写作的章节}\n删除优先：每条 AI 味项先判能否删除——删后不丢伏笔/钩子/角色/情节/必要信息的直接删，会丢才润色（删除受比例上限与字数下限约束，跌破下限改降AI重写）\n检查项按你自己的 7 Gate、禁止事项与写完后对话自检全量执行，其中否定翻转句式和台词里的工整否定清单不因脚本豁免台词而跳过")` 执行文字质量审查和去AI味检查。如 agent 不可用，由主线程直接执行，检查项对照 `references/anti-ai-writing.md` 与 `references/banned-words.md`。
+质量检查阶段，narrative-writer 已部署时可 spawn 文字质量与去AI味检查。Prompt：`项目目录：{dir}\n任务描述：审查+去AI味\n检查范围：{本次写作的章节}\n作者偏好：{本章 query 命中的 prose_style/story_design 项}\n删除优先：每条 AI 味项先判能否删除——删后不丢伏笔/钩子/角色/情节/必要信息的直接删，会丢才润色（删除受比例上限与字数下限约束，跌破下限改降AI重写）\n检查项按你自己的 7 Gate、禁止事项与写完后对话自检全量执行，其中否定翻转句式和台词里的工整否定清单不因脚本豁免台词而跳过`。不可用则主线程按 `references/anti-ai-writing.md` 与 `references/banned-words.md` 执行。
 
 检查后若正文修订改变了连续性事实，必须构造 `mode=revision` 的同章追踪事务并执行 `scripts/tracking_commit.py commit`：
 - 伏笔变化用 `foreshadow_changes` 更新同一 ID 的当前行，不追加重复历史；
 - 时间线变化写入 `timeline_events`，由 `_tracking-state.json` 统一派生 `作者真相.md` 与 `读者已知.md`，不得把作者秘密泄露到读者视图；
 - 核心角色状态变化同时提交该角色截至当前章的完整快照；
-- 事务失败后保留原事务 JSON，修正写入环境并重跑同一 `commit`；成功后执行 `check`，确认 state 与全部派生视图一致再继续写作。
-
+- 事务失败后保留原事务 JSON，修正写入环境并重跑同一 `commit`；成功后执行 `check`，确认 state 与全部派生视图一致，删除该临时事务 JSON 后再继续写作。

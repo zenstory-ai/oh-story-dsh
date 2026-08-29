@@ -10,10 +10,11 @@ const dramaRoot = resolve(root, "packages/knowledge/drama");
 const novelToGameRoot = resolve(root, "packages/knowledge/novel-to-game");
 const platformGlue = [
   "skills/story/assets/",
-  "skills/story/scripts/",
+  "skills/story/scripts/dashboard-server.mjs",
   "skills/browser-cdp/scripts/setup-cdp-chrome.js",
   "skills/story-long-scan/scripts/",
   "skills/story-short-scan/scripts/",
+  "skills/story-setup/references/antigravity/",
   "skills/story-setup/references/codex/",
   "skills/story-setup/references/generic/",
   "skills/story-setup/references/openclaw/",
@@ -21,6 +22,9 @@ const platformGlue = [
   "skills/story-setup/references/reasonix/",
   "skills/story-setup/references/templates/",
   "skills/story-setup/references/zcode/",
+  "skills/story-setup/scripts/deploy-antigravity-skills.py",
+  "skills/story-setup/scripts/generate-antigravity-agents.mjs",
+  "skills/story-setup/scripts/merge-antigravity-hooks.py",
   "skills/story-setup/scripts/merge-claude-settings.py",
   "skills/story-setup/scripts/merge-codex-hooks.py",
   "skills/story-setup/scripts/copy-path-safety.py",
@@ -114,7 +118,9 @@ for (const excluded of [
   "oh-story/skills/browser-cdp/scripts/setup-cdp-chrome.js",
   "oh-story/skills/story-long-scan/scripts",
   "oh-story/skills/story-short-scan/scripts",
-  "oh-story/skills/story-setup/scripts/copy-path-safety.py"
+  "oh-story/skills/story-setup/scripts/copy-path-safety.py",
+  "oh-story/skills/story-setup/scripts/deploy-antigravity-skills.py",
+  "oh-story/skills/story-setup/references/antigravity"
 ]) {
   const present = await access(resolve(outputRoot, excluded)).then(() => true, () => false);
   if (present) throw new Error(`Release bundle retained excluded platform/scraper code: ${excluded}`);

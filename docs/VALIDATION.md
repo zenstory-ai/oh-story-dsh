@@ -1,6 +1,6 @@
 # Validation
 
-Target: DeepSeek Harness `0.1.1-rc.1` · validated 2026-08-25.
+Target: DeepSeek Harness `0.1.1-rc.1` · validated 2026-08-27.
 
 ## Test architecture
 
@@ -22,9 +22,9 @@ The deterministic packaged Role path is part of the correctness gate. The paid r
 | Area | Evidence |
 | --- | --- |
 | Capability catalog | Native DSH Session exposes 13 Oh Story Skills, 10 Drama Skills and 7 NovelToGame Skills |
-| Upstream integrity | Three knowledge manifests verify pinned commits, catalogs and every bundled file hash; NovelToGame parity includes the complete playable `jin-ping-mei` example and six-check PASS record |
+| Upstream integrity | Three knowledge manifests verify pinned commits, catalogs, every bundled file hash, portable-source exclusions and the Drama 0.6 creator-first contract; all 10 bundled Drama selftests run without bytecode writes, the five demo documents verify recorded fixture hashes, and NovelToGame parity covers the playable `jin-ping-mei` build, its six-check PASS record and the authoring-material exclusions |
 | Plugin boundary | Host bundle and source audit keep all DSH imports inside `@oh-story/dsh` |
-| Workspace safety | Unit tests cover Host/Origin/Fetch Metadata trust, while the packaged route rejects traversal and exercises session-scoped reads plus atomic writes; generated-game CSP is browser-probed to reject workspace API access outside the preview asset prefix |
+| Workspace safety | Unit tests cover Host/Origin/Fetch Metadata trust and creative media allowlists, while the packaged route rejects traversal and exercises session-scoped reads, media byte ranges and atomic writes; generated-game CSP is browser-probed to reject workspace API access outside the preview asset prefix; child-session, absolute-path and symbolic-link negative cases remain follow-up contracts |
 | Editor concurrency | Versioned GET/PUT rejects stale saves; Chrome edits, saves, rereads and restores a real workspace file |
 | File following | Tests cover DSH Step location data, nested running calls, streamed write/edit previews, creative path classification and workbench switching |
 | Markdown rendering | Component tests cover tables, task lists, fenced code, inline formatting, safe links and inert raw HTML |
@@ -34,8 +34,10 @@ The deterministic packaged Role path is part of the correctness gate. The paid r
 | Dual workbench | Native smoke switches 小说/短剧, opens all five creator-first document types, and exercises Markdown preview/source modes |
 | Game Studio | Native smoke verifies Preview-left/Chat-right geometry, real iframe input, explicit new-version loading, state preservation across Preview/project-file, compact Studio/Chat and 小说/游戏 switches, fullscreen focus return, the absence of QA UI, the bundled Jin Ping Mei opening, and a non-clipping 500 px layout even when the host drawer remains open |
 | Compact Game Studio | Chrome runs the game-specific surface at 500×900, checks tab/tabpanel relationships and horizontal containment, enters a Composer draft in Chat, returns to the same live game state, and emits screenshot evidence |
+| Short-drama production | Unit tests cover document parsing, episode isolation, prompt authority, cross-episode image-reference filtering, media-typed version selection, DSH Queue/current-Turn classification, dispatched-unknown safety, jobs, versions and sequence logic; packaged Chrome checks two-episode switching, per-episode task/reference/canvas isolation, project-media search/reuse, concurrent submit/remove/cancel semantics, late partial-batch reconciliation, successful composition backfill, version selection, sequence reorder/blockers, creator keyboard canvas movement, Agent semantic focus, native Conversation dispatch, realistic image/MP4 backfill and 500 px containment |
+| Agent production operability | The packaged fixture model calls the registered `oh_story_production` tool in a real DSH turn; the durable successful call is rendered by the plugin tool view and focuses the requested EP001 production target without granting cosmetic canvas control. Unit tests reject traversal, duplicate sequence IDs, failed calls and malformed replay payloads. |
 | Roles and hooks | Real Cordis Fiber contracts cover plugin-runtime capture, `Context.get()` fallback and missing-runtime failure; packaged DSH deterministically completes one child-Agent Role invocation; unit contracts cover pinned reference reads, path escape and scoped-shadow rejection |
-| Package contents | Build and pack include all three pinned knowledge sets, the full Jin Ping Mei example, package metadata and license while omitting source tests and the standalone Drama Dashboard |
+| Package contents | Build and pack include all three pinned knowledge sets, the Jin Ping Mei playable build and QA record, package metadata and license while omitting source tests and the standalone Drama Dashboard |
 
 The gate discovers all `*.test.ts` and `*.contract.test.ts` files. Coverage claims below are tied to executable behavior, not a manually maintained test-count snapshot.
 
@@ -54,6 +56,7 @@ The gate discovers all `*.test.ts` and `*.contract.test.ts` files. Coverage clai
 
 - 13 Oh Story Skills, 10 Drama Skills and 7 NovelToGame Skills in the Session catalog;
 - Session-scoped workspace reads, a 20-writer atomic CAS race, stale-write rejection and path-traversal rejection;
+- allowlisted media discovery, read-only byte-range preview and media path-traversal rejection through the current Agent FileSystem, using two alternate 941×1672 generated keyframes and a real 704×1280 five-second seekable MP4 rather than one-pixel placeholders;
 - invalid project metadata isolation without taking down the workspace;
 - published Browser module and official UI slot registrations;
 - a real DSH Agent `write` tool call, incremental editor content, authoritative disk reconciliation and official tool-file navigation;
@@ -62,6 +65,12 @@ The gate discovers all `*.test.ts` and `*.contract.test.ts` files. Coverage clai
 - 游戏 defaults to real-time Preview, keeps the playable iframe left of the wider official Chat, executes workspace-game input, preserves the same runtime across Preview/project-file switching, switches projects, enters the Jin Ping Mei first day, and restores focus after fullscreen;
 - Game Studio exposes no QA tab, scorecard, badge or QA screenshot; the six-check artifact contract remains covered by parity, Host API assertions and packaged automation;
 - at 500×900 the game-specific `制作 / 对话` switch preserves both iframe state and Composer usability without horizontal clipping;
+- two isolated creator-first episodes, including production projection rebuilds, EP-local tasks, versions, selections, sequence and canvas coordinates when switching EP001 ↔ EP002;
+- direct `oh_story_production` execution by the fixture Agent, durable semantic-focus replay and navigation isolation; cosmetic canvas coordinates remain creator-controlled Session state;
+- a searchable project media library and explicit EP001 → EP002 image-reference reuse without duplicating prompt editing inside production cards;
+- running + queued submissions, exact Queue removal, current-Turn cancellation with the remaining Queue preserved but not auto-executed, and a late real MP4 that upgrades a completed batch from 0/8 to an explicit 1/8 partial result without a render loop;
+- a fully populated eight-video sequence that enables composition, dispatches the ordered native composition request, and becomes completed only after a task-ID-linked MP4 appears in the Agent FileSystem;
+- the short-drama production shot board, two-version selection and restoration, image-only reference resolution, video-only sequence resolution, asset board, missing-video sequence reorder/blockers, relationship canvas, keyboard layout movement, native `/short-drama-produce` Conversation dispatch, realistic image/video version backfill and cross-document source navigation;
 - blank-session mounting, Session-switch draft recovery, source editing, conflict isolation and saved-state behavior;
 - ordered tree/editor/Chat geometry at desktop and 500 px widths, a Composer that remains fixed during long-message scrolling, and anchor clearance in wide, medium and compact layouts.
 

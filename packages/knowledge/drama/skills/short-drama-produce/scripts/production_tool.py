@@ -63,13 +63,23 @@ ALLOWED_JOB_KEYS = {
     "adapter",
     "prompt",
     "source",
+    "source_entry",
     "references",
+    "reference_bindings",
     "outputs",
     "parameters",
     "overwrite",
 }
 STORED_EXECUTION_KEYS = ALLOWED_JOB_KEYS | {"inputs"}
 STORED_JOB_KEYS = STORED_EXECUTION_KEYS | {"fingerprint", "prepared_at"}
+LEGACY_STORED_EXECUTION_KEYS = STORED_EXECUTION_KEYS - {
+    "source_entry",
+    "reference_bindings",
+}
+LEGACY_STORED_JOB_KEYS = LEGACY_STORED_EXECUTION_KEYS | {
+    "fingerprint",
+    "prepared_at",
+}
 SECRET_KEYS = {
     "authorization",
     "credential",
@@ -102,6 +112,20 @@ MEDIA_TYPES = {
     ".flac": "audio/flac",
     ".opus": "audio/ogg",
 }
+CREATOR_SOURCE_NAMES = {
+    "图片提示词.md": "image",
+    "视频提示词.md": "video",
+}
+
+REF_SLOT_RE = re.compile(r"REF-[A-Z0-9][A-Z0-9-]{0,79}")
+SOURCE_ENTRY_RE = re.compile(r"[A-Z][A-Z0-9-]{1,99}")
+REFERENCE_SUFFIX_RE = r"(?:png|jpe?g|webp)"
+REFERENCE_LINE_RE = re.compile(
+    rf"(REF-[A-Z0-9][A-Z0-9-]{{0,79}})（顺序：([1-9]\d*)）· "
+    rf"([^；\n]+?\.{REFERENCE_SUFFIX_RE})《([^》\n]+)》"
+    r"（控制：([^；）\n]+)；不得控制：([^）\n]+)）",
+    re.IGNORECASE,
+)
 
 
 class ConfirmationRequiredError(RuntimeError):
@@ -627,6 +651,225 @@ def _string_list(value: object, *, label: str, limit: int = 32) -> list[str]:
     return list(value)
 
 
+def _scope_list(value: object, *, label: str) -> list[str]:
+    items = _string_list(value, label=label, limit=32)
+    if not items or any(not item.strip() or len(item) > 200 for item in items):
+        raise ValueError(f"{label} must contain non-empty bounded text")
+    normalized = [item.strip() for item in items]
+    folded = [item.casefold() for item in normalized]
+    if len(folded) != len(set(folded)):
+        raise ValueError(f"{label} must not contain duplicates")
+    return normalized
+
+
+def _canonical_creator_source_modality(source: str | None) -> str | None:
+    if source is None:
+        return None
+    path = PurePosixPath(source)
+    if (
+        len(path.parts) != 3
+        or path.parts[0] not in {"剧集", "episodes"}
+        or not path.parts[1]
+    ):
+        return None
+    return CREATOR_SOURCE_NAMES.get(path.name)
+
+
+def _normalize_reference_bindings(value: object) -> list[dict[str, Any]]:
+    if value is None:
+        return []
+    if not isinstance(value, list) or len(value) > 16:
+        raise ValueError("reference_bindings must be a list of at most sixteen entries")
+    normalized: list[dict[str, Any]] = []
+    for index, binding in enumerate(value, 1):
+        label = f"reference_bindings[{index}]"
+        if not isinstance(binding, Mapping) or set(binding) != {
+            "slot_id",
+            "order",
+            "path",
+            "label",
+            "role",
+            "may_control",
+            "must_not_control",
+        }:
+            raise ValueError(f"{label} fields are invalid")
+        slot_id = binding.get("slot_id")
+        order = binding.get("order")
+        raw_label = binding.get("label")
+        role = binding.get("role")
+        if not isinstance(slot_id, str) or REF_SLOT_RE.fullmatch(slot_id) is None:
+            raise ValueError(f"{label} slot_id is invalid")
+        if not isinstance(order, int) or isinstance(order, bool) or order < 1:
+            raise ValueError(f"{label} order is invalid")
+        if (
+            not isinstance(raw_label, str)
+            or not raw_label.strip()
+            or len(raw_label) > 200
+            or re.search(r"[\u3400-\u9fff]", raw_label) is None
+        ):
+            raise ValueError(f"{label} label must contain Chinese text")
+        if not isinstance(role, str) or not role.strip() or len(role) > 80:
+            raise ValueError(f"{label} role is invalid")
+        may_control = _scope_list(
+            binding.get("may_control"), label=f"{label}.may_control"
+        )
+        must_not_control = _scope_list(
+            binding.get("must_not_control"), label=f"{label}.must_not_control"
+        )
+        if {item.casefold() for item in may_control} & {
+            item.casefold() for item in must_not_control
+        }:
+            raise ValueError(f"{label} control scopes must not overlap")
+        normalized.append(
+            {
+                "slot_id": slot_id,
+                "order": order,
+                "path": _relative_path(binding.get("path")),
+                "label": raw_label.strip(),
+                "role": role.strip(),
+                "may_control": may_control,
+                "must_not_control": must_not_control,
+            }
+        )
+    normalized.sort(key=lambda item: int(item["order"]))
+    slots = [str(item["slot_id"]) for item in normalized]
+    orders = [int(item["order"]) for item in normalized]
+    paths = [str(item["path"]) for item in normalized]
+    if len(slots) != len(set(slots)):
+        raise ValueError("reference binding slot_ids must be unique")
+    if orders != list(range(1, len(orders) + 1)):
+        raise ValueError("reference binding order must be unique and contiguous from 1")
+    if len(paths) != len(set(paths)):
+        raise ValueError("reference binding paths must be unique")
+    return normalized
+
+
+def _markdown_section(document: str, source_entry: str) -> str:
+    heading = re.compile(
+        rf"^##\s+`?{re.escape(source_entry)}`?(?:\s+·.*)?\s*$", re.MULTILINE
+    )
+    matches = list(heading.finditer(document))
+    if not matches:
+        raise ValueError(f"source entry is missing from Markdown: {source_entry}")
+    if len(matches) != 1:
+        raise ValueError(f"source entry is duplicated in Markdown: {source_entry}")
+    match = matches[0]
+    next_heading = re.search(r"^##\s+", document[match.end() :], re.MULTILINE)
+    end = match.end() + next_heading.start() if next_heading is not None else len(document)
+    return document[match.start() : end]
+
+
+def _copyable_prompt(section: str) -> str:
+    markers = list(
+        re.finditer(
+            r"^###\s+可复制(?:通用)?提示词\s*$", section, re.MULTILINE
+        )
+    )
+    if not markers:
+        raise ValueError("source entry has no copyable prompt")
+    if len(markers) != 1:
+        raise ValueError("source entry has duplicate copyable prompts")
+    marker = markers[0]
+    body = section[marker.end() :]
+    following = re.search(r"^###\s+|^##\s+", body, re.MULTILINE)
+    if following is not None:
+        body = body[: following.start()]
+    body_lines = [line for line in body.splitlines() if line.strip()]
+    if any(not line.startswith(">") for line in body_lines):
+        raise ValueError("source entry copyable prompt contains unquoted content")
+    lines = [line[1:].lstrip() for line in body_lines]
+    if not lines or not "\n".join(lines).strip():
+        raise ValueError("source entry copyable prompt is empty")
+    return "\n".join(lines).strip()
+
+
+def _scope_items(value: str) -> list[str]:
+    return [item.strip() for item in re.split(r"[、,，]", value) if item.strip()]
+
+
+def _contains_ref_token(value: str) -> bool:
+    return "ref-" in value.casefold()
+
+
+def _markdown_reference_bindings(
+    section: str, *, field_name: str
+) -> list[dict[str, Any]]:
+    lines = re.findall(
+        rf"^- {re.escape(field_name)}：(.+)$", section, re.MULTILINE
+    )
+    if not lines:
+        raise ValueError(f"source entry has no {field_name} declaration")
+    if len(lines) != 1:
+        raise ValueError(f"source entry has duplicate {field_name} declarations")
+    value = lines[0].strip()
+    if (
+        field_name == "输入参考图"
+        and not _contains_ref_token(value)
+        and re.fullmatch(r"无(?:（[^）\n]+）)?。?", value)
+    ):
+        return []
+    if (
+        field_name == "参考"
+        and not _contains_ref_token(value)
+        and re.fullmatch(r"无(?:外部参考)?(?:；[^\n]*)?。?", value)
+    ):
+        return []
+    matches = list(REFERENCE_LINE_RE.finditer(value))
+    if not matches:
+        raise ValueError("source entry input-reference declaration is invalid")
+    cursor = 0
+    for index, match in enumerate(matches):
+        separator = value[cursor : match.start()]
+        if separator != ("" if index == 0 else "；"):
+            raise ValueError("source entry input-reference declaration is invalid")
+        cursor = match.end()
+    if value[cursor:] not in {"", "。"}:
+        raise ValueError("source entry input-reference declaration is invalid")
+    return [
+        {
+            "slot_id": match.group(1),
+            "order": int(match.group(2)),
+            "path": _relative_path(match.group(3)),
+            "label": match.group(4).strip(),
+            "may_control": _scope_items(match.group(5)),
+            "must_not_control": _scope_items(match.group(6)),
+        }
+        for match in matches
+    ]
+
+
+def _verify_markdown_source(
+    root: Path,
+    *,
+    source: str,
+    source_entry: str,
+    prompt: str,
+    bindings: list[dict[str, Any]],
+) -> None:
+    source_path = _project_file(root, source)
+    if source_path.suffix.casefold() != ".md":
+        raise ValueError("source_entry requires a Markdown source")
+    document = source_path.read_text(encoding="utf-8")
+    section = _markdown_section(document, source_entry)
+    if _copyable_prompt(section) != prompt.strip():
+        raise ValueError("job prompt does not match the selected source entry")
+    field_name = "参考" if source_entry.startswith("IMG-") else "输入参考图"
+    declared = _markdown_reference_bindings(section, field_name=field_name)
+    comparable = [
+        {key: binding[key] for key in (
+            "slot_id",
+            "order",
+            "path",
+            "label",
+            "may_control",
+            "must_not_control",
+        )}
+        for binding in bindings
+    ]
+    if declared != comparable:
+        raise ValueError("job reference bindings do not match the selected source entry")
+
+
 def _normalize_job(root: Path, raw: object) -> dict[str, Any]:
     if not isinstance(raw, Mapping) or set(raw) - ALLOWED_JOB_KEYS:
         raise ValueError("job contains unsupported fields")
@@ -646,10 +889,55 @@ def _normalize_job(root: Path, raw: object) -> dict[str, Any]:
         raise ValueError("prompt must be non-empty and at most 100000 characters")
     source_raw = raw.get("source")
     source = _relative_path(source_raw) if source_raw is not None else None
-    references = [
+    source_entry = raw.get("source_entry")
+    if source_entry is not None and (
+        not isinstance(source_entry, str)
+        or SOURCE_ENTRY_RE.fullmatch(source_entry) is None
+    ):
+        raise ValueError("source_entry must be a visible uppercase Markdown entry ID")
+    if source_entry is not None and source is None:
+        raise ValueError("source_entry requires source")
+    creator_source_modality = _canonical_creator_source_modality(source)
+    if creator_source_modality == modality and source_entry is None:
+        raise ValueError("creator Markdown source requires source_entry")
+    if creator_source_modality is not None and modality != creator_source_modality and not (
+        creator_source_modality == "video"
+        and modality == "music"
+        and source_entry is None
+    ):
+        raise ValueError("creator Markdown source does not match the job modality")
+    expected_entry_prefix = {"image": "IMG-", "video": "MOTION-"}.get(
+        str(modality)
+    )
+    if source_entry is not None and (
+        expected_entry_prefix is None
+        or not source_entry.startswith(expected_entry_prefix)
+    ):
+        raise ValueError("source_entry does not match the job modality")
+    if source_entry is not None and creator_source_modality != modality:
+        raise ValueError("source_entry requires the canonical creator Markdown path")
+    references_supplied = "references" in raw
+    supplied_references = [
         _relative_path(path)
         for path in _string_list(raw.get("references", []), label="references", limit=16)
     ]
+    reference_bindings = _normalize_reference_bindings(raw.get("reference_bindings"))
+    binding_references = [str(binding["path"]) for binding in reference_bindings]
+    if (
+        references_supplied
+        and (reference_bindings or source_entry is not None)
+        and supplied_references != binding_references
+    ):
+        raise ValueError("references must match reference_bindings order")
+    references = binding_references if reference_bindings else supplied_references
+    if source_entry is not None:
+        _verify_markdown_source(
+            root,
+            source=str(source),
+            source_entry=source_entry,
+            prompt=prompt,
+            bindings=reference_bindings,
+        )
     outputs = [
         _relative_path(path, output=True)
         for path in _string_list(raw.get("outputs"), label="outputs", limit=16)
@@ -678,7 +966,9 @@ def _normalize_job(root: Path, raw: object) -> dict[str, Any]:
         "adapter": adapter,
         "prompt": prompt,
         "source": source,
+        "source_entry": source_entry,
         "references": references,
+        "reference_bindings": reference_bindings,
         "outputs": outputs,
         "parameters": dict(parameters),
         "overwrite": raw.get("overwrite", False),
@@ -713,8 +1003,17 @@ def _validate_stored_job(
     root: Path, document: object, *, expected_job_id: str | None = None
 ) -> dict[str, Any]:
     root = root.resolve()
-    if not isinstance(document, dict) or set(document) != STORED_JOB_KEYS:
+    if not isinstance(document, dict):
         raise ValueError("stored job fields are invalid")
+    stored_keys = set(document)
+    legacy = stored_keys == LEGACY_STORED_JOB_KEYS
+    if not legacy and stored_keys != STORED_JOB_KEYS:
+        raise ValueError("stored job fields are invalid")
+    original = document
+    document = dict(document)
+    if legacy:
+        document["source_entry"] = None
+        document["reference_bindings"] = []
     job_id = document.get("job_id")
     if (
         not isinstance(job_id, str)
@@ -736,11 +1035,47 @@ def _validate_stored_job(
     source = document.get("source")
     if source is not None and _relative_path(source) != source:
         raise ValueError("stored job source is invalid")
+    source_entry = document.get("source_entry")
+    if source_entry is not None and (
+        not isinstance(source_entry, str)
+        or SOURCE_ENTRY_RE.fullmatch(source_entry) is None
+        or source is None
+    ):
+        raise ValueError("stored job source entry is invalid")
+    expected_entry_prefix = {"image": "IMG-", "video": "MOTION-"}.get(
+        str(modality)
+    )
+    if source_entry is not None and (
+        expected_entry_prefix is None
+        or not source_entry.startswith(expected_entry_prefix)
+    ):
+        raise ValueError("stored job source entry has the wrong modality")
+    creator_source_modality = _canonical_creator_source_modality(
+        str(source) if source is not None else None
+    )
+    if not legacy and creator_source_modality == modality and source_entry is None:
+        raise ValueError("stored creator Markdown job has no source entry")
+    if creator_source_modality is not None and modality != creator_source_modality and not (
+        creator_source_modality == "video"
+        and modality == "music"
+        and source_entry is None
+    ):
+        raise ValueError("stored creator Markdown source has the wrong modality")
+    if source_entry is not None and creator_source_modality != modality:
+        raise ValueError("stored job creator source path is invalid")
     references = _string_list(
         document.get("references"), label="stored references", limit=16
     )
     if any(_relative_path(reference) != reference for reference in references):
         raise ValueError("stored job references are invalid")
+    reference_bindings = _normalize_reference_bindings(
+        document.get("reference_bindings")
+    )
+    binding_references = [binding["path"] for binding in reference_bindings]
+    if (
+        source_entry is not None or reference_bindings
+    ) and binding_references != references:
+        raise ValueError("stored job references do not match reference bindings")
     outputs = _string_list(document.get("outputs"), label="stored outputs", limit=16)
     if not outputs or len(outputs) != len(set(outputs)):
         raise ValueError("stored job outputs are invalid")
@@ -771,7 +1106,10 @@ def _validate_stored_job(
     ):
         raise ValueError("stored job input hash is invalid")
     fingerprint = document.get("fingerprint")
-    execution = {key: document[key] for key in STORED_EXECUTION_KEYS}
+    execution_keys = (
+        LEGACY_STORED_EXECUTION_KEYS if legacy else STORED_EXECUTION_KEYS
+    )
+    execution = {key: original[key] for key in execution_keys}
     if (
         not isinstance(fingerprint, str)
         or re.fullmatch(r"[0-9a-f]{64}", fingerprint) is None
@@ -803,7 +1141,9 @@ def _preview(job: Mapping[str, Any]) -> dict[str, Any]:
         "count": len(job["outputs"]),
         "prompt": job["prompt"],
         "source": job["source"],
+        "source_entry": job["source_entry"],
         "references": job["references"],
+        "reference_bindings": job["reference_bindings"],
         "outputs": job["outputs"],
         "parameters": job["parameters"],
         "overwrite": job["overwrite"],

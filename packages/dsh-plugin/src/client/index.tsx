@@ -1,4 +1,5 @@
-import { defineStore, type ClientContext, type PartialAssistant, type RunningToolCall } from "@deepseek-ai/dsh-client-runtime/client";
+import { defineStore, type ClientContext, type ISessions, type PartialAssistant, type RunningToolCall } from "@deepseek-ai/dsh-client-runtime/client";
+import type { IConversation } from "@deepseek-ai/dsh-client-ui-conversation/client";
 import type {} from "@deepseek-ai/dsh-client-ui-layout/client";
 import type { PropsRenderSlots, PropsRuntime, PropsStore } from "@deepseek-ai/dsh-client-ui-slots";
 import type { ToolCallViewProps } from "@deepseek-ai/dsh-client-ui-tool/client";
@@ -18,10 +19,29 @@ import {
 import { buildFileTree, type FileTreeNode } from "./file-tree.js";
 import { JsonlPreview } from "./jsonl-preview.js";
 import { MarkdownPreview } from "./markdown-preview.js";
+import {
+  creatorDocumentPaths,
+  episodeDirectoryForPath,
+  isCreatorDocumentPath,
+  parseEpisodeProduction,
+  type DramaDocumentTarget,
+  type DramaProductionSection
+} from "./drama-production.js";
+import { DramaProductionView } from "./drama-production-view.js";
+import { createPendingJob, type
+  CanvasPoint,
+  mediaTargetFromPath,
+  type ProductionJob,
+  type ProductionMediaVersion,
+  type ProductionQueueEntry,
+  type ProductionSequenceItem
+} from "./production-runtime.js";
+import { settledProductionIntents, type SettledProductionIntent } from "./production-intents.js";
+import { OH_STORY_PRODUCTION_TOOL_NAME } from "../production-intent.js";
 import styles from "./plugin.css?inline";
 
 export const name = "oh-story";
-export const inject = ["slots"];
+export const inject = ["slots", "sessions", "conversation"];
 
 declare module "@deepseek-ai/dsh-client-ui-slots" {
   interface SlotMap {
@@ -29,7 +49,13 @@ declare module "@deepseek-ai/dsh-client-ui-slots" {
   }
 }
 
-interface WorkspaceFile { readonly path: string; readonly bytes: number; readonly version: string }
+interface WorkspaceFile {
+  readonly path: string;
+  readonly bytes: number;
+  readonly version: string;
+  readonly kind: "text" | "media";
+  readonly mimeType?: string | undefined;
+}
 interface WorkspacePayload {
   readonly cwd: string;
   readonly files: readonly WorkspaceFile[];
@@ -70,13 +96,22 @@ interface FileBuffer {
 
 interface WorkbenchMemory {
   buffers: Record<string, FileBuffer>;
-  editorMode: "preview" | "source";
+  editorMode: "preview" | "source" | "production";
   expanded: Record<string, boolean>;
   selected: string | undefined;
   workbench: WorkbenchMode;
   gameTab: "preview" | "design";
   gameProjectId: string | undefined;
   gamePane: "studio" | "chat";
+  productionSection: DramaProductionSection;
+  productionSelectedIds: Record<string, string | undefined>;
+  productionJobs: Record<string, ProductionJob[]>;
+  productionSelections: Record<string, Record<string, string>>;
+  productionReferences: Record<string, Record<string, string[]>>;
+  productionSequence: Record<string, ProductionSequenceItem[]>;
+  productionCanvas: Record<string, Record<string, CanvasPoint>>;
+  productionZoom: Record<string, number>;
+  productionIntentCalls: Record<string, boolean>;
 }
 
 type Update<T> = T | ((current: T) => T);
@@ -95,7 +130,16 @@ function createWorkbenchStore() {
       workbench: "story",
       gameTab: "preview",
       gameProjectId: undefined,
-      gamePane: "studio"
+      gamePane: "studio",
+      productionSection: "shots",
+      productionSelectedIds: {},
+      productionJobs: {},
+      productionSelections: {},
+      productionReferences: {},
+      productionSequence: {},
+      productionCanvas: {},
+      productionZoom: {},
+      productionIntentCalls: {}
     }),
     actions: {
       setBuffers: (draft, update: Update<Record<string, FileBuffer>>) => {
@@ -121,6 +165,33 @@ function createWorkbenchStore() {
       },
       setGamePane: (draft, update: Update<WorkbenchMemory["gamePane"]>) => {
         draft.gamePane = applyUpdate(draft.gamePane, update);
+      },
+      setProductionSection: (draft, update: Update<DramaProductionSection>) => {
+        draft.productionSection = applyUpdate(draft.productionSection, update);
+      },
+      setProductionSelectedIds: (draft, update: Update<Record<string, string | undefined>>) => {
+        draft.productionSelectedIds = applyUpdate(draft.productionSelectedIds, update);
+      },
+      setProductionJobs: (draft, update: Update<Record<string, ProductionJob[]>>) => {
+        draft.productionJobs = applyUpdate(draft.productionJobs, update);
+      },
+      setProductionSelections: (draft, update: Update<Record<string, Record<string, string>>>) => {
+        draft.productionSelections = applyUpdate(draft.productionSelections, update);
+      },
+      setProductionReferences: (draft, update: Update<Record<string, Record<string, string[]>>>) => {
+        draft.productionReferences = applyUpdate(draft.productionReferences, update);
+      },
+      setProductionSequence: (draft, update: Update<Record<string, ProductionSequenceItem[]>>) => {
+        draft.productionSequence = applyUpdate(draft.productionSequence, update);
+      },
+      setProductionCanvas: (draft, update: Update<Record<string, Record<string, CanvasPoint>>>) => {
+        draft.productionCanvas = applyUpdate(draft.productionCanvas, update);
+      },
+      setProductionZoom: (draft, update: Update<Record<string, number>>) => {
+        draft.productionZoom = applyUpdate(draft.productionZoom, update);
+      },
+      setProductionIntentCalls: (draft, update: Update<Record<string, boolean>>) => {
+        draft.productionIntentCalls = applyUpdate(draft.productionIntentCalls, update);
       }
     }
   });
@@ -137,7 +208,7 @@ const GROUP_ORDER: Readonly<Record<WorkbenchMode, readonly string[]>> = {
 };
 
 const WORKBENCH_MODES = ["story", "drama", "game"] as const;
-const EDITOR_MODES = ["preview", "source"] as const;
+const EDITOR_MODES = ["preview", "source", "production"] as const;
 
 function handleTabKey<T extends string>(
   event: ReactKeyboardEvent<HTMLButtonElement>,
@@ -478,6 +549,12 @@ function CreativeWorkbench({
   runningCalls,
   partial,
   settledMutation,
+  sessionRunning,
+  productionQueue,
+  productionIntents,
+  sendProductionPrompt,
+  cancelProduction,
+  removeQueuedProduction,
   useStore,
   actions
 }: {
@@ -485,7 +562,10 @@ function CreativeWorkbench({
   readonly runningCalls: readonly RunningToolCall[];
   readonly partial: PartialAssistant | null;
   readonly settledMutation: string | undefined;
-} & Pick<WorkbenchSlotProps, "useStore" | "actions">) {
+  readonly sessionRunning: boolean;
+  readonly productionQueue: readonly ProductionQueueEntry[];
+  readonly productionIntents: readonly SettledProductionIntent[];
+} & Pick<WorkbenchSlotProps, "useStore" | "actions" | "sendProductionPrompt" | "cancelProduction" | "removeQueuedProduction">) {
   const { workspace, error, loading: workspaceLoading, reload } = useWorkspace(sessionId);
   const activities = useMemo(
     () => fileMutations(runningCalls, partial),
@@ -515,6 +595,16 @@ function CreativeWorkbench({
   const buffersRef = useRef<Record<string, FileBuffer>>({});
   const expanded = useStore((memory) => memory.expanded);
   const setExpanded = actions.setExpanded;
+  const productionSection = useStore((memory) => memory.productionSection);
+  const setProductionSection = actions.setProductionSection;
+  const productionSelectedIds = useStore((memory) => memory.productionSelectedIds);
+  const productionJobsByEpisode = useStore((memory) => memory.productionJobs);
+  const productionSelectionsByEpisode = useStore((memory) => memory.productionSelections);
+  const productionReferencesByEpisode = useStore((memory) => memory.productionReferences);
+  const productionSequenceByEpisode = useStore((memory) => memory.productionSequence);
+  const productionCanvasByEpisode = useStore((memory) => memory.productionCanvas);
+  const productionZoomByEpisode = useStore((memory) => memory.productionZoom);
+  const productionIntentCalls = useStore((memory) => memory.productionIntentCalls);
   const surfaceRef = useRef<HTMLDivElement>(null);
   const compactTabsId = useId();
   const compactStudioId = `${compactTabsId}-studio-panel`;
@@ -525,6 +615,8 @@ function CreativeWorkbench({
   const previousSettledMutation = useRef(settledMutation);
   const saveLocks = useRef(new Set<string>());
   const buffer = selected === undefined ? undefined : buffers[selected];
+  const selectedFile = workspace?.files.find((file) => file.path === selected);
+  const selectedMedia = selectedFile?.kind === "media";
   const dirty = buffer?.source === "human" && buffer.content !== buffer.saved;
   const saving = buffer?.saving === true;
   const fileError = buffer?.error;
@@ -534,6 +626,83 @@ function CreativeWorkbench({
   const jsonl = selectedLower?.endsWith(".jsonl") === true;
   const structured = jsonl || selectedLower?.endsWith(".json") === true;
   const previewable = markdown || jsonl;
+  const episodeDirectory = episodeDirectoryForPath(selected);
+  const productionAvailable = selected !== undefined && isCreatorDocumentPath(selected) && episodeDirectory !== undefined;
+  const editorModes = productionAvailable ? EDITOR_MODES : EDITOR_MODES.filter((mode) => mode !== "production");
+  const episodeDocumentPaths = useMemo(
+    () => episodeDirectory === undefined ? [] : creatorDocumentPaths(workspace?.files.filter((file) => file.kind === "text") ?? [], episodeDirectory),
+    [episodeDirectory, workspace?.files]
+  );
+  const episodeDocuments = useMemo(() => Object.fromEntries(episodeDocumentPaths.flatMap((path) => {
+    const current = buffers[path];
+    return current === undefined || current.missing === true ? [] : [[path, current.content] as const];
+  })), [buffers, episodeDocumentPaths]);
+  const episodeProduction = useMemo(
+    () => episodeDirectory === undefined ? undefined : parseEpisodeProduction(episodeDocuments, episodeDirectory),
+    [episodeDirectory, episodeDocuments]
+  );
+  const productionLibrary = useMemo(() => (workspace?.files ?? []).flatMap((file): ProductionMediaVersion[] => {
+    if (file.kind !== "media" || file.mimeType?.startsWith("audio/") === true) return [];
+    if (!file.path.startsWith("剧集/") && !file.path.startsWith("交付/")) return [];
+    const targetId = file.path.toLocaleUpperCase().match(/(?:SHOT|IMG|MOTION|VISUAL)-[A-Z0-9-]+/u)?.[0] ?? file.path.split("/").at(-2) ?? "PROJECT-MEDIA";
+    return [{
+      id: `workspace:${file.path}:${file.version}`,
+      targetId,
+      kind: file.mimeType?.startsWith("image/") === true ? "image" : "video",
+      url: endpoint("media", sessionId, file.path),
+      path: file.path
+    }];
+  }), [sessionId, workspace?.files]);
+  const productionVersions = useMemo(() => {
+    if (episodeProduction === undefined) return [];
+    const episodeName = episodeProduction.episodeDirectory.split("/").at(-1) ?? "";
+    const knownTargets = [
+      ...episodeProduction.shots.map((shot) => shot.id),
+      ...episodeProduction.assets.map((asset) => asset.id),
+      ...episodeProduction.visualAssets.map((asset) => asset.id),
+      ...episodeProduction.motions.map((motion) => motion.id)
+    ].sort((left, right) => right.length - left.length);
+    const motionTargets = new Map(episodeProduction.motions.flatMap((motion) => motion.shotId === undefined ? [] : [[motion.id, motion.shotId] as const]));
+    const fromWorkspace = productionLibrary.flatMap((version) => {
+      if (version.path === undefined || (!version.path.startsWith(`${episodeProduction.episodeDirectory}/`) && !version.path.startsWith(`交付/${episodeName}/`))) return [];
+      const matched = mediaTargetFromPath(version.path, knownTargets);
+      const composition = /(?:^|\/)成片-[^/]+\.mp4$/iu.test(version.path);
+      if (matched === undefined && !composition) return [];
+      const targetId = matched === undefined ? episodeProduction.episodeDirectory : motionTargets.get(matched) ?? matched;
+      return [{ ...version, targetId }];
+    });
+    const byId = new Map<string, ProductionMediaVersion>();
+    for (const version of fromWorkspace) byId.set(version.id, version);
+    return [...byId.values()];
+  }, [episodeProduction, productionLibrary]);
+  const productionSelectedId = episodeDirectory === undefined ? undefined : productionSelectedIds[episodeDirectory];
+  const productionJobs = episodeDirectory === undefined ? [] : productionJobsByEpisode[episodeDirectory] ?? [];
+  const productionSelections = episodeDirectory === undefined ? {} : productionSelectionsByEpisode[episodeDirectory] ?? {};
+  const productionReferences = episodeDirectory === undefined ? {} : productionReferencesByEpisode[episodeDirectory] ?? {};
+  const productionSequence = episodeDirectory === undefined ? [] : productionSequenceByEpisode[episodeDirectory] ?? [];
+  const productionCanvas = episodeDirectory === undefined ? {} : productionCanvasByEpisode[episodeDirectory] ?? {};
+  const productionZoom = episodeDirectory === undefined ? .65 : productionZoomByEpisode[episodeDirectory] ?? .65;
+  const setProductionSelectedId = useCallback((selectedId: string | undefined) => {
+    if (episodeDirectory !== undefined) actions.setProductionSelectedIds((current) => ({ ...current, [episodeDirectory]: selectedId }));
+  }, [actions, episodeDirectory]);
+  const setProductionJobs = useCallback((jobs: ProductionJob[]) => {
+    if (episodeDirectory !== undefined) actions.setProductionJobs((current) => ({ ...current, [episodeDirectory]: jobs }));
+  }, [actions, episodeDirectory]);
+  const setProductionSelections = useCallback((selections: Record<string, string>) => {
+    if (episodeDirectory !== undefined) actions.setProductionSelections((current) => ({ ...current, [episodeDirectory]: selections }));
+  }, [actions, episodeDirectory]);
+  const setProductionReferences = useCallback((references: Record<string, string[]>) => {
+    if (episodeDirectory !== undefined) actions.setProductionReferences((current) => ({ ...current, [episodeDirectory]: references }));
+  }, [actions, episodeDirectory]);
+  const setProductionSequence = useCallback((sequence: ProductionSequenceItem[]) => {
+    if (episodeDirectory !== undefined) actions.setProductionSequence((current) => ({ ...current, [episodeDirectory]: sequence }));
+  }, [actions, episodeDirectory]);
+  const setProductionCanvas = useCallback((canvas: Record<string, CanvasPoint>) => {
+    if (episodeDirectory !== undefined) actions.setProductionCanvas((current) => ({ ...current, [episodeDirectory]: canvas }));
+  }, [actions, episodeDirectory]);
+  const setProductionZoom = useCallback((zoom: number) => {
+    if (episodeDirectory !== undefined) actions.setProductionZoom((current) => ({ ...current, [episodeDirectory]: zoom }));
+  }, [actions, episodeDirectory]);
   const editorMode = useStore((memory) => memory.editorMode);
   const setEditorMode = actions.setEditorMode;
   const modeSelection = useRef(selected);
@@ -605,6 +774,73 @@ function CreativeWorkbench({
     expandPath(path);
   }, [expandPath, rememberEditorPosition]);
 
+  useEffect(() => {
+    if (workspace === undefined) return;
+    const pending = productionIntents.filter(({ callId }) => productionIntentCalls[callId] !== true);
+    if (pending.length === 0) return;
+    for (const { intent } of pending) {
+      if (intent.action === "open_section" || intent.action === "focus_target") {
+        const documentPath = ["分镜.md", "图片提示词.md", "视觉设定.md", "剧本.md", "视频提示词.md"]
+          .map((name) => `${intent.episode}/${name}`)
+          .find((path) => workspace.files.some((file) => file.path === path));
+        if (documentPath !== undefined) {
+          setWorkbench("drama");
+          setSelected(documentPath);
+          expandPath(documentPath);
+          globalThis.setTimeout(() => { setEditorMode("production"); }, 0);
+        }
+      }
+      if (intent.action === "open_section") setProductionSection(intent.section ?? "shots");
+      else if (intent.action === "focus_target") {
+        actions.setProductionSelectedIds((current) => ({ ...current, [intent.episode]: intent.targetId }));
+        setProductionSection(intent.section ?? (intent.targetId?.startsWith("SHOT-") === true ? "shots" : "assets"));
+      } else if (intent.action === "set_sequence") {
+        actions.setProductionSequence((current) => ({
+          ...current,
+          [intent.episode]: (intent.shotIds ?? []).map((shotId) => ({ shotId }))
+        }));
+      } else if (intent.action === "track_job" && intent.jobId !== undefined && intent.targetId !== undefined && intent.jobKind !== undefined) {
+        const { jobId, targetId, jobKind } = intent;
+        actions.setProductionJobs((current) => {
+          const jobs = current[intent.episode] ?? [];
+          if (jobs.some((job) => job.id === jobId)) {
+            return {
+              ...current,
+              [intent.episode]: jobs.map((job) => job.id === jobId ? {
+                ...job,
+                targetId,
+                kind: jobKind,
+                status: "running",
+                progress: Math.max(10, job.progress),
+                prompt: intent.prompt ?? job.prompt,
+                expectedOutputs: intent.expectedOutputs ?? job.expectedOutputs,
+                error: undefined
+              } : job)
+            };
+          }
+          return {
+            ...current,
+            [intent.episode]: [...jobs, {
+              ...createPendingJob({
+                id: jobId,
+                targetId,
+                kind: jobKind,
+                prompt: intent.prompt ?? "",
+                expectedOutputs: intent.expectedOutputs
+              }),
+              status: "running",
+              progress: 10
+            }]
+          };
+        });
+      }
+    }
+    actions.setProductionIntentCalls((current) => ({
+      ...current,
+      ...Object.fromEntries(pending.map(({ callId }) => [callId, true]))
+    }));
+  }, [actions, expandPath, productionIntentCalls, productionIntents, setEditorMode, setProductionSection, setSelected, setWorkbench, workspace]);
+
   const followAgentPath = useCallback((path: string): void => {
     expandPath(path);
     const current = selected === undefined ? undefined : buffersRef.current[selected];
@@ -625,14 +861,14 @@ function CreativeWorkbench({
   }, [availableModes, workbench, workspace]);
 
   useEffect(() => {
-    if (activityPath !== undefined && activityPath === selected) setEditorMode("source");
-  }, [activityPath, selected]);
+    if (activityPath !== undefined && activityPath === selected && !selectedMedia) setEditorMode("source");
+  }, [activityPath, selected, selectedMedia]);
 
   useEffect(() => {
     if (modeSelection.current === selected) return;
     modeSelection.current = selected;
-    setEditorMode(activityPath === selected ? "source" : previewable ? "preview" : "source");
-  }, [activityPath, previewable, selected]);
+    setEditorMode(selected !== undefined && activityPaths.has(selected) ? "source" : selectedMedia || previewable ? "preview" : "source");
+  }, [activityPaths, previewable, selected, selectedMedia]);
 
   useEffect(() => {
     if (workspaceLoading) return;
@@ -667,7 +903,7 @@ function CreativeWorkbench({
   }, [activityPaths, workspace, workspaceLoading]);
 
   useEffect(() => {
-    if (selected === undefined || activityPaths.has(selected)) return;
+    if (selected === undefined || selectedMedia || activityPaths.has(selected)) return;
     if (!(workspace?.files.some((file) => file.path === selected) ?? false)) return;
     const controller = new AbortController();
     setBuffers((current) => {
@@ -712,7 +948,39 @@ function CreativeWorkbench({
         });
       });
     return () => { controller.abort(); };
-  }, [activityPaths, selected, sessionId, workspace?.files]);
+  }, [activityPaths, selected, selectedMedia, sessionId, workspace?.files]);
+
+  useEffect(() => {
+    if (!productionAvailable) return;
+    const missing = episodeDocumentPaths.filter((path) => buffersRef.current[path] === undefined && !activityPaths.has(path));
+    if (missing.length === 0) return;
+    const controller = new AbortController();
+    void Promise.all(missing.map((path) => fetch(endpoint("file", sessionId, path), { signal: controller.signal }).then((response) => json<FilePayload>(response))))
+      .then((files) => {
+        setBuffers((current) => {
+          const next = { ...current };
+          for (const file of files) {
+            const existing = next[file.path];
+            if (existing?.source === "human" && existing.content !== existing.saved) continue;
+            next[file.path] = { content: file.content, saved: file.content, source: "disk", version: file.version };
+          }
+          return next;
+        });
+      })
+      .catch((reason: unknown) => {
+        if (!controller.signal.aborted) {
+          setBuffers((current) => {
+            const next = { ...current };
+            for (const path of missing) {
+              const existing = next[path];
+              if (existing !== undefined) next[path] = { ...existing, error: reason instanceof Error ? reason.message : String(reason) };
+            }
+            return next;
+          });
+        }
+      });
+    return () => { controller.abort(); };
+  }, [activityPaths, episodeDocumentPaths, productionAvailable, sessionId]);
 
   useEffect(() => {
     if (normalizedActivities.length === 0) return;
@@ -917,7 +1185,7 @@ function CreativeWorkbench({
   const groups = useMemo(() => {
     const value = new Map<string, WorkspaceFile[]>();
     const all = [...(workspace?.files ?? [])].filter((file) => workbenchModeForPath(file.path) === workbench);
-    if (activityPath !== undefined && !all.some((file) => file.path === activityPath)) all.push({ path: activityPath, bytes: 0, version: "" });
+    if (activityPath !== undefined && !all.some((file) => file.path === activityPath)) all.push({ path: activityPath, bytes: 0, version: "", kind: "text" });
     all.sort((left, right) => left.path.localeCompare(right.path, "zh-Hans-CN"));
     for (const file of all) {
       const directory = groupForPath(file.path);
@@ -948,6 +1216,15 @@ function CreativeWorkbench({
   const selectEditorMode = (next: WorkbenchMemory["editorMode"]): void => {
     if (next === "preview") rememberEditorPosition();
     setEditorMode(next);
+  };
+  const navigateProductionTarget = (target: DramaDocumentTarget): void => {
+    const content = buffersRef.current[target.path]?.content ?? "";
+    const before = content.slice(0, target.offset);
+    const approximateScrollTop = Math.max(0, before.split(/\r?\n/u).length * 28 - 96);
+    editorPositions.current.set(target.path, { scrollTop: approximateScrollTop, selectionStart: target.offset, selectionEnd: target.offset });
+    modeSelection.current = target.path;
+    revealPath(target.path);
+    setEditorMode("source");
   };
   const selectedLabel = selected ?? `在当前 DSH workspace 中选择${workbench === "story" ? "小说" : workbench === "drama" ? "短剧" : "游戏"}文件`;
   const selectedBasename = selected?.split("/").at(-1) ?? selectedLabel;
@@ -1044,16 +1321,16 @@ function CreativeWorkbench({
       <header>
         <span className="oh-story-editor-path" title={selected}><span>{selectedLabel}</span><strong>{selectedBasename}</strong></span>
         <div className="oh-story-editor-actions">
-          {previewable && <div className="oh-story-editor-tabs" role="tablist" aria-label={markdown ? "Markdown 查看方式" : "JSONL 查看方式"}>
-            {EDITOR_MODES.map((mode) => <button
+          {(previewable || productionAvailable) && !selectedMedia && <div className="oh-story-editor-tabs" role="tablist" aria-label={productionAvailable ? "短剧文档查看方式" : markdown ? "Markdown 查看方式" : "JSONL 查看方式"}>
+            {editorModes.map((mode) => <button
               type="button"
               role="tab"
               key={mode}
               tabIndex={editorMode === mode ? 0 : -1}
               aria-selected={editorMode === mode}
-              onKeyDown={(event) => { handleTabKey(event, EDITOR_MODES, editorMode, selectEditorMode); }}
+              onKeyDown={(event) => { handleTabKey(event, editorModes, editorMode, selectEditorMode); }}
               onClick={() => { selectEditorMode(mode); }}
-            >{mode === "preview" ? "预览" : "源码"}</button>)}
+            >{mode === "preview" ? "预览" : mode === "source" ? "源码" : "生产"}</button>)}
           </div>}
           {(dirty || saving) && selected !== undefined && <button className="oh-story-save" type="button" disabled={saving || buffer?.missing === true} onClick={() => { void savePath(selected); }}>
             {saving ? "保存中…" : "保存"}
@@ -1073,6 +1350,12 @@ function CreativeWorkbench({
         ? <div className="oh-story-empty">{workbench === "story"
             ? <>当前 workspace 还没有小说文件。可在右侧 Chat 中运行 <code>/story-setup</code>。</>
             : <>当前 workspace 还没有短剧项目。可在右侧 Chat 中运行 <code>/short-drama</code>。</>}</div>
+        : selectedMedia && selectedFile !== undefined
+          ? <div className="oh-story-media-document">{selectedFile.mimeType?.startsWith("image/") === true
+              ? <img src={endpoint("media", sessionId, selectedFile.path)} alt={selectedFile.path} />
+              : selectedFile.mimeType?.startsWith("audio/") === true
+                ? <audio src={endpoint("media", sessionId, selectedFile.path)} controls />
+                : <video src={endpoint("media", sessionId, selectedFile.path)} controls preload="metadata" />}</div>
         : buffer === undefined
           ? <div className="oh-story-empty">正在加载 {selected}…</div>
         : buffer.missing === true
@@ -1084,6 +1367,36 @@ function CreativeWorkbench({
             });
             setSelected(workspace === undefined ? undefined : preferredWorkbenchFile(workspace.files, workbench));
           }}>放弃本地草稿</button></div>
+        : editorMode === "production" && productionAvailable && episodeProduction !== undefined
+          ? <DramaProductionView
+              production={episodeProduction}
+              sessionRunning={sessionRunning}
+              queue={productionQueue}
+              section={productionSection}
+              selectedId={productionSelectedId}
+              jobs={productionJobs}
+              versions={productionVersions}
+              libraryVersions={productionLibrary}
+              selections={productionSelections}
+              manualReferences={productionReferences}
+              sequence={productionSequence}
+              canvas={productionCanvas}
+              zoom={productionZoom}
+              onSectionChange={setProductionSection}
+              onSelect={setProductionSelectedId}
+              onNavigate={navigateProductionTarget}
+              onJobsChange={setProductionJobs}
+              onSelectionsChange={setProductionSelections}
+              onManualReferencesChange={setProductionReferences}
+              onOpenMedia={(path) => { revealPath(path); }}
+              onSequenceChange={setProductionSequence}
+              onCanvasChange={setProductionCanvas}
+              onZoomChange={setProductionZoom}
+              onDispatchPrompt={sendProductionPrompt}
+              onCancelTurn={cancelProduction}
+              onRemoveQueued={removeQueuedProduction}
+              onRefresh={reload}
+            />
         : previewable && editorMode === "preview"
           ? markdown
             ? <MarkdownPreview content={buffer.content} label={selected} />
@@ -1117,10 +1430,16 @@ function CreativeWorkbench({
   </div>;
 }
 
-type WorkbenchSlotProps = PropsRuntime<"oh-story.workspace"> & PropsStore<ReturnType<typeof createWorkbenchStore>>;
+interface ProductionConversationFace {
+  readonly sendProductionPrompt: (prompt: string) => Promise<void>;
+  readonly cancelProduction: () => Promise<void>;
+  readonly removeQueuedProduction: (itemId: string) => Promise<void>;
+}
+
+type WorkbenchSlotProps = PropsRuntime<"oh-story.workspace"> & PropsStore<ReturnType<typeof createWorkbenchStore>> & ProductionConversationFace;
 
 /** Mount beside the official conversation without replacing Chat or Composer. */
-function CreativeSplitBridge({ sessionId, useSession, useStore, actions }: WorkbenchSlotProps) {
+function CreativeSplitBridge({ sessionId, useSession, useStore, actions, sendProductionPrompt, cancelProduction, removeQueuedProduction }: WorkbenchSlotProps) {
   const marker = useRef<HTMLSpanElement>(null);
   const [target, setTarget] = useState<HTMLElement>();
   const runningCalls = useSession((snapshot) => snapshot.runningCalls);
@@ -1128,6 +1447,10 @@ function CreativeSplitBridge({ sessionId, useSession, useStore, actions }: Workb
   const settledMutation = useSession((snapshot) => latestSettledMutation(snapshot.chat));
   const workbench = useStore((memory) => memory.workbench);
   const gamePane = useStore((memory) => memory.gamePane);
+  const sessionRunning = useSession((snapshot) => snapshot.running);
+  const productionQueue = useSession((snapshot) => snapshot.queue.map((item) => ({ id: item.id, preview: item.preview })));
+  const chat = useSession((snapshot) => snapshot.chat);
+  const productionIntents = useMemo(() => settledProductionIntents(chat), [chat]);
   useLayoutEffect(() => {
     const document = marker.current?.ownerDocument;
     if (document === undefined) return;
@@ -1170,6 +1493,12 @@ function CreativeSplitBridge({ sessionId, useSession, useStore, actions }: Workb
       runningCalls={runningCalls}
       partial={partial}
       settledMutation={settledMutation}
+      sessionRunning={sessionRunning}
+      productionQueue={productionQueue}
+      productionIntents={productionIntents}
+      sendProductionPrompt={sendProductionPrompt}
+      cancelProduction={cancelProduction}
+      removeQueuedProduction={removeQueuedProduction}
       useStore={useStore}
       actions={actions}
     />, target)}
@@ -1208,6 +1537,19 @@ function RoleToolView({ block, inspect }: ToolCallViewProps) {
   </details>;
 }
 
+function ProductionToolView({ block, inspect }: ToolCallViewProps) {
+  const args = argsOf(block);
+  const action = typeof args.action === "string" ? args.action : "production";
+  const episode = typeof args.episode === "string" ? args.episode : "短剧";
+  const state = !("kind" in block) ? "running" : block.isError ? "error" : "done";
+  return <details className="oh-story-role" data-state={state}>
+    <style>{styles}</style>
+    <summary><span>▦ 生产</span><strong>{episode} · {action}</strong><em>{state === "running" ? "执行中" : state === "error" ? "失败" : "已应用"}</em></summary>
+    {resultOf(block) !== undefined && <pre>{resultOf(block)}</pre>}
+    {inspect !== undefined && <button type="button" onClick={inspect}>在轨迹中检查</button>}
+  </details>;
+}
+
 /** Register only official DSH surfaces; the split bridge never replaces Chat. */
 export function apply(context: ClientContext): void {
   context.slots.inject("shell.overlay", () => {
@@ -1219,7 +1561,23 @@ export function apply(context: ClientContext): void {
     }, WorkbenchSeat);
     const disposeWorkbench = context.slots.register({
       name: "oh-story.workspace",
-      store: createWorkbenchStore
+      store: createWorkbenchStore,
+      inject: (sessionId) => {
+        const binding = (context.sessions as unknown as ISessions).binding(sessionId);
+        const conversation = binding?.ctx.get("conversation");
+        if (binding === undefined || conversation === undefined) {
+          return {
+            sendProductionPrompt: () => Promise.reject(new Error("DSH 会话当前不可用。")),
+            cancelProduction: () => Promise.reject(new Error("DSH 会话当前不可用。")),
+            removeQueuedProduction: () => Promise.reject(new Error("DSH 会话当前不可用。"))
+          };
+        }
+        return {
+          sendProductionPrompt: (prompt: string) => conversation.send(prompt),
+          cancelProduction: () => conversation.cancel(),
+          removeQueuedProduction: (itemId: string) => conversation.updateQueue(itemId as Parameters<IConversation["updateQueue"]>[0], { kind: "remove" })
+        };
+      }
     }, CreativeSplitBridge);
     return [disposeSeat, disposeWorkbench];
   });
@@ -1227,6 +1585,10 @@ export function apply(context: ClientContext): void {
     name: "tool.call.toolview",
     key: "oh_story_role"
   }, RoleToolView));
+  context.slots.inject("tool.call.toolview", () => context.slots.register({
+    name: "tool.call.toolview",
+    key: OH_STORY_PRODUCTION_TOOL_NAME
+  }, ProductionToolView));
 }
 
 export default { name, inject, apply };

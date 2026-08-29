@@ -23,16 +23,19 @@ describe("Oh Story bundled skill provider", () => {
     expect(skill?.content).toContain("# story-long-write");
     expect(skill?.content).toContain("oh_story_role");
     expect(skill?.content).toContain("DSH owns the workspace, model, preset, permissions, Session Log");
+    for (const platformPath of [".claude/agents", ".codex/agents", ".opencode/agents", ".agents/agents", "invoke_subagent"]) {
+      expect(skill?.content).toContain(platformPath);
+    }
     expect(skill?.content).toContain("Keep the upstream writing, Tracking, lint, outline, revision, and quality workflows");
     const workflowSetup = await readFile(resolve(skillRoot, "story-long-write/references/workflow-setup.md"), "utf8");
-    expect(workflowSetup).toContain("目标字数合计：下限X字（章目标Y，范围Y-Z）");
+    expect(workflowSetup).toContain("| # | 情节点（谁做了什么） | 功能标签 | 执行边界 |");
     expect(skill?.content.startsWith("---")).toBe(false);
     const setupCandidate = candidates.find((candidate) => candidate.name === "story-setup");
     const setup = await provider.get(setupCandidate!, {});
-    expect(setup?.content).toContain("never deploy Claude/OpenCode/Codex/ZCode/OpenClaw/Reasonix files");
+    expect(setup?.content).toContain("never deploy Claude/OpenCode/Codex/Antigravity/ZCode/OpenClaw/Reasonix files");
     expect(setup?.content).not.toContain("merge-codex-hooks.py");
     expect(setup?.resourceBase).toEqual({ kind: "directory", path: resolve(skillRoot, "story-setup") });
-    for (const reference of ["character-basics.md", "quality-checklist.md", "writing-craft.md", "outline-methods.md"]) {
+    for (const reference of ["character-basics.md", "long-quality.md", "short-quality.md", "writing-craft.md", "outline-methods.md"]) {
       await expect(readFile(resolve(skillRoot, "story-setup/references/agent-references", reference), "utf8"))
         .resolves.toMatch(/\S/u);
     }
@@ -42,6 +45,9 @@ describe("Oh Story bundled skill provider", () => {
     const routeCandidate = candidates.find((candidate) => candidate.name === "story");
     const route = await provider.get(routeCandidate!, {});
     expect(route?.content).toContain("The 小说 workspace is an official DSH conversation view");
+    expect(routeCandidate?.description).toContain("记住我的写作习惯");
+    expect(route?.content).toContain("scripts/author_memory_commit.py");
+    await expect(readFile(resolve(skillRoot, "story/scripts/author_memory_commit.py"), "utf8")).resolves.toMatch(/\S/u);
     expect(route?.content).not.toContain("dashboard-server.mjs");
     const browserCandidate = candidates.find((candidate) => candidate.name === "browser-cdp");
     const browser = await provider.get(browserCandidate!, {});
