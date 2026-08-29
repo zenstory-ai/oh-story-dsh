@@ -802,7 +802,14 @@ async function main(): Promise<void> {
         }
         const agentTreeFile = page.locator(`button[data-file-path=${JSON.stringify(agentMutationPath)}]`);
         await agentTreeFile.waitFor({ state: "visible", timeout: 10_000 });
-        if (await agentTreeFile.getAttribute("aria-current") !== "page") throw new Error("Agent write did not automatically select its file in the tree.");
+        // The tree button becomes visible one render before follow-the-agent sets aria-current, so read
+        // the attribute through an auto-retrying locator instead of a single racy getAttribute().
+        try {
+          await page.locator(`button[data-file-path=${JSON.stringify(agentMutationPath)}][aria-current="page"]`)
+            .waitFor({ state: "visible", timeout: 10_000 });
+        } catch {
+          throw new Error("Agent write did not automatically select its file in the tree.");
+        }
         await selectFile(page, chapterPath);
         const agentFolder = page.locator(".oh-story-file-folder > summary").filter({ hasText: /^角色\d+$/u }).first();
         await agentFolder.click();
