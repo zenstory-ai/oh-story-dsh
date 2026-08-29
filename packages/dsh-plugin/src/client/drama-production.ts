@@ -67,6 +67,7 @@ export interface DramaVisualAsset {
   readonly offset: number;
   readonly description: string;
   readonly stableId: boolean;
+  readonly declaredId?: string | undefined;
 }
 
 export interface DramaEpisodeProduction {
@@ -168,7 +169,7 @@ export function parseStoryboard(path: string, content: string): DramaShot[] {
       shotSpec: firstField(fields, "景别/机位", "景别", "镜头规格"),
       start: firstField(fields, "起点", "起始"),
       end: firstField(fields, "终点", "结束"),
-      references: splitReferences(firstField(fields, "参考", "关联资产")),
+      references: splitReferences(firstField(fields, "图片提示词项", "参考", "关联资产")),
       keyframePrompt: quoteUnderHeading(section.body, "冻结关键帧提示词")
     }];
   });
@@ -224,7 +225,7 @@ export function parseVisualAssets(path: string, content: string): DramaVisualAss
     const declaredId = firstField(fields, "ID", "资产 ID", "资产ID")?.trim().toLocaleUpperCase();
     const stableId = declaredId !== undefined && /^VISUAL-[A-Z0-9-]+$/u.test(declaredId);
     const id = stableId ? declaredId : `VISUAL-${slug(`${match[1]}-${title}`)}`;
-    return [{ id, title, kind: inferAssetKind(`${match[1]} ${title}`), path, offset: section.offset, description: section.body.trim(), stableId }];
+    return [{ id, title, kind: inferAssetKind(`${match[1]} ${title}`), path, offset: section.offset, description: section.body.trim(), stableId, declaredId }];
   });
 }
 
@@ -250,7 +251,9 @@ function validateProductionProtocol(input: {
 
   for (const visual of input.visualAssets) {
     if (visual.stableId) continue;
-    add({ severity: "warning", code: "generated_visual_id", path: visual.path, offset: visual.offset, targetId: visual.id, message: `${visual.title} 缺少稳定的 “- ID：VISUAL-*”；修改标题会改变画布节点身份。` });
+    add(visual.declaredId === undefined
+      ? { severity: "warning", code: "generated_visual_id", path: visual.path, offset: visual.offset, targetId: visual.id, message: `${visual.title} 缺少稳定的 “- ID：VISUAL-*”；修改标题会改变画布节点身份。` }
+      : { severity: "warning", code: "invalid_visual_id", path: visual.path, offset: visual.offset, targetId: visual.id, message: `${visual.title} 的 “- ID：${visual.declaredId}” 不是可用形式，已回退到标题派生 ID；请写成 VISUAL- 加大写字母、数字或连字符。` });
   }
 
   const knownReferences = new Set([...input.assets, ...input.visualAssets, ...input.shots, ...input.motions].map((item) => item.id));
@@ -279,13 +282,14 @@ function validateProductionProtocol(input: {
     for (const motion of motions) add({ severity: "error", code: "multiple_motions", path: motion.path, offset: motion.offset, targetId: motion.id, message: `${shotId} 同时绑定了多个 MOTION，画布只能确定一个。` });
   }
 
-  for (const [path, prefix, accepted] of [
-    [`${input.episodeDirectory}/分镜.md`, "SHOT", /^SHOT-[A-Z0-9-]+(?:\s|$)/iu],
-    [`${input.episodeDirectory}/图片提示词.md`, "IMG", /^IMG-[A-Z0-9-]+(?:\s|$)/iu],
-    [`${input.episodeDirectory}/视频提示词.md`, "MOTION", /^MOTION-[A-Z0-9-]+(?:\s|$)/iu]
+  const parsedOffsets = new Set([...input.shots, ...input.assets, ...input.motions].map((item) => `${item.path}:${String(item.offset)}`));
+  for (const [path, prefix] of [
+    [`${input.episodeDirectory}/分镜.md`, "SHOT"],
+    [`${input.episodeDirectory}/图片提示词.md`, "IMG"],
+    [`${input.episodeDirectory}/视频提示词.md`, "MOTION"]
   ] as const) {
     for (const section of levelTwoSections(input.documents[path] ?? "")) {
-      if (section.heading.toLocaleUpperCase().startsWith(prefix) && !accepted.test(section.heading.trim())) {
+      if (section.heading.toLocaleUpperCase().startsWith(prefix) && !parsedOffsets.has(`${path}:${String(section.offset)}`)) {
         add({ severity: "error", code: "malformed_heading", path, offset: section.offset, message: `无法解析标题 “${section.heading.trim()}”，需要稳定的 ${prefix}-* ID。` });
       }
     }

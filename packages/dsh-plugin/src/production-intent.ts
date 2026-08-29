@@ -54,11 +54,14 @@ export function validateProductionIntent(args: ProductionIntentArgs): Production
     }
     return { action: args.action, episode, shotIds };
   }
-  const expectedOutputs = args.expectedOutputs ?? 1;
-  if (!Number.isInteger(expectedOutputs) || expectedOutputs < 1 || expectedOutputs > 500) {
+  // Leave expectedOutputs/prompt undefined when the caller omits them: track_job re-registers a job the
+  // workbench already created, and defaulting here would silently reset a batch's count to 1.
+  const expectedOutputs = args.expectedOutputs;
+  if (expectedOutputs !== undefined && (!Number.isInteger(expectedOutputs) || expectedOutputs < 1 || expectedOutputs > 500)) {
     throw new Error("oh_story_production expectedOutputs must be an integer between 1 and 500.");
   }
   if (args.jobKind === undefined) throw new Error("oh_story_production jobKind is required for track_job.");
+  const prompt = args.prompt?.trim();
   return {
     action: args.action,
     episode,
@@ -66,6 +69,6 @@ export function validateProductionIntent(args: ProductionIntentArgs): Production
     targetId: requiredText(args.targetId, "targetId"),
     jobKind: args.jobKind,
     expectedOutputs,
-    prompt: args.prompt?.trim() ?? ""
+    prompt: prompt === "" ? undefined : prompt
   };
 }

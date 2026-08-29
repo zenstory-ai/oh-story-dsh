@@ -10,7 +10,6 @@ import { chromium, type Locator, type Page } from "@playwright/test";
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const dshVersion = "0.1.1-rc.1";
 const demoFramesDirectory = process.env.OH_STORY_DEMO_FRAMES_DIR;
-const productionFramesDirectory = process.env.OH_STORY_PRODUCTION_FRAMES_DIR;
 const useRealDeepSeek = process.env.OH_STORY_DEMO_USE_REAL_DEEPSEEK === "1";
 const browserChannel = process.env.DSH_SMOKE_BROWSER_CHANNEL ?? (process.platform === "win32" ? "msedge" : "chrome");
 const storyProjectName = "让你管账号，你高燃混剪炸全网";
@@ -49,18 +48,6 @@ async function captureDemoFrame(page: Page, workbench: "story" | "drama", index:
     path: join(demoFramesDirectory, `${workbench}-${String(index).padStart(2, "0")}.png`),
     animations: "disabled"
   });
-}
-
-async function captureProductionFrame(page: Page, filename: string): Promise<void> {
-  if (productionFramesDirectory === undefined) return;
-  await mkdir(productionFramesDirectory, { recursive: true });
-  const collapse = page.getByRole("button", { name: /^(?:Collapse sidebar|收起侧边栏)$/u }).first();
-  if (await collapse.isVisible()) {
-    await collapse.click();
-    await page.waitForTimeout(250);
-  }
-  await page.waitForTimeout(180);
-  await page.screenshot({ path: join(productionFramesDirectory, filename), animations: "disabled" });
 }
 
 async function prepareDemoSurface(page: Page): Promise<void> {
@@ -1088,7 +1075,6 @@ async function main(): Promise<void> {
         || videoMetadata.width < 500 || videoMetadata.height < 900 || videoMetadata.duration < 4) {
         throw new Error(`Production mock media was not realistic: ${JSON.stringify({ keyframeMetadata, videoMetadata })}`);
       }
-      await captureProductionFrame(page, "01-shot-board.png");
       const firstShotVersions = page.locator(".oh-story-shot-card").first().locator(".oh-story-version-strip").getByRole("button");
       if (await firstShotVersions.count() !== 2) throw new Error("Production image versions were not grouped under their shot.");
       await firstShotVersions.first().click();
@@ -1105,7 +1091,6 @@ async function main(): Promise<void> {
       await page.waitForTimeout(100);
       if (await reusableReference.getAttribute("aria-pressed") !== "true") throw new Error("Project media could not be attached as an explicit shot reference.");
       await page.locator(".oh-story-media-library").scrollIntoViewIfNeeded();
-      await captureProductionFrame(page, "02-asset-board.png");
       await productionTabs.getByRole("tab", { name: "成片", exact: true }).click();
       if (await page.locator(".oh-story-sequence > ol > li").count() !== 8
         || await page.locator(".oh-story-sequence-summary").getByText("7 个阻塞项", { exact: true }).count() !== 1
@@ -1118,7 +1103,6 @@ async function main(): Promise<void> {
         throw new Error("Production sequence did not apply an explicit shot reorder.");
       }
       await page.getByRole("button", { name: "上移 SHOT-EP001-001", exact: true }).click();
-      await captureProductionFrame(page, "03-sequence-check.png");
       await productionTabs.getByRole("tab", { name: "画布", exact: true }).click();
       if (await page.locator(".oh-story-canvas article").count() < 12 || await page.locator(".oh-story-canvas path").count() < 8) {
         throw new Error("Production canvas omitted creator-document relationships.");
@@ -1131,7 +1115,6 @@ async function main(): Promise<void> {
       if (leftAfterKeyboardMove !== leftBeforeKeyboardMove + 10) {
         throw new Error("Production canvas did not expose keyboard-operable Session layout controls.");
       }
-      await captureProductionFrame(page, "04-relation-canvas.png");
       await productionTabs.getByRole("tab", { name: "镜头", exact: true }).click();
       await page.locator(".oh-story-shot-card").first().getByRole("button", { name: "IMG-JIANGCHEN-SHEET", exact: true }).click();
       await page.getByRole("textbox", { name: "剧集/EP001/图片提示词.md" }).waitFor({ state: "visible", timeout: 10_000 });
@@ -1160,7 +1143,6 @@ async function main(): Promise<void> {
         const removedQueuedTask = taskFor("SHOT-EP001-003");
         const removeQueuedButton = removedQueuedTask.getByRole("button", { name: "从 DSH Queue 移除", exact: true });
         await removeQueuedButton.waitFor({ state: "visible", timeout: 10_000 });
-        await captureProductionFrame(page, "05-task-queue.png");
         await removeQueuedButton.click();
         await removedQueuedTask.getByText("已取消", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
         await runningQueueRemovalTask.getByText("等待确认", { exact: true })

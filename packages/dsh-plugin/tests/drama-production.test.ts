@@ -19,7 +19,7 @@ const storyboard = `# EP001 分镜
 - 景别/机位：中近景，轻微低机位。
 - 起点：右手悬在门把上方。
 - 终点：手收回。
-- 参考：IMG-JIANGCHEN-SHEET；IMG-OLD-DOOR。
+- 图片提示词项：IMG-JIANGCHEN-SHEET《江辰角色板》；IMG-OLD-DOOR《旧门场景板》。
 
 ### 冻结关键帧提示词
 > 江辰站在旧门外，右手悬停。
@@ -131,5 +131,40 @@ describe("short-drama production projection", () => {
       "unknown_source"
     ]));
     expect(production.diagnostics.every((item) => item.line > 0)).toBe(true);
+  });
+});
+
+describe("storyboard contract regressions", () => {
+  it("reads shot references from the contract field 图片提示词项", () => {
+    const shots = parseStoryboard(`${episode}/分镜.md`, storyboard);
+    expect(shots[0]?.references).toEqual(["IMG-JIANGCHEN-SHEET", "IMG-OLD-DOOR"]);
+    expect(productionCompleteness(shots[0]!).references).toBe(true);
+  });
+
+  it("still accepts the legacy 参考 spelling", () => {
+    const shots = parseStoryboard(`${episode}/分镜.md`, "## SHOT-A-001 · x\n- 参考：IMG-ONE。\n");
+    expect(shots[0]?.references).toEqual(["IMG-ONE"]);
+  });
+
+  it("does not raise malformed_heading for a separator the parser accepts", () => {
+    const production = parseEpisodeProduction({
+      [`${episode}/分镜.md`]: "## SHOT-EP001-001·门外停步\n- 时长：4s\n"
+    }, episode);
+    expect(production.shots.map((shot) => shot.id)).toEqual(["SHOT-EP001-001"]);
+    expect(production.diagnostics.filter((item) => item.code === "malformed_heading")).toEqual([]);
+  });
+
+  it("still reports a heading that carries the prefix but no parsable ID", () => {
+    const production = parseEpisodeProduction({ [`${episode}/分镜.md`]: "## SHOT 待补编号\n" }, episode);
+    expect(production.diagnostics.map((item) => item.code)).toContain("malformed_heading");
+  });
+
+  it("says a declared VISUAL id was rejected instead of claiming it is missing", () => {
+    const production = parseEpisodeProduction({
+      [`${episode}/视觉设定.md`]: "## 人物 · 江辰\n- ID：VISUAL_CHAR_JIANGCHEN\n- 识别锚点：左眉尾旧疤。\n"
+    }, episode);
+    const diagnostic = production.diagnostics.find((item) => item.code === "invalid_visual_id");
+    expect(diagnostic?.message).toContain("VISUAL_CHAR_JIANGCHEN");
+    expect(production.diagnostics.map((item) => item.code)).not.toContain("generated_visual_id");
   });
 });

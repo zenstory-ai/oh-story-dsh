@@ -47,7 +47,8 @@ describe("production runtime", () => {
     expect(sequence[0]?.versionId).toBe("video-v1");
     expect(sequence.map((item) => item.shotId)).toEqual(["SHOT-EP001-001", "SHOT-EP001-002"]);
     expect(sequenceIssues(sequence, versions)).toEqual(["SHOT-EP001-002 缺少已选视频版本"]);
-    expect(reorderSequence(sequence, "SHOT-EP001-002", "SHOT-EP001-001").map((item) => item.shotId)).toEqual(["SHOT-EP001-002", "SHOT-EP001-001"]);
+    expect(reorderSequence(sequence, 1, 0).map((item) => item.shotId)).toEqual(["SHOT-EP001-002", "SHOT-EP001-001"]);
+    expect(reorderSequence(sequence, 0, 9).map((item) => item.shotId)).toEqual(["SHOT-EP001-001", "SHOT-EP001-002"]);
   });
 
   it("does not turn an ended paid dispatch into an automatically retryable failure", () => {
@@ -74,3 +75,27 @@ describe("production runtime", () => {
     expect(activeProductionJobId([prepared], [], true)).toBe("prepare-1");
   });
 });
+
+describe("paid-job reconciliation regressions", () => {
+  it("does not mark a job queued because another job's prompt quotes its id", () => {
+    const queue = [{ id: "q1", preview: "合成成片 任务 ID：compose-9 顺序：剧集/EP001/制作成果/paid-1-001.mp4" }];
+    expect(queuedItemForJob("paid-1", queue)).toBeUndefined();
+    expect(queuedItemForJob("compose-9", queue)?.id).toBe("q1");
+  });
+
+  it("clears the end-of-turn billing warning once outputs start landing", () => {
+    const stale = {
+      ...createPendingJob({ id: "paid-2", targetId: "SHOT-001", kind: "video", prompt: "p", expectedOutputs: 2 }),
+      status: "dispatched_unknown" as const,
+      error: "DSH Turn 已结束，尚未发现关联成果。"
+    };
+    const versions: ProductionMediaVersion[] = [{
+      id: "v1", targetId: "SHOT-001", kind: "video", url: "/oh-story/media", path: "剧集/EP001/制作成果/paid-2-001.mp4"
+    }];
+    const next = reconcileProductionJobs([stale], [], true, versions)[0]!;
+    expect(next.status).toBe("running");
+    expect(next.completedOutputs).toBe(1);
+    expect(next.error).toBeUndefined();
+  });
+});
+

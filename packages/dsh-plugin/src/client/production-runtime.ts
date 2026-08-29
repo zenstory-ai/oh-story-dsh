@@ -109,7 +109,12 @@ export function referencesForTarget(
 }
 
 export function queuedItemForJob(jobId: string, queue: readonly ProductionQueueEntry[]): ProductionQueueEntry | undefined {
-  return queue.find((item) => item.preview.includes(jobId));
+  if (jobId.trim() === "") return undefined;
+  const escaped = jobId.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+  // The prompts label the id as 「任务 ID：<id>」 / 「批次任务 ID：<id>」. Anchor on that label so an
+  // id merely quoted inside another job's output paths cannot mark this job as queued.
+  const labelled = new RegExp(`任务\\s*ID\\s*[：:]\\s*${escaped}(?:[\\s.,;、。]|$)`, "u");
+  return queue.find((item) => labelled.test(item.preview));
 }
 
 export function activeProductionJobId(
@@ -152,7 +157,7 @@ export function reconcileProductionJobs(
     if (job.status === "canceled" || job.status === "succeeded" || (job.status === "awaiting_confirmation" && outputs.length === 0)) return job;
     if (job.status === "running" && queued) return { ...job, status: "pending", progress: 0 };
     if (job.status === "pending" && sessionRunning && !queued && job === latestPending) {
-      return { ...job, status: "running", progress: Math.max(10, job.progress) };
+      return { ...job, status: "running", progress: Math.max(10, job.progress), error: undefined };
     }
     if (!sessionRunning && !queued && (job.status === "running" || job.status === "dispatched_unknown")) {
       return {
@@ -170,7 +175,8 @@ export function reconcileProductionJobs(
         ...job,
         status: job.status === "failed" ? "failed" : "running",
         progress: Math.max(10, Math.round(outputs.length / job.expectedOutputs * 100)),
-        completedOutputs: outputs.length
+        completedOutputs: outputs.length,
+        error: job.status === "failed" ? job.error : undefined
       };
     }
     return job;
@@ -204,10 +210,9 @@ export function sequenceIssues(sequence: readonly ProductionSequenceItem[], vers
   return issues;
 }
 
-export function reorderSequence(sequence: readonly ProductionSequenceItem[], sourceShotId: string, targetShotId: string): ProductionSequenceItem[] {
-  const source = sequence.findIndex((item) => item.shotId === sourceShotId);
-  const target = sequence.findIndex((item) => item.shotId === targetShotId);
-  if (source < 0 || target < 0 || source === target) return [...sequence];
+export function reorderSequence(sequence: readonly ProductionSequenceItem[], source: number, target: number): ProductionSequenceItem[] {
+  if (!Number.isInteger(source) || !Number.isInteger(target)) return [...sequence];
+  if (source < 0 || target < 0 || source >= sequence.length || target >= sequence.length || source === target) return [...sequence];
   const next = [...sequence];
   const [item] = next.splice(source, 1);
   if (item !== undefined) next.splice(target, 0, item);
