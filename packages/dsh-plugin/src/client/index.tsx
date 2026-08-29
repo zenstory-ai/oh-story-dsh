@@ -1079,8 +1079,13 @@ function CreativeWorkbench({
 
   useEffect(() => {
     if (settledMutation === undefined || settledMutation === previousSettledMutation.current) return;
+    // The signal carries an absolute path, so creativeRelativePath cannot resolve it until the
+    // workspace (and its cwd) has loaded. Consuming the signal first would burn it: the effect
+    // re-runs when cwd arrives, but the guard above then short-circuits and the agent's file is
+    // never selected. Wait for cwd instead of dropping the follow.
+    if (workspace?.cwd === undefined) return;
     previousSettledMutation.current = settledMutation;
-    const path = creativeRelativePath(settledMutation.slice(settledMutation.indexOf("\0") + 1), workspace?.cwd);
+    const path = creativeRelativePath(settledMutation.slice(settledMutation.indexOf("\0") + 1), workspace.cwd);
     if (path !== undefined) followAgentPath(path);
     reload();
   }, [followAgentPath, reload, settledMutation, workspace?.cwd]);

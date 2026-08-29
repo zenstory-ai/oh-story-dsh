@@ -206,3 +206,13 @@ describe("official DSH file activity", () => {
     ], "drama")).toBe("剧集/EP001/screenplay.md");
   });
 });
+
+describe("agent path resolution before the workspace loads", () => {
+  it("cannot resolve an absolute mutation path without a cwd", () => {
+    // Why the settled-mutation effect waits for workspace.cwd instead of consuming the signal:
+    // the mutation carries an absolute path, so resolving it early yields undefined and the
+    // follow-the-agent selection would be dropped permanently.
+    expect(creativeRelativePath("/home/runner/work/story/设定/角色/a.md", undefined)).toBeUndefined();
+    expect(creativeRelativePath("/home/runner/work/story/设定/角色/a.md", "/home/runner/work/story")).toBe("设定/角色/a.md");
+  });
+});
