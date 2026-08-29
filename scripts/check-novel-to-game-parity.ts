@@ -39,12 +39,21 @@ for (const required of [
   "skills/novel-to-game/references/pipeline-contract.md",
   "skills/game-build/references/playable-model-contract.md",
   "skills/game-qa/references/qa-contract.md",
-  "examples/jin-ping-mei/PRODUCT_BRIEF.md",
+  "examples/jin-ping-mei/example.json",
   "examples/jin-ping-mei/build/app/index.html",
-  "examples/jin-ping-mei/qa/verification.json",
-  "examples/jin-ping-mei/source/金瓶梅.txt"
+  "examples/jin-ping-mei/qa/verification.json"
 ]) {
   if (!manifest.files.some((entry) => entry.path === required)) throw new Error(`Bundled NovelToGame asset is missing ${required}.`);
+}
+// The Game Studio serves build/app/** and reads example.json plus qa/verification.json. Upstream
+// authoring material is deliberately not shipped to plugin users; keep it out of the tarball.
+const authoringOnly = manifest.files.filter(({ path }) => /^examples\/[^/]+\/(?:source|analysis|concepts|design|screenshots|qa\/evidence)\//u.test(path)
+  || /^examples\/[^/]+\/(?:_progress\.md|PRODUCT_BRIEF\.md)$/u.test(path));
+if (authoringOnly.length > 0) {
+  throw new Error(`Bundled NovelToGame example retained upstream authoring material: ${authoringOnly.map(({ path }) => path).join(", ")}`);
+}
+if (manifest.files.some(({ path }) => path.includes("/__pycache__/") || path.endsWith(".pyc") || path.endsWith("/.DS_Store"))) {
+  throw new Error("Bundled NovelToGame assets retained upstream workspace artifacts.");
 }
 const verification = JSON.parse(await readFile(join(novelToGameRoot, "examples/jin-ping-mei/qa/verification.json"), "utf8")) as {
   readonly status?: string;

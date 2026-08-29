@@ -60,6 +60,34 @@ export async function currentNovelToGameFiles(): Promise<NovelToGameAssetManifes
     .map(async (path) => ({ path: portableRelative(novelToGameRoot, path), ...await fileDigest(path) })));
 }
 
+/**
+ * Authoring provenance the Game Studio never reads. The product serves examples/<name>/build/app/**
+ * and reads example.json plus qa/verification.json; everything below is upstream working material
+ * that would otherwise ship to every plugin user (source/ alone is the 2MB public-domain novel).
+ */
+const exampleAuthoringOnly = [
+  "source/",
+  "analysis/",
+  "concepts/",
+  "design/",
+  "screenshots/",
+  "qa/evidence/",
+  "_progress.md",
+  "PRODUCT_BRIEF.md"
+] as const;
+
+function isPortableExampleAsset(bundledPath: string): boolean {
+  return !exampleAuthoringOnly.some((entry) => bundledPath === entry.replace(/\/$/u, "") || bundledPath.startsWith(entry));
+}
+
+function isPortableSourceAsset(path: string): boolean {
+  const normalized = path.split(sep).join("/");
+  return !normalized.includes("/__pycache__/")
+    && !normalized.endsWith("/__pycache__")
+    && !normalized.endsWith(".pyc")
+    && !normalized.endsWith("/.DS_Store");
+}
+
 export async function synchronizeNovelToGameAssets(): Promise<NovelToGameAssetManifest> {
   const source = novelToGameUpstreamRoot();
   if (!(await stat(source).catch(() => undefined))?.isDirectory()) {
@@ -67,11 +95,17 @@ export async function synchronizeNovelToGameAssets(): Promise<NovelToGameAssetMa
   }
   await rm(novelToGameRoot, { recursive: true, force: true });
   await mkdir(novelToGameRoot, { recursive: true });
-  await cp(join(source, "skills"), join(novelToGameRoot, "skills"), { recursive: true, dereference: false });
-  await mkdir(join(novelToGameRoot, "examples"), { recursive: true });
-  await cp(join(source, "examples/jin-ping-mei"), join(novelToGameRoot, "examples/jin-ping-mei"), {
+  await cp(join(source, "skills"), join(novelToGameRoot, "skills"), {
     recursive: true,
-    dereference: false
+    dereference: false,
+    filter: isPortableSourceAsset
+  });
+  await mkdir(join(novelToGameRoot, "examples"), { recursive: true });
+  const sourceExample = join(source, "examples/jin-ping-mei");
+  await cp(sourceExample, join(novelToGameRoot, "examples/jin-ping-mei"), {
+    recursive: true,
+    dereference: false,
+    filter: (path) => isPortableSourceAsset(path) && isPortableExampleAsset(portableRelative(sourceExample, path))
   });
   for (const file of ["LICENSE", "README.md", "README_ZH.md", "VERSION"]) {
     await cp(join(source, file), join(novelToGameRoot, file));

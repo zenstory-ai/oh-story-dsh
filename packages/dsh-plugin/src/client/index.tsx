@@ -364,7 +364,7 @@ function GameDesign({
   }, [path, project.source, sessionId]);
   if (project.source === "example") return <div className="oh-game-design-empty">
     <strong>内置完整示例</strong>
-    <p>《金瓶梅 · 风月总账》的 PRODUCT_BRIEF、分析、概念、设计、构建与源小说均随插件打包。此处保持只读，完整方法与产物可直接检查。</p>
+    <p>《金瓶梅 · 风月总账》的完整可玩构建与 QA 校验结果随插件打包，可直接在左侧试玩。上游的产品简报、分析、概念、设计与源小说不随包分发，可在 novel-to-game 仓库查看完整创作过程。</p>
     <code>novel-to-game/examples/jin-ping-mei</code>
   </div>;
   if (documents.length === 0 || path === undefined) return <div className="oh-game-design-empty">当前项目还没有可检查的设计或源文件。</div>;
