@@ -1058,7 +1058,16 @@ async function main(): Promise<void> {
       if (!useRealDeepSeek && await page.locator(".oh-story-shot-card").filter({ hasText: productionIntentArgs.targetId }).first().getAttribute("data-selected") === null) {
         throw new Error("Agent production intent did not focus the requested semantic shot target.");
       }
-      const keyframeMetadata = await page.locator(".oh-story-shot-card img.oh-story-media-preview").first().evaluate((element) => ({
+      // The Agent intent above focuses SHOT-EP001-008, so the board is scrolled to the last shot and
+      // the first card's loading="lazy" keyframe is deliberately still unloaded. Bring it into view and
+      // await decode before measuring, so this asserts fixture realism rather than scroll position.
+      const keyframePreview = page.locator(".oh-story-shot-card img.oh-story-media-preview").first();
+      await keyframePreview.scrollIntoViewIfNeeded();
+      await keyframePreview.evaluate(async (element) => {
+        const image = element as HTMLImageElement;
+        if (!image.complete || image.naturalWidth === 0) await image.decode();
+      });
+      const keyframeMetadata = await keyframePreview.evaluate((element) => ({
         width: (element as HTMLImageElement).naturalWidth,
         height: (element as HTMLImageElement).naturalHeight
       }));
