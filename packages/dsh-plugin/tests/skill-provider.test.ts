@@ -2,11 +2,12 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { renderSkillContent } from "@deepseek-ai/dsh-skill";
 import { describe, expect, it } from "vitest";
-import { createDramaSkillProvider, createNovelToGameSkillProvider, createOhStorySkillProvider, parseBundledSkill } from "../src/skill-provider.js";
+import { createDramaSkillProvider, createNovelToGameSkillProvider, createOhStorySkillProvider, createVideoRecapSkillProvider, parseBundledSkill } from "../src/skill-provider.js";
 
 const skillRoot = resolve(import.meta.dirname, "../../knowledge/oh-story/skills");
 const dramaRoot = resolve(import.meta.dirname, "../../knowledge/drama/skills");
 const gameRoot = resolve(import.meta.dirname, "../../knowledge/novel-to-game/skills");
+const videoRoot = resolve(import.meta.dirname, "../../knowledge/video-recap/skills");
 
 describe("Oh Story bundled skill provider", () => {
   it("publishes the complete upstream capability catalog with a DSH bridge", async () => {
@@ -64,6 +65,12 @@ describe("Oh Story bundled skill provider", () => {
 
   it("rejects missing frontmatter", () => {
     expect(() => parseBundledSkill("# no metadata")).toThrow(/frontmatter/u);
+  });
+
+  it("parses folded YAML descriptions and user invocation metadata", () => {
+    const parsed = parseBundledSkill("---\nname: folded-skill\nuser-invocable: false\ndescription: >\n first line\n second line\n---\n# Body\n");
+    expect(parsed.description).toBe("first line second line");
+    expect(parsed.userInvocable).toBe(false);
   });
 
   it("rejects candidate paths outside the packaged skill root", async () => {
@@ -149,6 +156,32 @@ describe("NovelToGame bundled provider", () => {
     const qa = await provider.get(listed.find((candidate) => candidate.name === "game-qa")!, {});
     for (const check of ["launch", "render", "input", "coreLoop", "outcome", "restart"]) {
       expect(qa?.content).toContain(check);
+    }
+  });
+});
+
+describe("video-recap bundled provider", () => {
+  it("publishes the complete six-Skill pipeline with native DSH boundaries", async () => {
+    const provider = createVideoRecapSkillProvider(videoRoot);
+    const listed = await provider.list({});
+    if (!Array.isArray(listed)) throw new Error("Expected a complete video-recap catalog.");
+    expect(listed.map((candidate) => candidate.name)).toEqual([
+      "video-assemble",
+      "video-cut",
+      "video-recap",
+      "video-script",
+      "video-understanding",
+      "video-voiceover"
+    ]);
+    expect(listed.find((candidate) => candidate.name === "video-recap")?.invocation.userInvocable).toBe(true);
+    expect(listed.find((candidate) => candidate.name === "video-cut")?.invocation.userInvocable).toBe(false);
+    expect(listed.find((candidate) => candidate.name === "video-understanding")?.description).toContain("结构化理解索引");
+    for (const candidate of listed) {
+      const skill = await provider.get(candidate, {});
+      expect(skill?.content).toContain("The Video Studio is a preview and artifact surface");
+      expect(skill?.content).toContain("video-recaps/<project>/");
+      expect(skill?.content).toContain("MIMO_API_KEY, FISH_API_KEY");
+      expect(skill?.resourceBase).toEqual({ kind: "directory", path: resolve(videoRoot, candidate.name) });
     }
   });
 });

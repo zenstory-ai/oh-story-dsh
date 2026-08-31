@@ -11,7 +11,7 @@ import {
 const STORY_PROVIDER_NAME = "oh-story";
 const DRAMA_PROVIDER_NAME = "short-drama";
 const GAME_PROVIDER_NAME = "novel-to-game";
-const INVOCATION = { modelInvocable: true, userInvocable: true } as const;
+const VIDEO_PROVIDER_NAME = "video-recap";
 const DSH_SKILL_BRIDGE = [
   "<oh-story-dsh-integration>",
   "This Skill is a native contribution to the current DeepSeek Harness session.",
@@ -63,6 +63,18 @@ const DSH_GAME_BRIDGE = [
   "Use only DSH-visible tools and approvals. qa/verification.json remains the sole machine QA truth and must cover launch, render, input, coreLoop, outcome, and restart with real execution evidence.",
   "The bundled Jin Ping Mei project is a read-only example, not a template to copy mechanically and not proof that another adaptation passed QA.",
   "</novel-to-game-dsh-integration>"
+].join("\n");
+const DSH_VIDEO_BRIDGE = [
+  "<video-recap-dsh-integration>",
+  "This Skill is a native contribution to the current DeepSeek Harness session.",
+  "DSH owns the workspace, model, preset, permissions, Session Log, tools, approvals, cancellation, resume, Todo, Chat, and the 视频 preview Studio.",
+  "Never start a second Agent runtime, dashboard, session transport, web server, polling loop, or model configuration.",
+  "Keep the complete upstream six-Skill pipeline. Put each project under video-recaps/<project>/, copy or import source media under sources/, and use work/ as the upstream work_dir so the Studio can discover authoritative manifests and outputs.",
+  "The Video Studio is a preview and artifact surface, not a nonlinear editor. Do not invent a second project-state format, timeline truth, or render queue; recap_run_manifest.json, recap_phase.json, timeline.json, assembly_manifest.json, and the upstream artifacts remain authoritative.",
+  "MIMO_API_KEY, FISH_API_KEY, and voice credentials stay in the host environment. Never write secrets into project files, tool arguments shown to the browser, or chat output.",
+  "Use only DSH-visible tools and approvals. Run Python and ffmpeg through the current DSH execution world, preserve cancellation, and do not install or upgrade system dependencies without explicit user approval.",
+  "When a new edited or final video is ready, tell the user that Video Studio can load it; never interrupt playback by replacing the currently loaded video silently.",
+  "</video-recap-dsh-integration>"
 ].join("\n");
 
 const DSH_NATIVE_SKILLS: Readonly<Partial<Record<string, string>>> = {
@@ -144,12 +156,23 @@ interface ParsedSkill {
   readonly name: string;
   readonly description: string;
   readonly content: string;
+  readonly userInvocable: boolean;
 }
 
 function frontmatterValue(frontmatter: string, key: string): string | undefined {
-  const match = new RegExp(`^${key}:\\s*(.+)$`, "mu").exec(frontmatter);
-  const raw = match?.[1]?.trim();
+  const lines = frontmatter.split(/\r?\n/u);
+  const index = lines.findIndex((line) => new RegExp(`^${key}:\\s*`, "u").test(line));
+  if (index < 0) return undefined;
+  const raw = lines[index]?.replace(new RegExp(`^${key}:\\s*`, "u"), "").trim();
   if (raw === undefined) return undefined;
+  if (raw === ">" || raw === "|" || raw === ">-" || raw === "|-") {
+    const values: string[] = [];
+    for (const line of lines.slice(index + 1)) {
+      if (/^\S/u.test(line)) break;
+      values.push(line.trim());
+    }
+    return (raw.startsWith(">") ? values.join(" ") : values.join("\n")).trim();
+  }
   if (raw.startsWith("\"") && raw.endsWith("\"")) {
     try { return JSON.parse(raw) as string; }
     catch { return raw.slice(1, -1); }
@@ -164,7 +187,12 @@ export function parseBundledSkill(source: string): ParsedSkill {
   const description = frontmatterValue(match[1], "description");
   if (!name || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(name)) throw new Error("Bundled skill has an invalid name.");
   if (!description) throw new Error(`Bundled skill "${name}" has no description.`);
-  return { name, description, content: source.slice(match[0].length) };
+  return {
+    name,
+    description,
+    content: source.slice(match[0].length),
+    userInvocable: frontmatterValue(match[1], "user-invocable") !== "false"
+  };
 }
 
 export function dshSkillContent(name: string, content: string): string {
@@ -214,7 +242,7 @@ function createBundledSkillProvider(
         return {
           name: parsed.name,
           description: parsed.description,
-          invocation: INVOCATION,
+          invocation: { modelInvocable: true, userInvocable: parsed.userInvocable },
           provider: providerName,
           source: "bundled",
           resourceBase: { kind: "directory", path: join(root, directory) },
@@ -236,7 +264,7 @@ function createBundledSkillProvider(
       return {
         name: parsed.name,
         description: parsed.description,
-        invocation: INVOCATION,
+        invocation: { modelInvocable: true, userInvocable: parsed.userInvocable },
         provider: providerName,
         source: "bundled",
         resourceBase: { kind: "directory", path: join(root, parsed.name) },
@@ -266,4 +294,19 @@ export function dshNovelToGameSkillContent(_name: string, content: string): stri
 
 export function createNovelToGameSkillProvider(skillRoot = defaultNovelToGameSkillRoot()): SkillProvider {
   return createBundledSkillProvider(GAME_PROVIDER_NAME, skillRoot, dshNovelToGameSkillContent);
+}
+
+export function defaultVideoRecapSkillRoot(): string {
+  const current = dirname(fileURLToPath(import.meta.url));
+  return basename(current) === "src"
+    ? resolve(current, "../../knowledge/video-recap/skills")
+    : resolve(current, "video-recap/skills");
+}
+
+export function dshVideoRecapSkillContent(_name: string, content: string): string {
+  return `${DSH_VIDEO_BRIDGE}\n\n${content}`;
+}
+
+export function createVideoRecapSkillProvider(skillRoot = defaultVideoRecapSkillRoot()): SkillProvider {
+  return createBundledSkillProvider(VIDEO_PROVIDER_NAME, skillRoot, dshVideoRecapSkillContent);
 }

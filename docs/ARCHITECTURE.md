@@ -13,26 +13,28 @@ oh-story-dsh is a Cordis plugin loaded into DeepSeek Harness. The repository shi
 | Novel craft and specialist personas | Pinned Oh Story Skills and Roles |
 | Short-drama workflow and project contracts | Pinned Drama Skills |
 | Interactive-game workflow and artifact contracts | Pinned NovelToGame Skills |
-| Creative file tree, editor, production projection, game preview and file following | `@oh-story/dsh` Browser contribution |
+| Video-recap workflow and artifact contracts | Pinned video-recap Skills |
+| Creative file tree, editor, production projection, game/video preview and file following | `@oh-story/dsh` Browser contribution |
 
 ## Host entry
 
-The Host entry registers seven contributions in the current Cordis context:
+The Host entry registers nine contributions in the current Cordis context:
 
 1. An `oh-story` Skill provider for 13 pinned novel Skills.
 2. A `short-drama` Skill provider for 10 pinned Drama Skills.
 3. A `novel-to-game` Skill provider for 7 pinned game-production Skills.
-4. The `oh_story_role` tool, backed by DSH's `spawn` provider and bounded by the caller's visible tools.
-5. The read-only `oh_story_bundled_reference` tool for exact, pinned Role craft references.
-6. The side-effect-free `oh_story_production` UI-intent tool for semantic production focus, explicit sequence order and Agent-owned job projection. Cosmetic canvas layout remains creator-controlled Session state.
-7. `tools/pre-execute` and `tools/post-execute` hooks for long-form outline and Tracking checks.
-8. A Session-scoped creative file route for Markdown, text, JSON, JSONL and previewable production media, plus a separate game-preview content route.
+4. A `video-recap` Skill provider for 6 pinned video Skills.
+5. The `oh_story_role` tool, backed by DSH's `spawn` provider and bounded by the caller's visible tools.
+6. The read-only `oh_story_bundled_reference` tool for exact, pinned Role craft references.
+7. The side-effect-free `oh_story_production` UI-intent tool for semantic production focus, explicit sequence order and Agent-owned job projection. Cosmetic canvas layout remains creator-controlled Session state.
+8. `tools/pre-execute` and `tools/post-execute` hooks for long-form outline and Tracking checks.
+9. A Session-scoped creative file route for Markdown, text, JSON, JSONL and previewable production media, plus separate game and video-preview routes.
 
-All three providers prepend a small DSH bridge at load time. The bridge maps upstream platform integration points to the current Session, tools, approvals and UI while leaving craft instructions and references intact. The short-drama bridge fixes the Drama Skills 0.6 creator-first boundary: episodes keep only the requested subset of up to five creator-facing Markdown documents, no empty documents or nominal stages are backfilled, persisted reviews remain readable Markdown while oral reviews write nothing, production keeps the exact-job confirmation contract, and legacy v0.5 structured projects are never migrated in place. The NovelToGame bridge keeps `game-adaptations/<project>` as the project root, `build/app/index.html` as the playable authority and `qa/verification.json` as the six-check QA authority. Bundled legacy validators remain maintenance resources and do not reactivate the old JSON/JSONL workflow.
+All four providers prepend a small DSH bridge at load time. The bridge maps upstream platform integration points to the current Session, tools, approvals and UI while leaving craft instructions and references intact. The short-drama bridge fixes the Drama Skills 0.6 creator-first boundary: episodes keep only the requested subset of up to five creator-facing Markdown documents, no empty documents or nominal stages are backfilled, persisted reviews remain readable Markdown while oral reviews write nothing, production keeps the exact-job confirmation contract, and legacy v0.5 structured projects are never migrated in place. The NovelToGame bridge keeps `game-adaptations/<project>` as the project root, `build/app/index.html` as the playable authority and `qa/verification.json` as the six-check QA authority. The video bridge keeps each project under `video-recaps/<project>`, uses `work/` as the upstream work directory, leaves upstream manifests and timelines authoritative, and keeps API keys process-only. It does not introduce a second Agent runtime, render queue, project database or editing timeline. Bundled legacy validators remain maintenance resources and do not reactivate the old JSON/JSONL workflow.
 
 Specialist Roles preserve their upstream structured file tools and intersect them with the calling Agent's visible DSH tools. Roles that reference shared `story-setup` craft material receive only the plugin's `oh_story_bundled_reference` reader when it is visible. The reader exposes an allowlist built from the pinned package, resolves every file canonically inside that package, rejects path escape, and fails closed if a scoped same-name tool shadows it; project Skills can therefore neither redirect Role references nor inject replacement instructions. Roles never probe `.claude`, `.codex` or other deployment directories.
 
-The prose guards and file route resolve the live Agent and use that Agent's DSH `FileSystem`, so their view of the workspace matches native tools under local, sandboxed and remote providers. The route first applies the same Host, Origin and Fetch Metadata trust boundary as DSH's native browser API, then uses the Agent filesystem and sandbox policy for resolution, containment, reads and atomic `replaceIfVersion` writes. Media preview is read-only, extension allowlisted, capped at 256 MiB and supports HTTP byte ranges for native video controls. Editable access remains limited to documented novel, short-drama and game project directories. Loopback is trusted by default; explicit non-loopback authorities must be declared through the plugin's `trustedHosts` config. Child Sessions do not receive an editor route.
+The prose guards and file route resolve the live Agent and use that Agent's DSH `FileSystem`, so their view of the workspace matches native tools under local, sandboxed and remote providers. The route first applies the same Host, Origin and Fetch Metadata trust boundary as DSH's native browser API, then uses the Agent filesystem and sandbox policy for resolution, containment, reads and atomic `replaceIfVersion` writes. Media preview is read-only and extension allowlisted. Local process-path media is streamed with HTTP byte ranges without a whole-file buffer; remote filesystem backends use the DSH bounded byte API and retain a 256 MiB fallback cap. Editable access remains limited to documented creative project directories. Loopback is trusted by default; explicit non-loopback authorities must be declared through the plugin's `trustedHosts` config. Child Sessions do not receive an editor route.
 
 Playable game assets are served from workspace `build/app` directories or the bundled example through a separate content route. Every path is canonically contained, files are size-limited and HTML receives a restrictive CSP. On loopback, the Browser swaps `127.0.0.1` and `localhost` for the iframe origin, preserving same-origin storage inside a game while isolating generated scripts from the DSH application origin. The fallback sandbox omits `allow-same-origin` when an alternate origin is unavailable.
 
@@ -46,6 +48,8 @@ The Browser entry uses two official extension slots:
 | `tool.call.toolview` | Compact `oh_story_role` invocation view |
 
 The bridge portals its workbench into the stable `conversation.session` layout seam. 小说/短剧 retain the file-tree/editor/Chat three-column surface. 游戏 switches to a focused two-column surface: the generated-game preview owns the larger left region and the mounted official conversation remains the right region, so Chat state, streaming, tools, Todo, approvals, history and Composer continue to use DSH implementations.
+
+视频 uses the same left-Studio/right-Conversation geometry without importing an NLE runtime. Project discovery reads a small allowlist of upstream artifacts and skips frame, ASR-chunk, cache and TTS-segment directories. The player exposes source, `edited_source.mp4` and the assembly output, keeps the loaded version stable during Agent writes, and makes the creator opt into a new version. The artifact panel is read-only; `recap_run_manifest.json`, `recap_phase.json`, `timeline.json` and `assembly_manifest.json` remain the lifecycle authority.
 
 Game Studio discovers workspace projects from `game-adaptations/*`, fingerprints `build/app`, retains the current playable version during an Agent build, and exposes only Preview plus read-only project-file inspection. The Game Studio and Preview panel stay mounted while project files, Chat, or the same Session's 小说 workspace are visible, preserving the live iframe and player state. A new digest is never loaded merely because the iframe lost focus; the creator explicitly chooses `载入新版本`. Narrow layouts show either Studio or Chat at a time instead of shrinking the playable surface below a usable width; both regions and their drafts remain mounted.
 
@@ -65,10 +69,10 @@ Markdown rendering is implemented as a safe React element tree with tables, task
 
 ## Upstream assets
 
-`packages/knowledge/oh-story/manifest.json` pins the Oh Story release, commit, 13 Skills, 7 Roles, agents version and every file hash. `packages/knowledge/drama/manifest.json` performs the same role for 10 Drama Skills. `packages/knowledge/novel-to-game/manifest.json` pins NovelToGame 0.3.0, all 7 Skills and the complete playable `jin-ping-mei` example.
+`packages/knowledge/oh-story/manifest.json` pins the Oh Story release, commit, 13 Skills, 7 Roles, agents version and every file hash. `packages/knowledge/drama/manifest.json` performs the same role for 10 Drama Skills. `packages/knowledge/novel-to-game/manifest.json` pins NovelToGame 0.3.0, all 7 Skills and the complete playable `jin-ping-mei` example. `packages/knowledge/video-recap/manifest.json` pins video-recap-skills 0.4.0, all 6 Skills and every bundled file hash.
 
 The Drama Skills standalone dashboard server and assets are omitted during synchronization because the creator surface is supplied by the DSH workbench. Oh Story's login/CDP rank scrapers and platform deployment helpers are also excluded; the two scan Skills use DSH-native, visible-tool research instructions instead. Synchronization rejects Python bytecode, `__pycache__` and `.DS_Store` workspace pollution before manifests are generated. Remaining workflow, reference, validation and production-adapter resources are packaged with their upstream paths.
 
 ## Release boundary
 
-The build produces Host and Browser bundles under `packages/dsh-plugin/lib`, copies all three knowledge sets, and rejects known parallel-runtime markers. Generated `lib` and tarballs are release artifacts and are excluded from Git history.
+The build produces Host and Browser bundles under `packages/dsh-plugin/lib`, copies all four knowledge sets, and rejects known parallel-runtime markers. Generated `lib` and tarballs are release artifacts and are excluded from Git history.

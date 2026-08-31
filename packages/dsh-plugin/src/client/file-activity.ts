@@ -26,7 +26,18 @@ interface JsonStringPrefix {
   readonly complete: boolean;
 }
 
-export type WorkbenchMode = "story" | "drama" | "game";
+export type WorkbenchMode = "story" | "drama" | "game" | "video";
+
+const WORKBENCH_LABELS: Readonly<Record<WorkbenchMode, string>> = {
+  story: "小说",
+  drama: "短剧",
+  game: "游戏",
+  video: "视频"
+};
+
+export function workbenchLabel(mode: WorkbenchMode): string {
+  return WORKBENCH_LABELS[mode];
+}
 
 export interface WorkspaceFilePath {
   readonly path: string;
@@ -35,6 +46,7 @@ export interface WorkspaceFilePath {
 const STORY_DIRECTORIES = new Set(["正文", "大纲", "设定", "追踪", "对标", "参考资料"]);
 const DRAMA_DIRECTORIES = new Set(["输入", "项目开发", "设定集", "剧集", "交付", "创作者决策", "审查"]);
 const GAME_DIRECTORY = "game-adaptations";
+const VIDEO_DIRECTORY = "video-recaps";
 const EDITABLE_EXTENSION = /\.(?:md|txt|json|jsonl|html|css|[cm]?js|tsx?|jsx)$/iu;
 const MUTATING_CALLS = new Set(["write", "edit", "str_replace_editor", "bash", "run_code", "oh_story_role"]);
 
@@ -239,7 +251,7 @@ export function creativeRelativePath(path: string | undefined, cwd: string | und
   if ((normalized.startsWith("/") || /^[a-z]:\//iu.test(normalized) || normalized.startsWith("file:")) && !insideRoot) return undefined;
   const relative = insideRoot ? normalized.slice(root.length + 1) : normalized.replace(/^\.\//u, "");
   const [directory] = relative.split("/", 1);
-  const creative = directory !== undefined && (STORY_DIRECTORIES.has(directory) || DRAMA_DIRECTORIES.has(directory) || directory === GAME_DIRECTORY);
+  const creative = directory !== undefined && (STORY_DIRECTORIES.has(directory) || DRAMA_DIRECTORIES.has(directory) || directory === GAME_DIRECTORY || directory === VIDEO_DIRECTORY);
   if ((!creative && relative !== "short-drama.json") || !EDITABLE_EXTENSION.test(relative)) return undefined;
   if (relative.split("/").some((part) => part === ".." || part === "." || part === "")) return undefined;
   return relative;
@@ -251,6 +263,7 @@ export function workbenchModeForPath(path: string | undefined): WorkbenchMode | 
   if (directory !== undefined && STORY_DIRECTORIES.has(directory)) return "story";
   if (directory !== undefined && DRAMA_DIRECTORIES.has(directory)) return "drama";
   if (directory === GAME_DIRECTORY) return "game";
+  if (directory === VIDEO_DIRECTORY) return "video";
   return undefined;
 }
 
@@ -271,12 +284,16 @@ export function preferredWorkbenchFile(
         /^输入\/.*\.md$/u,
         /\.md$/u,
         /^short-drama\.json$/u
-      ] : [
+      ] : mode === "game" ? [
         /^game-adaptations\/[^/]+\/PRODUCT_BRIEF\.md$/u,
         /^game-adaptations\/[^/]+\/design\/GAME_DESIGN\.md$/u,
         /^game-adaptations\/[^/]+\/qa\/verification\.json$/u,
         /^game-adaptations\/[^/]+\/build\/app\/index\.html$/u,
         /\.md$/u
+      ] : [
+        /^video-recaps\/[^/]+\/work\/recap_story_plan\.json$/u,
+        /^video-recaps\/[^/]+\/work\/narration\.json$/u,
+        /^video-recaps\/[^/]+\/work\/assembly_manifest\.json$/u
       ];
   for (const pattern of preferences) {
     const match = matching.find((file) => pattern.test(file.path));
