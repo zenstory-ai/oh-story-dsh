@@ -635,7 +635,12 @@ async function main(): Promise<void> {
     const dramaWorkspace = await rpc<{ readonly workspace: { readonly workspaceId: string; readonly title: string } }>(origin, "workspace/create", { request: { path: dramaRoot } });
     const storySession = await rpc<{ readonly sessionId: string }>(origin, "session/create", { request: { workspaceId: storyWorkspace.workspace.workspaceId } });
     const gameSession = await rpc<{ readonly sessionId: string }>(origin, "session/create", { request: { workspaceId: storyWorkspace.workspace.workspaceId } });
-    const videoSession = await rpc<{ readonly sessionId: string }>(origin, "session/create", { request: { workspaceId: storyWorkspace.workspace.workspaceId } });
+    // The Video Studio demo needs its own conversation beside the preview. The
+    // correctness pass reaches the same workbench from the game session, and the
+    // packaged run has too little timing headroom to carry a session it never asserts on.
+    const videoSession = demoFramesDirectory === undefined
+      ? undefined
+      : await rpc<{ readonly sessionId: string }>(origin, "session/create", { request: { workspaceId: storyWorkspace.workspace.workspaceId } });
     const dramaSession = await rpc<{ readonly sessionId: string }>(origin, "session/create", { request: { workspaceId: dramaWorkspace.workspace.workspaceId } });
     const catalog = await rpc<{ readonly skills: readonly { readonly name: string }[] }>(origin, "skills/list", { request: { sessionId: storySession.sessionId } });
     const ohStorySkills = catalog.skills.filter((skill) => skill.name === "story" || skill.name.startsWith("story-") || skill.name === "browser-cdp");
@@ -658,7 +663,7 @@ async function main(): Promise<void> {
     const dramaSessionTitle = `短剧 · ${dramaProjectName}`;
     await prepareSession(origin, storySession.sessionId, storyPrompt, storySessionTitle);
     await prepareSession(origin, gameSession.sessionId, gamePrompt, gameSessionTitle);
-    await prepareSession(origin, videoSession.sessionId, videoPrompt, videoSessionTitle);
+    if (videoSession !== undefined) await prepareSession(origin, videoSession.sessionId, videoPrompt, videoSessionTitle);
     await prepareSession(origin, dramaSession.sessionId, dramaPrompt, dramaSessionTitle);
 
     if (!useRealDeepSeek) {
@@ -1423,8 +1428,12 @@ async function main(): Promise<void> {
           throw new Error("Explicit new-version loading did not replace the generated game iframe.");
         }
       }
-      await selectSession(page, storyWorkspace.workspace.title, videoSessionTitle);
-      await page.getByRole("tablist", { name: "创作工作台" }).getByRole("tab", { name: "视频", exact: true }).click();
+      if (videoSession === undefined) {
+        await gameStudio.getByRole("tab", { name: "视频", exact: true }).click();
+      } else {
+        await selectSession(page, storyWorkspace.workspace.title, videoSessionTitle);
+        await page.getByRole("tablist", { name: "创作工作台" }).getByRole("tab", { name: "视频", exact: true }).click();
+      }
       const videoStudio = page.locator(".oh-video-studio");
       await videoStudio.waitFor({ state: "visible", timeout: 10_000 });
       const videoProject = videoStudio.getByRole("combobox", { name: "视频项目", exact: true });
