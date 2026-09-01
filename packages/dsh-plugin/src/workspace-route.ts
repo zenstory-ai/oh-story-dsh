@@ -1,7 +1,10 @@
 import { createHash } from "node:crypto";
-import { readFile as readNodeFile, stat as nodeStat } from "node:fs/promises";
+import { createReadStream } from "node:fs";
+import { readFile as readNodeFile, realpath as nodeRealpath, stat as nodeStat } from "node:fs/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { extname, isAbsolute, relative, resolve } from "node:path";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import type { Context } from "@deepseek-ai/cordis";
 import type { Agent } from "@deepseek-ai/dsh-agent";
 import { FsError, type FileSystem, type FsInfo, type FsTarget, type FsVersion } from "@deepseek-ai/dsh-fs";
@@ -11,18 +14,22 @@ import { SessionId } from "@deepseek-ai/dsh-session";
 import type {} from "@deepseek-ai/dsh-typert-registry";
 import { type GameVerificationBinding, WorkspaceVerificationTracker } from "./game-verification.js";
 import { defaultNovelToGameSkillRoot } from "./skill-provider.js";
+import { skipVideoDirectory, summarizeVideoProject, VIDEO_DIRECTORY, videoProjectRoot, visibleVideoPath, type VideoProjectSummary } from "./video-project.js";
 import { isTrustedPreviewNavigation, isTrustedWorkspaceRequest } from "./workspace-request-trust.js";
 
 const STORY_DIRECTORIES = ["正文", "大纲", "设定", "追踪", "对标", "参考资料"] as const;
 const DRAMA_DIRECTORIES = ["输入", "项目开发", "设定集", "剧集", "交付", "创作者决策", "审查"] as const;
 const GAME_DIRECTORY = "game-adaptations";
-const CREATIVE_DIRECTORIES = [...STORY_DIRECTORIES, ...DRAMA_DIRECTORIES, GAME_DIRECTORY] as const;
+// Preview studios need only a small manifest-driven subset, so discover them before a very large
+// prose workspace can consume the shared listing budget.
+const CREATIVE_DIRECTORIES = [VIDEO_DIRECTORY, GAME_DIRECTORY, ...STORY_DIRECTORIES, ...DRAMA_DIRECTORIES] as const;
 const ROOT_FILES = new Set(["short-drama.json"]);
 const EDITABLE_EXTENSIONS = new Set([".md", ".txt", ".json", ".jsonl"]);
 const GAME_EDITABLE_EXTENSIONS = new Set([...EDITABLE_EXTENSIONS, ".html", ".css", ".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx"]);
+const VIDEO_EDITABLE_EXTENSIONS = new Set([...EDITABLE_EXTENSIONS, ".srt", ".ass"]);
 const MEDIA_TYPES: ReadonlyMap<string, string> = new Map([
   [".png", "image/png"], [".jpg", "image/jpeg"], [".jpeg", "image/jpeg"], [".webp", "image/webp"], [".gif", "image/gif"],
-  [".mp4", "video/mp4"], [".webm", "video/webm"], [".mov", "video/quicktime"],
+  [".mp4", "video/mp4"], [".webm", "video/webm"], [".mov", "video/quicktime"], [".mkv", "video/x-matroska"],
   [".mp3", "audio/mpeg"], [".wav", "audio/wav"], [".m4a", "audio/mp4"]
 ]);
 const MEDIA_MAX_BYTES = 256 * 1_024 * 1_024;
@@ -30,10 +37,20 @@ const FILE_LIMIT = 1_000;
 const PREVIEW_FILE_LIMIT = 32 * 1024 * 1024;
 const BUNDLED_GAME_EXAMPLE = "jin-ping-mei";
 const workspaceVerificationTracker = new WorkspaceVerificationTracker();
+const execFileAsync = promisify(execFile);
+let videoPreflightCache: { readonly expires: number; readonly value: VideoPreflightSummary } | undefined;
 
 interface WorkspaceRouteOptions {
   readonly maxBytes: number;
   readonly trustedHosts?: readonly string[];
+}
+
+/** Host-process capability probe. The Agent's execution world may differ; `video-recap --doctor` is authoritative there. */
+interface VideoPreflightSummary {
+  readonly python: { readonly ok: boolean; readonly version?: string | undefined };
+  readonly ffmpeg: { readonly ok: boolean; readonly subtitles: boolean };
+  readonly ffprobe: { readonly ok: boolean };
+  readonly credentials: { readonly mimo: boolean; readonly fish: boolean; readonly ttsProvider: string };
 }
 
 interface WorkspaceFile {
@@ -82,6 +99,52 @@ class WorkspaceHttpError extends Error {
   constructor(readonly status: number, message: string) { super(message); }
 }
 
+async function commandOutput(command: string, args: readonly string[]): Promise<string | undefined> {
+  try {
+    const { stdout, stderr } = await execFileAsync(command, [...args], { encoding: "utf8", timeout: 5_000, maxBuffer: 4 * 1_024 * 1_024 });
+    return `${stdout}${stderr}`.trim();
+  } catch { return undefined; }
+}
+
+function pythonVersion(value: string | undefined): { readonly ok: boolean; readonly version?: string | undefined } {
+  const match = /Python\s+(\d+)\.(\d+)(?:\.(\d+))?/u.exec(value ?? "");
+  if (match === null) return { ok: false };
+  const major = Number(match[1]);
+  const minor = Number(match[2]);
+  return { ok: major > 3 || (major === 3 && minor >= 10), version: match[0].replace(/^Python\s+/u, "") };
+}
+
+function configured(...names: readonly string[]): boolean {
+  return names.some((name) => (process.env[name] ?? "") !== "");
+}
+
+async function videoPreflight(): Promise<VideoPreflightSummary> {
+  if (videoPreflightCache !== undefined && videoPreflightCache.expires > Date.now()) return videoPreflightCache.value;
+  let python: VideoPreflightSummary["python"] = { ok: false };
+  for (const command of ["python3", "python"]) {
+    const parsed = pythonVersion(await commandOutput(command, ["--version"]));
+    if (parsed.version !== undefined) { python = parsed; break; }
+  }
+  const [ffmpegOutput, ffmpegFilters, ffprobeOutput] = await Promise.all([
+    commandOutput("ffmpeg", ["-version"]),
+    commandOutput("ffmpeg", ["-hide_banner", "-filters"]),
+    commandOutput("ffprobe", ["-version"])
+  ]);
+  const value = {
+    python,
+    ffmpeg: { ok: ffmpegOutput !== undefined, subtitles: /\bsubtitles\b/u.test(ffmpegFilters ?? "") },
+    ffprobe: { ok: ffprobeOutput !== undefined },
+    credentials: {
+      // Upstream falls back to the shared MIMO_API_KEY only when a per-service key is unset.
+      mimo: configured("MIMO_API_KEY", "MIMO_VIDEO_API_KEY", "MIMO_TTS_API_KEY", "MIMO_ASR_API_KEY"),
+      fish: configured("FISH_API_KEY"),
+      ttsProvider: process.env.TTS_PROVIDER ?? "mimo"
+    }
+  };
+  videoPreflightCache = { expires: Date.now() + 30_000, value };
+  return value;
+}
+
 function send(response: ServerResponse, status: number, value: unknown): void {
   const body = `${JSON.stringify(value)}\n`;
   response.writeHead(status, {
@@ -93,33 +156,96 @@ function send(response: ServerResponse, status: number, value: unknown): void {
   response.end(body);
 }
 
-function sendMedia(request: IncomingMessage, response: ServerResponse, bytes: Uint8Array, mimeType: string): void {
-  const range = request.headers.range;
-  let start = 0;
-  let end = bytes.byteLength - 1;
-  let status = 200;
-  if (typeof range === "string") {
-    const match = /^bytes=(\d*)-(\d*)$/u.exec(range.trim());
-    if (match !== null) {
-      const requestedStart = match[1] === "" ? 0 : Number(match[1]);
-      const requestedEnd = match[2] === "" ? end : Number(match[2]);
-      if (Number.isSafeInteger(requestedStart) && Number.isSafeInteger(requestedEnd) && requestedStart >= 0 && requestedStart <= requestedEnd && requestedStart < bytes.byteLength) {
-        start = requestedStart;
-        end = Math.min(requestedEnd, end);
-        status = 206;
-      }
-    }
+export interface ByteRange { readonly start: number; readonly end: number }
+
+/**
+ * RFC 9110 14.2: a Range this server cannot parse or does not support is ignored (`undefined`, full
+ * 200 response); only a well-formed but unsatisfiable range earns a 416 (`null`).
+ */
+export function parseByteRange(value: string | undefined, size: number): ByteRange | undefined | null {
+  const match = value === undefined ? null : /^bytes=(\d*)-(\d*)$/u.exec(value.trim());
+  if (match === null) return undefined;
+  const left = match[1] ?? "";
+  const right = match[2] ?? "";
+  if (left === "") {
+    const suffix = Number(right);
+    if (right === "" || !Number.isSafeInteger(suffix)) return undefined;
+    return suffix === 0 || size <= 0 ? null : { start: Math.max(0, size - suffix), end: size - 1 };
   }
-  const body = bytes.subarray(start, end + 1);
-  response.writeHead(status, {
+  const start = Number(left);
+  const requestedEnd = right === "" ? Number.MAX_SAFE_INTEGER : Number(right);
+  if (!Number.isSafeInteger(start) || !Number.isSafeInteger(requestedEnd) || requestedEnd < start) return undefined;
+  return start >= size ? null : { start, end: Math.min(requestedEnd, size - 1) };
+}
+
+function mediaHeaders(mimeType: string, size: number, range: ByteRange | undefined): Record<string, string | number> {
+  const start = range?.start ?? 0;
+  const end = range?.end ?? size - 1;
+  return {
     "content-type": mimeType,
-    "content-length": body.byteLength,
+    "content-length": Math.max(0, end - start + 1),
     "cache-control": "private, max-age=60",
     "accept-ranges": "bytes",
-    ...(status === 206 ? { "content-range": `bytes ${String(start)}-${String(end)}/${String(bytes.byteLength)}` } : {}),
+    ...(range === undefined ? {} : { "content-range": `bytes ${String(start)}-${String(end)}/${String(size)}` }),
     "x-content-type-options": "nosniff"
-  });
-  response.end(Buffer.from(body));
+  };
+}
+
+function sendMediaBytes(request: IncomingMessage, response: ServerResponse, bytes: Uint8Array, mimeType: string): void {
+  const range = parseByteRange(typeof request.headers.range === "string" ? request.headers.range : undefined, bytes.byteLength);
+  if (range === null) {
+    response.writeHead(416, { "content-range": `bytes */${String(bytes.byteLength)}`, "cache-control": "no-store" });
+    response.end();
+    return;
+  }
+  const start = range?.start ?? 0;
+  const end = range?.end ?? bytes.byteLength - 1;
+  const body = bytes.subarray(start, end + 1);
+  response.writeHead(range === undefined ? 200 : 206, mediaHeaders(mimeType, bytes.byteLength, range));
+  response.end(request.method === "HEAD" ? undefined : Buffer.from(body));
+}
+
+/**
+ * Resolve the target to a path this web host may open directly, or `undefined` when it may not.
+ * `processPath` is canonical in the backend's execution world, which is not necessarily this
+ * process's, so containment is re-checked against the host-visible workspace root: a remote path
+ * that happens to exist locally never becomes a stream.
+ */
+async function hostWorkspaceFile(realm: WorkspaceRealm, target: FsTarget, expectedSize: number): Promise<string | undefined> {
+  const [root, path] = await Promise.all([
+    nodeRealpath(realm.fs.processPath(realm.root)),
+    nodeRealpath(realm.fs.processPath(target))
+  ]);
+  const inside = relative(root, path);
+  if (inside === "" || inside.startsWith("..") || isAbsolute(inside)) return undefined;
+  const local = await nodeStat(path);
+  return local.isFile() && local.size === expectedSize ? path : undefined;
+}
+
+async function sendWorkspaceMedia(request: IncomingMessage, response: ServerResponse, realm: WorkspaceRealm, target: FsTarget, info: FsInfo, mimeType: string): Promise<void> {
+  const expectedSize = info.size;
+  if (expectedSize !== undefined) {
+    // A remote filesystem may expose a process path this web host cannot read; fall back to its
+    // bounded binary API for modest files.
+    const processPath = await hostWorkspaceFile(realm, target, expectedSize).catch(() => undefined);
+    if (processPath !== undefined) {
+      const range = parseByteRange(typeof request.headers.range === "string" ? request.headers.range : undefined, expectedSize);
+      if (range === null) {
+        response.writeHead(416, { "content-range": `bytes */${String(expectedSize)}`, "cache-control": "no-store" });
+        response.end();
+        return;
+      }
+      response.writeHead(range === undefined ? 200 : 206, mediaHeaders(mimeType, expectedSize, range));
+      if (request.method === "HEAD") { response.end(); return; }
+      const stream = createReadStream(processPath, range === undefined ? undefined : { start: range.start, end: range.end });
+      request.once("close", () => { if (!response.writableEnded) stream.destroy(); });
+      stream.on("error", () => { if (!response.headersSent) response.destroy(); else response.end(); });
+      stream.pipe(response);
+      return;
+    }
+    if (expectedSize > MEDIA_MAX_BYTES) throw new WorkspaceHttpError(413, "远程媒体超过工作台回退预览大小限制。");
+  }
+  sendMediaBytes(request, response, await realm.fs.readBytes(target, undefined, MEDIA_MAX_BYTES), mimeType);
 }
 
 async function jsonBody(request: IncomingMessage, maxBytes: number): Promise<Record<string, unknown>> {
@@ -148,7 +274,9 @@ function safeRelativePath(path: string): boolean {
 }
 
 function editablePath(path: string): boolean {
-  const extensions = path.startsWith(`${GAME_DIRECTORY}/`) ? GAME_EDITABLE_EXTENSIONS : EDITABLE_EXTENSIONS;
+  const extensions = path.startsWith(`${GAME_DIRECTORY}/`) ? GAME_EDITABLE_EXTENSIONS
+    : path.startsWith(`${VIDEO_DIRECTORY}/`) ? VIDEO_EDITABLE_EXTENSIONS
+      : EDITABLE_EXTENSIONS;
   return extensions.has(extname(path).toLocaleLowerCase());
 }
 
@@ -235,12 +363,16 @@ async function listFiles(realm: WorkspaceRealm): Promise<WorkspaceFile[]> {
     for (const entry of await realm.fs.listDir(directory)) {
       if (entry.name.startsWith(".") || !realm.fs.contains(realm.root, entry.target)) continue;
       const childPath = `${path}/${entry.name}`;
-      if (entry.type === "directory") await walk(childPath, entry.target);
+      if (entry.type === "directory") {
+        if (!skipVideoDirectory(childPath)) await walk(childPath, entry.target);
+      }
       else if (entry.type === "file" && (editablePath(childPath) || MEDIA_TYPES.has(extname(entry.name).toLocaleLowerCase()))) {
         const info = entry.version === undefined || entry.size === undefined ? await realm.fs.stat(entry.target) : undefined;
         const version = entry.version ?? info?.version;
         const mimeType = MEDIA_TYPES.get(extname(entry.name).toLocaleLowerCase());
-        if (version !== undefined) files.push({ path: childPath, bytes: entry.size ?? info?.size ?? 0, version, kind: mimeType === undefined ? "text" : "media", mimeType });
+        if (version !== undefined && (!childPath.startsWith(`${VIDEO_DIRECTORY}/`) || visibleVideoPath(childPath))) {
+          files.push({ path: childPath, bytes: entry.size ?? info?.size ?? 0, version, kind: mimeType === undefined ? "text" : "media", mimeType });
+        }
       }
       if (files.length >= FILE_LIMIT) return;
     }
@@ -400,6 +532,30 @@ async function workspaceGameProjects(
       previewVersion: preview.version,
       verification: normalizedVerification(verification, freshness.binding, freshness.verifiedPreviewVersion)
     };
+  }));
+}
+
+async function workspaceVideoProjects(realm: WorkspaceRealm, files: readonly WorkspaceFile[], maxBytes: number): Promise<VideoProjectSummary[]> {
+  const roots = [...new Set(files.flatMap((file) => {
+    const root = videoProjectRoot(file.path);
+    return root === undefined ? [] : [root];
+  }))].sort((left, right) => left.localeCompare(right, "zh-Hans-CN"));
+  return Promise.all(roots.map(async (root) => {
+    const findPath = (name: string): string | undefined => files.find((file) => file.path.startsWith(`${root}/`) && file.path.split("/").at(-1) === name)?.path;
+    const readJson = async (name: string): Promise<unknown> => {
+      const path = findPath(name);
+      if (path === undefined) return undefined;
+      const content = await workspaceText(realm, path, maxBytes).catch(() => undefined);
+      if (content === undefined) return undefined;
+      try { return JSON.parse(content) as unknown; }
+      catch { return undefined; }
+    };
+    const [project, runManifest, assembly] = await Promise.all([
+      readJson("project.json"),
+      readJson("recap_run_manifest.json"),
+      readJson("assembly_manifest.json")
+    ]);
+    return summarizeVideoProject(root, files, { project, runManifest, assembly });
   }));
 }
 
@@ -580,7 +736,12 @@ async function handle(context: Context, request: IncomingMessage, response: Serv
         ...await workspaceGameProjects(realm, files, sessionId, options.maxBytes),
         await bundledGameExample()
       ];
-      send(response, 200, { cwd: realm.cwd, files, games, tracking: tracking.value, shortDrama: shortDrama.value, metadataErrors, mode: "dsh-session" });
+      const videos = await workspaceVideoProjects(realm, files, options.maxBytes);
+      send(response, 200, { cwd: realm.cwd, files, games, videos, tracking: tracking.value, shortDrama: shortDrama.value, metadataErrors, mode: "dsh-session" });
+      return;
+    }
+    if (url.pathname === "/oh-story/video-preflight" && request.method === "GET") {
+      send(response, 200, await videoPreflight());
       return;
     }
     if (url.pathname === "/oh-story/file" && request.method === "GET") {
@@ -591,7 +752,7 @@ async function handle(context: Context, request: IncomingMessage, response: Serv
       send(response, 200, { path, ...file });
       return;
     }
-    if (url.pathname === "/oh-story/media" && request.method === "GET") {
+    if (url.pathname === "/oh-story/media" && (request.method === "GET" || request.method === "HEAD")) {
       const realm = await workspaceRealm(context, url);
       const path = url.searchParams.get("path");
       if (path === null) throw new WorkspaceHttpError(400, "缺少媒体文件路径。");
@@ -599,8 +760,7 @@ async function handle(context: Context, request: IncomingMessage, response: Serv
       if (mimeType === undefined) throw new WorkspaceHttpError(415, "目标不是受支持的短剧媒体文件。");
       const target = await creativeTarget(realm, path, "media");
       const info = requireRegularFile(await realm.fs.stat(target));
-      if (info.size !== undefined && info.size > MEDIA_MAX_BYTES) throw new WorkspaceHttpError(413, "媒体文件超过工作台预览大小限制。");
-      sendMedia(request, response, await realm.fs.readBytes(target, undefined, MEDIA_MAX_BYTES), mimeType);
+      await sendWorkspaceMedia(request, response, realm, target, info, mimeType);
       return;
     }
     if (url.pathname === "/oh-story/file" && request.method === "PUT") {

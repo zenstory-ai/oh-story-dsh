@@ -453,6 +453,25 @@ async function main(): Promise<void> {
         limitations: []
       }, null, 2)}\n`)
     ]);
+    const videoProjectRoot = join(storyRoot, "video-recaps", "smoke-recap");
+    await Promise.all([
+      mkdir(join(videoProjectRoot, "sources"), { recursive: true }),
+      mkdir(join(videoProjectRoot, "work"), { recursive: true }),
+      mkdir(join(videoProjectRoot, "outputs"), { recursive: true })
+    ]);
+    await Promise.all([
+      cp(videoMediaFixture, join(videoProjectRoot, "sources", "source.mp4")),
+      cp(videoMediaFixture, join(videoProjectRoot, "work", "edited_source.mp4")),
+      cp(videoMediaFixture, join(videoProjectRoot, "outputs", "recap_smoke.mp4")),
+      writeFile(join(videoProjectRoot, "project.json"), `${JSON.stringify({ title: "DSH Video Recap Smoke" }, null, 2)}\n`),
+      writeFile(join(videoProjectRoot, "work", "recap_run_manifest.json"), `${JSON.stringify({
+        source_video: "video-recaps/smoke-recap/sources/source.mp4",
+        settings: { edit_mode: "cut" }
+      }, null, 2)}\n`),
+      writeFile(join(videoProjectRoot, "work", "clip_plan.json"), `${JSON.stringify({ clips: [{ source_start: 0, source_end: 5 }] }, null, 2)}\n`),
+      writeFile(join(videoProjectRoot, "work", "narration.json"), `${JSON.stringify([{ start: 0, end: 2, text: "视频工作台烟测" }], null, 2)}\n`),
+      writeFile(join(videoProjectRoot, "work", "assembly_manifest.json"), `${JSON.stringify({ final_output: "video-recaps/smoke-recap/outputs/recap_smoke.mp4" }, null, 2)}\n`)
+    ]);
 
     const secondEpisode = join(dramaRoot, "剧集", "EP002");
     await cp(join(dramaRoot, "剧集", "EP001"), secondEpisode, { recursive: true });
@@ -483,12 +502,15 @@ async function main(): Promise<void> {
       "package/LICENSE", "package/README.md", "package/cordis.patch.yml", "package/package.json",
       "package/lib/index.js", "package/lib/client.js", "package/lib/oh-story/manifest.json", "package/lib/drama/manifest.json",
       "package/lib/novel-to-game/manifest.json",
+      "package/lib/video-recap/manifest.json",
       "package/lib/oh-story/skills/story-setup/references/agent-references/writing-craft.md",
       "package/lib/drama/skills/short-drama/references/creator-documents.md",
       "package/lib/drama/skills/short-drama-storyboard/references/comic-keyframe-lexicon.md",
       "package/lib/novel-to-game/skills/novel-to-game/references/pipeline-contract.md",
       "package/lib/novel-to-game/examples/jin-ping-mei/build/app/index.html",
-      "package/lib/novel-to-game/examples/jin-ping-mei/qa/verification.json"
+      "package/lib/novel-to-game/examples/jin-ping-mei/qa/verification.json",
+      "package/lib/video-recap/skills/video-recap/scripts/recap.py",
+      "package/lib/video-recap/skills/video-recap/scripts/recap_inspect.py"
     ]) {
       if (!entries.has(required)) throw new Error(`Plugin tarball is missing ${required}.`);
     }
@@ -536,9 +558,15 @@ async function main(): Promise<void> {
     const gameSkills = catalog.skills.filter((skill) => [
       "novel-to-game", "novel-game-analyze", "game-concept", "game-world-design", "game-art-direction", "game-build", "game-qa"
     ].includes(skill.name));
+    const videoSkills = catalog.skills.filter((skill) => [
+      "video-recap", "video-understanding", "video-script", "video-cut", "video-voiceover", "video-assemble"
+    ].includes(skill.name));
     if (ohStorySkills.length !== 13) throw new Error(`Expected 13 Oh Story Skills, found ${String(ohStorySkills.length)}.`);
     if (dramaSkills.length !== 10) throw new Error(`Expected 10 Drama Skills, found ${String(dramaSkills.length)}.`);
     if (gameSkills.length !== 7) throw new Error(`Expected 7 NovelToGame Skills, found ${String(gameSkills.length)}.`);
+    if (JSON.stringify(videoSkills.map((skill) => skill.name).sort()) !== JSON.stringify(["video-recap", "video-script"])) {
+      throw new Error(`Expected the two user-invocable video-recap entries, found ${videoSkills.map((skill) => skill.name).join(", ")}.`);
+    }
     const storySessionTitle = `小说 · ${storyProjectName}`;
     const gameSessionTitle = "游戏 · Live Game Lab";
     const dramaSessionTitle = `短剧 · ${dramaProjectName}`;
@@ -605,17 +633,26 @@ async function main(): Promise<void> {
       readonly cwd?: string;
       readonly files?: readonly { readonly path: string }[];
       readonly games?: readonly { readonly id: string; readonly title: string; readonly source: string; readonly previewUrl?: string; readonly verification?: { readonly status?: string; readonly binding?: string } }[];
+      readonly videos?: readonly { readonly id: string; readonly title: string; readonly state: string; readonly previews: readonly { readonly role: string; readonly path: string }[] }[];
       readonly shortDrama?: unknown;
     };
     const bundledGame = storyWorkspacePayload.games?.find((game) => game.id === "example:jin-ping-mei");
     const generatedGame = storyWorkspacePayload.games?.find((game) => game.id === `workspace:${generatedGameId}`);
+    const generatedVideo = storyWorkspacePayload.videos?.find((video) => video.id === "smoke-recap");
     if (!storyWorkspaceResponse.ok || storyWorkspacePayload.mode !== "dsh-session" || storyWorkspacePayload.cwd !== await realpath(storyRoot)
       || !storyWorkspacePayload.files?.some((file) => file.path.startsWith("正文/")) || storyWorkspacePayload.shortDrama !== null
       || bundledGame?.title !== "金瓶梅 · 风月总账" || bundledGame.source !== "example" || bundledGame.verification?.status !== "PASS"
       || bundledGame.verification.binding !== "PINNED"
       || bundledGame.previewUrl === undefined || generatedGame?.source !== "workspace" || generatedGame.previewUrl === undefined
-      || generatedGame.verification?.status !== "PASS" || generatedGame.verification.binding !== "UNBOUND") {
+      || generatedGame.verification?.status !== "PASS" || generatedGame.verification.binding !== "UNBOUND"
+      || generatedVideo?.title !== "DSH Video Recap Smoke" || generatedVideo.state !== "ready"
+      || JSON.stringify(generatedVideo.previews.map((preview) => preview.role)) !== JSON.stringify(["source", "edited", "final"])) {
       throw new Error(`Story Session workspace route failed: ${JSON.stringify(storyWorkspacePayload)}`);
+    }
+    const recapSourceUrl = `${origin}/oh-story/media?sessionId=${encodeURIComponent(storySession.sessionId)}&path=${encodeURIComponent("video-recaps/smoke-recap/sources/source.mp4")}`;
+    const recapRange = await fetch(recapSourceUrl, { headers: { range: "bytes=-12" } });
+    if (recapRange.status !== 206 || (await recapRange.arrayBuffer()).byteLength !== 12 || !recapRange.headers.get("content-range")?.startsWith("bytes ")) {
+      throw new Error(`Video Studio suffix range failed: ${String(recapRange.status)} ${recapRange.headers.get("content-range") ?? ""}`);
     }
     const bundledPreview = await fetch(`${origin}${bundledGame.previewUrl}`);
     if (!bundledPreview.ok || !(await bundledPreview.text()).includes("金瓶梅·风月总账")) {
@@ -831,9 +868,10 @@ async function main(): Promise<void> {
       await storyWorkbenchTabs.waitFor({ state: "visible", timeout: 10_000 });
       if (await storyKind.textContent() !== "小说"
         || await storyWorkbenchTabs.getByRole("tab", { name: "小说", exact: true }).count() !== 1
+        || await storyWorkbenchTabs.getByRole("tab", { name: "短剧", exact: true }).count() !== 1
         || await storyWorkbenchTabs.getByRole("tab", { name: "游戏", exact: true }).count() !== 1
-        || await storyWorkbenchTabs.getByRole("tab", { name: "短剧", exact: true }).count() !== 0) {
-        throw new Error("Story workspace did not expose the dedicated Game Studio switcher.");
+        || await storyWorkbenchTabs.getByRole("tab", { name: "视频", exact: true }).count() !== 1) {
+        throw new Error("Story workspace did not expose all four persistent creation workbenches.");
       }
       if (await page.getByRole("button", { name: "刷新项目文件", exact: true }).count() !== 1) {
         throw new Error("The workspace refresh control has no descriptive accessible name.");
@@ -968,8 +1006,10 @@ async function main(): Promise<void> {
         }
         await rm(mixedMarker);
         await page.getByRole("button", { name: "刷新项目文件", exact: true }).click();
-        await workbenchTabs.getByRole("tab", { name: "短剧", exact: true }).waitFor({ state: "detached", timeout: 10_000 });
-        await workbenchTabs.getByRole("tab", { name: "游戏", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+        await dramaTab.waitFor({ state: "visible", timeout: 10_000 });
+        await dramaTab.click();
+        await page.getByText("当前 workspace 还没有短剧项目。", { exact: false }).waitFor({ state: "visible", timeout: 10_000 });
+        await storyTab.click();
         await page.locator(".oh-story-kind").filter({ hasText: "小说" }).waitFor({ state: "visible", timeout: 10_000 });
       }
       await prepareDemoSurface(page);
@@ -1269,7 +1309,36 @@ async function main(): Promise<void> {
           throw new Error("Explicit new-version loading did not replace the generated game iframe.");
         }
       }
-      await gameStudio.getByRole("tab", { name: "小说", exact: true }).click();
+      await gameStudio.getByRole("tab", { name: "视频", exact: true }).click();
+      const videoStudio = page.locator(".oh-video-studio");
+      await videoStudio.waitFor({ state: "visible", timeout: 10_000 });
+      const videoProject = videoStudio.getByRole("combobox", { name: "视频项目", exact: true });
+      if (await videoProject.inputValue() !== "smoke-recap" || !await videoStudio.getByText("成片已就绪", { exact: true }).isVisible()) {
+        throw new Error("Video Studio did not discover the manifest-driven smoke project.");
+      }
+      const videoTabs = videoStudio.getByRole("tablist", { name: "视频工作台", exact: true });
+      await videoTabs.getByRole("tab", { name: "预览", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+      const recapPlayer = videoStudio.locator("video");
+      await recapPlayer.waitFor({ state: "visible", timeout: 10_000 });
+      await page.waitForFunction(() => (document.querySelector(".oh-video-studio video") as HTMLVideoElement | null)?.readyState !== 0);
+      const videoChat = page.locator('[data-slot="conversation.session"] > :not(.oh-story-split-surface)');
+      const [videoStudioBox, videoChatBox] = await Promise.all([videoStudio.boundingBox(), videoChat.boundingBox()]);
+      if (videoStudioBox === null || videoChatBox === null
+        || await page.locator("[data-conversation-scroll]").getAttribute("data-oh-story-workbench") !== "video"
+        || videoStudioBox.x + videoStudioBox.width > videoChatBox.x + 1
+        || videoStudioBox.width <= videoChatBox.width) {
+        throw new Error(`Video Studio did not render as preview-left/chat-right: ${JSON.stringify({ videoStudioBox, videoChatBox })}`);
+      }
+      const versionTabs = videoStudio.getByRole("tablist", { name: "预览版本", exact: true });
+      for (const label of ["原片", "剪后片", "最终成片"]) {
+        if (await versionTabs.getByRole("tab", { name: label, exact: true }).count() !== 1) throw new Error(`Video Studio missed ${label}.`);
+      }
+      await videoTabs.getByRole("tab", { name: "产物", exact: true }).click();
+      await videoStudio.getByRole("button", { name: /运行清单 recap_run_manifest\.json/u }).click();
+      await videoStudio.getByText('"edit_mode": "cut"', { exact: false }).waitFor({ state: "visible", timeout: 10_000 });
+      await videoStudio.getByRole("button", { name: "检查环境", exact: true }).click();
+      await videoStudio.getByText(/^Python /u).waitFor({ state: "visible", timeout: 10_000 });
+      await videoStudio.getByRole("tab", { name: "小说", exact: true }).click();
       await storyTree.waitFor({ state: "visible", timeout: 10_000 });
 
       await selectSession(page, dramaWorkspace.workspace.title, dramaSessionTitle);
@@ -1281,9 +1350,10 @@ async function main(): Promise<void> {
       await dramaWorkbenchTabs.waitFor({ state: "visible", timeout: 10_000 });
       if (await dramaKind.textContent() !== "短剧"
         || await dramaWorkbenchTabs.getByRole("tab", { name: "短剧", exact: true }).count() !== 1
+        || await dramaWorkbenchTabs.getByRole("tab", { name: "小说", exact: true }).count() !== 1
         || await dramaWorkbenchTabs.getByRole("tab", { name: "游戏", exact: true }).count() !== 1
-        || await dramaWorkbenchTabs.getByRole("tab", { name: "小说", exact: true }).count() !== 0) {
-        throw new Error("Drama workspace did not expose the dedicated Game Studio switcher.");
+        || await dramaWorkbenchTabs.getByRole("tab", { name: "视频", exact: true }).count() !== 1) {
+        throw new Error("Drama workspace did not expose all four persistent creation workbenches.");
       }
       await selectFile(page, "剧集/EP001/剧本.md");
       await page.getByRole("tab", { name: "预览", exact: true }).click();
@@ -1299,6 +1369,20 @@ async function main(): Promise<void> {
         await todo.waitFor({ state: "visible", timeout: 30_000 });
         await todo.getByRole("button").click();
         await todo.locator("li").last().waitFor({ state: "attached", timeout: 20_000 });
+        await page.waitForFunction(() => {
+          const scroller = Array.from(document.querySelectorAll<HTMLElement>("[data-conversation-scroll]"))
+            .find((element) => element.dataset.ohStoryWorkbench === "drama" && element.getBoundingClientRect().width > 0);
+          const flow = scroller?.querySelector<HTMLElement>("[data-chat-flow]");
+          const seat = scroller === undefined
+            ? undefined
+            : Array.from(scroller.children).find((element): element is HTMLElement => element instanceof HTMLElement && element.hasAttribute("data-composer-seat"));
+          const tail = flow?.lastElementChild;
+          if (!(tail instanceof HTMLElement) || seat === undefined || flow === null) return false;
+          const tailBox = tail.getBoundingClientRect();
+          const seatBox = seat.getBoundingClientRect();
+          const clearance = Number.parseFloat(getComputedStyle(flow).paddingBottom);
+          return clearance >= seatBox.height + 15 && tailBox.bottom <= seatBox.top + 1;
+        }, undefined, { timeout: 10_000 });
         const flow = page.locator('[data-slot="conversation.session"] [data-chat-flow]');
         const tail = flow.locator(":scope > *").last();
         const [tailBox, seatBox, scrollBox, clearance, tailFlowKey] = await Promise.all([
@@ -1712,11 +1796,14 @@ async function main(): Promise<void> {
       skills: ohStorySkills.length,
       dramaSkills: dramaSkills.length,
       gameSkills: gameSkills.length,
+      userInvocableVideoSkills: videoSkills.length,
       provider: useRealDeepSeek ? "deepseek-official" : "local-fixture",
       fixtures: [storyProjectName, dramaProjectName, "金瓶梅 · 风月总账"],
       uiSlots: ["shell.overlay", "tool.call.toolview"],
       threeColumn: true,
       gameStudio: "preview-left-chat-right",
+      videoStudio: "preview-left-chat-right",
+      videoPreviewRoles: ["source", "edited", "final"],
       playableIframe: true,
       previewCsp: "asset-prefix-only",
       gameModeExit: true,

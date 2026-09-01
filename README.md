@@ -2,13 +2,13 @@
 
 # oh-story-dsh
 
-**小说、短剧与互动游戏创作工作台**
+**小说、短剧、互动游戏与视频解说创作工作台**
 
-[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) · [Oh Story](https://github.com/zenstory-ai/oh-story-claudecode) · [Drama Skills](https://github.com/zenstory-ai/drama-skills) · [NovelToGame](https://github.com/zenstory-ai/novel-to-game) · [MIT](LICENSE)
+[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) · [Oh Story](https://github.com/zenstory-ai/oh-story-claudecode) · [Drama Skills](https://github.com/zenstory-ai/drama-skills) · [NovelToGame](https://github.com/zenstory-ai/novel-to-game) · [video-recap-skills](https://github.com/zenstory-ai/video-recap-skills) · [MIT](LICENSE)
 
 </div>
 
-`oh-story-dsh` 是基于 DeepSeek Harness（DSH）构建的社区插件，将 Oh Story 的小说方法库、Drama Skills 的短剧流程与 NovelToGame 的互动游戏生产线带入 DSH。DSH 管理 Agent、会话、模型、权限和 Chat；插件提供创作 Skills、专业 Roles、项目协议与对应工作台。
+`oh-story-dsh` 是基于 DeepSeek Harness（DSH）构建的社区插件，将小说、短剧、互动游戏与 video-recap 视频解说流水线带入 DSH。DSH 管理 Agent、会话、模型、权限和 Chat；插件提供创作 Skills、专业 Roles、项目协议与对应工作台。
 
 > 本项目与 DeepSeek 官方无隶属、合作或背书关系；DeepSeek Harness 名称与品牌素材归其权利人所有。
 
@@ -32,9 +32,23 @@
 
 内置《金瓶梅 · 风月总账》的完整可玩构建，方便开箱验证输入、核心循环、结局与重开流程；上游的产品简报、分析、设计与源小说不随包分发。试玩 iframe 在切换项目文件或窄屏对话时保持挂载，不会丢失当前进度；新构建就绪后由创作者主动载入，不会因为转去 Chat 而静默覆盖正在玩的版本。正式 QA 继续由 `/game-qa`、原生 Agent 工具结果与 `qa/verification.json` 承担，不在制作面板增加独立 QA 页。
 
+## 视频预览工作台
+
+视频模式采用“左侧预览 + 右侧 DSH Chat”的轻量两列布局。完整打包 [video-recap-skills 0.4.0](https://github.com/zenstory-ai/video-recap-skills) 的 6 个 Skills，项目放在 `video-recaps/<project>/`：原片位于 `sources/`，上游权威工作产物位于 `work/`，可选交付位于 `outputs/`。工作台只提供原片、剪后片和最终成片切换、阶段提示、全屏、刷新以及关键计划/字幕/质检产物查看，不内置多轨时间线或重型编辑器。
+
+视频文件通过 HTTP Range 流式预览；新成片出现时保留当前播放，由创作者主动载入新版。流水线需要宿主机安装 Python 3.10+ 与带 libass `subtitles` 滤镜的 ffmpeg/ffprobe（macOS `brew install ffmpeg`、Debian/Ubuntu `sudo apt install ffmpeg`）。运行环境检查只显示 DSH Host 进程里 Python、ffmpeg/libass、ffprobe 与 Key 是否就绪，不把 `MIMO_API_KEY`、`FISH_API_KEY` 或音色凭据发送给浏览器；Agent 实际执行世界的结论以 `video-recap --doctor` 为准。
+
+在 Chat 中直接描述输入和目标即可，例如：
+
+```text
+给 /path/to/video.mp4 做一个 3 分钟中文解说成片，保留关键原声，字幕烧进画面。
+把 /path/to/ep1.mp4 和 /path/to/ep2.mp4 围绕同一主线剪成 10 分钟解说。
+把 /path/to/english.mp4 翻译成中文配音，保留原说话人的声音。
+```
+
 ## 核心体验
 
-- **按任务优化的布局**：小说/短剧保留文件树、编辑器、Chat 三栏；游戏使用“左侧实时试玩 + 右侧 Chat”两列，主流程不被辅助面板挤占。
+- **按任务优化的布局**：小说/短剧保留文件树、编辑器、Chat 三栏；游戏与视频使用“左侧工作台 + 右侧 Chat”两列。
 - **实时游戏预览**：Agent 生成 `build/app/` 后自动发现可试玩版本；预览隔离运行，支持刷新、全屏、项目切换与构建期间保留上一版。
 - **实时文件跟随**：Agent 调用官方文件工具时，目标文件自动定位，编辑器同步呈现生成中的内容。
 - **Chat 文件导航**：点击官方 Chat 中的作品文件名，文件树会定位并在编辑器打开对应文件。
@@ -53,6 +67,7 @@
 | 小说 | [Oh Story 0.7.8](https://github.com/zenstory-ai/oh-story-claudecode/releases/tag/v0.7.8) · 13 Skills · 7 Roles | `/story`、`/story-long-write`、`/story-review` |
 | 短剧 | [Drama Skills 0.6.1](https://github.com/zenstory-ai/drama-skills/releases/tag/v0.6.1) · 10 Skills | `/short-drama`、`/short-drama-write`、`/short-drama-storyboard` |
 | 游戏 | [NovelToGame 0.3.0](https://github.com/zenstory-ai/novel-to-game) · 7 Skills · 《金瓶梅》可玩示例 | `/novel-to-game quick`、`/game-build`、`/game-qa` |
+| 视频 | [video-recap-skills 0.4.0](https://github.com/zenstory-ai/video-recap-skills) · 6 Skills | `/video-recap`、`/video-script` |
 
 ## 安装
 
@@ -80,7 +95,7 @@ npx -y @deepseek-ai/dsh@0.1.1-rc.1 web
 
 **3. 开始创作**
 
-添加作品目录为 workspace，新建或打开 Session 后使用 `/story`、`/short-drama` 或 `/novel-to-game quick`。小说、短剧与游戏工作台可随时通过顶部 Tab 切换。
+添加作品目录为 workspace，新建或打开 Session 后使用 `/story`、`/short-drama`、`/novel-to-game quick` 或 `/video-recap`。四个工作台可随时通过顶部 Tab 切换。
 
 ## 按需加载
 

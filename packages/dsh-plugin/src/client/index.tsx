@@ -3,7 +3,7 @@ import type { IConversation } from "@deepseek-ai/dsh-client-ui-conversation/clie
 import type {} from "@deepseek-ai/dsh-client-ui-layout/client";
 import type { PropsRenderSlots, PropsRuntime, PropsStore } from "@deepseek-ai/dsh-client-ui-slots";
 import type { ToolCallViewProps } from "@deepseek-ai/dsh-client-ui-tool/client";
-import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import {
   creativeRelativePath,
@@ -13,6 +13,7 @@ import {
   preferredWorkbenchFile,
   previewMutation,
   streamingAssistant,
+  workbenchLabel,
   workbenchModeForPath,
   type WorkbenchMode
 } from "./file-activity.js";
@@ -38,6 +39,8 @@ import { createPendingJob, type
 } from "./production-runtime.js";
 import { settledProductionIntents, type SettledProductionIntent } from "./production-intents.js";
 import { OH_STORY_PRODUCTION_TOOL_NAME } from "../production-intent.js";
+import { VideoStudio, type VideoProject } from "./video-studio.js";
+import { endpoint, handleTabKey } from "./workbench-ui.js";
 import styles from "./plugin.css?inline";
 
 export const name = "oh-story";
@@ -60,6 +63,7 @@ interface WorkspacePayload {
   readonly cwd: string;
   readonly files: readonly WorkspaceFile[];
   readonly games: readonly GameProject[];
+  readonly videos: readonly VideoProject[];
   readonly shortDrama: Record<string, unknown> | null;
   readonly metadataErrors: readonly string[];
   readonly mode: "dsh-session";
@@ -103,6 +107,9 @@ interface WorkbenchMemory {
   gameTab: "preview" | "design";
   gameProjectId: string | undefined;
   gamePane: "studio" | "chat";
+  videoTab: "preview" | "artifacts";
+  videoProjectId: string | undefined;
+  videoPane: "studio" | "chat";
   productionSection: DramaProductionSection;
   productionSelectedIds: Record<string, string | undefined>;
   productionJobs: Record<string, ProductionJob[]>;
@@ -131,6 +138,9 @@ function createWorkbenchStore() {
       gameTab: "preview",
       gameProjectId: undefined,
       gamePane: "studio",
+      videoTab: "preview",
+      videoProjectId: undefined,
+      videoPane: "studio",
       productionSection: "shots",
       productionSelectedIds: {},
       productionJobs: {},
@@ -165,6 +175,15 @@ function createWorkbenchStore() {
       },
       setGamePane: (draft, update: Update<WorkbenchMemory["gamePane"]>) => {
         draft.gamePane = applyUpdate(draft.gamePane, update);
+      },
+      setVideoTab: (draft, update: Update<WorkbenchMemory["videoTab"]>) => {
+        draft.videoTab = applyUpdate(draft.videoTab, update);
+      },
+      setVideoProjectId: (draft, update: Update<string | undefined>) => {
+        draft.videoProjectId = applyUpdate(draft.videoProjectId, update);
+      },
+      setVideoPane: (draft, update: Update<WorkbenchMemory["videoPane"]>) => {
+        draft.videoPane = applyUpdate(draft.videoPane, update);
       },
       setProductionSection: (draft, update: Update<DramaProductionSection>) => {
         draft.productionSection = applyUpdate(draft.productionSection, update);
@@ -204,40 +223,15 @@ class WorkspaceRequestError extends Error {
 const GROUP_ORDER: Readonly<Record<WorkbenchMode, readonly string[]>> = {
   story: ["正文", "大纲", "设定", "追踪", "对标", "参考资料"],
   drama: ["项目", "输入", "项目开发", "设定集", "剧集", "审查", "创作者决策", "交付"],
-  game: ["game-adaptations"]
+  game: ["game-adaptations"],
+  video: ["video-recaps"]
 };
 
-const WORKBENCH_MODES = ["story", "drama", "game"] as const;
+const WORKBENCH_MODES = ["story", "drama", "game", "video"] as const;
 const EDITOR_MODES = ["preview", "source", "production"] as const;
-
-function handleTabKey<T extends string>(
-  event: ReactKeyboardEvent<HTMLButtonElement>,
-  values: readonly T[],
-  current: T,
-  select: (value: T) => void
-): void {
-  let index: number | undefined;
-  if (event.key === "Home") index = 0;
-  else if (event.key === "End") index = values.length - 1;
-  else if (event.key === "ArrowRight") index = (values.indexOf(current) + 1) % values.length;
-  else if (event.key === "ArrowLeft") index = (values.indexOf(current) - 1 + values.length) % values.length;
-  if (index === undefined) return;
-  event.preventDefault();
-  const value = values[index];
-  if (value === undefined) return;
-  select(value);
-  event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>("[role='tab']")[index]?.focus();
-}
 
 function groupForPath(path: string): string {
   return path === "short-drama.json" ? "项目" : path.split("/", 1)[0] ?? "其他";
-}
-
-function endpoint(path: string, sessionId: string, file?: string): string {
-  const url = new URL(`/oh-story/${path}`, globalThis.location.origin);
-  url.searchParams.set("sessionId", sessionId);
-  if (file !== undefined) url.searchParams.set("path", file);
-  return url.toString();
 }
 
 async function json<T>(response: Response): Promise<T> {
@@ -547,7 +541,7 @@ function GameStudio({
           tabIndex={mode === "game" ? 0 : -1}
           onKeyDown={(event) => { handleTabKey(event, workbenches, "game", onWorkbench); }}
           onClick={() => { onWorkbench(mode); }}
-        >{mode === "story" ? "小说" : mode === "drama" ? "短剧" : "游戏"}</button>)}
+        >{workbenchLabel(mode)}</button>)}
       </div>}
       <label className="oh-game-project" title="切换项目将重新载入试玩"><span>游戏项目</span><select aria-label="游戏项目；切换将重新载入试玩" value={project.id} onChange={(event) => { onGameProject(event.target.value); }}>
         {workspace.games.some((item) => item.source === "workspace") && <optgroup label="我的项目">{workspace.games.filter((item) => item.source === "workspace").map((item) => <option value={item.id} key={item.id}>{`我的项目 · ${item.title}`}</option>)}</optgroup>}
@@ -621,7 +615,12 @@ function CreativeWorkbench({
   const setGameProjectId = actions.setGameProjectId;
   const gamePane = useStore((memory) => memory.gamePane);
   const setGamePane = actions.setGamePane;
-  const initializedWorkbench = useRef(false);
+  const videoTab = useStore((memory) => memory.videoTab);
+  const setVideoTab = actions.setVideoTab;
+  const videoProjectId = useStore((memory) => memory.videoProjectId);
+  const setVideoProjectId = actions.setVideoProjectId;
+  const videoPane = useStore((memory) => memory.videoPane);
+  const setVideoPane = actions.setVideoPane;
   const selected = useStore((memory) => memory.selected);
   const setSelected = actions.setSelected;
   const buffers = useStore((memory) => memory.buffers);
@@ -642,6 +641,7 @@ function CreativeWorkbench({
   const surfaceRef = useRef<HTMLDivElement>(null);
   const compactTabsId = useId();
   const compactStudioId = `${compactTabsId}-studio-panel`;
+  const compactVideoStudioId = `${compactTabsId}-video-studio-panel`;
   const compactChatId = `${compactTabsId}-chat-panel`;
   const navRef = useRef<HTMLElement>(null);
   const activityBases = useRef(new Map<string, { readonly path: string; readonly base: string }>());
@@ -743,19 +743,9 @@ function CreativeWorkbench({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const editorPositions = useRef(new Map<string, { readonly scrollTop: number; readonly selectionStart: number; readonly selectionEnd: number }>());
   const editorReady = buffer !== undefined && buffer.missing !== true;
-  const availableModes = useMemo(() => {
-    const value = new Set<WorkbenchMode>();
-    for (const file of workspace?.files ?? []) {
-      const mode = workbenchModeForPath(file.path);
-      if (mode !== undefined) value.add(mode);
-    }
-    if (value.size === 0) value.add("story");
-    value.add("game");
-    return WORKBENCH_MODES.filter((mode) => value.has(mode));
-  }, [workspace?.files]);
-  const showModeTabs = workspace !== undefined && availableModes.length > 1;
-  const workspaceKind = workbench === "game" ? undefined : workbench;
+  const workspaceKind = workbench === "game" || workbench === "video" ? undefined : workbench;
   const gameBuilding = normalizedActivities.some(({ path }) => path.startsWith("game-adaptations/"));
+  const videoBuilding = normalizedActivities.some(({ path }) => path.startsWith("video-recaps/"));
 
   useEffect(() => { buffersRef.current = buffers; }, [buffers]);
 
@@ -881,6 +871,9 @@ function CreativeWorkbench({
   const openedGame = useRef(false);
   if (workbench === "game") openedGame.current = true;
   const gameStudioMounted = openedGame.current;
+  const openedVideo = useRef(false);
+  if (workbench === "video") openedVideo.current = true;
+  const videoStudioMounted = openedVideo.current;
 
   const followAgentPath = useCallback((path: string): void => {
     expandPath(path);
@@ -892,17 +885,9 @@ function CreativeWorkbench({
     if (preserveFocusedDraft) return;
     // The editor textarea is not mounted in the Game Studio, so the draft guard above can never
     // fire there. Never preempt a running game: agent writes may expand the tree, not navigate.
-    if (workbench === "game" && gameTab === "preview") return;
+    if ((workbench === "game" && gameTab === "preview") || (workbench === "video" && videoTab === "preview")) return;
     revealPath(path);
-  }, [expandPath, gameTab, revealPath, selected, workbench]);
-
-  useEffect(() => {
-    if (workspace === undefined || initializedWorkbench.current) return;
-    if (!availableModes.includes(workbench)) {
-      setWorkbench(availableModes.find((mode) => mode !== "game") ?? availableModes[0] ?? "story");
-    }
-    initializedWorkbench.current = true;
-  }, [availableModes, workbench, workspace]);
+  }, [expandPath, gameTab, revealPath, selected, videoTab, workbench]);
 
   useEffect(() => {
     if (activityPath !== undefined && activityPath === selected && !selectedMedia) setEditorMode("source");
@@ -1125,7 +1110,7 @@ function CreativeWorkbench({
   }, [normalizedActivities.length, revealPath, workspace]);
 
   useEffect(() => {
-    if (workbench !== "game") return;
+    if (workbench !== "game" && workbench !== "video") return;
     const surface = surfaceRef.current;
     const sessionSurface = surface?.parentElement;
     const chat = Array.from(sessionSurface?.children ?? []).find((child) => child !== surface && child instanceof HTMLElement);
@@ -1253,8 +1238,9 @@ function CreativeWorkbench({
 
   const selectWorkbench = (next: WorkbenchMode): void => {
     setWorkbench(next);
-    if (next === "game") {
-      setGameTab("preview");
+    if (next === "game" || next === "video") {
+      if (next === "game") setGameTab("preview");
+      else setVideoTab("preview");
       setSelected(undefined);
       return;
     }
@@ -1275,7 +1261,7 @@ function CreativeWorkbench({
     revealPath(target.path);
     setEditorMode("source");
   };
-  const selectedLabel = selected ?? `在当前 DSH workspace 中选择${workbench === "story" ? "小说" : workbench === "drama" ? "短剧" : "游戏"}文件`;
+  const selectedLabel = selected ?? `在当前 DSH workspace 中选择${workbenchLabel(workbench)}文件`;
   const selectedBasename = selected?.split("/").at(-1) ?? selectedLabel;
   const selectedGroup = selected === undefined ? undefined : groupForPath(selected);
   const toggleGroup = (key: string, open: boolean): void => {
@@ -1299,17 +1285,17 @@ function CreativeWorkbench({
 
   return <div ref={surfaceRef} className="oh-story-split-surface" data-workbench={workbench}>
     <style>{styles}</style>
-    {workbench === "game" && <div className="oh-game-mobile-switcher" role="tablist" aria-label="窄屏游戏工作台">
+    {(workbench === "game" || workbench === "video") && <div className="oh-game-mobile-switcher" role="tablist" aria-label={workbench === "game" ? "窄屏游戏工作台" : "窄屏视频工作台"}>
       {(["studio", "chat"] as const).map((pane) => <button
         type="button"
         role="tab"
         key={pane}
         id={`${compactTabsId}-${pane}-tab`}
-        aria-controls={pane === "studio" ? compactStudioId : compactChatId}
-        aria-selected={gamePane === pane}
-        tabIndex={gamePane === pane ? 0 : -1}
-        onKeyDown={(event) => { handleTabKey(event, ["studio", "chat"] as const, gamePane, setGamePane); }}
-        onClick={() => { setGamePane(pane); }}
+        aria-controls={pane === "chat" ? compactChatId : workbench === "game" ? compactStudioId : compactVideoStudioId}
+        aria-selected={(workbench === "game" ? gamePane : videoPane) === pane}
+        tabIndex={(workbench === "game" ? gamePane : videoPane) === pane ? 0 : -1}
+        onKeyDown={(event) => { handleTabKey(event, ["studio", "chat"] as const, workbench === "game" ? gamePane : videoPane, workbench === "game" ? setGamePane : setVideoPane); }}
+        onClick={() => { if (workbench === "game") setGamePane(pane); else setVideoPane(pane); }}
       >{pane === "studio" ? "制作" : "对话"}</button>)}
     </div>}
     {workbench === "game" && workspace === undefined && <main id={compactStudioId} className="oh-game-studio" role="tabpanel" aria-labelledby={`${compactTabsId}-studio-tab`}><div className="oh-game-design-empty">{error ?? "正在连接游戏工作台…"}</div></main>}
@@ -1323,28 +1309,43 @@ function CreativeWorkbench({
           hidden={workbench !== "game"}
           onGameTab={setGameTab}
           onGameProject={setGameProjectId}
-          workbenches={availableModes}
+          workbenches={WORKBENCH_MODES}
           paneId={compactStudioId}
           labelledBy={`${compactTabsId}-studio-tab`}
           onWorkbench={selectWorkbench}
           onSelect={revealPath}
         />}
-    {workbench !== "game" && <>
+    {workbench === "video" && workspace === undefined && <main id={compactVideoStudioId} className="oh-video-studio" role="tabpanel" aria-labelledby={`${compactTabsId}-studio-tab`}><div className="oh-video-preview-empty">{error ?? "正在连接视频工作台…"}</div></main>}
+    {workspace !== undefined && videoStudioMounted && <VideoStudio
+          sessionId={sessionId}
+          projects={workspace.videos}
+          running={videoBuilding}
+          projectId={videoProjectId}
+          tab={videoTab}
+          hidden={workbench !== "video"}
+          workbenches={WORKBENCH_MODES}
+          paneId={compactVideoStudioId}
+          labelledBy={`${compactTabsId}-studio-tab`}
+          onProject={setVideoProjectId}
+          onTab={setVideoTab}
+          onWorkbench={selectWorkbench}
+        />}
+    {workbench !== "game" && workbench !== "video" && <>
     <aside className="oh-story-tree">
       <div className="oh-story-brand">
         <span className="oh-story-brand-cluster"><strong>✦ <span>Oh Story</span></strong>{workspaceKind !== undefined && <span className="oh-story-kind">{workspaceKind === "story" ? "小说" : "短剧"}</span>}</span>
         <button type="button" onClick={reload} title="刷新" aria-label="刷新项目文件">↻</button>
       </div>
-      {showModeTabs && <div className="oh-story-mode-tabs" role="tablist" aria-label="创作工作台">
-        {availableModes.map((mode) => <button
+      {workspace !== undefined && <div className="oh-story-mode-tabs" role="tablist" aria-label="创作工作台">
+        {WORKBENCH_MODES.map((mode) => <button
           type="button"
           role="tab"
           key={mode}
           tabIndex={workbench === mode ? 0 : -1}
           aria-selected={workbench === mode}
-          onKeyDown={(event) => { handleTabKey(event, availableModes, workbench, selectWorkbench); }}
+          onKeyDown={(event) => { handleTabKey(event, WORKBENCH_MODES, workbench, selectWorkbench); }}
           onClick={() => { selectWorkbench(mode); }}
-        >{mode === "story" ? "小说" : mode === "drama" ? "短剧" : "游戏"}</button>)}
+        >{workbenchLabel(mode)}</button>)}
       </div>}
       {error !== undefined && <div className="oh-story-error">{error}</div>}
       {workspace?.metadataErrors.map((message) => <div className="oh-story-warning" key={message}>{message}</div>)}
@@ -1496,6 +1497,7 @@ function CreativeSplitBridge({ sessionId, useSession, useStore, actions, sendPro
   const settledMutation = useSession((snapshot) => latestSettledMutation(snapshot.chat));
   const workbench = useStore((memory) => memory.workbench);
   const gamePane = useStore((memory) => memory.gamePane);
+  const videoPane = useStore((memory) => memory.videoPane);
   const sessionRunning = useSession((snapshot) => snapshot.running);
   const productionQueue = useSession((snapshot) => snapshot.queue.map((item) => ({ id: item.id, preview: item.preview })));
   const chat = useSession((snapshot) => snapshot.chat);
@@ -1515,26 +1517,33 @@ function CreativeSplitBridge({ sessionId, useSession, useStore, actions, sendPro
   useLayoutEffect(() => {
     const scroller = target?.parentElement;
     if (scroller === undefined || scroller === null) return;
+    const composer = Array.from(scroller.children).find((element): element is HTMLElement => element instanceof HTMLElement && element.hasAttribute("data-composer-seat"));
+    const previousComposerHeight = scroller.style.getPropertyValue("--dsh-composer-height");
     const publishLayout = (): void => {
       scroller.style.setProperty("--oh-story-scroll-height", `${String(scroller.clientHeight)}px`);
+      if (composer !== undefined) scroller.style.setProperty("--dsh-composer-height", `${String(composer.getBoundingClientRect().height)}px`);
       scroller.dataset.ohStoryWorkbench = workbench;
-      scroller.dataset.ohGamePane = gamePane;
-      const compactAt = workbench === "game" ? 720 : 620;
-      const mediumAt = workbench === "game" ? 960 : 900;
+      const studioPane = workbench === "video" ? videoPane : gamePane;
+      scroller.dataset.ohStudioPane = studioPane;
+      const compactAt = workbench === "game" || workbench === "video" ? 720 : 620;
+      const mediumAt = workbench === "game" || workbench === "video" ? 960 : 900;
       const layout = scroller.clientWidth < compactAt ? "compact" : scroller.clientWidth < mediumAt ? "medium" : "wide";
       if (scroller.dataset.ohStoryLayout !== layout) scroller.dataset.ohStoryLayout = layout;
     };
     publishLayout();
     const observer = new ResizeObserver(publishLayout);
     observer.observe(scroller);
+    if (composer !== undefined) observer.observe(composer);
     return () => {
       observer.disconnect();
       scroller.style.removeProperty("--oh-story-scroll-height");
+      if (previousComposerHeight === "") scroller.style.removeProperty("--dsh-composer-height");
+      else scroller.style.setProperty("--dsh-composer-height", previousComposerHeight);
       delete scroller.dataset.ohStoryLayout;
       delete scroller.dataset.ohStoryWorkbench;
-      delete scroller.dataset.ohGamePane;
+      delete scroller.dataset.ohStudioPane;
     };
-  }, [gamePane, target, workbench]);
+  }, [gamePane, target, videoPane, workbench]);
   return <>
     <span ref={marker} className="oh-story-bridge-marker" aria-hidden />
     {target === undefined ? null : createPortal(<CreativeWorkbench
