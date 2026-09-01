@@ -8,7 +8,9 @@ import { fileURLToPath } from "node:url";
 import { chromium, type Locator, type Page } from "@playwright/test";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const dshVersion = "0.1.1-rc.1";
+const dshVersion = "0.1.2-alpha.3";
+/** Exact WebSocket route carrying every Typert Remote stream. */
+const REMOTE_STREAM_MUX_PATH = "/api/remote.mux";
 const demoFramesDirectory = process.env.OH_STORY_DEMO_FRAMES_DIR;
 const gameEvidenceDirectory = process.env.OH_STORY_GAME_E2E_DIR;
 const useRealDeepSeek = process.env.OH_STORY_DEMO_USE_REAL_DEEPSEEK === "1";
@@ -238,23 +240,52 @@ async function closeServer(server: HttpServer): Promise<void> {
   await new Promise<void>((accept, reject) => server.close((error) => error ? reject(error) : accept()));
 }
 
-async function waitForServer(origin: string): Promise<void> {
+let dshAuthCookie: string | undefined;
+
+/**
+ * DSH 0.1.2 gates Web and `/api` behind a session cookie. Exchange the one-time
+ * token the CLI prints at startup for that cookie, and hand the same URL to
+ * Chrome so the browser authorizes itself the way a user would.
+ */
+async function authorizeDsh(origin: string, logs: readonly string[]): Promise<string> {
+  const pattern = new RegExp(`${origin.replaceAll(".", "\\.")}/\\?token=[A-Za-z0-9_.-]+`, "u");
   const deadline = Date.now() + 90_000;
   while (Date.now() < deadline) {
-    try { if ((await fetch(origin)).ok) return; } catch { /* retry */ }
+    const tokenUrl = pattern.exec(logs.join(""))?.[0];
+    if (tokenUrl !== undefined) {
+      try {
+        const response = await fetch(tokenUrl, { redirect: "manual" });
+        const cookie = response.headers.getSetCookie().map((entry) => entry.split(";", 1)[0]).join("; ");
+        if (cookie !== "") {
+          dshAuthCookie = cookie;
+          return tokenUrl;
+        }
+      } catch { /* retry */ }
+    }
     await new Promise((accept) => setTimeout(accept, 150));
   }
   throw new Error("Timed out waiting for official DSH Web.");
 }
 
-async function rpc<T>(origin: string, method: string, payload: unknown): Promise<T> {
+/** Every request to DSH carries the session cookie obtained by {@link authorizeDsh}. */
+async function dshFetch(input: string | URL, init: RequestInit = {}): Promise<Response> {
+  return fetch(input, { ...init, headers: { ...init.headers as Record<string, string>, cookie: dshAuthCookie ?? "" } });
+}
+
+interface HistoryEvent { readonly seq: number; readonly type: string; readonly data: unknown }
+
+/**
+ * DSH 0.1.2 addresses Remotes as `<namespace>/<method>` and carries the call in
+ * a single `args` field, so the wire method must equal the endpoint path.
+ */
+async function rpc<T>(origin: string, endpoint: string, args: object): Promise<T> {
   const rpcId = `oh-story-smoke-${crypto.randomUUID()}`;
   const deadline = Date.now() + 15_000;
   while (true) {
-    const response = await fetch(`${origin}/api/${method}`, {
+    const response = await dshFetch(`${origin}/api/${endpoint}`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ type: "client-request", rpcId, method, payload })
+      body: JSON.stringify({ type: "client-request", rpcId, method: endpoint, payload: { args } })
     });
     const body = await response.text();
     if (response.status === 404 && body.trim() === "not found" && Date.now() < deadline) {
@@ -266,19 +297,53 @@ async function rpc<T>(origin: string, method: string, payload: unknown): Promise
       readonly result: { readonly ok: true; readonly value: T } | { readonly ok: false; readonly error: { readonly code: string; readonly message: string } };
     };
     try { envelope = JSON.parse(body) as typeof envelope; }
-    catch { throw new Error(`DSH ${method} returned HTTP ${String(response.status)} with a non-JSON body: ${body.slice(0, 200)}`); }
+    catch { throw new Error(`DSH ${endpoint} returned HTTP ${String(response.status)} with a non-JSON body: ${body.slice(0, 200)}`); }
     if (!response.ok || envelope.rpcId !== rpcId || !envelope.result.ok) {
-      throw new Error(`DSH ${method} failed: ${JSON.stringify(envelope)}`);
+      throw new Error(`DSH ${endpoint} failed: ${JSON.stringify(envelope)}`);
     }
     return envelope.result.value;
   }
 }
 
-interface HistoryEvent { readonly seq: number; readonly type: string; readonly data: unknown }
+interface HistoryRecord { readonly type: string; readonly event: HistoryEvent }
 
+/**
+ * `session.history` is gone: the durable log now arrives as the opening
+ * snapshot of the `session/follow` stream, multiplexed over one WebSocket.
+ */
 async function sessionEvents(origin: string, sessionId: string): Promise<readonly HistoryEvent[]> {
-  const history = await rpc<{ readonly events: readonly { readonly event: HistoryEvent }[] }>(origin, "session.history", { sessionId, maxMessages: 1_000 });
-  return history.events.map((entry) => entry.event);
+  const address = `${origin.replace(/^http/u, "ws")}${REMOTE_STREAM_MUX_PATH}`;
+  // Node's WebSocket takes request headers through an option its DOM types omit.
+  const socket = new WebSocket(address, { headers: { cookie: dshAuthCookie ?? "" } } as unknown as string[]);
+  let stalled: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await new Promise<readonly HistoryEvent[]>((accept, reject) => {
+      const streamId = crypto.randomUUID();
+      stalled = setTimeout(() => { reject(new Error("DSH session/follow produced no opening snapshot.")); }, 30_000);
+      socket.addEventListener("error", () => { reject(new Error("DSH session/follow stream failed to open.")); });
+      socket.addEventListener("close", () => { reject(new Error("DSH closed session/follow before the opening snapshot.")); });
+      socket.addEventListener("open", () => {
+        socket.send(JSON.stringify({
+          type: "open",
+          streamId,
+          endpoint: "session/follow",
+          payload: { args: { request: { address: { kind: "session", sessionId }, maxMessages: 1_000 } } }
+        }));
+      });
+      socket.addEventListener("message", (message: MessageEvent) => {
+        const frame = JSON.parse(String(message.data)) as {
+          readonly type: string;
+          readonly streamId: string;
+          readonly value?: { readonly type: string; readonly records?: readonly HistoryRecord[] };
+          readonly error?: { readonly message: string };
+        };
+        if (frame.streamId !== streamId) return;
+        if (frame.type === "error") { reject(new Error(`DSH session/follow failed: ${frame.error?.message ?? "unknown"}`)); return; }
+        if (frame.type !== "item" || frame.value?.type !== "snapshot") return;
+        accept((frame.value.records ?? []).filter((record) => record.type === "event").map((record) => record.event));
+      });
+    });
+  } finally { clearTimeout(stalled); socket.close(); }
 }
 
 async function waitForCompletedTurn(origin: string, sessionId: string, afterSeq = -1): Promise<readonly HistoryEvent[]> {
@@ -303,18 +368,21 @@ async function waitForCompletedTurn(origin: string, sessionId: string, afterSeq 
 async function prepareSession(origin: string, sessionId: string, prompt: string, title: string): Promise<void> {
   const models = await rpc<{
     readonly groups: readonly { readonly id: string; readonly models: readonly { readonly id: string }[] }[];
-  }>(origin, "session.models", { sessionId });
+  }>(origin, "session/modelCatalog", {});
   const deepseek = models.groups.find((group) => group.id === "deepseek-official");
   const model = deepseek?.models.find((candidate) => candidate.id === "deepseek-v4-flash")?.id ?? deepseek?.models[0]?.id;
   if (deepseek === undefined || model === undefined) throw new Error("DSH did not expose a DeepSeek official model.");
-  await rpc(origin, "session.selectModel", { sessionId, provider: deepseek.id, model });
-  await rpc(origin, "session.prompt", {
-    sessionId,
-    mode: "queue",
-    content: [{ type: "text", text: prompt }]
+  await rpc(origin, "session/selectModel", { request: { sessionId, provider: deepseek.id, model } });
+  await rpc(origin, "session/prompt", {
+    request: {
+      requestId: crypto.randomUUID(),
+      sessionId,
+      mode: "queue",
+      content: [{ type: "text", text: prompt }]
+    }
   });
   await waitForCompletedTurn(origin, sessionId);
-  await rpc(origin, "session.rename", { sessionId, title });
+  await rpc(origin, "session/rename", { request: { sessionId, title } });
 }
 
 /** Send one request with headers verbatim; fetch silently drops a forged Host. */
@@ -352,6 +420,15 @@ async function openFolder(page: Page, label: string): Promise<void> {
   const summary = page.locator(".oh-story-file-folder > summary").filter({ hasText: new RegExp(`^${label}\\d+$`, "u") }).first();
   await summary.waitFor({ state: "visible", timeout: 10_000 });
   await ensureOpen(summary);
+}
+
+/** DSH 0.1.2 folds a completed Turn's tool calls behind a turn-process disclosure. */
+async function expandTurnProcesses(page: Page): Promise<void> {
+  const collapsed = page.locator('button[data-turn-process][aria-expanded="false"]');
+  // Each click re-renders the flow, so re-resolve the first collapsed toggle every round.
+  for (let round = 0; round < 32 && await collapsed.count() > 0; round += 1) {
+    await collapsed.first().click();
+  }
 }
 
 async function selectFile(page: Page, path: string): Promise<void> {
@@ -523,14 +600,14 @@ async function main(): Promise<void> {
     });
     child.stdout?.on("data", (chunk: Buffer) => logs.push(chunk.toString("utf8")));
     child.stderr?.on("data", (chunk: Buffer) => logs.push(chunk.toString("utf8")));
-    await waitForServer(origin);
+    const dshTokenUrl = await authorizeDsh(origin, logs);
 
-    const storyWorkspace = await rpc<{ readonly workspace: { readonly workspaceId: string; readonly title: string } }>(origin, "workspace.create", { path: storyRoot });
-    const dramaWorkspace = await rpc<{ readonly workspace: { readonly workspaceId: string; readonly title: string } }>(origin, "workspace.create", { path: dramaRoot });
-    const storySession = await rpc<{ readonly sessionId: string }>(origin, "session.create", { workspaceId: storyWorkspace.workspace.workspaceId });
-    const gameSession = await rpc<{ readonly sessionId: string }>(origin, "session.create", { workspaceId: storyWorkspace.workspace.workspaceId });
-    const dramaSession = await rpc<{ readonly sessionId: string }>(origin, "session.create", { workspaceId: dramaWorkspace.workspace.workspaceId });
-    const catalog = await rpc<{ readonly skills: readonly { readonly name: string }[] }>(origin, "skill.list", { sessionId: storySession.sessionId });
+    const storyWorkspace = await rpc<{ readonly workspace: { readonly workspaceId: string; readonly title: string } }>(origin, "workspace/create", { request: { path: storyRoot } });
+    const dramaWorkspace = await rpc<{ readonly workspace: { readonly workspaceId: string; readonly title: string } }>(origin, "workspace/create", { request: { path: dramaRoot } });
+    const storySession = await rpc<{ readonly sessionId: string }>(origin, "session/create", { request: { workspaceId: storyWorkspace.workspace.workspaceId } });
+    const gameSession = await rpc<{ readonly sessionId: string }>(origin, "session/create", { request: { workspaceId: storyWorkspace.workspace.workspaceId } });
+    const dramaSession = await rpc<{ readonly sessionId: string }>(origin, "session/create", { request: { workspaceId: dramaWorkspace.workspace.workspaceId } });
+    const catalog = await rpc<{ readonly skills: readonly { readonly name: string }[] }>(origin, "skills/list", { request: { sessionId: storySession.sessionId } });
     const ohStorySkills = catalog.skills.filter((skill) => skill.name === "story" || skill.name.startsWith("story-") || skill.name === "browser-cdp");
     const dramaSkills = catalog.skills.filter((skill) => skill.name === "short-drama" || skill.name.startsWith("short-drama-"));
     const gameSkills = catalog.skills.filter((skill) => [
@@ -549,10 +626,13 @@ async function main(): Promise<void> {
     if (!useRealDeepSeek) {
       const previousEvents = await sessionEvents(origin, storySession.sessionId);
       const afterSeq = previousEvents.at(-1)?.seq ?? -1;
-      await rpc(origin, "session.prompt", {
-        sessionId: storySession.sessionId,
-        mode: "queue",
-        content: [{ type: "text", text: roleSmokePrompt }]
+      await rpc(origin, "session/prompt", {
+        request: {
+          requestId: crypto.randomUUID(),
+          sessionId: storySession.sessionId,
+          mode: "queue",
+          content: [{ type: "text", text: roleSmokePrompt }]
+        }
       });
       const roleEvents = await waitForCompletedTurn(origin, storySession.sessionId, afterSeq);
       const roleCalls = roleEvents.filter((event) => event.type === "tool/call")
@@ -582,10 +662,13 @@ async function main(): Promise<void> {
 
       const dramaEventsBeforeIntent = await sessionEvents(origin, dramaSession.sessionId);
       const intentAfterSeq = dramaEventsBeforeIntent.at(-1)?.seq ?? -1;
-      await rpc(origin, "session.prompt", {
-        sessionId: dramaSession.sessionId,
-        mode: "queue",
-        content: [{ type: "text", text: productionIntentSmokePrompt }]
+      await rpc(origin, "session/prompt", {
+        request: {
+          requestId: crypto.randomUUID(),
+          sessionId: dramaSession.sessionId,
+          mode: "queue",
+          content: [{ type: "text", text: productionIntentSmokePrompt }]
+        }
       });
       const intentEvents = await waitForCompletedTurn(origin, dramaSession.sessionId, intentAfterSeq);
       const intentCalls = intentEvents.filter((event) => event.type === "tool/call")
@@ -599,7 +682,7 @@ async function main(): Promise<void> {
       }
     }
 
-    const storyWorkspaceResponse = await fetch(`${origin}/oh-story/workspace?sessionId=${encodeURIComponent(storySession.sessionId)}`);
+    const storyWorkspaceResponse = await dshFetch(`${origin}/oh-story/workspace?sessionId=${encodeURIComponent(storySession.sessionId)}`);
     const storyWorkspacePayload = await storyWorkspaceResponse.json() as {
       readonly mode?: string;
       readonly cwd?: string;
@@ -617,17 +700,17 @@ async function main(): Promise<void> {
       || generatedGame.verification?.status !== "PASS" || generatedGame.verification.binding !== "UNBOUND") {
       throw new Error(`Story Session workspace route failed: ${JSON.stringify(storyWorkspacePayload)}`);
     }
-    const bundledPreview = await fetch(`${origin}${bundledGame.previewUrl}`);
+    const bundledPreview = await dshFetch(`${origin}${bundledGame.previewUrl}`);
     if (!bundledPreview.ok || !(await bundledPreview.text()).includes("金瓶梅·风月总账")) {
       throw new Error(`Bundled Jin Ping Mei preview route failed: ${String(bundledPreview.status)}.`);
     }
-    const generatedPreview = await fetch(`${origin}${generatedGame.previewUrl}`);
+    const generatedPreview = await dshFetch(`${origin}${generatedGame.previewUrl}`);
     const generatedCsp = generatedPreview.headers.get("content-security-policy") ?? "";
     if (!generatedPreview.ok || !(await generatedPreview.text()).includes("试玩成功")
       || !generatedCsp.includes("/oh-story/game-preview/") || generatedCsp.includes("connect-src 'self'")) {
       throw new Error(`Workspace game preview route failed: ${String(generatedPreview.status)}.`);
     }
-    const dramaWorkspaceResponse = await fetch(`${origin}/oh-story/workspace?sessionId=${encodeURIComponent(dramaSession.sessionId)}`);
+    const dramaWorkspaceResponse = await dshFetch(`${origin}/oh-story/workspace?sessionId=${encodeURIComponent(dramaSession.sessionId)}`);
     const dramaWorkspacePayload = await dramaWorkspaceResponse.json() as { readonly mode?: string; readonly cwd?: string; readonly files?: readonly { readonly path: string; readonly kind?: string; readonly mimeType?: string }[]; readonly shortDrama?: unknown };
     const dramaPaths = dramaWorkspacePayload.files?.map((file) => file.path).sort() ?? [];
     const expectedDramaPaths = ["EP001", "EP002"].flatMap((episode) => dramaCreatorFiles.map((name) => `剧集/${episode}/${name}`)).sort();
@@ -648,7 +731,7 @@ async function main(): Promise<void> {
       cp(keyframeV2MediaFixture, join(dramaRoot, productionMediaV2Path)),
       cp(videoMediaFixture, join(dramaRoot, productionVideoPath))
     ]);
-    const mediaWorkspaceResponse = await fetch(`${origin}/oh-story/workspace?sessionId=${encodeURIComponent(dramaSession.sessionId)}`);
+    const mediaWorkspaceResponse = await dshFetch(`${origin}/oh-story/workspace?sessionId=${encodeURIComponent(dramaSession.sessionId)}`);
     const mediaWorkspace = await mediaWorkspaceResponse.json() as { readonly files?: readonly { readonly path: string; readonly kind?: string; readonly mimeType?: string }[] };
     const listedMedia = mediaWorkspace.files?.find((file) => file.path === productionMediaPath);
     const listedMediaV2 = mediaWorkspace.files?.find((file) => file.path === productionMediaV2Path);
@@ -659,7 +742,7 @@ async function main(): Promise<void> {
       throw new Error(`DSH workspace did not classify production media: ${JSON.stringify({ listedMedia, listedMediaV2, listedVideo })}`);
     }
     const productionMediaUrl = `${origin}/oh-story/media?sessionId=${encodeURIComponent(dramaSession.sessionId)}&path=${encodeURIComponent(productionMediaPath)}`;
-    const rangeResponse = await fetch(productionMediaUrl, { headers: { range: "bytes=0-7" } });
+    const rangeResponse = await dshFetch(productionMediaUrl, { headers: { range: "bytes=0-7" } });
     const rangeBytes = new Uint8Array(await rangeResponse.arrayBuffer());
     const keyframeBytes = await readFile(keyframeMediaFixture);
     if (rangeResponse.status !== 206 || rangeResponse.headers.get("content-range") !== `bytes 0-7/${String(keyframeBytes.byteLength)}`
@@ -667,31 +750,31 @@ async function main(): Promise<void> {
       throw new Error(`DSH media range route failed: ${JSON.stringify({ status: rangeResponse.status, range: rangeResponse.headers.get("content-range"), bytes: Buffer.from(rangeBytes).toString("hex") })}`);
     }
     const productionVideoUrl = `${origin}/oh-story/media?sessionId=${encodeURIComponent(dramaSession.sessionId)}&path=${encodeURIComponent(productionVideoPath)}`;
-    const videoRangeResponse = await fetch(productionVideoUrl, { headers: { range: "bytes=0-11" } });
+    const videoRangeResponse = await dshFetch(productionVideoUrl, { headers: { range: "bytes=0-11" } });
     const videoRangeBytes = Buffer.from(await videoRangeResponse.arrayBuffer());
     const videoBytes = await readFile(videoMediaFixture);
     if (videoRangeResponse.status !== 206 || videoRangeResponse.headers.get("content-range") !== `bytes 0-11/${String(videoBytes.byteLength)}`
       || videoRangeBytes.subarray(4, 8).toString("ascii") !== "ftyp") {
       throw new Error(`DSH video range route failed: ${JSON.stringify({ status: videoRangeResponse.status, range: videoRangeResponse.headers.get("content-range"), bytes: videoRangeBytes.toString("hex") })}`);
     }
-    const escapedMedia = await fetch(`${origin}/oh-story/media?sessionId=${encodeURIComponent(dramaSession.sessionId)}&path=${encodeURIComponent("../secret.png")}`);
+    const escapedMedia = await dshFetch(`${origin}/oh-story/media?sessionId=${encodeURIComponent(dramaSession.sessionId)}&path=${encodeURIComponent("../secret.png")}`);
     if (escapedMedia.status !== 403) throw new Error(`Media route allowed path traversal: ${String(escapedMedia.status)}.`);
-    const escaped = await fetch(`${origin}/oh-story/file?sessionId=${encodeURIComponent(storySession.sessionId)}&path=${encodeURIComponent("../package.json")}`);
+    const escaped = await dshFetch(`${origin}/oh-story/file?sessionId=${encodeURIComponent(storySession.sessionId)}&path=${encodeURIComponent("../package.json")}`);
     if (escaped.ok) throw new Error("Workspace route allowed path traversal.");
     const chapterPath = "正文/第001章_军宣新星.md";
     const chapterUrl = `${origin}/oh-story/file?sessionId=${encodeURIComponent(storySession.sessionId)}&path=${encodeURIComponent(chapterPath)}`;
-    const chapterResponse = await fetch(chapterUrl);
+    const chapterResponse = await dshFetch(chapterUrl);
     const chapter = await chapterResponse.json() as { readonly content?: string; readonly version?: string };
     if (!chapterResponse.ok || chapter.content === undefined || chapter.version === undefined) {
       throw new Error(`Workspace file version was unavailable: ${JSON.stringify(chapter)}`);
     }
-    const staleWrite = await fetch(chapterUrl, {
+    const staleWrite = await dshFetch(chapterUrl, {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ content: chapter.content, baseVersion: "stale-version" })
     });
     if (staleWrite.status !== 412) throw new Error(`Workspace route accepted a stale write: ${String(staleWrite.status)}.`);
-    const unchangedWrite = await fetch(chapterUrl, {
+    const unchangedWrite = await dshFetch(chapterUrl, {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ content: chapter.content, baseVersion: chapter.version })
@@ -701,7 +784,7 @@ async function main(): Promise<void> {
       throw new Error(`Workspace optimistic save failed: ${JSON.stringify(unchanged)}`);
     }
     const candidates = Array.from({ length: 20 }, (_, index) => `${chapter.content}\n<!-- atomic-${String(index)} -->\n`);
-    const concurrent = await Promise.all(candidates.map((content) => fetch(chapterUrl, {
+    const concurrent = await Promise.all(candidates.map((content) => dshFetch(chapterUrl, {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ content, baseVersion: unchanged.version })
@@ -711,12 +794,12 @@ async function main(): Promise<void> {
     if (winnerCount !== 1 || staleCount !== candidates.length - 1) {
       throw new Error(`Workspace CAS was not atomic: ${JSON.stringify(concurrent.map((response) => response.status))}`);
     }
-    const afterRaceResponse = await fetch(chapterUrl);
+    const afterRaceResponse = await dshFetch(chapterUrl);
     const afterRace = await afterRaceResponse.json() as { readonly content?: string; readonly version?: string };
     if (!afterRaceResponse.ok || afterRace.content === undefined || afterRace.version === undefined || !candidates.includes(afterRace.content)) {
       throw new Error(`Workspace CAS winner was not authoritative: ${JSON.stringify(afterRace)}`);
     }
-    const restoreChapter = await fetch(chapterUrl, {
+    const restoreChapter = await dshFetch(chapterUrl, {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ content: chapter.content, baseVersion: afterRace.version })
@@ -725,23 +808,23 @@ async function main(): Promise<void> {
 
     const trackingPath = "追踪/_tracking-state.json";
     const trackingUrl = `${origin}/oh-story/file?sessionId=${encodeURIComponent(storySession.sessionId)}&path=${encodeURIComponent(trackingPath)}`;
-    const trackingResponse = await fetch(trackingUrl);
+    const trackingResponse = await dshFetch(trackingUrl);
     const tracking = await trackingResponse.json() as { readonly content?: string; readonly version?: string };
     if (!trackingResponse.ok || tracking.content === undefined || tracking.version === undefined) throw new Error("Tracking fixture was unavailable.");
-    const invalidTrackingResponse = await fetch(trackingUrl, {
+    const invalidTrackingResponse = await dshFetch(trackingUrl, {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ content: "{ invalid", baseVersion: tracking.version })
     });
     const invalidTracking = await invalidTrackingResponse.json() as { readonly version?: string };
     if (!invalidTrackingResponse.ok || invalidTracking.version === undefined) throw new Error("Could not stage invalid tracking JSON.");
-    const degradedWorkspaceResponse = await fetch(`${origin}/oh-story/workspace?sessionId=${encodeURIComponent(storySession.sessionId)}`);
+    const degradedWorkspaceResponse = await dshFetch(`${origin}/oh-story/workspace?sessionId=${encodeURIComponent(storySession.sessionId)}`);
     const degradedWorkspace = await degradedWorkspaceResponse.json() as { readonly files?: readonly unknown[]; readonly metadataErrors?: readonly string[] };
     if (!degradedWorkspaceResponse.ok || degradedWorkspace.files === undefined
       || !degradedWorkspace.metadataErrors?.some((message) => message.includes(trackingPath))) {
       throw new Error(`Invalid metadata still broke the workspace: ${JSON.stringify(degradedWorkspace)}`);
     }
-    const restoreTracking = await fetch(trackingUrl, {
+    const restoreTracking = await dshFetch(trackingUrl, {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ content: tracking.content, baseVersion: invalidTracking.version })
@@ -765,10 +848,19 @@ async function main(): Promise<void> {
       }
     }
 
-    const index = await (await fetch(origin)).text();
-    const clientPath = index.match(/\/plugins\/[^"']*oh-story[^"']*client\.js[^"']*/u)?.[0];
-    if (clientPath === undefined) throw new Error("DSH did not publish the Oh Story Browser module.");
-    const client = await (await fetch(new URL(clientPath, origin))).text();
+    // DSH 0.1.2 preloads every browser module through one combined `/plugins/??a,b` URL,
+    // so the plugin's own registration is sliced back out of the shared response.
+    const index = await (await dshFetch(origin)).text();
+    const preloadPath = index.match(/\/plugins\/\?\?[^"']+/u)?.[0].replaceAll("&amp;", "&");
+    if (preloadPath === undefined || !preloadPath.includes("@oh-story/dsh/client.js")) {
+      throw new Error("DSH did not publish the Oh Story Browser module.");
+    }
+    const bundle = await (await dshFetch(new URL(preloadPath, origin))).text();
+    const registration = 'window.__ModuleLoader__.load({id:"';
+    const start = bundle.indexOf(`${registration}@oh-story/dsh"`);
+    if (start < 0) throw new Error("DSH did not serve the Oh Story Browser module.");
+    const next = bundle.indexOf(registration, start + registration.length);
+    const client = next < 0 ? bundle.slice(start) : bundle.slice(start, next);
     for (const slot of ["shell.overlay", "tool.call.toolview"]) {
       if (!client.includes(slot)) throw new Error(`Browser module is missing official slot ${slot}.`);
     }
@@ -793,7 +885,7 @@ async function main(): Promise<void> {
       page.on("response", (response) => {
         if (response.url().includes("/oh-story/game-preview/")) gamePreviewResponses.push({ status: response.status(), url: response.url() });
       });
-      await page.goto(origin, { waitUntil: "networkidle" });
+      await page.goto(dshTokenUrl, { waitUntil: "networkidle" });
       for (const name of [/^(?:Continue|继续)$/u, /^(?:Configure later|稍后配置)$/u]) {
         const button = page.getByRole("button", { name });
         try {
@@ -842,17 +934,20 @@ async function main(): Promise<void> {
       catch (error) {
         const selectedRows = await page.getByRole("treeitem", { selected: true }).allTextContents();
         const body = (await page.locator("body").innerText()).slice(0, 4_000);
-        const history = await rpc<{ readonly events: readonly { readonly event: HistoryEvent }[] }>(origin, "session.history", { sessionId: storySession.sessionId, maxMessages: 1_000 });
-        throw new Error(`Story Session selection did not render its Chat; selected=${JSON.stringify(selectedRows)}; url=${page.url()}; historyTail=${JSON.stringify(history.events.slice(-8).map((entry) => entry.event.type))}; body=${JSON.stringify(body)}`, { cause: error });
+        const history = await sessionEvents(origin, storySession.sessionId);
+        throw new Error(`Story Session selection did not render its Chat; selected=${JSON.stringify(selectedRows)}; url=${page.url()}; historyTail=${JSON.stringify(history.slice(-8).map((event) => event.type))}; body=${JSON.stringify(body)}`, { cause: error });
       }
       if (!useRealDeepSeek) await page.getByText(`已读取《${storyProjectName}》工程。`, { exact: false }).waitFor({ state: "visible", timeout: 10_000 });
       if (await page.getByText("This turn failed", { exact: false }).isVisible()) throw new Error("Story Chat contains a failed turn.");
 
       if (!useRealDeepSeek) {
-        const mutationPrompt = rpc(origin, "session.prompt", {
-          sessionId: storySession.sessionId,
-          mode: "queue",
-          content: [{ type: "text", text: agentMutationPrompt }]
+        const mutationPrompt = rpc(origin, "session/prompt", {
+          request: {
+            requestId: crypto.randomUUID(),
+            sessionId: storySession.sessionId,
+            mode: "queue",
+            content: [{ type: "text", text: agentMutationPrompt }]
+          }
         });
         const streamedEditor = page.getByRole("textbox", { name: agentMutationPath });
         const streamedValues = new Set<string>();
@@ -869,11 +964,11 @@ async function main(): Promise<void> {
         }
         await mutationPrompt;
         if (streamedValues.size === 0) {
-          const history = await rpc<{ readonly events: readonly { readonly event: HistoryEvent }[] }>(origin, "session.history", { sessionId: storySession.sessionId, maxMessages: 1_000 });
+          const history = await sessionEvents(origin, storySession.sessionId);
           const selected = await page.locator("button[data-file-path][aria-current='page']").getAttribute("data-file-path");
           const target = page.locator(`button[data-file-path=${JSON.stringify(agentMutationPath)}]`);
           const targetCurrent = await target.count() === 0 ? null : await target.getAttribute("aria-current");
-          throw new Error(`Agent write never reached the editor; selected=${JSON.stringify(selected)}; targetCurrent=${JSON.stringify(targetCurrent)}; tailEvents=${JSON.stringify(history.events.slice(-12).map((entry) => entry.event.type))}`);
+          throw new Error(`Agent write never reached the editor; selected=${JSON.stringify(selected)}; targetCurrent=${JSON.stringify(targetCurrent)}; tailEvents=${JSON.stringify(history.slice(-12).map((event) => event.type))}`);
         }
         const approval = page.getByRole("button", { name: /^(?:Allow once|允许一次)$/u });
         try {
@@ -883,7 +978,7 @@ async function main(): Promise<void> {
         await page.getByText(agentMutationReply, { exact: true }).waitFor({ state: "visible", timeout: 20_000 });
         await waitForCompletedTurn(origin, storySession.sessionId);
         const agentFileUrl = `${origin}/oh-story/file?sessionId=${encodeURIComponent(storySession.sessionId)}&path=${encodeURIComponent(agentMutationPath)}`;
-        const agentFileResponse = await fetch(agentFileUrl);
+        const agentFileResponse = await dshFetch(agentFileUrl);
         const agentFile = await agentFileResponse.json() as { readonly content?: string };
         if (!agentFileResponse.ok || agentFile.content !== agentMutationContent) {
           throw new Error(`Real DSH Agent write was not authoritative on disk: ${JSON.stringify(agentFile)}`);
@@ -909,6 +1004,8 @@ async function main(): Promise<void> {
           return button === null || !button.checkVisibility();
         }, agentMutationPath);
         const officialWriteFile = page.locator('[data-slot="conversation.session"] button').filter({ hasText: new RegExp(`^${agentMutationPath}$`, "u") }).first();
+        // DSH 0.1.2 keeps off-screen Chat flow items at zero height, so bring the row in before reading it.
+        await expandTurnProcesses(page);
         await officialWriteFile.waitFor({ state: "visible", timeout: 10_000 });
         await officialWriteFile.click();
         await agentTreeFile.waitFor({ state: "visible", timeout: 10_000 });
@@ -921,10 +1018,13 @@ async function main(): Promise<void> {
         await protectedEditor.fill(protectedDraft);
         await protectedEditor.focus();
         const repliesBefore = await page.getByText(agentMutationReply, { exact: true }).count();
-        await rpc(origin, "session.prompt", {
-          sessionId: storySession.sessionId,
-          mode: "queue",
-          content: [{ type: "text", text: agentMutationPrompt }]
+        await rpc(origin, "session/prompt", {
+          request: {
+            requestId: crypto.randomUUID(),
+            sessionId: storySession.sessionId,
+            mode: "queue",
+            content: [{ type: "text", text: agentMutationPrompt }]
+          }
         });
         await page.waitForFunction((path) => document.querySelector(`button[data-file-path=${JSON.stringify(path)}][data-agent-target]`)?.checkVisibility() === true, agentMutationPath);
         const protectedSelected = page.locator(`button[data-file-path=${JSON.stringify(chapterPath)}]`);
@@ -940,7 +1040,7 @@ async function main(): Promise<void> {
           if (Date.now() >= replyDeadline) throw new Error("The concurrent Agent write did not settle.");
           await page.waitForTimeout(100);
         }
-        const concurrentAgentFile = await (await fetch(agentFileUrl)).json() as { readonly content?: string };
+        const concurrentAgentFile = await (await dshFetch(agentFileUrl)).json() as { readonly content?: string };
         if (concurrentAgentFile.content !== agentMutationContent || !await protectedEditor.inputValue().then((value) => value.endsWith("继续输入"))) {
           throw new Error("Concurrent Agent and human edits did not remain isolated.");
         }
@@ -1033,12 +1133,12 @@ async function main(): Promise<void> {
         throw new Error(`Browser editor save returned HTTP ${String(browserSaveResponse.status())}.`);
       }
       await saveButton.waitFor({ state: "hidden", timeout: 10_000 });
-      const savedResponse = await fetch(chapterUrl);
+      const savedResponse = await dshFetch(chapterUrl);
       const savedChapter = await savedResponse.json() as { readonly content?: string; readonly version?: string };
       if (!savedResponse.ok || savedChapter.content !== editedChapter || savedChapter.version === undefined) {
         throw new Error(`Browser editor did not save through the versioned route: ${JSON.stringify(savedChapter)}`);
       }
-      const restoredResponse = await fetch(chapterUrl, {
+      const restoredResponse = await dshFetch(chapterUrl, {
         method: "PUT",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ content: chapter.content, baseVersion: savedChapter.version })
@@ -1053,11 +1153,11 @@ async function main(): Promise<void> {
       await conflictEditor.waitFor({ state: "visible", timeout: 10_000 });
       if (await conflictEditor.inputValue() !== chapter.content) throw new Error("Editor did not reconcile the authoritative restored file.");
       await conflictEditor.fill(`${chapter.content}\n<!-- local conflict draft -->\n`);
-      const conflictBaseResponse = await fetch(chapterUrl);
+      const conflictBaseResponse = await dshFetch(chapterUrl);
       const conflictBase = await conflictBaseResponse.json() as { readonly content?: string; readonly version?: string };
       if (!conflictBaseResponse.ok || conflictBase.content === undefined || conflictBase.version === undefined) throw new Error("Could not prepare browser conflict fixture.");
       const externalChapter = `${chapter.content}\n<!-- external conflict edit -->\n`;
-      const externalResponse = await fetch(chapterUrl, {
+      const externalResponse = await dshFetch(chapterUrl, {
         method: "PUT",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ content: externalChapter, baseVersion: conflictBase.version })
@@ -1076,7 +1176,7 @@ async function main(): Promise<void> {
       if (await page.getByRole("textbox", { name: chapterPath }).inputValue() !== externalChapter) {
         throw new Error("Conflict resolution did not load the authoritative disk version.");
       }
-      const conflictRestore = await fetch(chapterUrl, {
+      const conflictRestore = await dshFetch(chapterUrl, {
         method: "PUT",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ content: chapter.content, baseVersion: external.version })
@@ -1146,7 +1246,7 @@ async function main(): Promise<void> {
       if (generatedBrowserFrame === undefined) throw new Error("Generated workspace game frame was not attached.");
       const previewEscapeBlocked = await generatedBrowserFrame.evaluate(async (sessionId) => {
         try {
-          await fetch(`/oh-story/workspace?sessionId=${encodeURIComponent(sessionId)}`);
+          await dshFetch(`/oh-story/workspace?sessionId=${encodeURIComponent(sessionId)}`);
           return false;
         } catch { return true; }
       }, gameSession.sessionId);
@@ -1252,10 +1352,13 @@ async function main(): Promise<void> {
         await generatedFrame.getByRole("button", { name: "输入已验证", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
         await generatedIframe.evaluate((element) => { element.setAttribute("data-e2e-instance", "new-build-preserved"); });
         const beforeGameUpdate = (await sessionEvents(origin, gameSession.sessionId)).at(-1)?.seq ?? -1;
-        await rpc(origin, "session.prompt", {
-          sessionId: gameSession.sessionId,
-          mode: "queue",
-          content: [{ type: "text", text: gameUpdatePrompt }]
+        await rpc(origin, "session/prompt", {
+          request: {
+            requestId: crypto.randomUUID(),
+            sessionId: gameSession.sessionId,
+            mode: "queue",
+            content: [{ type: "text", text: gameUpdatePrompt }]
+          }
         });
         await waitForCompletedTurn(origin, gameSession.sessionId, beforeGameUpdate);
         await page.getByText("新版本已就绪 · 由你决定何时载入", { exact: true }).waitFor({ state: "visible", timeout: 20_000 });
@@ -1294,13 +1397,25 @@ async function main(): Promise<void> {
       if (!useRealDeepSeek) {
         const scroller = page.locator("[data-conversation-scroll]");
         await scroller.evaluate((element) => { element.scrollTop = element.scrollHeight; });
-        await rpc(origin, "session.prompt", { sessionId: dramaSession.sessionId, mode: "queue", content: [{ type: "text", text: todoLayoutPrompt }] });
+        await rpc(origin, "session/prompt", { request: { requestId: crypto.randomUUID(), sessionId: dramaSession.sessionId, mode: "queue", content: [{ type: "text", text: todoLayoutPrompt }] } });
         const todo = page.locator('[data-testid="todo-panel"]');
         await todo.waitFor({ state: "visible", timeout: 30_000 });
         await todo.getByRole("button").click();
         await todo.locator("li").last().waitFor({ state: "attached", timeout: 20_000 });
         const flow = page.locator('[data-slot="conversation.session"] [data-chat-flow]');
         const tail = flow.locator(":scope > *").last();
+        // The seat grows by the Todo panel one layout pass before the workbench
+        // republishes its height, so assert the settled frame, not the resize.
+        await page.waitForFunction(() => {
+          const body = document.querySelector('[data-slot="conversation.session"] [data-chat-flow]');
+          const seat = document.querySelector("[data-composer-seat]");
+          const last = body?.lastElementChild;
+          if (body == null || seat == null || last == null) return false;
+          const seatTop = seat.getBoundingClientRect().top;
+          const lastBox = last.getBoundingClientRect();
+          return Number.parseFloat(getComputedStyle(body).paddingBottom) >= seat.getBoundingClientRect().height + 15
+            && lastBox.top + lastBox.height <= seatTop + 1;
+        }, undefined, { timeout: 15_000 });
         const [tailBox, seatBox, scrollBox, clearance, tailFlowKey] = await Promise.all([
           tail.boundingBox(), page.locator("[data-composer-seat]").boundingBox(), scroller.boundingBox(),
           flow.evaluate((element) => Number.parseFloat(getComputedStyle(element).paddingBottom)), tail.getAttribute("data-chat-flow-key")
@@ -1467,7 +1582,7 @@ async function main(): Promise<void> {
         const partialBatchOutput = `剧集/EP001/制作成果/SHOT-EP001-003/SHOT-EP001-003-${batchJobId}.mp4`;
         await mkdir(dirname(join(dramaRoot, partialBatchOutput)), { recursive: true });
         await cp(videoMediaFixture, join(dramaRoot, partialBatchOutput));
-        const partialWorkspaceResponse = await fetch(`${origin}/oh-story/workspace?sessionId=${encodeURIComponent(dramaSession.sessionId)}`);
+        const partialWorkspaceResponse = await dshFetch(`${origin}/oh-story/workspace?sessionId=${encodeURIComponent(dramaSession.sessionId)}`);
         const partialWorkspace = await partialWorkspaceResponse.json() as { readonly files?: readonly { readonly path: string }[] };
         if (!partialWorkspaceResponse.ok || !partialWorkspace.files?.some((file) => file.path === partialBatchOutput)) {
           throw new Error(`Partial batch output was not visible through the Agent FileSystem: ${JSON.stringify({ batchJobId, partialBatchOutput, partialWorkspace })}`);

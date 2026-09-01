@@ -1,4 +1,4 @@
-import type { ChatSnapshot } from "@deepseek-ai/dsh-client-runtime/client";
+import type { ChatSnapshot } from "@deepseek-ai/dsh-client-ui-chat/client";
 import type { ToolRunContext } from "@deepseek-ai/dsh-tools";
 import { describe, expect, it } from "vitest";
 import { settledProductionIntents } from "../src/client/production-intents.js";
@@ -44,8 +44,6 @@ describe("native short-drama production intent tool", () => {
       callId,
       isError,
       call: { name: OH_STORY_PRODUCTION_TOOL_NAME, argsRaw },
-      callView: null,
-      resultView: null,
       content: [],
       subCalls: []
     });

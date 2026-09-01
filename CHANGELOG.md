@@ -11,6 +11,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- 固定的 DeepSeek Harness 从 `0.1.1-rc.1` 升到 `0.1.2-alpha.3`。上游把 `@deepseek-ai/dsh-client-runtime` 拆成 `dsh-client-store`、`dsh-api-session-controller`、`dsh-client-ui-chat`、`dsh-client-ui-session` 与 `dsh-client-ui-renderer`；`JsonValue` 移到 `dsh-util-values`；Chat 快照改由 `useChat` 提供，会话快照不再带 `chat` / `runningCalls`；会话记录去掉了主机预算的 `callView` / `resultView` 渲染意图，文件改动改由工具参数推导。DSH Web 现在需要启动令牌换取会话 Cookie，Remote 端点改为 `<namespace>/<method>` 且载荷统一包在 `args` 里，`session.history` 由 `session/follow` 流的开窗快照取代。
+
 ### Added
 
 - 同步 Oh Story 0.7.8（`70c294b`，v0.7.8 之后 3 个提交）：新增工作区级作者记忆 `.story/作者记忆/` 与随包脚本 `author_memory_commit.py`；新增细纲结构验收 `check-outline-contract.js`、短篇 Phase 2 与交付验收 `check-phase2-contract.js` 与 `check-delivery-contract.js`；长篇字数改用 `storyctl.py` 的 `visible_chars_v1` 口径。上游 `agents_version` 升到 28，DSH 的七个 Role 随插件打包，用户无需重新部署。
@@ -42,6 +46,8 @@
 
 ### Fixed
 
+- 工作台不再被 DSH 0.1.2 新增的列拖拽条吞掉点击。上游在对话区上方铺了两条 40px 宽、整列高的隐形拖拽条，左侧那条压住创作文件树右缘约 40px，刷新按钮和文件行右半部分都点不动；工作台各栏现在盖在拖拽条之上。
+- 流式 Todo 面板不再遮住 Chat 尾部。DSH 0.1.2 把 Todo 面板并进 Composer 座位，而 `--dsh-composer-height` 仍只报输入框高度；改为实测座位高度撑开 Chat 留白，并在读者已停在尾部时保持贴底。
 - 退出全屏后焦点返回“全屏试玩”，游戏 Tab 补齐 `aria-controls` / `tabpanel` 关系，并移除未提供退出提示的 pointer-lock 权限。
 - `story` Skill 现在随包携带 `scripts/author_memory_commit.py`。此前 `story/scripts/` 被整目录排除，只有 `references/author-memory.md` 进包，作者记忆流程指向一个不存在的脚本；排除范围已收窄到 `dashboard-server.mjs`。
 - `story` 的 DSH 原生路由补上作者记忆入口。上游描述已宣告「记住我的写作习惯」，而替换后的路由正文没有对应分支。

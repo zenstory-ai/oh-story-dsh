@@ -1,6 +1,11 @@
-import { defineStore, type ClientContext, type ISessions, type PartialAssistant, type RunningToolCall } from "@deepseek-ai/dsh-client-runtime/client";
-import type { IConversation } from "@deepseek-ai/dsh-client-ui-conversation/client";
+import type { Context as ClientContext } from "@deepseek-ai/cordis";
+import type { ISessions } from "@deepseek-ai/dsh-api-session-controller/client";
+import { defineStore } from "@deepseek-ai/dsh-client-store";
+import type { IConversation, PartialAssistant, RunningToolCall } from "@deepseek-ai/dsh-client-ui-conversation/client";
+import type {} from "@deepseek-ai/dsh-client-ui-chat/client";
 import type {} from "@deepseek-ai/dsh-client-ui-layout/client";
+import type {} from "@deepseek-ai/dsh-client-ui-renderer/client";
+import type {} from "@deepseek-ai/dsh-client-ui-session/client";
 import type { PropsRenderSlots, PropsRuntime, PropsStore } from "@deepseek-ai/dsh-client-ui-slots";
 import type { ToolCallViewProps } from "@deepseek-ai/dsh-client-ui-tool/client";
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from "react";
@@ -1488,17 +1493,17 @@ interface ProductionConversationFace {
 type WorkbenchSlotProps = PropsRuntime<"oh-story.workspace"> & PropsStore<ReturnType<typeof createWorkbenchStore>> & ProductionConversationFace;
 
 /** Mount beside the official conversation without replacing Chat or Composer. */
-function CreativeSplitBridge({ sessionId, useSession, useStore, actions, sendProductionPrompt, cancelProduction, removeQueuedProduction }: WorkbenchSlotProps) {
+function CreativeSplitBridge({ sessionId, useSession, useChat, useStore, actions, sendProductionPrompt, cancelProduction, removeQueuedProduction }: WorkbenchSlotProps) {
   const marker = useRef<HTMLSpanElement>(null);
   const [target, setTarget] = useState<HTMLElement>();
-  const runningCalls = useSession((snapshot) => snapshot.runningCalls);
-  const partial = useSession((snapshot) => streamingAssistant(snapshot.chat.timeline));
-  const settledMutation = useSession((snapshot) => latestSettledMutation(snapshot.chat));
+  const runningCalls = useChat((snapshot) => snapshot.legacy.runningCalls);
+  const partial = useChat((snapshot) => streamingAssistant(snapshot.timeline));
+  const settledMutation = useChat((snapshot) => latestSettledMutation(snapshot));
   const workbench = useStore((memory) => memory.workbench);
   const gamePane = useStore((memory) => memory.gamePane);
   const sessionRunning = useSession((snapshot) => snapshot.running);
   const productionQueue = useSession((snapshot) => snapshot.queue.map((item) => ({ id: item.id, preview: item.preview })));
-  const chat = useSession((snapshot) => snapshot.chat);
+  const chat = useChat((snapshot) => snapshot);
   const productionIntents = useMemo(() => settledProductionIntents(chat), [chat]);
   useLayoutEffect(() => {
     const document = marker.current?.ownerDocument;
@@ -1515,8 +1520,15 @@ function CreativeSplitBridge({ sessionId, useSession, useStore, actions, sendPro
   useLayoutEffect(() => {
     const scroller = target?.parentElement;
     if (scroller === undefined || scroller === null) return;
+    const composerSeat = (): HTMLElement | null => scroller.querySelector(":scope > [data-composer-seat]");
     const publishLayout = (): void => {
+      // A seat that grows under a reader already at the tail must not swallow it.
+      const pinned = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight <= 8;
       scroller.style.setProperty("--oh-story-scroll-height", `${String(scroller.clientHeight)}px`);
+      // DSH 0.1.2 grows the seat with the streaming Todo panel while
+      // --dsh-composer-height keeps reporting the bare input height.
+      scroller.style.setProperty("--oh-story-composer-height", `${String(composerSeat()?.offsetHeight ?? 0)}px`);
+      if (pinned) scroller.scrollTop = scroller.scrollHeight - scroller.clientHeight;
       scroller.dataset.ohStoryWorkbench = workbench;
       scroller.dataset.ohGamePane = gamePane;
       const compactAt = workbench === "game" ? 720 : 620;
@@ -1524,12 +1536,25 @@ function CreativeSplitBridge({ sessionId, useSession, useStore, actions, sendPro
       const layout = scroller.clientWidth < compactAt ? "compact" : scroller.clientWidth < mediumAt ? "medium" : "wide";
       if (scroller.dataset.ohStoryLayout !== layout) scroller.dataset.ohStoryLayout = layout;
     };
-    publishLayout();
     const observer = new ResizeObserver(publishLayout);
+    const observed = new WeakSet<Element>();
+    // The official seat mounts and remounts independently of this bridge.
+    const observeSeat = (): void => {
+      const seat = composerSeat();
+      if (seat === null || observed.has(seat)) return;
+      observed.add(seat);
+      observer.observe(seat);
+    };
+    publishLayout();
     observer.observe(scroller);
+    observeSeat();
+    const seats = new MutationObserver(() => { observeSeat(); publishLayout(); });
+    seats.observe(scroller, { childList: true });
     return () => {
       observer.disconnect();
+      seats.disconnect();
       scroller.style.removeProperty("--oh-story-scroll-height");
+      scroller.style.removeProperty("--oh-story-composer-height");
       delete scroller.dataset.ohStoryLayout;
       delete scroller.dataset.ohStoryWorkbench;
       delete scroller.dataset.ohGamePane;
@@ -1557,7 +1582,7 @@ function CreativeSplitBridge({ sessionId, useSession, useStore, actions, sendPro
 type WorkbenchSeatProps = PropsRuntime<"shell.overlay"> & PropsRenderSlots<"oh-story.workspace">;
 
 function WorkbenchSeat({ SessionProvider, renderSlot }: WorkbenchSeatProps) {
-  return <SessionProvider>{() => renderSlot("oh-story.workspace", {})}</SessionProvider>;
+  return <SessionProvider>{renderSlot("oh-story.workspace", {})}</SessionProvider>;
 }
 
 function argsOf(block: ToolCallViewProps["block"]): Record<string, unknown> {

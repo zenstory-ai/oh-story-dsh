@@ -1,4 +1,5 @@
-import type { ChatSnapshot, ToolCallBlock } from "@deepseek-ai/dsh-client-runtime/client";
+import type { ChatSnapshot } from "@deepseek-ai/dsh-client-ui-chat/client";
+import type { ToolCallBlock } from "@deepseek-ai/dsh-client-ui-conversation/client";
 import {
   OH_STORY_PRODUCTION_TOOL_NAME,
   validateProductionIntent,

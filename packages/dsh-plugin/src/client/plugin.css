@@ -15,10 +15,12 @@
   overflow-y: auto;
   position: relative;
   scrollbar-gutter: stable;
-  scroll-padding-bottom: calc(var(--dsh-composer-height, 152px) + 16px);
+  scroll-padding-bottom: calc(max(var(--dsh-composer-height, 152px), var(--oh-story-composer-height, 0px)) + 16px);
 }
 
-/* Keep the final Chat flow above the overlapping official Composer. */
+/* Keep the final Chat flow above the overlapping official Composer. DSH 0.1.2
+   grows the seat with the streaming Todo panel, which --dsh-composer-height
+   does not account for, so the measured seat height wins when it is taller. */
 [data-conversation-scroll]:has(> [data-slot="conversation.session"] > .oh-story-split-surface)
   > [data-slot="conversation.session"] > :not(.oh-story-split-surface) {
   grid-column: 3;
@@ -30,7 +32,7 @@
 
 [data-conversation-scroll]:has(> [data-slot="conversation.session"] > .oh-story-split-surface)
   [data-chat-flow] {
-  padding-bottom: calc(var(--dsh-composer-height, 152px) + 16px);
+  padding-bottom: calc(max(var(--dsh-composer-height, 152px), var(--oh-story-composer-height, 0px)) + 16px);
 }
 
 [data-conversation-scroll]:has(> [data-slot="conversation.session"] > .oh-story-split-surface)
@@ -41,7 +43,7 @@
   min-width: 0;
   width: 100%;
   position: sticky;
-  top: calc(var(--oh-story-scroll-height, 720px) - var(--dsh-composer-height, 152px));
+  top: calc(var(--oh-story-scroll-height, 720px) - max(var(--dsh-composer-height, 152px), var(--oh-story-composer-height, 0px)));
   bottom: auto;
 }
 
@@ -62,11 +64,16 @@
 [data-conversation-scroll][data-oh-story-workbench="game"]:has(> [data-slot="conversation.session"] > .oh-story-split-surface)
   > [data-composer-seat] { grid-column: 2; }
 
+/* DSH 0.1.2 lays two 40px column-resize strips (z-index 8) over the whole
+   conversation area. The workbench replaces that column geometry, so the strip
+   no longer marks a real column seam here — it just swallows clicks on the
+   right edge of the file tree. The creator panes take the clicks back. */
 .oh-story-tree,
 .oh-story-editor {
   box-sizing: border-box;
   grid-row: 1;
   position: sticky;
+  z-index: 9;
   top: 0;
   align-self: start;
   min-width: 0;
@@ -82,6 +89,7 @@
   grid-column: 1;
   grid-row: 1;
   position: sticky;
+  z-index: 9;
   top: 0;
   min-width: 0;
   min-height: 0;
