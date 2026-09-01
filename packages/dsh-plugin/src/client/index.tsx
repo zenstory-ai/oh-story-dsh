@@ -3,7 +3,7 @@ import type { IConversation } from "@deepseek-ai/dsh-client-ui-conversation/clie
 import type {} from "@deepseek-ai/dsh-client-ui-layout/client";
 import type { PropsRenderSlots, PropsRuntime, PropsStore } from "@deepseek-ai/dsh-client-ui-slots";
 import type { ToolCallViewProps } from "@deepseek-ai/dsh-client-ui-tool/client";
-import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import {
   creativeRelativePath,
@@ -40,6 +40,7 @@ import { createPendingJob, type
 import { settledProductionIntents, type SettledProductionIntent } from "./production-intents.js";
 import { OH_STORY_PRODUCTION_TOOL_NAME } from "../production-intent.js";
 import { VideoStudio, type VideoProject } from "./video-studio.js";
+import { endpoint, handleTabKey } from "./workbench-ui.js";
 import styles from "./plugin.css?inline";
 
 export const name = "oh-story";
@@ -229,34 +230,8 @@ const GROUP_ORDER: Readonly<Record<WorkbenchMode, readonly string[]>> = {
 const WORKBENCH_MODES = ["story", "drama", "game", "video"] as const;
 const EDITOR_MODES = ["preview", "source", "production"] as const;
 
-function handleTabKey<T extends string>(
-  event: ReactKeyboardEvent<HTMLButtonElement>,
-  values: readonly T[],
-  current: T,
-  select: (value: T) => void
-): void {
-  let index: number | undefined;
-  if (event.key === "Home") index = 0;
-  else if (event.key === "End") index = values.length - 1;
-  else if (event.key === "ArrowRight") index = (values.indexOf(current) + 1) % values.length;
-  else if (event.key === "ArrowLeft") index = (values.indexOf(current) - 1 + values.length) % values.length;
-  if (index === undefined) return;
-  event.preventDefault();
-  const value = values[index];
-  if (value === undefined) return;
-  select(value);
-  event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>("[role='tab']")[index]?.focus();
-}
-
 function groupForPath(path: string): string {
   return path === "short-drama.json" ? "项目" : path.split("/", 1)[0] ?? "其他";
-}
-
-function endpoint(path: string, sessionId: string, file?: string): string {
-  const url = new URL(`/oh-story/${path}`, globalThis.location.origin);
-  url.searchParams.set("sessionId", sessionId);
-  if (file !== undefined) url.searchParams.set("path", file);
-  return url.toString();
 }
 
 async function json<T>(response: Response): Promise<T> {
@@ -666,6 +641,7 @@ function CreativeWorkbench({
   const surfaceRef = useRef<HTMLDivElement>(null);
   const compactTabsId = useId();
   const compactStudioId = `${compactTabsId}-studio-panel`;
+  const compactVideoStudioId = `${compactTabsId}-video-studio-panel`;
   const compactChatId = `${compactTabsId}-chat-panel`;
   const navRef = useRef<HTMLElement>(null);
   const activityBases = useRef(new Map<string, { readonly path: string; readonly base: string }>());
@@ -1315,7 +1291,7 @@ function CreativeWorkbench({
         role="tab"
         key={pane}
         id={`${compactTabsId}-${pane}-tab`}
-        aria-controls={pane === "studio" ? compactStudioId : compactChatId}
+        aria-controls={pane === "chat" ? compactChatId : workbench === "game" ? compactStudioId : compactVideoStudioId}
         aria-selected={(workbench === "game" ? gamePane : videoPane) === pane}
         tabIndex={(workbench === "game" ? gamePane : videoPane) === pane ? 0 : -1}
         onKeyDown={(event) => { handleTabKey(event, ["studio", "chat"] as const, workbench === "game" ? gamePane : videoPane, workbench === "game" ? setGamePane : setVideoPane); }}
@@ -1339,7 +1315,7 @@ function CreativeWorkbench({
           onWorkbench={selectWorkbench}
           onSelect={revealPath}
         />}
-    {workbench === "video" && workspace === undefined && <main id={compactStudioId} className="oh-video-studio" role="tabpanel" aria-labelledby={`${compactTabsId}-studio-tab`}><div className="oh-video-preview-empty">{error ?? "正在连接视频工作台…"}</div></main>}
+    {workbench === "video" && workspace === undefined && <main id={compactVideoStudioId} className="oh-video-studio" role="tabpanel" aria-labelledby={`${compactTabsId}-studio-tab`}><div className="oh-video-preview-empty">{error ?? "正在连接视频工作台…"}</div></main>}
     {workspace !== undefined && videoStudioMounted && <VideoStudio
           sessionId={sessionId}
           projects={workspace.videos}
@@ -1348,7 +1324,7 @@ function CreativeWorkbench({
           tab={videoTab}
           hidden={workbench !== "video"}
           workbenches={WORKBENCH_MODES}
-          paneId={compactStudioId}
+          paneId={compactVideoStudioId}
           labelledBy={`${compactTabsId}-studio-tab`}
           onProject={setVideoProjectId}
           onTab={setVideoTab}

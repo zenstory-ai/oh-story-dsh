@@ -1,5 +1,6 @@
-import { useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { workbenchLabel, type WorkbenchMode } from "./file-activity.js";
+import { endpoint, handleTabKey } from "./workbench-ui.js";
 
 export interface VideoPreviewAsset {
   readonly role: "source" | "edited" | "final";
@@ -31,32 +32,10 @@ export interface VideoProject {
 
 interface FilePayload { readonly content: string }
 interface VideoPreflight {
-  readonly ready: boolean;
-  readonly python: { readonly ok: boolean; readonly command?: string; readonly version?: string };
-  readonly ffmpeg: { readonly ok: boolean; readonly subtitles: boolean; readonly version?: string };
+  readonly python: { readonly ok: boolean; readonly version?: string };
+  readonly ffmpeg: { readonly ok: boolean; readonly subtitles: boolean };
   readonly ffprobe: { readonly ok: boolean };
   readonly credentials: { readonly mimo: boolean; readonly fish: boolean; readonly ttsProvider: string };
-}
-
-function endpoint(path: string, sessionId: string, file?: string): string {
-  const url = new URL(`/oh-story/${path}`, globalThis.location.origin);
-  url.searchParams.set("sessionId", sessionId);
-  if (file !== undefined) url.searchParams.set("path", file);
-  return url.toString();
-}
-
-function handleTabKey<T extends string>(event: ReactKeyboardEvent<HTMLButtonElement>, values: readonly T[], current: T, select: (value: T) => void): void {
-  let index: number | undefined;
-  if (event.key === "Home") index = 0;
-  else if (event.key === "End") index = values.length - 1;
-  else if (event.key === "ArrowRight") index = (values.indexOf(current) + 1) % values.length;
-  else if (event.key === "ArrowLeft") index = (values.indexOf(current) - 1 + values.length) % values.length;
-  if (index === undefined) return;
-  event.preventDefault();
-  const value = values[index];
-  if (value === undefined) return;
-  select(value);
-  event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>("[role='tab']")[index]?.focus();
 }
 
 function preferredPreview(project: VideoProject): VideoPreviewAsset | undefined {
@@ -100,13 +79,6 @@ function VideoPreview({ project, sessionId, running }: { readonly project: Video
   const [revision, setRevision] = useState(0);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState(false);
-  useEffect(() => {
-    const best = preferredPreview(project);
-    setRole(best?.role);
-    setLoaded(best);
-    setReady(false);
-    setError(false);
-  }, [project.id]);
   if (selected === undefined || loaded === undefined) return <div className="oh-video-preview-empty">
     <span aria-hidden>▶</span>
     <strong>还没有可预览的视频</strong>
@@ -168,7 +140,7 @@ function VideoArtifacts({ project, sessionId }: { readonly project: VideoProject
   const [selected, setSelected] = useState(preferredArtifact(project)?.path);
   const [content, setContent] = useState<string>();
   const [error, setError] = useState<string>();
-  const [preflight, setPreflight] = useState<VideoPreflight>();
+  const [preflight, setPreflight] = useState<VideoPreflight | "failed">();
   useEffect(() => { setSelected(preferredArtifact(project)?.path); }, [project.id]);
   useEffect(() => {
     if (selected === undefined) { setContent(undefined); return; }
@@ -190,16 +162,20 @@ function VideoArtifacts({ project, sessionId }: { readonly project: VideoProject
       <div className="oh-video-artifacts-heading"><strong>项目产物</strong><span>{project.artifacts.length}</span></div>
       <div className="oh-video-environment">
         <strong>运行环境</strong>
-        {preflight === undefined ? <button type="button" onClick={() => {
+        {typeof preflight === "object" ? <>
+          <span data-ready={preflight.python.ok || undefined}>Python {preflight.python.version ?? "未找到"}</span>
+          <span data-ready={(preflight.ffmpeg.ok && preflight.ffmpeg.subtitles) || undefined}>ffmpeg {preflight.ffmpeg.subtitles ? "· libass" : "· 缺字幕滤镜"}</span>
+          <span data-ready={preflight.ffprobe.ok || undefined}>ffprobe {preflight.ffprobe.ok ? "可用" : "未找到"}</span>
+          <span data-ready={preflight.credentials.mimo || undefined}>MiMo Key {preflight.credentials.mimo ? "已配置" : "未配置"}</span>
+          {preflight.credentials.ttsProvider === "fish"
+            && <span data-ready={preflight.credentials.fish || undefined}>Fish Key {preflight.credentials.fish ? "已配置" : "未配置"}</span>}
+          <em>DSH Host 进程环境；Agent 执行世界以 <code>video-recap --doctor</code> 为准。</em>
+        </> : <button type="button" onClick={() => {
           void fetch(endpoint("video-preflight", sessionId)).then(async (response) => {
             if (!response.ok) throw new Error(`HTTP ${String(response.status)}`);
             setPreflight(await response.json() as VideoPreflight);
-          }).catch(() => { setPreflight(undefined); });
-        }}>检查环境</button> : <>
-          <span data-ready={preflight.python.ok || undefined}>Python {preflight.python.version ?? "未找到"}</span>
-          <span data-ready={preflight.ffmpeg.ok && preflight.ffmpeg.subtitles || undefined}>ffmpeg {preflight.ffmpeg.subtitles ? "· libass" : "· 缺字幕滤镜"}</span>
-          <span data-ready={preflight.credentials.mimo || undefined}>MiMo Key {preflight.credentials.mimo ? "已配置" : "未配置"}</span>
-        </>}
+          }).catch(() => { setPreflight("failed"); });
+        }}>{preflight === "failed" ? "环境检查失败 · 重试" : "检查环境"}</button>}
       </div>
       <nav>
         {project.artifacts.length === 0 && <p>流水线启动后，关键产物会出现在这里。</p>}

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { readFile as readNodeFile, stat as nodeStat } from "node:fs/promises";
+import { readFile as readNodeFile, realpath as nodeRealpath, stat as nodeStat } from "node:fs/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { extname, isAbsolute, relative, resolve } from "node:path";
 import { execFile } from "node:child_process";
@@ -45,10 +45,10 @@ interface WorkspaceRouteOptions {
   readonly trustedHosts?: readonly string[];
 }
 
+/** Host-process capability probe. The Agent's execution world may differ; `video-recap --doctor` is authoritative there. */
 interface VideoPreflightSummary {
-  readonly ready: boolean;
-  readonly python: { readonly ok: boolean; readonly command?: string | undefined; readonly version?: string | undefined };
-  readonly ffmpeg: { readonly ok: boolean; readonly subtitles: boolean; readonly version?: string | undefined };
+  readonly python: { readonly ok: boolean; readonly version?: string | undefined };
+  readonly ffmpeg: { readonly ok: boolean; readonly subtitles: boolean };
   readonly ffprobe: { readonly ok: boolean };
   readonly credentials: { readonly mimo: boolean; readonly fish: boolean; readonly ttsProvider: string };
 }
@@ -114,31 +114,32 @@ function pythonVersion(value: string | undefined): { readonly ok: boolean; reado
   return { ok: major > 3 || (major === 3 && minor >= 10), version: match[0].replace(/^Python\s+/u, "") };
 }
 
+function configured(...names: readonly string[]): boolean {
+  return names.some((name) => (process.env[name] ?? "") !== "");
+}
+
 async function videoPreflight(): Promise<VideoPreflightSummary> {
   if (videoPreflightCache !== undefined && videoPreflightCache.expires > Date.now()) return videoPreflightCache.value;
   let python: VideoPreflightSummary["python"] = { ok: false };
   for (const command of ["python3", "python"]) {
     const parsed = pythonVersion(await commandOutput(command, ["--version"]));
-    if (parsed.version !== undefined) { python = { ...parsed, command }; break; }
+    if (parsed.version !== undefined) { python = parsed; break; }
   }
   const [ffmpegOutput, ffmpegFilters, ffprobeOutput] = await Promise.all([
     commandOutput("ffmpeg", ["-version"]),
     commandOutput("ffmpeg", ["-hide_banner", "-filters"]),
     commandOutput("ffprobe", ["-version"])
   ]);
-  const ffmpegVersion = /^ffmpeg version\s+(\S+)/mu.exec(ffmpegOutput ?? "")?.[1];
-  const ffmpeg = { ok: ffmpegOutput !== undefined, subtitles: /\bsubtitles\b/u.test(ffmpegFilters ?? ""), version: ffmpegVersion };
-  const credentials = {
-    mimo: typeof process.env.MIMO_API_KEY === "string" && process.env.MIMO_API_KEY !== "",
-    fish: typeof process.env.FISH_API_KEY === "string" && process.env.FISH_API_KEY !== "",
-    ttsProvider: process.env.TTS_PROVIDER ?? "mimo"
-  };
   const value = {
-    ready: python.ok && ffmpeg.ok && ffmpeg.subtitles && credentials.mimo,
     python,
-    ffmpeg,
+    ffmpeg: { ok: ffmpegOutput !== undefined, subtitles: /\bsubtitles\b/u.test(ffmpegFilters ?? "") },
     ffprobe: { ok: ffprobeOutput !== undefined },
-    credentials
+    credentials: {
+      // Upstream falls back to the shared MIMO_API_KEY only when a per-service key is unset.
+      mimo: configured("MIMO_API_KEY", "MIMO_VIDEO_API_KEY", "MIMO_TTS_API_KEY", "MIMO_ASR_API_KEY"),
+      fish: configured("FISH_API_KEY"),
+      ttsProvider: process.env.TTS_PROVIDER ?? "mimo"
+    }
   };
   videoPreflightCache = { expires: Date.now() + 30_000, value };
   return value;
@@ -157,22 +158,24 @@ function send(response: ServerResponse, status: number, value: unknown): void {
 
 export interface ByteRange { readonly start: number; readonly end: number }
 
+/**
+ * RFC 9110 14.2: a Range this server cannot parse or does not support is ignored (`undefined`, full
+ * 200 response); only a well-formed but unsatisfiable range earns a 416 (`null`).
+ */
 export function parseByteRange(value: string | undefined, size: number): ByteRange | undefined | null {
-  if (value === undefined) return undefined;
-  const match = /^bytes=(\d*)-(\d*)$/u.exec(value.trim());
-  if (match === null || size <= 0) return null;
+  const match = value === undefined ? null : /^bytes=(\d*)-(\d*)$/u.exec(value.trim());
+  if (match === null) return undefined;
   const left = match[1] ?? "";
   const right = match[2] ?? "";
-  if (left === "" && right === "") return null;
   if (left === "") {
     const suffix = Number(right);
-    if (!Number.isSafeInteger(suffix) || suffix <= 0) return null;
-    return { start: Math.max(0, size - suffix), end: size - 1 };
+    if (right === "" || !Number.isSafeInteger(suffix)) return undefined;
+    return suffix === 0 || size <= 0 ? null : { start: Math.max(0, size - suffix), end: size - 1 };
   }
   const start = Number(left);
-  const requestedEnd = right === "" ? size - 1 : Number(right);
-  if (!Number.isSafeInteger(start) || !Number.isSafeInteger(requestedEnd) || start < 0 || start >= size || requestedEnd < start) return null;
-  return { start, end: Math.min(requestedEnd, size - 1) };
+  const requestedEnd = right === "" ? Number.MAX_SAFE_INTEGER : Number(right);
+  if (!Number.isSafeInteger(start) || !Number.isSafeInteger(requestedEnd) || requestedEnd < start) return undefined;
+  return start >= size ? null : { start, end: Math.min(requestedEnd, size - 1) };
 }
 
 function mediaHeaders(mimeType: string, size: number, range: ByteRange | undefined): Record<string, string | number> {
@@ -202,30 +205,43 @@ function sendMediaBytes(request: IncomingMessage, response: ServerResponse, byte
   response.end(request.method === "HEAD" ? undefined : Buffer.from(body));
 }
 
+/**
+ * Resolve the target to a path this web host may open directly, or `undefined` when it may not.
+ * `processPath` is canonical in the backend's execution world, which is not necessarily this
+ * process's, so containment is re-checked against the host-visible workspace root: a remote path
+ * that happens to exist locally never becomes a stream.
+ */
+async function hostWorkspaceFile(realm: WorkspaceRealm, target: FsTarget, expectedSize: number): Promise<string | undefined> {
+  const [root, path] = await Promise.all([
+    nodeRealpath(realm.fs.processPath(realm.root)),
+    nodeRealpath(realm.fs.processPath(target))
+  ]);
+  const inside = relative(root, path);
+  if (inside === "" || inside.startsWith("..") || isAbsolute(inside)) return undefined;
+  const local = await nodeStat(path);
+  return local.isFile() && local.size === expectedSize ? path : undefined;
+}
+
 async function sendWorkspaceMedia(request: IncomingMessage, response: ServerResponse, realm: WorkspaceRealm, target: FsTarget, info: FsInfo, mimeType: string): Promise<void> {
   const expectedSize = info.size;
   if (expectedSize !== undefined) {
-    try {
-      const processPath = realm.fs.processPath(target);
-      const local = await nodeStat(processPath);
-      if (local.isFile() && local.size === expectedSize) {
-        const range = parseByteRange(typeof request.headers.range === "string" ? request.headers.range : undefined, local.size);
-        if (range === null) {
-          response.writeHead(416, { "content-range": `bytes */${String(local.size)}`, "cache-control": "no-store" });
-          response.end();
-          return;
-        }
-        response.writeHead(range === undefined ? 200 : 206, mediaHeaders(mimeType, local.size, range));
-        if (request.method === "HEAD") { response.end(); return; }
-        const stream = createReadStream(processPath, range === undefined ? undefined : { start: range.start, end: range.end });
-        request.once("close", () => { if (!response.writableEnded) stream.destroy(); });
-        stream.on("error", () => { if (!response.headersSent) response.destroy(); else response.end(); });
-        stream.pipe(response);
+    // A remote filesystem may expose a process path this web host cannot read; fall back to its
+    // bounded binary API for modest files.
+    const processPath = await hostWorkspaceFile(realm, target, expectedSize).catch(() => undefined);
+    if (processPath !== undefined) {
+      const range = parseByteRange(typeof request.headers.range === "string" ? request.headers.range : undefined, expectedSize);
+      if (range === null) {
+        response.writeHead(416, { "content-range": `bytes */${String(expectedSize)}`, "cache-control": "no-store" });
+        response.end();
         return;
       }
-    } catch {
-      // A remote filesystem may expose a process path that is not readable by this web host.
-      // Fall back to its bounded binary API for modest files.
+      response.writeHead(range === undefined ? 200 : 206, mediaHeaders(mimeType, expectedSize, range));
+      if (request.method === "HEAD") { response.end(); return; }
+      const stream = createReadStream(processPath, range === undefined ? undefined : { start: range.start, end: range.end });
+      request.once("close", () => { if (!response.writableEnded) stream.destroy(); });
+      stream.on("error", () => { if (!response.headersSent) response.destroy(); else response.end(); });
+      stream.pipe(response);
+      return;
     }
     if (expectedSize > MEDIA_MAX_BYTES) throw new WorkspaceHttpError(413, "远程媒体超过工作台回退预览大小限制。");
   }

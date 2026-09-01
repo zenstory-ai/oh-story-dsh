@@ -36,7 +36,7 @@
 
 视频模式采用“左侧预览 + 右侧 DSH Chat”的轻量两列布局。完整打包 [video-recap-skills 0.4.0](https://github.com/zenstory-ai/video-recap-skills) 的 6 个 Skills，项目放在 `video-recaps/<project>/`：原片位于 `sources/`，上游权威工作产物位于 `work/`，可选交付位于 `outputs/`。工作台只提供原片、剪后片和最终成片切换、阶段提示、全屏、刷新以及关键计划/字幕/质检产物查看，不内置多轨时间线或重型编辑器。
 
-视频文件通过 HTTP Range 流式预览；新成片出现时保留当前播放，由创作者主动载入新版。运行环境检查只显示 Python 3.10+、ffmpeg/libass、ffprobe 与 Key 是否就绪，不把 `MIMO_API_KEY`、`FISH_API_KEY` 或音色凭据发送给浏览器。视频流水线还需要宿主机安装 Python 3.10+ 和带 `subtitles` 滤镜的 ffmpeg。当前 macOS Homebrew 的普通 `ffmpeg` formula 不包含 libass，可安装 `python@3.12` 与 `ffmpeg-full`，并在启动 DSH 前把 `$(brew --prefix ffmpeg-full)/bin` 放到 `PATH` 前面；以工作台运行环境检查或 `video-recap --doctor` 的实际结果为准。
+视频文件通过 HTTP Range 流式预览；新成片出现时保留当前播放，由创作者主动载入新版。流水线需要宿主机安装 Python 3.10+ 与带 libass `subtitles` 滤镜的 ffmpeg/ffprobe（macOS `brew install ffmpeg`、Debian/Ubuntu `sudo apt install ffmpeg`）。运行环境检查只显示 DSH Host 进程里 Python、ffmpeg/libass、ffprobe 与 Key 是否就绪，不把 `MIMO_API_KEY`、`FISH_API_KEY` 或音色凭据发送给浏览器；Agent 实际执行世界的结论以 `video-recap --doctor` 为准。
 
 在 Chat 中直接描述输入和目标即可，例如：
 

@@ -53,19 +53,19 @@ async function fileDigest(path: string): Promise<{ readonly sha256: string; read
   return { sha256: createHash("sha256").update(bytes).digest("hex"), bytes: bytes.byteLength };
 }
 
-export async function currentVideoRecapFiles(): Promise<VideoRecapAssetManifest["files"]> {
-  return Promise.all((await regularFiles(videoRecapRoot))
-    .filter(portableSourceAsset)
-    .filter((path) => basename(path) !== "manifest.json")
-    .map(async (path) => ({ path: portableRelative(videoRecapRoot, path), ...await fileDigest(path) })));
-}
-
-function portableSourceAsset(path: string): boolean {
+function isPortableSourceAsset(path: string): boolean {
   const normalized = path.split(sep).join("/");
   return !normalized.includes("/__pycache__/")
     && !normalized.endsWith("/__pycache__")
     && !normalized.endsWith(".pyc")
     && !normalized.endsWith("/.DS_Store");
+}
+
+export async function currentVideoRecapFiles(): Promise<VideoRecapAssetManifest["files"]> {
+  return Promise.all((await regularFiles(videoRecapRoot))
+    .filter(isPortableSourceAsset)
+    .filter((path) => basename(path) !== "manifest.json")
+    .map(async (path) => ({ path: portableRelative(videoRecapRoot, path), ...await fileDigest(path) })));
 }
 
 export async function synchronizeVideoRecapAssets(): Promise<VideoRecapAssetManifest> {
@@ -78,7 +78,7 @@ export async function synchronizeVideoRecapAssets(): Promise<VideoRecapAssetMani
   await cp(join(source, "skills"), join(videoRecapRoot, "skills"), {
     recursive: true,
     dereference: false,
-    filter: portableSourceAsset
+    filter: isPortableSourceAsset
   });
   for (const file of ["LICENSE", "README.md", "README.en.md", "CHANGELOG.md"]) {
     await cp(join(source, file), join(videoRecapRoot, file));

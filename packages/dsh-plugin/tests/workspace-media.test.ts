@@ -29,7 +29,17 @@ describe("DSH workspace media boundary", () => {
     expect(parseByteRange("bytes=100-199", 1_000)).toEqual({ start: 100, end: 199 });
     expect(parseByteRange("bytes=900-", 1_000)).toEqual({ start: 900, end: 999 });
     expect(parseByteRange("bytes=-100", 1_000)).toEqual({ start: 900, end: 999 });
+    expect(parseByteRange("bytes=-4000", 1_000)).toEqual({ start: 0, end: 999 });
+    expect(parseByteRange("bytes=100-4000", 1_000)).toEqual({ start: 100, end: 999 });
+  });
+
+  it("distinguishes an unsatisfiable range from one this server does not support", () => {
     expect(parseByteRange("bytes=1000-", 1_000)).toBeNull();
-    expect(parseByteRange("bytes=0-1,3-4", 1_000)).toBeNull();
+    expect(parseByteRange("bytes=-0", 1_000)).toBeNull();
+    expect(parseByteRange("bytes=0-", 0)).toBeNull();
+    // RFC 9110 14.2: unparseable or unsupported Range headers are ignored, never answered with 416.
+    expect(parseByteRange("bytes=0-1,3-4", 1_000)).toBeUndefined();
+    expect(parseByteRange("items=0-1", 1_000)).toBeUndefined();
+    expect(parseByteRange("bytes=9-4", 1_000)).toBeUndefined();
   });
 });

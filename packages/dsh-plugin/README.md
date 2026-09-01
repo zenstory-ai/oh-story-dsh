@@ -34,13 +34,17 @@ npx -y @deepseek-ai/dsh@0.1.1-rc.1 web
 
 需要 Node.js 24+。首次使用需要在 DSH 的「设置 → 模型」中添加 Provider 并填入 API Key，或在启动前设置环境变量 `DEEPSEEK_API_KEY`。
 
-将作品目录添加为 DSH workspace，然后在普通 Agent 会话中使用 `/story`、`/short-drama`、`/novel-to-game quick` 或 `/video-recap`。四个入口始终可见；尚未创建的类型显示对应的创建引导。模型、权限、会话记录、停止/继续、Todo、审批和 Composer 均沿用当前 DeepSeek Harness 配置与界面。
+将作品目录添加为 DSH workspace，然后在普通 Agent 会话中使用 `/story`、`/short-drama`、`/novel-to-game quick` 或 `/video-recap`。四个入口始终可见；尚未创建的类型显示对应的创建引导。模型、凭据、Preset、权限、会话记录、停止/继续、Todo、审批和 Composer 均沿用当前 DeepSeek Harness 配置与界面。
+
+## 短剧工作台
+
+选择某集的 creator-first 文档后可切换到「生产」，查看镜头板、素材板、任务、成片顺序与关系画布；图片与视频按钮先准备完整生产预检，创作者在 Chat 明确确认同一任务后才会运行。
 
 ## 游戏工作台
 
 ![金瓶梅实时试玩](https://raw.githubusercontent.com/zenstory-ai/oh-story-dsh/main/docs/images/game-studio-jin-ping-mei.png)
 
-游戏项目写入 `game-adaptations/<project>`；左侧直接试玩当前构建，右侧继续与 Agent 对话。新构建只在用户主动载入时替换当前预览。
+游戏产物写入 `game-adaptations/<project>`；`build/app/index.html` 就绪后即可在左侧隔离预览中实时试玩，切换项目文件或窄屏对话不会卸载当前运行时，新构建也只在用户主动选择后载入。`/game-qa` 与 `qa/verification.json` 保留为 Agent/自动化质量契约，不在制作面板展示独立 QA UI。
 
 ## 视频工作台
 
@@ -50,7 +54,7 @@ npx -y @deepseek-ai/dsh@0.1.1-rc.1 web
 给 /path/to/video.mp4 做一个 3 分钟中文解说成片，保留关键原声，字幕烧进画面。
 ```
 
-宿主机需要 Python 3.10+、ffprobe、带 libass/`subtitles` 滤镜的 ffmpeg，以及 `MIMO_API_KEY`。Fish Audio TTS 另需 `FISH_API_KEY`。浏览器只接收环境是否就绪，不接收 Key 内容；密钥也不会写入项目。macOS Homebrew 可安装 `python@3.12` 与 `ffmpeg-full`，并在启动 DSH 前把 `$(brew --prefix ffmpeg-full)/bin` 放到 `PATH` 前面。
+宿主机需要 Python 3.10+、`PATH` 上的 ffmpeg/ffprobe（默认烧录字幕，因此 ffmpeg 需带 libass 的 `subtitles` 滤镜），以及 `MIMO_API_KEY`；Fish Audio TTS 另需 `FISH_API_KEY`。安装按上游说明即可（macOS `brew install ffmpeg`、Debian/Ubuntu `sudo apt install ffmpeg`）。工作台的「运行环境」检查只报告 DSH Host 进程是否就绪，不返回 Key 内容，密钥也不会写入项目；Agent 实际的执行世界以 `video-recap --doctor` 为准。
 
 Drama Skills 0.6.0 不支持把 v0.5 结构化项目原地升级为 creator-first 项目。旧项目应继续锁定 v0.5 并只读保留；迁移时请新建项目根，逐集人工确认当前工作实际需要的 `剧本.md`、`视觉设定.md`、`分镜.md`、`图片提示词.md` 或 `视频提示词.md`，不要预建空文档。
 
