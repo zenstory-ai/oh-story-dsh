@@ -76,15 +76,15 @@
 **1. 安装插件并启动 DSH Web**
 
 ```bash
-npx -y @deepseek-ai/dsh@0.1.1-rc.1 plugin --profile web add @oh-story/dsh@0.1.4
-npx -y @deepseek-ai/dsh@0.1.1-rc.1 web
+npx -y @deepseek-ai/dsh@0.1.2-alpha.3 plugin --profile web add @oh-story/dsh@0.1.4
+npx -y @deepseek-ai/dsh@0.1.2-alpha.3 web
 ```
 
 也可以直接安装 GitHub Release 中经过同一套测试的预构建包：
 
 ```bash
-npx -y @deepseek-ai/dsh@0.1.1-rc.1 plugin --profile web add https://github.com/zenstory-ai/oh-story-dsh/releases/download/v0.1.4/oh-story-dsh-0.1.4.tgz
-npx -y @deepseek-ai/dsh@0.1.1-rc.1 web
+npx -y @deepseek-ai/dsh@0.1.2-alpha.3 plugin --profile web add https://github.com/zenstory-ai/oh-story-dsh/releases/download/v0.1.4/oh-story-dsh-0.1.4.tgz
+npx -y @deepseek-ai/dsh@0.1.2-alpha.3 web
 ```
 
 默认在 `http://127.0.0.1:3080` 打开。
@@ -104,7 +104,7 @@ npx -y @deepseek-ai/dsh@0.1.1-rc.1 web
 **1. 装进独立 profile**
 
 ```bash
-npx -y @deepseek-ai/dsh@0.1.1-rc.1 plugin --profile story add @oh-story/dsh@0.1.4
+npx -y @deepseek-ai/dsh@0.1.2-alpha.3 plugin --profile story add @oh-story/dsh@0.1.4
 ```
 
 **2. 补上界面**
@@ -124,8 +124,8 @@ npx -y @deepseek-ai/dsh@0.1.1-rc.1 plugin --profile story add @oh-story/dsh@0.1.
 **3. 按需启动**
 
 ```bash
-npx -y @deepseek-ai/dsh@0.1.1-rc.1 web                          # 原版 DSH
-npx -y @deepseek-ai/dsh@0.1.1-rc.1 --profile story --port 3081  # 创作工作台
+npx -y @deepseek-ai/dsh@0.1.2-alpha.3 web                          # 原版 DSH
+npx -y @deepseek-ai/dsh@0.1.2-alpha.3 --profile story --port 3081  # 创作工作台
 ```
 
 两个 profile 用不同端口可以同时运行。模型、凭据、workspace 与历史会话由 DSH 统一保存，切换 profile 不会丢。

@@ -8,7 +8,9 @@ import { parseEnv } from "node:util";
 import { fileURLToPath } from "node:url";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const dshVersion = "0.1.1-rc.1";
+const dshVersion = "0.1.2-alpha.3";
+/** Exact WebSocket route carrying every Typert Remote stream. */
+const REMOTE_STREAM_MUX_PATH = "/api/remote.mux";
 
 function run(command: string, args: readonly string[], env: NodeJS.ProcessEnv = process.env): void {
   const result = spawnSync(command, args, { cwd: repositoryRoot, env, encoding: "utf8", stdio: "pipe" });
@@ -24,23 +26,54 @@ async function freePort(): Promise<number> {
   return address.port;
 }
 
-async function waitForServer(origin: string): Promise<void> {
+let dshAuthCookie: string | undefined;
+
+/**
+ * DSH 0.1.2 gates Web and `/api` behind a session cookie. Exchange the one-time
+ * token the CLI prints at startup for that cookie, and hand the same URL to
+ * Chrome so the browser authorizes itself the way a user would.
+ */
+async function authorizeDsh(origin: string, logs: readonly string[]): Promise<string> {
+  const pattern = new RegExp(`${origin.replaceAll(".", "\\.")}/\\?token=[A-Za-z0-9_.-]+`, "u");
   const deadline = Date.now() + 90_000;
   while (Date.now() < deadline) {
-    try { if ((await fetch(origin)).ok) return; } catch { /* retry */ }
+    const tokenUrl = pattern.exec(logs.join(""))?.[0];
+    if (tokenUrl !== undefined) {
+      try {
+        const response = await fetch(tokenUrl, { redirect: "manual" });
+        const cookie = response.headers.getSetCookie().map((entry) => entry.split(";", 1)[0]).join("; ");
+        if (cookie !== "") {
+          dshAuthCookie = cookie;
+          return tokenUrl;
+        }
+      } catch { /* retry */ }
+    }
     await new Promise((accept) => setTimeout(accept, 150));
   }
   throw new Error("Timed out waiting for official DSH Web.");
 }
 
-async function rpc<T>(origin: string, method: string, payload: unknown): Promise<T> {
+/** Every request to DSH carries the session cookie obtained by {@link authorizeDsh}. */
+async function dshFetch(input: string | URL, init: RequestInit = {}): Promise<Response> {
+  return fetch(input, { ...init, headers: { ...init.headers as Record<string, string>, cookie: dshAuthCookie ?? "" } });
+}
+
+interface HistoryEvent { readonly type: string; readonly seq: number; readonly data: unknown }
+
+interface HistoryRecord { readonly type: string; readonly event: HistoryEvent }
+
+/**
+ * DSH 0.1.2 addresses Remotes as `<namespace>/<method>` and carries the call in
+ * a single `args` field, so the wire method must equal the endpoint path.
+ */
+async function rpc<T>(origin: string, endpoint: string, args: object): Promise<T> {
   const rpcId = `oh-story-real-${crypto.randomUUID()}`;
   const deadline = Date.now() + 15_000;
   while (true) {
-    const response = await fetch(`${origin}/api/${method}`, {
+    const response = await dshFetch(`${origin}/api/${endpoint}`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ type: "client-request", rpcId, method, payload })
+      body: JSON.stringify({ type: "client-request", rpcId, method: endpoint, payload: { args } })
     });
     const body = await response.text();
     if (response.status === 404 && body.trim() === "not found" && Date.now() < deadline) {
@@ -52,12 +85,51 @@ async function rpc<T>(origin: string, method: string, payload: unknown): Promise
       readonly result: { readonly ok: true; readonly value: T } | { readonly ok: false; readonly error: { readonly code: string; readonly message: string } };
     };
     try { envelope = JSON.parse(body) as typeof envelope; }
-    catch { throw new Error(`DSH ${method} returned HTTP ${String(response.status)} with a non-JSON body: ${body.slice(0, 200)}`); }
+    catch { throw new Error(`DSH ${endpoint} returned HTTP ${String(response.status)} with a non-JSON body: ${body.slice(0, 200)}`); }
     if (!response.ok || envelope.rpcId !== rpcId || !envelope.result.ok) {
-      throw new Error(`DSH ${method} failed: ${JSON.stringify(envelope)}`);
+      throw new Error(`DSH ${endpoint} failed: ${JSON.stringify(envelope)}`);
     }
     return envelope.result.value;
   }
+}
+
+/**
+ * `session.history` is gone: the durable log now arrives as the opening
+ * snapshot of the `session/follow` stream, multiplexed over one WebSocket.
+ */
+async function sessionEvents(origin: string, sessionId: string): Promise<readonly HistoryEvent[]> {
+  const address = `${origin.replace(/^http/u, "ws")}${REMOTE_STREAM_MUX_PATH}`;
+  // Node's WebSocket takes request headers through an option its DOM types omit.
+  const socket = new WebSocket(address, { headers: { cookie: dshAuthCookie ?? "" } } as unknown as string[]);
+  let stalled: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await new Promise<readonly HistoryEvent[]>((accept, reject) => {
+      const streamId = crypto.randomUUID();
+      stalled = setTimeout(() => { reject(new Error("DSH session/follow produced no opening snapshot.")); }, 30_000);
+      socket.addEventListener("error", () => { reject(new Error("DSH session/follow stream failed to open.")); });
+      socket.addEventListener("close", () => { reject(new Error("DSH closed session/follow before the opening snapshot.")); });
+      socket.addEventListener("open", () => {
+        socket.send(JSON.stringify({
+          type: "open",
+          streamId,
+          endpoint: "session/follow",
+          payload: { args: { request: { address: { kind: "session", sessionId }, maxMessages: 1_000 } } }
+        }));
+      });
+      socket.addEventListener("message", (message: MessageEvent) => {
+        const frame = JSON.parse(String(message.data)) as {
+          readonly type: string;
+          readonly streamId: string;
+          readonly value?: { readonly type: string; readonly records?: readonly HistoryRecord[] };
+          readonly error?: { readonly message: string };
+        };
+        if (frame.streamId !== streamId) return;
+        if (frame.type === "error") { reject(new Error(`DSH session/follow failed: ${frame.error?.message ?? "unknown"}`)); return; }
+        if (frame.type !== "item" || frame.value?.type !== "snapshot") return;
+        accept((frame.value.records ?? []).filter((record) => record.type === "event").map((record) => record.event));
+      });
+    });
+  } finally { clearTimeout(stalled); socket.close(); }
 }
 
 async function stop(child: ChildProcess): Promise<void> {
@@ -101,13 +173,10 @@ async function treeDigest(root: string): Promise<string> {
   return hash.digest("hex");
 }
 
-interface HistoryEvent { readonly type: string; readonly seq: number; readonly data: unknown }
-
 async function waitForCompletedTurn(origin: string, sessionId: string): Promise<readonly HistoryEvent[]> {
   const deadline = Date.now() + 600_000;
   while (Date.now() < deadline) {
-    const history = await rpc<{ readonly events: readonly { readonly event: HistoryEvent }[] }>(origin, "session.history", { sessionId, maxMessages: 1_000 });
-    const events = history.events.map((entry) => entry.event);
+    const events = await sessionEvents(origin, sessionId);
     const end = [...events].reverse().find((event) => event.type === "turn/end");
     if (end !== undefined) {
       const reason = (end.data as { readonly reason?: { readonly kind?: string } }).reason?.kind;
@@ -177,29 +246,32 @@ async function main(): Promise<void> {
     });
     child.stdout?.on("data", (chunk: Buffer) => logs.push(chunk.toString("utf8")));
     child.stderr?.on("data", (chunk: Buffer) => logs.push(chunk.toString("utf8")));
-    await waitForServer(origin);
+    await authorizeDsh(origin, logs);
 
-    const workspace = await rpc<{ readonly workspace: { readonly workspaceId: string } }>(origin, "workspace.create", { path: projectRoot });
-    const session = await rpc<{ readonly sessionId: string }>(origin, "session.create", { workspaceId: workspace.workspace.workspaceId });
+    const workspace = await rpc<{ readonly workspace: { readonly workspaceId: string } }>(origin, "workspace/create", { request: { path: projectRoot } });
+    const session = await rpc<{ readonly sessionId: string }>(origin, "session/create", { request: { workspaceId: workspace.workspace.workspaceId } });
     const models = await rpc<{
       readonly current: { readonly provider: string; readonly model: string };
       readonly groups: readonly { readonly id: string; readonly models: readonly { readonly id: string }[] }[];
-    }>(origin, "session.models", { sessionId: session.sessionId });
+    }>(origin, "session/modelCatalog", {});
     const deepseek = models.groups.find((group) => group.id === "deepseek-official");
     const selectedModel = deepseek?.models.find((candidate) => candidate.id === "deepseek-v4-flash")?.id ?? deepseek?.models[0]?.id;
     if (deepseek === undefined || selectedModel === undefined) throw new Error("DSH did not expose a DeepSeek official model.");
-    await rpc(origin, "session.selectModel", { sessionId: session.sessionId, provider: deepseek.id, model: selectedModel });
+    await rpc(origin, "session/selectModel", { request: { sessionId: session.sessionId, provider: deepseek.id, model: selectedModel } });
 
-    const skills = await rpc<{ readonly skills: readonly { readonly name: string }[] }>(origin, "skill.list", { sessionId: session.sessionId });
+    const skills = await rpc<{ readonly skills: readonly { readonly name: string }[] }>(origin, "skills/list", { request: { sessionId: session.sessionId } });
     if (!skills.skills.some((skill) => skill.name === "story-review")) throw new Error("story-review was not registered in the DSH Session.");
-    await rpc(origin, "session.prompt", {
-      sessionId: session.sessionId,
-      mode: "queue",
-      content: [{
-        type: "text",
-        text: "/story-review lean 审查 正文/第001章_雨夜.md。只输出审稿报告，不修改任何文件；必须通过 oh_story_role 分别调用 story-explorer 和 consistency-checker，并综合两者的证据。"
-      }],
-      clientTimeZone: "America/Los_Angeles"
+    await rpc(origin, "session/prompt", {
+      request: {
+        requestId: crypto.randomUUID(),
+        sessionId: session.sessionId,
+        mode: "queue",
+        content: [{
+          type: "text",
+          text: "/story-review lean 审查 正文/第001章_雨夜.md。只输出审稿报告，不修改任何文件；必须通过 oh_story_role 分别调用 story-explorer 和 consistency-checker，并综合两者的证据。"
+        }],
+        clientTimeZone: "America/Los_Angeles"
+      }
     });
 
     const storyEvents = await waitForCompletedTurn(origin, session.sessionId);
@@ -212,18 +284,21 @@ async function main(): Promise<void> {
     }
     if (!storyEvents.some((event) => event.type === "assistant/message")) throw new Error("Story review Session has no durable assistant result.");
 
-    const dramaSession = await rpc<{ readonly sessionId: string }>(origin, "session.create", { workspaceId: workspace.workspace.workspaceId });
-    await rpc(origin, "session.selectModel", { sessionId: dramaSession.sessionId, provider: deepseek.id, model: selectedModel });
-    const dramaSkills = await rpc<{ readonly skills: readonly { readonly name: string }[] }>(origin, "skill.list", { sessionId: dramaSession.sessionId });
+    const dramaSession = await rpc<{ readonly sessionId: string }>(origin, "session/create", { request: { workspaceId: workspace.workspace.workspaceId } });
+    await rpc(origin, "session/selectModel", { request: { sessionId: dramaSession.sessionId, provider: deepseek.id, model: selectedModel } });
+    const dramaSkills = await rpc<{ readonly skills: readonly { readonly name: string }[] }>(origin, "skills/list", { request: { sessionId: dramaSession.sessionId } });
     if (!dramaSkills.skills.some((skill) => skill.name === "short-drama-review")) throw new Error("short-drama-review was not registered in the DSH Session.");
-    await rpc(origin, "session.prompt", {
-      sessionId: dramaSession.sessionId,
-      mode: "queue",
-      content: [{
-        type: "text",
-        text: "/short-drama-review story_script 只读审查 creator-first 文档 剧集/EP001/剧本.md。只输出审查结论，不修改文件，不生成审查文件或任何 JSON/JSONL，也不调用生产步骤。"
-      }],
-      clientTimeZone: "America/Los_Angeles"
+    await rpc(origin, "session/prompt", {
+      request: {
+        requestId: crypto.randomUUID(),
+        sessionId: dramaSession.sessionId,
+        mode: "queue",
+        content: [{
+          type: "text",
+          text: "/short-drama-review story_script 只读审查 creator-first 文档 剧集/EP001/剧本.md。只输出审查结论，不修改文件，不生成审查文件或任何 JSON/JSONL，也不调用生产步骤。"
+        }],
+        clientTimeZone: "America/Los_Angeles"
+      }
     });
     const dramaEvents = await waitForCompletedTurn(origin, dramaSession.sessionId);
     if (!dramaEvents.some((event) => event.type === "assistant/message")) throw new Error("Short-drama review Session has no durable assistant result.");

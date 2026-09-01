@@ -1,7 +1,7 @@
 import type { Context } from "@deepseek-ai/cordis";
 import type { ContentBlock } from "@deepseek-ai/dsh-llm";
-import type { JsonValue } from "@deepseek-ai/dsh-session";
 import type { SubagentRuntime } from "@deepseek-ai/dsh-subagent";
+import type { JsonValue } from "@deepseek-ai/dsh-util-values";
 import { defineTool, type ToolDefinition } from "@deepseek-ai/dsh-tools";
 import {
   bundledReferenceGuard,

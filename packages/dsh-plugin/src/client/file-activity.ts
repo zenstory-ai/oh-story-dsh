@@ -1,11 +1,10 @@
+import type { AssistantChatData, ChatSnapshot } from "@deepseek-ai/dsh-client-ui-chat/client";
 import type {
-  ChatSnapshot,
   ConversationTimelineSnapshot,
   PartialAssistant,
   RunningToolCall,
   ToolCallBlock
-} from "@deepseek-ai/dsh-client-runtime/client";
-import type { AssistantChatData } from "@deepseek-ai/dsh-client-ui-conversation/client";
+} from "@deepseek-ai/dsh-client-ui-conversation/client";
 
 export type MutationToolName = "write" | "edit" | "str_replace_editor";
 
@@ -171,21 +170,6 @@ function mutationFromArgs(name: string, callId: string, argsRaw: string, stage: 
   return { callId, name, argsRaw, stage, path, operation: undefined, oldText: undefined, newText: undefined, replaceAll: false };
 }
 
-function mutationsFromRunning(call: RunningToolCall): FileMutationActivity[] {
-  const direct = mutationFromArgs(call.name, call.callId, call.argsRaw, "running");
-  if (direct === undefined) return [];
-  const view = call.callView;
-  if (view?.card !== "diff" || view.diffs.length === 0) return [direct];
-  return view.diffs.map((diff, index) => ({
-    ...direct,
-    callId: view.diffs.length === 1 ? call.callId : `${call.callId}:${String(index)}`,
-    path: diff.path,
-    operation: diff.oldText === null ? "replace-file" : "replace-text",
-    oldText: diff.oldText ?? undefined,
-    newText: diff.newText
-  }));
-}
-
 function visitRunning(blocks: readonly ToolCallBlock[], visit: (call: RunningToolCall) => void): void {
   for (const block of blocks) {
     if (!("kind" in block)) visit(block);
@@ -199,7 +183,10 @@ export function fileMutations(
   partial: PartialAssistant | null = null
 ): FileMutationActivity[] {
   const values: FileMutationActivity[] = [];
-  visitRunning(runningCalls, (call) => { values.push(...mutationsFromRunning(call)); });
+  visitRunning(runningCalls, (call) => {
+    const mutation = mutationFromArgs(call.name, call.callId, call.argsRaw, "running");
+    if (mutation !== undefined) values.push(mutation);
+  });
   for (const block of partial?.blocks ?? []) {
     if (block.kind !== "tool-call") continue;
     const value = mutationFromArgs(block.name, block.callId, block.argsRaw, "streaming");
@@ -218,13 +205,6 @@ export function mutatingCallIds(runningCalls: readonly RunningToolCall[]): Reado
 function settledMutationSignals(block: ToolCallBlock): string[] {
   const nested = block.subCalls.flatMap(settledMutationSignals);
   if (!("kind" in block) || block.isError) return nested;
-  const diffs = block.resultView?.card === "diff"
-    ? block.resultView.diffs
-    : block.callView?.card === "diff" ? block.callView.diffs : undefined;
-  if (diffs !== undefined) return [
-    ...diffs.map((diff, index) => `${block.callId}:${String(index)}\0${diff.path}`),
-    ...nested
-  ];
   if (block.call === null) return nested;
   const mutation = mutationFromArgs(block.call.name, block.callId, block.call.argsRaw, "running");
   return mutation?.path === undefined ? nested : [`${block.callId}\0${mutation.path}`, ...nested];
