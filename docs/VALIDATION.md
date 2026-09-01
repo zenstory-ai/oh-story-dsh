@@ -21,8 +21,8 @@ The deterministic packaged Role path is part of the correctness gate. The paid r
 
 | Area | Evidence |
 | --- | --- |
-| Capability catalog | Native DSH Session exposes 13 Oh Story Skills, 10 Drama Skills and 7 NovelToGame Skills |
-| Upstream integrity | Three knowledge manifests verify pinned commits, catalogs, every bundled file hash, portable-source exclusions and the Drama 0.6 creator-first contract; all 10 bundled Drama selftests run without bytecode writes, the five demo documents verify recorded fixture hashes, and NovelToGame parity covers the playable `jin-ping-mei` build, its six-check PASS record and the authoring-material exclusions |
+| Capability catalog | Native DSH Session exposes 13 Oh Story Skills, 10 Drama Skills, 7 NovelToGame Skills and the 2 user-invocable video entries; provider tests retain all 6 upstream video Skills |
+| Upstream integrity | Four knowledge manifests verify pinned commits, catalogs, every bundled file hash, portable-source exclusions and the Drama 0.6 creator-first contract; all 10 bundled Drama selftests run without bytecode writes, the five demo documents verify recorded fixture hashes, NovelToGame parity covers the playable `jin-ping-mei` build, its six-check PASS record and authoring-material exclusions, and video-recap parity requires the complete six-Skill pipeline plus its orchestrator/inspect entry points |
 | Plugin boundary | Host bundle and source audit keep all DSH imports inside `@oh-story/dsh` |
 | Workspace safety | Unit tests cover Host/Origin/Fetch Metadata trust and creative media allowlists, while the packaged route rejects traversal and exercises session-scoped reads, media byte ranges and atomic writes; generated-game CSP is browser-probed to reject workspace API access outside the preview asset prefix; child-session, absolute-path and symbolic-link negative cases remain follow-up contracts |
 | Editor concurrency | Versioned GET/PUT rejects stale saves; Chrome edits, saves, rereads and restores a real workspace file |
@@ -33,11 +33,12 @@ The deterministic packaged Role path is part of the correctness gate. The paid r
 | Composer stability | Browser interaction contracts run `scrollIntoView()` and verify dynamic Composer clearance in wide, medium and 500 px compact layouts |
 | Dual workbench | Native smoke switches 小说/短剧, opens all five creator-first document types, and exercises Markdown preview/source modes |
 | Game Studio | Native smoke verifies Preview-left/Chat-right geometry, real iframe input, explicit new-version loading, state preservation across Preview/project-file, compact Studio/Chat and 小说/游戏 switches, fullscreen focus return, the absence of QA UI, the bundled Jin Ping Mei opening, and a non-clipping 500 px layout even when the host drawer remains open |
+| Video Studio | Unit tests cover project-root validation, high-volume artifact exclusion, full/cut pause projection, source/edited/final selection and standards-compliant byte ranges; packaged catalog and tarball checks cover all six Skills |
 | Compact Game Studio | Chrome runs the game-specific surface at 500×900, checks tab/tabpanel relationships and horizontal containment, enters a Composer draft in Chat, returns to the same live game state, and emits screenshot evidence |
 | Short-drama production | Unit tests cover document parsing, episode isolation, prompt authority, cross-episode image-reference filtering, media-typed version selection, DSH Queue/current-Turn classification, dispatched-unknown safety, jobs, versions and sequence logic; packaged Chrome checks two-episode switching, per-episode task/reference/canvas isolation, project-media search/reuse, concurrent submit/remove/cancel semantics, late partial-batch reconciliation, successful composition backfill, version selection, sequence reorder/blockers, creator keyboard canvas movement, Agent semantic focus, native Conversation dispatch, realistic image/MP4 backfill and 500 px containment |
 | Agent production operability | The packaged fixture model calls the registered `oh_story_production` tool in a real DSH turn; the durable successful call is rendered by the plugin tool view and focuses the requested EP001 production target without granting cosmetic canvas control. Unit tests reject traversal, duplicate sequence IDs, failed calls and malformed replay payloads. |
 | Roles and hooks | Real Cordis Fiber contracts cover plugin-runtime capture, `Context.get()` fallback and missing-runtime failure; packaged DSH deterministically completes one child-Agent Role invocation; unit contracts cover pinned reference reads, path escape and scoped-shadow rejection |
-| Package contents | Build and pack include all three pinned knowledge sets, the Jin Ping Mei playable build and QA record, package metadata and license while omitting source tests and the standalone Drama Dashboard |
+| Package contents | Build and pack include all four pinned knowledge sets, the Jin Ping Mei playable build and QA record, package metadata and license while omitting source tests and the standalone Drama Dashboard |
 
 The gate discovers all `*.test.ts` and `*.contract.test.ts` files. Coverage claims below are tied to executable behavior, not a manually maintained test-count snapshot.
 
@@ -54,7 +55,7 @@ The gate discovers all `*.test.ts` and `*.contract.test.ts` files. Coverage clai
 
 `pnpm test:dsh` creates an isolated DSH installation and profile, packs `@oh-story/dsh`, installs the tarball through `dsh plugin --profile web add`, and starts the official Web UI. It copies the pinned public demo projects from Oh Story (`让你管账号，你高燃混剪炸全网`) and Drama Skills 0.6 (`让你管账号`) into temporary workspaces, creates a minimal workspace game, and loads the pinned NovelToGame Jin Ping Mei example. The Chrome pass verifies:
 
-- 13 Oh Story Skills, 10 Drama Skills and 7 NovelToGame Skills in the Session catalog;
+- 13 Oh Story Skills, 10 Drama Skills, 7 NovelToGame Skills and the 2 upstream user-invocable video entries in the Session catalog; provider tests cover all 6 bundled video Skills;
 - Session-scoped workspace reads, a 20-writer atomic CAS race, stale-write rejection and path-traversal rejection;
 - allowlisted media discovery, read-only byte-range preview and media path-traversal rejection through the current Agent FileSystem, using two alternate 941×1672 generated keyframes and a real 704×1280 five-second seekable MP4 rather than one-pixel placeholders;
 - invalid project metadata isolation without taking down the workspace;

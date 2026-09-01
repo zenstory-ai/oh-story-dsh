@@ -17,6 +17,10 @@
 
 ### Added
 
+- 完整嵌入 video-recap-skills 0.4.0（`106175e`）的 6 个 Skills、固定上游资产清单与 `video-recaps/<project>` 项目约定。
+- 新增第四个「视频」工作台：桌面端左侧预览、右侧 DSH 原生 Chat；支持原片/剪后片/最终成片切换、阶段提示、关键产物检查、全屏、刷新和显式载入新版本，不引入多轨编辑器。
+- 新增视频运行环境检查，只向浏览器返回 Python、ffmpeg/libass、ffprobe 与凭据是否就绪，不返回任何 Key 内容。
+- 本地视频预览改用 HTTP Range 文件流，可预览超过 256 MiB 的长视频而不在 Host 内整文件缓冲；远程文件系统保留有界回退读取。
 - 同步 Oh Story 0.7.8（`70c294b`，v0.7.8 之后 3 个提交）：新增工作区级作者记忆 `.story/作者记忆/` 与随包脚本 `author_memory_commit.py`；新增细纲结构验收 `check-outline-contract.js`、短篇 Phase 2 与交付验收 `check-phase2-contract.js` 与 `check-delivery-contract.js`；长篇字数改用 `storyctl.py` 的 `visible_chars_v1` 口径。上游 `agents_version` 升到 28，DSH 的七个 Role 随插件打包，用户无需重新部署。
 - 同步 Drama Skills 0.6.1（`3ab6b85`，v0.6.1 之后 3 个提交，含尚未发版的 0.6.2 修复）：新增 `creator_markdown_check.py`，按剧集校验 creator-first 五份 Markdown 的跨文档结构。
 - 短剧每集 creator-first 文档新增「生产」视图：镜头卡、人物/场景/道具素材板、跨文档定位、批量生产、任务状态、版本选择、成片顺序与缺镜检查，以及可缩放拖拽的关系画布。
