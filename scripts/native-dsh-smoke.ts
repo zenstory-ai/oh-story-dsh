@@ -29,6 +29,8 @@ const gamePrompt = "请打开 Game Studio，检查当前可试玩版本与设计
 const storyReply = `已读取《${storyProjectName}》工程。正文、大纲、设定与追踪文件已就绪。`;
 const dramaReply = `已读取《${dramaProjectName}》EP001。creator-first 五份 Markdown 创作文档已就绪，未发现并行 JSON/JSONL 创作真相。`;
 const gameReply = "Game Studio 已就绪。左侧可以直接试玩、检查设计并切换《金瓶梅 · 风月总账》示例；右侧继续使用原生对话。";
+const videoPrompt = "请打开 Video Studio，确认 smoke-recap 的原片、剪后片与最终成片，并检查运行清单与解说环境。";
+const videoReply = "Video Studio 已就绪。左侧可以切换原片、剪后片与最终成片，查看运行清单与环境检查；右侧继续使用原生对话。";
 const dramaCreatorFiles = ["剧本.md", "视觉设定.md", "分镜.md", "图片提示词.md", "视频提示词.md"] as const;
 const agentMutationPrompt = "AGENT_WRITE_SMOKE：请使用 write 工具创建指定测试文件。";
 const agentMutationPath = "设定/角色/_agent-write-smoke.md";
@@ -50,7 +52,7 @@ const productionIntentSmokePrompt = "PRODUCTION_INTENT_SMOKE：必须调用 oh_s
 const productionIntentReply = "PRODUCTION_INTENT_RESULT：生产目标聚焦意图已发送。";
 const productionIntentArgs = { action: "focus_target", episode: "剧集/EP001", targetId: "SHOT-EP001-008", section: "shots" } as const;
 
-async function captureDemoFrame(page: Page, workbench: "story" | "drama" | "game", index: number): Promise<void> {
+async function captureDemoFrame(page: Page, workbench: "story" | "drama" | "game" | "video", index: number): Promise<void> {
   if (demoFramesDirectory === undefined) return;
   await mkdir(demoFramesDirectory, { recursive: true });
   await page.waitForTimeout(180);
@@ -75,9 +77,12 @@ async function captureGameEvidence(page: Page, name: string): Promise<void> {
 async function prepareDemoSurface(page: Page): Promise<void> {
   if (demoFramesDirectory === undefined) return;
   const collapse = page.getByRole("button", { name: /^(?:Collapse sidebar|收起侧边栏)$/u }).first();
+  const opened = page.getByRole("button", { name: /^(?:Open sidebar|打开侧边栏)$/u }).first();
+  // Every workbench prepares the same surface, so later captures find it collapsed already.
+  if (await opened.isVisible()) return;
   await collapse.waitFor({ state: "visible", timeout: 10_000 });
   await collapse.click();
-  await page.getByRole("button", { name: /^(?:Open sidebar|打开侧边栏)$/u }).first().waitFor({ state: "visible", timeout: 10_000 });
+  await opened.waitFor({ state: "visible", timeout: 10_000 });
   await page.waitForTimeout(350);
 }
 
@@ -201,6 +206,8 @@ async function startMockDeepSeek(): Promise<MockDeepSeek> {
             ? productionIntentReply
           : mutationTurn
             ? gameUpdateTurn ? gameUpdateReply : agentMutationReply
+            : serialized.includes("Video Studio")
+              ? videoReply
             : serialized.includes("Game Studio")
               ? gameReply
               : serialized.includes(storyProjectName) ? storyReply : dramaReply;
@@ -628,6 +635,7 @@ async function main(): Promise<void> {
     const dramaWorkspace = await rpc<{ readonly workspace: { readonly workspaceId: string; readonly title: string } }>(origin, "workspace/create", { request: { path: dramaRoot } });
     const storySession = await rpc<{ readonly sessionId: string }>(origin, "session/create", { request: { workspaceId: storyWorkspace.workspace.workspaceId } });
     const gameSession = await rpc<{ readonly sessionId: string }>(origin, "session/create", { request: { workspaceId: storyWorkspace.workspace.workspaceId } });
+    const videoSession = await rpc<{ readonly sessionId: string }>(origin, "session/create", { request: { workspaceId: storyWorkspace.workspace.workspaceId } });
     const dramaSession = await rpc<{ readonly sessionId: string }>(origin, "session/create", { request: { workspaceId: dramaWorkspace.workspace.workspaceId } });
     const catalog = await rpc<{ readonly skills: readonly { readonly name: string }[] }>(origin, "skills/list", { request: { sessionId: storySession.sessionId } });
     const ohStorySkills = catalog.skills.filter((skill) => skill.name === "story" || skill.name.startsWith("story-") || skill.name === "browser-cdp");
@@ -646,9 +654,11 @@ async function main(): Promise<void> {
     }
     const storySessionTitle = `小说 · ${storyProjectName}`;
     const gameSessionTitle = "游戏 · Live Game Lab";
+    const videoSessionTitle = "视频 · Recap Lab";
     const dramaSessionTitle = `短剧 · ${dramaProjectName}`;
     await prepareSession(origin, storySession.sessionId, storyPrompt, storySessionTitle);
     await prepareSession(origin, gameSession.sessionId, gamePrompt, gameSessionTitle);
+    await prepareSession(origin, videoSession.sessionId, videoPrompt, videoSessionTitle);
     await prepareSession(origin, dramaSession.sessionId, dramaPrompt, dramaSessionTitle);
 
     if (!useRealDeepSeek) {
@@ -1307,6 +1317,7 @@ async function main(): Promise<void> {
         || studioBox.width <= gameChatBox.width) {
         throw new Error(`Game Studio did not render as preview-left/chat-right: ${JSON.stringify({ studioBox, gameChatBox })}`);
       }
+      await prepareDemoSurface(page);
       await captureGameEvidence(page, "game-studio-age-gate");
       await captureDemoFrame(page, "game", 1);
       await ageGate.click();
@@ -1412,7 +1423,8 @@ async function main(): Promise<void> {
           throw new Error("Explicit new-version loading did not replace the generated game iframe.");
         }
       }
-      await gameStudio.getByRole("tab", { name: "视频", exact: true }).click();
+      await selectSession(page, storyWorkspace.workspace.title, videoSessionTitle);
+      await page.getByRole("tablist", { name: "创作工作台" }).getByRole("tab", { name: "视频", exact: true }).click();
       const videoStudio = page.locator(".oh-video-studio");
       await videoStudio.waitFor({ state: "visible", timeout: 10_000 });
       const videoProject = videoStudio.getByRole("combobox", { name: "视频项目", exact: true });
@@ -1432,15 +1444,21 @@ async function main(): Promise<void> {
         || videoStudioBox.width <= videoChatBox.width) {
         throw new Error(`Video Studio did not render as preview-left/chat-right: ${JSON.stringify({ videoStudioBox, videoChatBox })}`);
       }
+      await prepareDemoSurface(page);
+      await captureDemoFrame(page, "video", 1);
       const versionTabs = videoStudio.getByRole("tablist", { name: "预览版本", exact: true });
       for (const label of ["原片", "剪后片", "最终成片"]) {
         if (await versionTabs.getByRole("tab", { name: label, exact: true }).count() !== 1) throw new Error(`Video Studio missed ${label}.`);
       }
+      await versionTabs.getByRole("tab", { name: "剪后片", exact: true }).click();
+      await captureDemoFrame(page, "video", 2);
       await videoTabs.getByRole("tab", { name: "产物", exact: true }).click();
       await videoStudio.getByRole("button", { name: /运行清单 recap_run_manifest\.json/u }).click();
       await videoStudio.getByText('"edit_mode": "cut"', { exact: false }).waitFor({ state: "visible", timeout: 10_000 });
+      await captureDemoFrame(page, "video", 3);
       await videoStudio.getByRole("button", { name: "检查环境", exact: true }).click();
       await videoStudio.getByText(/^Python /u).waitFor({ state: "visible", timeout: 10_000 });
+      await captureDemoFrame(page, "video", 4);
       await videoStudio.getByRole("tab", { name: "小说", exact: true }).click();
       await storyTree.waitFor({ state: "visible", timeout: 10_000 });
 

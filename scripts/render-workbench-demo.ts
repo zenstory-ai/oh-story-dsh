@@ -4,12 +4,38 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const workbench = process.argv[2];
-if (workbench !== "story" && workbench !== "drama" && workbench !== "all") throw new Error("Usage: render-workbench-demo.ts <story|drama|all>");
+/**
+ * One packaged smoke pass captures every workbench, so a single run renders all
+ * four demos; naming a workbench only narrows which GIFs get written.
+ */
+const demos = {
+  story: "docs/images/story-workbench-demo.gif",
+  drama: "docs/images/drama-workbench-demo.gif",
+  game: "docs/images/game-workbench-demo.gif",
+  video: "docs/images/video-workbench-demo.gif"
+} as const;
 
-const frames = await mkdtemp(join(tmpdir(), `oh-story-dsh-${workbench}-demo-`));
-const targets = workbench === "all" ? ["story", "drama"] as const : [workbench];
+type Workbench = keyof typeof demos;
+
+const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const requested = process.argv[2];
+const names = Object.keys(demos) as readonly Workbench[];
+if (requested !== "all" && !names.includes(requested as Workbench)) {
+  throw new Error(`Usage: render-workbench-demo.ts <${[...names, "all"].join("|")}>`);
+}
+const targets = requested === "all" ? names : [requested as Workbench];
+
+/**
+ * Demos ship the real model's voice, so a paid provider is the default. Set
+ * OH_STORY_DEMO_MOCK=1 to re-render the surfaces from the deterministic
+ * fixtures instead — useful for checking the pipeline without spending a key.
+ */
+const useMock = process.env.OH_STORY_DEMO_MOCK === "1";
+if (!useMock && process.env.DEEPSEEK_API_KEY === undefined) {
+  throw new Error("Rendering demos calls the real provider: set DEEPSEEK_API_KEY, or OH_STORY_DEMO_MOCK=1 for fixture output.");
+}
+
+const frames = await mkdtemp(join(tmpdir(), `oh-story-dsh-${requested}-demo-`));
 
 function run(command: string, args: readonly string[], env = process.env): void {
   const result = spawnSync(command, args, { cwd: repositoryRoot, env, encoding: "utf8", stdio: "inherit" });
@@ -20,12 +46,10 @@ try {
   run("pnpm", ["test:dsh"], {
     ...process.env,
     OH_STORY_DEMO_FRAMES_DIR: frames,
-    OH_STORY_DEMO_USE_REAL_DEEPSEEK: "1"
+    ...useMock ? {} : { OH_STORY_DEMO_USE_REAL_DEEPSEEK: "1" }
   });
   for (const target of targets) {
-    const output = resolve(repositoryRoot, target === "story"
-      ? "docs/images/oh-story-dsh-demo.gif"
-      : "docs/images/short-drama-dsh-demo.gif");
+    const output = resolve(repositoryRoot, demos[target]);
     run("ffmpeg", [
       "-v", "error",
       "-framerate", "1/2",
