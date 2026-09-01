@@ -77,7 +77,7 @@ The gate discovers all `*.test.ts` and `*.contract.test.ts` files. Coverage clai
 
 When `OH_STORY_GAME_E2E_DIR` is set, the same pass emits game evidence screenshots. The checked-in evidence is `docs/images/game-studio-jin-ping-mei.png` and the 500×900 `docs/images/game-studio-compact.png`.
 
-The same audited surface generates the README demos through `pnpm demo` (both), `pnpm demo:story`, or `pnpm demo:drama`. Demo commands require `DEEPSEEK_API_KEY`, use the real `deepseek-official` provider, wait for successful assistant turns, collapse the DSH navigation rail, and record the complete tree/editor/Chat surface. The API key is process-only and is redacted from captured failure logs.
+The same audited surface generates all four README demos. One pass captures every workbench, so `pnpm demo` renders the complete set and `pnpm demo:story`, `pnpm demo:drama`, `pnpm demo:game` and `pnpm demo:video` only narrow which GIFs get written. Demo commands require `DEEPSEEK_API_KEY` and `ffmpeg`, use the real `deepseek-official` provider, wait for successful assistant turns, collapse the DSH navigation rail, and record the complete workbench/Chat surface. `OH_STORY_DEMO_MOCK=1` re-renders the same surfaces from the deterministic fixtures without a provider key. The API key is process-only and is redacted from captured failure logs.
 
 ## Real DeepSeek observation
 

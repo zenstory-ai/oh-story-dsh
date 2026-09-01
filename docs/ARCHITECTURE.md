@@ -73,6 +73,30 @@ Markdown rendering is implemented as a safe React element tree with tables, task
 
 The Drama Skills standalone dashboard server and assets are omitted during synchronization because the creator surface is supplied by the DSH workbench. Oh Story's login/CDP rank scrapers and platform deployment helpers are also excluded; the two scan Skills use DSH-native, visible-tool research instructions instead. Synchronization rejects Python bytecode, `__pycache__` and `.DS_Store` workspace pollution before manifests are generated. Remaining workflow, reference, validation and production-adapter resources are packaged with their upstream paths.
 
+## Product boundaries
+
+Each workbench projects the pinned upstream contract; none of them becomes a
+second source of creative truth.
+
+- Short drama reads the five creator-first Markdown documents per episode. The
+  production view projects them through the lightweight `short-drama/v1`
+  protocol and reports duplicate ids, dangling references and malformed
+  headings against their source lines. Empty documents are never pre-created,
+  and stages the creator did not ask for are never backfilled.
+- The game workbench keeps QA in `/game-qa`, native tool results and
+  `qa/verification.json`. It adds no QA tab, card or badge of its own.
+- The video workbench offers version switching, stage hints and artifact
+  viewing. It carries no multi-track timeline or heavy editor.
+- `oh_story_production` opens and focuses semantic targets, sets shot order and
+  records the jobs the Agent actually ran. It never edits creative documents,
+  never generates media, and never stands in for a paid-production
+  confirmation.
+- Bundled media exists for offline interaction regression only and is never
+  presented as a provider success.
+- The video runtime check reports only whether Python, ffmpeg/libass, ffprobe
+  and keys are ready inside the DSH Host process. Provider credentials are
+  never sent to the browser; `video-recap --doctor` remains authoritative.
+
 ## Release boundary
 
 The build produces Host and Browser bundles under `packages/dsh-plugin/lib`, copies all four knowledge sets, and rejects known parallel-runtime markers. Generated `lib` and tarballs are release artifacts and are excluded from Git history.

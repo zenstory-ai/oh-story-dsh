@@ -62,7 +62,7 @@ pnpm assets:check
 1. 更新版本、安装示例与 `CHANGELOG.md`。
 2. 运行 `pnpm verify:release`。
 3. 需要观察官方 provider 兼容性时，运行 `pnpm test:dsh:real`，并确认结果是 executed and passed、项目摘要未改变、凭据未出现在日志中；缺少凭据导致的 skipped 不能记作 passed，也不替代第 2 步的确定性 correctness gate。
-4. 运行 `DEEPSEEK_API_KEY=... pnpm demo`，通过真实 DeepSeek 会话一次性重新生成并检查两张 README 演示图。
+4. 运行 `DEEPSEEK_API_KEY=... pnpm demo`，通过真实 DeepSeek 会话一次性重新生成并检查四张 README 演示图（需要 `ffmpeg`；`OH_STORY_DEMO_MOCK=1` 可用固定 fixture 免 Key 出图）。
 5. 运行 `pnpm pack:release` 并检查 tarball。
 6. 按 [`docs/RELEASING.md`](docs/RELEASING.md) 创建与包版本一致的 Tag，由工作流执行正式发布。
 

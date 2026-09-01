@@ -24,6 +24,8 @@
     "demo": "tsx scripts/render-workbench-demo.ts all",
     "demo:story": "tsx scripts/render-workbench-demo.ts story",
     "demo:drama": "tsx scripts/render-workbench-demo.ts drama",
+    "demo:game": "tsx scripts/render-workbench-demo.ts game",
+    "demo:video": "tsx scripts/render-workbench-demo.ts video",
     "assets:sync": "pnpm assets:sync:story && pnpm assets:sync:drama && pnpm assets:sync:game && pnpm assets:sync:video",
     "assets:sync:story": "tsx scripts/sync-oh-story-assets.ts",
     "assets:sync:drama": "tsx scripts/sync-drama-assets.ts",
