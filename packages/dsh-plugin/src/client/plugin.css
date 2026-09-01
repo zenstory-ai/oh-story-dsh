@@ -15,7 +15,7 @@
   overflow-y: auto;
   position: relative;
   scrollbar-gutter: stable;
-  scroll-padding-bottom: calc(var(--dsh-composer-height, 152px) + 16px);
+  scroll-padding-bottom: calc(max(var(--dsh-composer-height, 152px), var(--oh-story-composer-height, 0px)) + 16px);
 }
 
 /* Keep the final Chat flow above the overlapping official Composer. */
@@ -30,7 +30,7 @@
 
 [data-conversation-scroll]:has(> [data-slot="conversation.session"] > .oh-story-split-surface)
   [data-chat-flow] {
-  padding-bottom: calc(var(--dsh-composer-height, 152px) + 16px);
+  padding-bottom: calc(max(var(--dsh-composer-height, 152px), var(--oh-story-composer-height, 0px)) + 16px);
 }
 
 [data-conversation-scroll]:has(> [data-slot="conversation.session"] > .oh-story-split-surface)
@@ -41,7 +41,7 @@
   min-width: 0;
   width: 100%;
   position: sticky;
-  top: calc(var(--oh-story-scroll-height, 720px) - var(--dsh-composer-height, 152px));
+  top: calc(var(--oh-story-scroll-height, 720px) - max(var(--dsh-composer-height, 152px), var(--oh-story-composer-height, 0px)));
   bottom: auto;
 }
 

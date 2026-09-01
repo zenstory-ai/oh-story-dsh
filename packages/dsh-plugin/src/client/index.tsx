@@ -1523,15 +1523,15 @@ function CreativeSplitBridge({ sessionId, useSession, useChat, useStore, actions
     const scroller = target?.parentElement;
     if (scroller === undefined || scroller === null) return;
     const composerSeat = (): HTMLElement | null => scroller.querySelector(":scope > [data-composer-seat]");
-    const previousComposerHeight = scroller.style.getPropertyValue("--dsh-composer-height");
     const publishLayout = (): void => {
       // A seat that grows under a reader already at the tail must not swallow it.
       const pinned = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight <= 8;
       scroller.style.setProperty("--oh-story-scroll-height", `${String(scroller.clientHeight)}px`);
-      // DSH 0.1.2 grows the seat with the streaming Todo panel while its own
-      // --dsh-composer-height keeps reporting the bare input height.
-      const seat = composerSeat();
-      if (seat !== null) scroller.style.setProperty("--dsh-composer-height", `${String(seat.getBoundingClientRect().height)}px`);
+      // DSH 0.1.2 grows the seat with the streaming Todo panel while
+      // --dsh-composer-height keeps reporting the bare input height. Publish the
+      // measurement beside it rather than over it: the CSS takes the larger, so
+      // writing the variable DSH also owns can never turn into a resize duel.
+      scroller.style.setProperty("--oh-story-composer-height", `${String(composerSeat()?.getBoundingClientRect().height ?? 0)}px`);
       scroller.dataset.ohStoryWorkbench = workbench;
       const studioPane = workbench === "video" ? videoPane : gamePane;
       scroller.dataset.ohStudioPane = studioPane;
@@ -1559,8 +1559,7 @@ function CreativeSplitBridge({ sessionId, useSession, useChat, useStore, actions
       observer.disconnect();
       seats.disconnect();
       scroller.style.removeProperty("--oh-story-scroll-height");
-      if (previousComposerHeight === "") scroller.style.removeProperty("--dsh-composer-height");
-      else scroller.style.setProperty("--dsh-composer-height", previousComposerHeight);
+      scroller.style.removeProperty("--oh-story-composer-height");
       delete scroller.dataset.ohStoryLayout;
       delete scroller.dataset.ohStoryWorkbench;
       delete scroller.dataset.ohStudioPane;
