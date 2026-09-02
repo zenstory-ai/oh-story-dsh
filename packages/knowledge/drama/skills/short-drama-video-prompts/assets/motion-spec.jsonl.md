@@ -43,6 +43,11 @@
       "record_id": "SHOT-<id>",
       "field": "/start_boundary"
     },
+    "primary_transition": {
+      "src": "shots",
+      "record_id": "SHOT-<id>",
+      "field": "/primary_transition"
+    },
     "end": {
       "src": "shots",
       "record_id": "SHOT-<id>",
@@ -63,7 +68,7 @@
         "src": "keyframes",
         "record_id": "KEY-<id>"
       },
-      "role": "start_frame",
+      "role": "start_frame | continuity_video | actual_tail_frame",
       "may_control": [
         "<本镜 accepted 起始构图与可见状态>"
       ],

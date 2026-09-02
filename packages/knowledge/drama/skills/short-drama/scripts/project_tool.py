@@ -13,6 +13,7 @@ import argparse
 import contextlib
 import hashlib
 import json
+import math
 import os
 import re
 import shutil
@@ -20,7 +21,7 @@ import stat
 import sys
 import unicodedata
 import uuid
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 from typing import Any, Iterator
@@ -40,6 +41,15 @@ STATE_SCHEMA = "2.0"
 DEFAULT_PROMPT_LANGUAGE = "en"
 LANGUAGE_TAG_RE = re.compile(r"[A-Za-z]{2,8}(?:-[A-Za-z0-9]{1,8})*")
 DELIVERY_SUFFIXES = {".md", ".json", ".jsonl"}
+CREATOR_DOCUMENTS = (
+    "剧本.md",
+    "视觉设定.md",
+    "分镜.md",
+    "图片提示词.md",
+    "视频提示词.md",
+)
+EXPORT_MEDIA_DIRECTORY = "制作成果"
+EXPORT_SCHEMA = "1.0"
 EPISODE_ID_RE = re.compile(r"EP(?:[0-9]{3}|[1-9][0-9]{3,})")
 WINDOWS_FORBIDDEN_PATH_CHARACTERS = frozenset('<>:"|?*')
 WINDOWS_RESERVED_PATH_STEMS = frozenset(
@@ -193,10 +203,54 @@ def project_languages(project: Mapping[str, Any]) -> dict[str, str]:
         if isinstance(format_block, Mapping)
         else None
     )
+    authority = project.get("creator_authority")
+    production_profile = (
+        authority.get("production_profile")
+        if isinstance(authority, Mapping)
+        else None
+    )
+    choices = (
+        production_profile.get("choices")
+        if isinstance(production_profile, Mapping)
+        else None
+    )
+    video_prompt_language = (
+        choices.get("video_prompt_language") if isinstance(choices, Mapping) else None
+    )
     return {
         "language": str(project.get("language") or "zh-CN"),
         "prompt_language": str(prompt_language or DEFAULT_PROMPT_LANGUAGE),
+        "video_prompt_language": str(
+            video_prompt_language or prompt_language or DEFAULT_PROMPT_LANGUAGE
+        ),
     }
+
+
+def project_video_model_profile(project: Mapping[str, Any]) -> dict[str, Any]:
+    """Expose the accepted prompt-facing model choices without guessing defaults."""
+    authority = project.get("creator_authority")
+    production_profile = (
+        authority.get("production_profile")
+        if isinstance(authority, Mapping)
+        else None
+    )
+    if (
+        not isinstance(production_profile, Mapping)
+        or production_profile.get("status") != "accepted"
+    ):
+        return {}
+    choices = production_profile.get("choices")
+    if not isinstance(choices, Mapping):
+        return {}
+    fields = (
+        "target_video_model",
+        "video_prompt_dialect",
+        "video_prompt_language",
+        "native_duration_seconds",
+        "supported_generation_modes",
+        "audio_generation",
+    )
+    return {field: choices[field] for field in fields if field in choices}
 
 
 def initialize_project(
@@ -206,10 +260,25 @@ def initialize_project(
     language: str,
     aspect_ratio: str,
     prompt_language: str = DEFAULT_PROMPT_LANGUAGE,
+    episode_count: int | None = None,
+    target_seconds_per_episode: float | None = None,
     suite_root: Path | None = None,
 ) -> dict[str, Any]:
     language = normalize_language_tag(language, field="language")
     prompt_language = normalize_language_tag(prompt_language, field="prompt_language")
+    if episode_count is not None and (
+        isinstance(episode_count, bool)
+        or not isinstance(episode_count, int)
+        or episode_count <= 0
+    ):
+        raise ValueError("episode_count must be a positive integer")
+    if target_seconds_per_episode is not None and (
+        isinstance(target_seconds_per_episode, bool)
+        or not isinstance(target_seconds_per_episode, (int, float))
+        or not math.isfinite(target_seconds_per_episode)
+        or target_seconds_per_episode <= 0
+    ):
+        raise ValueError("target_seconds_per_episode must be a positive number of seconds")
     root = path.expanduser().resolve()
     project_path = root / PROJECT_FILE
     if project_path.exists():
@@ -233,6 +302,10 @@ def initialize_project(
     )
     project["format"]["aspect_ratio"] = aspect_ratio
     project["format"]["prompt_language"] = prompt_language
+    if episode_count is not None:
+        project["format"]["episode_count"] = episode_count
+    if target_seconds_per_episode is not None:
+        project["format"]["target_seconds_per_episode"] = target_seconds_per_episode
     state = {
         "schema_version": STATE_SCHEMA,
         "project_id": project["project_id"],
@@ -832,11 +905,14 @@ def _build_status(
                 if isinstance(output, str) and output:
                     ownership[output] = owner
     languages = project_languages(project)
+    video_model_profile = project_video_model_profile(project)
     return {
         "project_id": project.get("project_id"),
         "title": project.get("title"),
         "language": languages["language"],
         "prompt_language": languages["prompt_language"],
+        "video_prompt_language": languages["video_prompt_language"],
+        "video_model_profile": video_model_profile,
         "project_root": project_root,
         "last_action": state.get("last_action"),
         "layout": dict(layout),
@@ -1788,6 +1864,255 @@ def _manifest_problems(
     return problems
 
 
+def _same_directory(left: Path, right: Path) -> bool:
+    """Do these two paths name the same directory on disk?
+
+    String comparison is not enough: a case-insensitive volume and a filesystem
+    that stores a different Unicode normalisation both spell one directory two
+    ways, and either spelling would otherwise slip past a containment check.
+    """
+    try:
+        return os.path.samefile(left, right)
+    except OSError:
+        return False
+
+
+def _require_safe_export_destination(destination: Path, root: Path) -> None:
+    """Refuse any destination that would take the project down with it.
+
+    The export replaces its destination directory wholesale, so a destination
+    that is -- or contains -- the project being exported would delete the
+    source. Ancestors matter as much as descendants here.
+    """
+    if destination == root or root in destination.parents:
+        raise ValueError("export destination must live outside the project root")
+    for ancestor in (root, *root.parents):
+        if destination == ancestor or _same_directory(destination, ancestor):
+            raise ValueError(
+                "export destination must not be the project root or any directory containing it"
+            )
+
+
+def _require_replaceable_export(destination: Path) -> None:
+    """Only ever overwrite a directory this command itself produced.
+
+    `--overwrite` removes the destination tree. Without this check a mistyped
+    path turns an ordinary directory into a deletion, and nothing else in this
+    tool can erase a directory outside the project.
+    """
+    if not destination.exists():
+        return
+    details = os.lstat(destination)
+    if _is_link_or_reparse(details) or not stat.S_ISDIR(details.st_mode):
+        raise ProjectConflictError("export destination is not a regular directory")
+    manifest = destination / "manifest.json"
+    try:
+        document = json.loads(manifest.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise ValueError(
+            "refusing to overwrite a directory that is not a previous export: "
+            f"{destination}"
+        ) from exc
+    if not isinstance(document, Mapping) or document.get("kind") != "creator_export":
+        raise ValueError(
+            "refusing to overwrite a directory that is not a previous export: "
+            f"{destination}"
+        )
+
+
+def _export_regular_file(source: Path, destination: Path) -> str:
+    """Copy one regular project file into the export tree and return its digest."""
+    details = os.lstat(source)
+    if _is_link_or_reparse(details) or not stat.S_ISREG(details.st_mode):
+        raise ProjectConflictError(f"export source is not a regular file: {source.name}")
+    if "\n" in source.name or "\r" in source.name:
+        # checksums.sha256 is one record per line; such a name cannot be written
+        # in a form any verifier could read back.
+        raise ProjectConflictError(
+            "export source name contains a line break and cannot be checksummed"
+        )
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(source, destination)
+    return sha256_file(destination)
+
+
+def _export_episode(
+    episode_directory: Path, target: Path, *, include_media: bool
+) -> tuple[list[dict[str, str]], list[str]]:
+    files: list[dict[str, str]] = []
+    missing: list[str] = []
+    for name in CREATOR_DOCUMENTS:
+        source = episode_directory / name
+        if not source.exists():
+            missing.append(name)
+            continue
+        digest = _export_regular_file(source, target / name)
+        files.append({"path": name, "sha256": digest})
+    media_root = episode_directory / EXPORT_MEDIA_DIRECTORY
+    if include_media and media_root.exists():
+        media_details = os.lstat(media_root)
+        if _is_link_or_reparse(media_details) or not stat.S_ISDIR(media_details.st_mode):
+            # Silently exporting no media reads as "this episode has none".
+            raise ProjectConflictError(
+                f"{EXPORT_MEDIA_DIRECTORY} is not a regular directory: {episode_directory.name}"
+            )
+        for source in sorted(media_root.rglob("*")):
+            if source.is_dir() and not source.is_symlink():
+                continue
+            relative = source.relative_to(episode_directory).as_posix()
+            digest = _export_regular_file(source, target / relative)
+            files.append({"path": relative, "sha256": digest})
+    return files, missing
+
+
+def _export_exclusions(root: Path, episodes_name: str) -> list[str]:
+    """Name every top-level project directory this export did not copy.
+
+    A fixed list lies twice over: it names roots a legacy-layout project does
+    not have, and it stays silent about a published 设定集/ that the handover is
+    missing.
+    """
+    excluded: list[str] = []
+    for entry in sorted(root.iterdir(), key=lambda item: item.name):
+        if entry.name == episodes_name or entry.name == PROJECT_FILE:
+            continue
+        if entry.is_dir() or entry.is_symlink():
+            excluded.append(entry.name)
+    return excluded
+
+
+def _is_portable_windows_path(relative: str) -> bool:
+    for part in PurePosixPath(relative).parts:
+        stem = part.split(".")[0].casefold()
+        if stem in WINDOWS_RESERVED_PATH_STEMS:
+            return False
+        if set(part) & WINDOWS_FORBIDDEN_PATH_CHARACTERS:
+            return False
+        if part.endswith((" ", ".")):
+            return False
+    return True
+
+
+def build_creator_export(
+    root: Path,
+    *,
+    out: Path,
+    episodes: Sequence[str] | None = None,
+    include_media: bool = True,
+    overwrite: bool = False,
+) -> dict[str, Any]:
+    """Copy the current creator documents and produced media into a handover tree.
+
+    This is a snapshot of what the project holds right now.  It deliberately
+    asserts nothing about review or creator acceptance; `package` remains the
+    only command that speaks for an approved delivery.
+    """
+    root = find_project(root)
+    destination = out.expanduser().resolve()
+    _require_safe_export_destination(destination, root)
+    layout = _project_layout_from_root(root)
+    if layout["mode"] == "mixed":
+        raise PackageBlockedError("mixed project layouts cannot be exported")
+    episodes_root = root / str(layout["roots"]["episodes"])
+    available = sorted(
+        entry.name
+        for entry in episodes_root.iterdir()
+        if entry.is_dir() and not entry.is_symlink()
+        if EPISODE_ID_RE.fullmatch(entry.name)
+    ) if episodes_root.is_dir() and not episodes_root.is_symlink() else []
+    if episodes:
+        selected = []
+        for episode in episodes:
+            if EPISODE_ID_RE.fullmatch(episode) is None:
+                raise ValueError("episode must use an EP001-style identifier")
+            if episode not in available:
+                raise FileNotFoundError(f"episode directory not found: {episode}")
+            if episode not in selected:
+                selected.append(episode)
+    else:
+        selected = available
+    if not selected:
+        raise FileNotFoundError("no episode directory to export")
+    if destination.exists():
+        if not overwrite:
+            raise FileExistsError(f"export destination already exists: {destination}")
+        _require_replaceable_export(destination)
+
+    project = json.loads((root / PROJECT_FILE).read_text(encoding="utf-8"))
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = destination.parent / f".{destination.name}.{uuid.uuid4().hex}.tmp"
+    temporary.mkdir()
+    try:
+        exported: list[dict[str, Any]] = []
+        members: list[dict[str, str]] = []
+        episodes_name = str(layout["roots"]["episodes"])
+        for episode in selected:
+            target = temporary / episodes_name / episode
+            target.mkdir(parents=True)
+            files, missing = _export_episode(
+                episodes_root / episode, target, include_media=include_media
+            )
+            for entry in files:
+                members.append(
+                    {
+                        "path": f"{episodes_name}/{episode}/{entry['path']}",
+                        "sha256": entry["sha256"],
+                    }
+                )
+            exported.append(
+                {"episode": episode, "files": files, "missing_documents": missing}
+            )
+        config_digest = _export_regular_file(
+            root / PROJECT_FILE, temporary / PROJECT_FILE
+        )
+        members.append({"path": PROJECT_FILE, "sha256": config_digest})
+        manifest = {
+            "schema_version": EXPORT_SCHEMA,
+            "kind": "creator_export",
+            "asserts_approval": False,
+            "project_id": project.get("project_id"),
+            "title": project.get("title"),
+            "created_at": utc_now(),
+            "episodes": exported,
+            "selection": {
+                "episodes": "all" if not episodes else list(selected),
+                "available_episodes": list(available),
+                "include_media": bool(include_media),
+            },
+            "excluded": _export_exclusions(root, episodes_name),
+            "windows_unsafe_paths": sorted(
+                entry["path"]
+                for entry in members
+                if not _is_portable_windows_path(entry["path"])
+            ),
+        }
+        atomic_json(temporary / "manifest.json", manifest)
+        checksum_members = ["manifest.json", *(entry["path"] for entry in members)]
+        checksums = "".join(
+            f"{sha256_file(temporary / relative)}  {relative}\n"
+            for relative in sorted(checksum_members)
+        )
+        _atomic_bytes(temporary / "checksums.sha256", checksums.encode("utf-8"))
+        _replace_directory(temporary, destination)
+    finally:
+        if temporary.exists():
+            shutil.rmtree(temporary)
+    return {
+        "kind": "creator_export",
+        "out": str(destination),
+        "episodes": [entry["episode"] for entry in exported],
+        "files": [entry["path"] for entry in members],
+        "excluded": manifest["excluded"],
+        "include_media": bool(include_media),
+        "missing_documents": {
+            entry["episode"]: entry["missing_documents"]
+            for entry in exported
+            if entry["missing_documents"]
+        },
+        "windows_unsafe_paths": manifest["windows_unsafe_paths"],
+    }
+
+
 def verify_delivery_package(root: Path, *, episode: str) -> dict[str, Any]:
     if EPISODE_ID_RE.fullmatch(episode) is None:
         raise ValueError("episode must use an EP001-style identifier")
@@ -1945,6 +2270,8 @@ def build_parser() -> argparse.ArgumentParser:
     init.add_argument("--language", default="zh-CN")
     init.add_argument("--prompt-language", default=DEFAULT_PROMPT_LANGUAGE)
     init.add_argument("--aspect-ratio", default="9:16")
+    init.add_argument("--episode-count", type=int)
+    init.add_argument("--target-seconds", type=float, dest="target_seconds_per_episode")
 
     status = commands.add_parser("status", help="Print a creator-safe project summary.")
     status.add_argument("path", nargs="?", default=".")
@@ -2011,6 +2338,29 @@ def build_parser() -> argparse.ArgumentParser:
     verify = commands.add_parser("verify", help="Re-check a delivered package checksums.")
     verify.add_argument("path")
     verify.add_argument("--episode", required=True)
+
+    export = commands.add_parser(
+        "export",
+        help="Copy the current creator documents and produced media for handover.",
+    )
+    export.add_argument("path")
+    export.add_argument("--out", required=True, type=Path)
+    export.add_argument(
+        "--episode",
+        action="append",
+        dest="episodes",
+        help="Export only this episode; repeat for several. Default: every episode.",
+    )
+    export.add_argument(
+        "--no-media",
+        action="store_true",
+        help=f"Skip 剧集/<EP>/{EXPORT_MEDIA_DIRECTORY}/ and export text only.",
+    )
+    export.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Replace an existing export directory at --out.",
+    )
     return parser
 
 
@@ -2024,6 +2374,8 @@ def main(argv: list[str] | None = None) -> int:
                 language=args.language,
                 prompt_language=args.prompt_language,
                 aspect_ratio=args.aspect_ratio,
+                episode_count=args.episode_count,
+                target_seconds_per_episode=args.target_seconds_per_episode,
             )
         elif args.command == "status":
             result = project_status(Path(args.path))
@@ -2066,6 +2418,14 @@ def main(argv: list[str] | None = None) -> int:
                 episode=args.episode,
                 includes=args.includes,
                 omissions=_parse_omissions(args.omissions),
+            )
+        elif args.command == "export":
+            result = build_creator_export(
+                Path(args.path),
+                out=args.out,
+                episodes=args.episodes,
+                include_media=not args.no_media,
+                overwrite=args.overwrite,
             )
         else:
             result = verify_delivery_package(Path(args.path), episode=args.episode)

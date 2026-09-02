@@ -17,14 +17,14 @@
       "order": 1,
       "path": "输入/approved-character-reference.png",
       "label": "女主定妆照",
-      "role": "identity_and_look",
+      "role": "reference_image",
       "may_control": ["身份", "造型"],
       "must_not_control": ["构图", "动作"]
     }
   ],
   "references": ["输入/approved-character-reference.png"],
   "outputs": ["剧集/EP001/制作成果/video/SHOT-EP001-001.mp4"],
-  "parameters": {"duration": 5, "ratio": "9:16"},
+  "parameters": {"duration": 5, "ratio": "9:16", "prompt_language": "zh-CN"},
   "overwrite": false
 }
 ```
@@ -33,9 +33,11 @@
   utterance; `music` is a separately accepted timeline-level cue or song and
   must not be smuggled into every shot's video job.
 - `source`: optional current project text/spec that owns the prompt.
-- `source_entry`: for a creator-first job, the exact uppercase `IMG-*` or `MOTION-*`
-  H2 ID inside the canonical `剧集|episodes/<EP>/图片提示词.md|视频提示词.md`
-  `source`. A new image/video job pointing to either canonical filename must
+- `source_entry`: for a creator-first job, the exact uppercase H2 ID inside a
+  canonical `剧集|episodes/<EP>/` creator document, matched to that document:
+  `图片提示词.md` takes `IMG-*` (image), `视频提示词.md` takes `MOTION-*` (video),
+  and `分镜.md` takes `SHOT-*` (image, whose prompt is the shot's
+  `### 冻结关键帧提示词` body rather than `### 可复制提示词`). A new image/video job pointing to either canonical filename must
   provide the matching selector; an arbitrary Markdown file cannot impersonate a
   creator source. `prepare` selects that section and requires `prompt` to exactly
   equal its copyable prompt after Markdown quote markers are removed.
@@ -43,8 +45,19 @@
   exactly `slot_id`, contiguous `order`, project-relative `path`, Chinese `label`,
   non-empty `role`, and non-empty `may_control` / `must_not_control` lists. When
   `source_entry` is present, these fields must exactly match that entry's
-  `参考` (IMG) or `输入参考图` (MOTION) declaration (except `role`, which is
+  `参考` (IMG) or `输入参考图` (SHOT/MOTION) declaration (except `role`, which is
   production metadata). Allowed and prohibited scopes may not overlap.
+  The creator declaration also carries a `用途` — what this picture decides in
+  this shot, from the closed set in the storyboard skill. `role` is its
+  production-side translation and is chosen per provider, so the two are not
+  compared; a binding whose `role` contradicts the declared `用途` is a defect
+  the creator document, not this schema, is the authority on. This schema keeps
+  `role` free-form because an external adapter names its own inputs, but the
+  bundled video adapters read it as the provider's own role and accept only
+  their published vocabulary: `first_frame`, `last_frame`, `reference_image`,
+  `reference_video`, `reference_audio` for MiniMax, and the three `reference_*`
+  values for Seedance. A video job carrying references without bindings fails
+  closed there rather than having a role guessed for it.
 - `references`: zero to sixteen current project files actually sent to production.
   It may be omitted when `reference_bindings` is present, in which case the paths
   are derived in binding order. If both are present, they must match exactly.
@@ -52,7 +65,10 @@
   `剧集|episodes/<EP>/制作成果|production/`; extensions must match the modality.
   A nested directory merely named `production` does not grant write access to
   protected input or delivery trees.
-- `parameters`: provider-neutral public settings only. Secret-like keys are rejected.
+- `parameters`: provider-neutral public settings only. Image/video jobs carry the resolved
+  `prompt_language` so a bundled compiler writes its appended reference contract in the same
+  language as the copyable prompt; this execution-only setting is not forwarded as a provider
+  request field. Secret-like keys are rejected.
 - `overwrite`: must be explicitly true to replace an existing result.
 
 `prepare` records internal digests of source/reference bytes and returns the exact confirmation phrase. Callers never
@@ -104,9 +120,11 @@ the project job remains provider-neutral, and adapter selection, model access,
 polling and credentials stay in the external runtime configuration.
 
 The confirmed document includes `source_entry` and `reference_bindings`. Bundled
-image/video compilers append a deterministic, ordered reference contract to the
-provider prompt so the Chinese label, role, allowed controls, and prohibited
-controls survive the handoff. External adapters must preserve equivalent semantics
+image/video compilers append an ordered reference contract to the provider prompt so the Chinese
+label, role, allowed controls, and prohibited controls survive the handoff. Its prose follows
+`parameters.prompt_language`; model-native compilers also use that model's actual reference tokens,
+such as Seedance `@图片1` or H3 `<Picture 1>`, rather than adding a second generic numbering scheme.
+External adapters must preserve equivalent semantics
 or reject the job; silently reducing the input to an unlabelled file list is invalid.
 
 ## Adapter stdout
