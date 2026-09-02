@@ -11,6 +11,8 @@
 
 ## [Unreleased]
 
+## [0.1.6] - 2026-09-02
+
 ### Fixed
 
 - 长答复不再在窗口尺寸变化后躲到 Composer 后面（[#26](https://github.com/zenstory-ai/oh-story-dsh/issues/26)）。工作台把 Composer 座位叠在 Chat 列上，所以「读者被挤出尾部」不只是滚动位置不对，最后几行会直接落在输入框后面。此前贴底判定在 ResizeObserver 回调里现算，而那时 Chat 已经重排完，判定必然是「没贴底」；现在贴底状态只由用户自己的滚动（滚轮、触摸、拖动、非输入框按键）释放，布局引起的滚动不改它，滚到底则重新取回。同时把 Chat 正文纳入尺寸观察：窗口变化后正文还要重排几帧，每次回落都重新贴底，不再停在第一帧的瞬时高度上。
@@ -156,7 +158,8 @@
 - 提供 13 个 Oh Story 小说 Skills、7 个专业 Roles 与 10 个 Drama Skills。
 - 提供文件树、Markdown/JSONL 编辑预览与官方 DSH Chat 同屏的三栏工作台。
 
-[Unreleased]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.5...HEAD
+[Unreleased]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.6...HEAD
+[0.1.6]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.2...v0.1.3
