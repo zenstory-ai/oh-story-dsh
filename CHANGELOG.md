@@ -11,9 +11,7 @@
 
 ## [Unreleased]
 
-### Changed
-
-- 固定的 DeepSeek Harness 从 `0.1.1-rc.1` 升到 `0.1.2-alpha.3`。上游把 `@deepseek-ai/dsh-client-runtime` 拆成 `dsh-client-store`、`dsh-api-session-controller`、`dsh-client-ui-chat`、`dsh-client-ui-session` 与 `dsh-client-ui-renderer`；`JsonValue` 移到 `dsh-util-values`；Chat 快照改由 `useChat` 提供，会话快照不再带 `chat` / `runningCalls`；会话记录去掉了主机预算的 `callView` / `resultView` 渲染意图，文件改动改由工具参数推导。DSH Web 现在需要启动令牌换取会话 Cookie，Remote 端点改为 `<namespace>/<method>` 且载荷统一包在 `args` 里，`session.history` 由 `session/follow` 流的开窗快照取代。
+## [0.1.5] - 2026-09-02
 
 ### Added
 
@@ -37,6 +35,7 @@
 
 ### Changed
 
+- 固定的 DeepSeek Harness 从 `0.1.1-rc.1` 升到 `0.1.2-alpha.3`。上游把 `@deepseek-ai/dsh-client-runtime` 拆成 `dsh-client-store`、`dsh-api-session-controller`、`dsh-client-ui-chat`、`dsh-client-ui-session` 与 `dsh-client-ui-renderer`；`JsonValue` 移到 `dsh-util-values`；Chat 快照改由 `useChat` 提供，会话快照不再带 `chat` / `runningCalls`；会话记录去掉了主机预算的 `callView` / `resultView` 渲染意图，文件改动改由工具参数推导。DSH Web 现在需要启动令牌换取会话 Cookie，Remote 端点改为 `<namespace>/<method>` 且载荷统一包在 `args` 里，`session.history` 由 `session/follow` 流的开窗快照取代。
 - 同步后的短剧文档契约有两处收紧（既有项目需要补字段，目录不变）：《分镜.md》每镜必写「视觉依据」并机械核对冻结关键帧点名的条目，`REF-...` 槽位必须声明 `用途`；未手工指定参考图时不再静默降级为文生视频，缺图会停在最终视频提示词之前，除非创作者明确选择文生视频。
 - 游戏试玩运行时在切换项目文件与 500px 窄屏对话时保持挂载；窄屏改为可触控的“制作 / 对话”单区切换。
 - 新构建不再因用户转去 Chat 导致 iframe 失焦而静默替换；状态文案区分文件更新、预览载入与载入失败。
@@ -45,7 +44,7 @@
 - 长篇写正文与短篇构思前新增会阻断的 Reference Gate：当前阶段要求的 reference 必须读到 EOF，缺失或不可读时停止并报出路径，不允许先写正文再补读。
 - 长篇章节缺少合法「字数目标」时停止，不再静默回退到 3000；欠字不自动补写，超字最多一次净删压缩。短篇总字数以用户给定范围为准，未给范围时才用 8000-20000 默认值。
 - 细纲情节点改为四列表格（`#` / 情节点 / 功能标签 / 执行边界），不再要求逐点字数预算与「目标字数合计」行。
-- 短剧已确认的生产 job 必须用 `source_entry` 点名 `图片提示词.md` 或 `视频提示词.md` 中的 `IMG-*` / `MOTION-*` 条目，并逐张填写 `reference_bindings`；与 canonical 文档漂移即 fail closed。
+- 短剧已确认的生产 job 必须用 `source_entry` 点名 canonical 创作文档中的条目——`图片提示词.md` 的 `IMG-*`、`视频提示词.md` 的 `MOTION-*`、`分镜.md` 的 `SHOT-*` 冻结关键帧——并逐张填写 `reference_bindings`；与 canonical 文档漂移即 fail closed。
 - DSH bridge 补齐 Google Antigravity：`.agents/agents` 与 `invoke_subagent` 进入平台探测禁令，story-setup 的禁止部署清单加入 Antigravity。上游 0.7.8 给每个 Skill 增加了第四条 canonical agent 路径，未补齐时 Skill 会误判 Role 不可用并降级 solo。
 - 上游资产同步排除 Antigravity 平台部署产物（`story-setup/references/antigravity/` 与三个 `*antigravity*` 脚本），与 Claude/Codex/OpenCode/ZCode/OpenClaw/Reasonix 的口径一致。
 
@@ -153,7 +152,8 @@
 - 提供 13 个 Oh Story 小说 Skills、7 个专业 Roles 与 10 个 Drama Skills。
 - 提供文件树、Markdown/JSONL 编辑预览与官方 DSH Chat 同屏的三栏工作台。
 
-[Unreleased]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.4...HEAD
+[Unreleased]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.5...HEAD
+[0.1.5]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.1...v0.1.2

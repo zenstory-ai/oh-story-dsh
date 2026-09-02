@@ -1,6 +1,6 @@
 {
   "name": "oh-story-dsh",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "private": true,
   "description": "A DSH plugin for fiction, short-drama, playable game, and video-recap production",
   "license": "MIT",
