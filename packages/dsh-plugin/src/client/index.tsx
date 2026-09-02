@@ -1523,9 +1523,27 @@ function CreativeSplitBridge({ sessionId, useSession, useChat, useStore, actions
     const scroller = target?.parentElement;
     if (scroller === undefined || scroller === null) return;
     const composerSeat = (): HTMLElement | null => scroller.querySelector(":scope > [data-composer-seat]");
+    // The seat overlaps the Chat column here, so a reader parked at the tail has
+    // to be carried across every layout pass; losing the tail does not merely
+    // scroll it out of sight, it leaves the last lines behind the Composer.
+    // Being parked cannot be read inside the pass — a reflow moves the tail
+    // before the observer runs — and it cannot be read from scroll events alone
+    // either: the Chat settles over several frames after a resize and every one
+    // of those frames scrolls without the reader asking. So only a scroll the
+    // reader actually drove releases the tail; reaching the bottom always
+    // reclaims it.
+    const parkedAtTail = (): boolean => scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight <= 8;
+    let parked = parkedAtTail();
+    let drivenAt = 0;
+    const markDriven = (event: Event): void => {
+      if (event.target instanceof Node && composerSeat()?.contains(event.target) === true) return;
+      drivenAt = performance.now();
+    };
+    const trackParked = (): void => {
+      if (parkedAtTail()) parked = true;
+      else if (performance.now() - drivenAt < 400) parked = false;
+    };
     const publishLayout = (): void => {
-      // A seat that grows under a reader already at the tail must not swallow it.
-      const pinned = scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight <= 8;
       scroller.style.setProperty("--oh-story-scroll-height", `${String(scroller.clientHeight)}px`);
       // DSH 0.1.2 grows the seat with the streaming Todo panel while
       // --dsh-composer-height keeps reporting the bare input height. Publish the
@@ -1539,23 +1557,43 @@ function CreativeSplitBridge({ sessionId, useSession, useChat, useStore, actions
       const mediumAt = workbench === "game" || workbench === "video" ? 960 : 900;
       const layout = scroller.clientWidth < compactAt ? "compact" : scroller.clientWidth < mediumAt ? "medium" : "wide";
       if (scroller.dataset.ohStoryLayout !== layout) scroller.dataset.ohStoryLayout = layout;
-      if (pinned) scroller.scrollTop = scroller.scrollHeight - scroller.clientHeight;
+      if (parked) scroller.scrollTop = scroller.scrollHeight - scroller.clientHeight;
     };
     const observer = new ResizeObserver(publishLayout);
     const observed = new WeakSet<Element>();
-    // The official seat mounts and remounts independently of this bridge.
-    const observeSeat = (): void => {
-      const seat = composerSeat();
-      if (seat === null || observed.has(seat)) return;
-      observed.add(seat);
-      observer.observe(seat);
+    // The official seat and Chat flow mount and remount independently of this
+    // bridge. The flow is observed because a resized Chat keeps re-wrapping for
+    // several frames afterwards: pinning once against the height the first frame
+    // reports leaves the reader behind the Composer again once it settles.
+    let flowObserved = false;
+    const observePanes = (): void => {
+      const flow = scroller.querySelector("[data-chat-flow]");
+      flowObserved = flow !== null;
+      for (const pane of [composerSeat(), flow]) {
+        if (pane === null || observed.has(pane)) continue;
+        observed.add(pane);
+        observer.observe(pane);
+      }
     };
     publishLayout();
+    scroller.addEventListener("scroll", trackParked, { passive: true });
+    for (const driven of ["wheel", "touchmove", "pointerdown", "keydown"]) {
+      scroller.addEventListener(driven, markDriven, { passive: true });
+    }
     observer.observe(scroller);
-    observeSeat();
-    const seats = new MutationObserver(() => { observeSeat(); publishLayout(); });
+    observePanes();
+    const seats = new MutationObserver(() => { observePanes(); publishLayout(); });
     seats.observe(scroller, { childList: true });
+    // The flow mounts below the seat's level, and streaming mutates it token by
+    // token: watch the subtree only until it has been found once.
+    const panes = new MutationObserver(() => { if (!flowObserved) observePanes(); });
+    panes.observe(scroller, { childList: true, subtree: true });
     return () => {
+      panes.disconnect();
+      scroller.removeEventListener("scroll", trackParked);
+      for (const driven of ["wheel", "touchmove", "pointerdown", "keydown"]) {
+        scroller.removeEventListener(driven, markDriven);
+      }
       observer.disconnect();
       seats.disconnect();
       scroller.style.removeProperty("--oh-story-scroll-height");
