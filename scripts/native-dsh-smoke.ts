@@ -1515,7 +1515,7 @@ async function main(): Promise<void> {
         // Composer (#26).
         await rpc(origin, "session/prompt", { request: { requestId: crypto.randomUUID(), sessionId: dramaSession.sessionId, mode: "queue", content: [{ type: "text", text: longReplyPrompt }] } });
         await page.getByText(longReplyTail, { exact: false }).last().waitFor({ state: "visible", timeout: 30_000 });
-        for (const size of [{ width: 1_440, height: 900 }, { width: 1_000, height: 900 }, { width: 1_200, height: 640 }, { width: 1_440, height: 900 }]) {
+        for (const size of [{ width: 1_440, height: 900 }, { width: 1_000, height: 900 }, { width: 1_200, height: 640 }, { width: 600, height: 800 }, { width: 1_440, height: 900 }]) {
           await page.setViewportSize(size);
           await page.waitForTimeout(400);
           const tail = await page.evaluate((marker) => {
@@ -1543,6 +1543,28 @@ async function main(): Promise<void> {
             throw new Error(`Long answer lost its tail at ${String(size.width)}x${String(size.height)}: ${JSON.stringify(tail)}`);
           }
         }
+        // The same carry must not become a leash: a reader who scrolled up to
+        // re-read stays where they put themselves when the layout changes.
+        const held = await page.evaluate(() => {
+          const scroll = Array.from(document.querySelectorAll<HTMLElement>("[data-conversation-scroll]"))
+            .find((element) => element.dataset.ohStoryWorkbench === "drama" && element.getBoundingClientRect().width > 0);
+          if (scroll === undefined) return undefined;
+          scroll.dispatchEvent(new WheelEvent("wheel", { deltaY: -600, bubbles: true }));
+          scroll.scrollTop = Math.max(0, scroll.scrollTop - 600);
+          return Math.round(scroll.scrollTop);
+        });
+        await page.setViewportSize({ width: 1_200, height: 820 });
+        await page.waitForTimeout(400);
+        const stillHeld = await page.evaluate(() => {
+          const scroll = Array.from(document.querySelectorAll<HTMLElement>("[data-conversation-scroll]"))
+            .find((element) => element.dataset.ohStoryWorkbench === "drama" && element.getBoundingClientRect().width > 0);
+          return scroll === undefined ? undefined : { top: Math.round(scroll.scrollTop), fromBottom: Math.round(scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight) };
+        });
+        if (held === undefined || stillHeld === undefined || stillHeld.fromBottom < 100) {
+          throw new Error(`Resize dragged a reader back to the tail: ${JSON.stringify({ held, stillHeld })}`);
+        }
+        await page.setViewportSize({ width: 1_440, height: 900 });
+        await page.waitForTimeout(300);
         await rpc(origin, "session/prompt", { request: { requestId: crypto.randomUUID(), sessionId: dramaSession.sessionId, mode: "queue", content: [{ type: "text", text: todoLayoutPrompt }] } });
         const todo = page.locator('[data-testid="todo-panel"]');
         await todo.waitFor({ state: "visible", timeout: 30_000 });
