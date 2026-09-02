@@ -42,6 +42,15 @@ const gameUpdateContent = "game-build-update-smoke\n";
 const gameUpdateReply = "游戏构建版本标记已更新。";
 const todoLayoutPrompt = "TODO_LAYOUT_SMOKE：写入十一条已完成任务。";
 const todoLayoutItems = Array.from({ length: 11 }, (_, index) => ({ content: `布局任务 ${String(index + 1)}`, status: "completed" }));
+const longReplyPrompt = "LONG_REPLY_SMOKE：请返回一篇很长的答复。";
+const longReplyTail = "LONG_REPLY_TAIL_MARKER";
+const longReplyContent = [
+  "## 下一步最值得做的",
+  "",
+  ...Array.from({ length: 36 }, (_, index) => `${String(index + 1)}. 长答复行 ${String(index + 1)}：这一行用来把 Chat 尾部推到 Composer 座位下面，验证工作台的留白是否真的把最后一行让了出来。`),
+  "",
+  longReplyTail
+].join("\n");
 const roleReference = "story-setup/references/agent-references/writing-craft.md";
 const roleReferenceExcerpt = "贯穿道具系统";
 const roleSmokePrompt = "ROLE_RUNTIME_SMOKE：必须调用 oh_story_role 的 narrative-writer，并返回子角色结果。";
@@ -137,6 +146,7 @@ async function startMockDeepSeek(): Promise<MockDeepSeek> {
       const gameUpdateTurn = currentTurn.includes(gameUpdatePrompt);
       const mutationTurn = currentTurn.includes(agentMutationPrompt) || gameUpdateTurn;
       const todoLayoutTurn = currentTurn.includes(todoLayoutPrompt);
+      const longReplyTurn = currentTurn.includes(longReplyPrompt);
       const productionTurn = currentTurn.includes("/short-drama-produce");
       const roleParentTurn = currentTurn.includes(roleSmokePrompt);
       const productionIntentTurn = currentTurn.includes(productionIntentSmokePrompt);
@@ -200,7 +210,9 @@ async function startMockDeepSeek(): Promise<MockDeepSeek> {
           return;
         }
         requests.push(roleParentTurn ? "role-parent-resume" : productionTurn ? "production" : "other");
-        const content = roleParentTurn
+        const content = longReplyTurn
+          ? longReplyContent
+          : roleParentTurn
           ? roleParentReply
           : productionIntentTurn
             ? productionIntentReply
@@ -211,9 +223,12 @@ async function startMockDeepSeek(): Promise<MockDeepSeek> {
             : serialized.includes("Game Studio")
               ? gameReply
               : serialized.includes(storyProjectName) ? storyReply : dramaReply;
+        // A long answer arrives as many deltas, so the tail settles after the
+        // reader is already parked at the bottom.
+        const contentChunks = content.match(/[\s\S]{1,64}/gu) ?? [content];
         events = [
           JSON.stringify({ choices: [{ delta: { role: "assistant", content: null, reasoning_content: "" } }] }),
-          JSON.stringify({ choices: [{ delta: { content } }] }),
+          ...contentChunks.map((chunk) => JSON.stringify({ choices: [{ delta: { content: chunk } }] })),
           JSON.stringify({ choices: [{ delta: { content: "" }, finish_reason: "stop" }], usage: { prompt_tokens: 12, completion_tokens: 20 } }),
           "[DONE]"
         ];
@@ -921,7 +936,7 @@ async function main(): Promise<void> {
     }
 
     if (process.env.OH_STORY_EXTERNAL_CAPTURE === "1") {
-      process.stdout.write(`OH_STORY_CAPTURE_READY ${JSON.stringify({ origin, dramaWorkspaceTitle: dramaWorkspace.workspace.title, dramaSessionTitle })}\n`);
+      process.stdout.write(`OH_STORY_CAPTURE_READY ${JSON.stringify({ origin, dshTokenUrl, dramaWorkspaceTitle: dramaWorkspace.workspace.title, dramaSessionTitle })}\n`);
       await new Promise<void>((accept) => {
         const stop = () => { accept(); };
         process.once("SIGINT", stop);
@@ -1494,6 +1509,62 @@ async function main(): Promise<void> {
       if (!useRealDeepSeek) {
         const scroller = page.locator("[data-conversation-scroll]");
         await scroller.evaluate((element) => { element.scrollTop = element.scrollHeight; });
+        // A long answer read to the end must stay readable across a resize. The
+        // seat overlaps the Chat column, so a reader carried out of the tail by a
+        // reflow does not merely lose the bottom — the lines land behind the
+        // Composer (#26).
+        await rpc(origin, "session/prompt", { request: { requestId: crypto.randomUUID(), sessionId: dramaSession.sessionId, mode: "queue", content: [{ type: "text", text: longReplyPrompt }] } });
+        await page.getByText(longReplyTail, { exact: false }).last().waitFor({ state: "visible", timeout: 30_000 });
+        for (const size of [{ width: 1_440, height: 900 }, { width: 1_000, height: 900 }, { width: 1_200, height: 640 }, { width: 600, height: 800 }, { width: 1_440, height: 900 }]) {
+          await page.setViewportSize(size);
+          await page.waitForTimeout(400);
+          const tail = await page.evaluate((marker) => {
+            const scroll = Array.from(document.querySelectorAll<HTMLElement>("[data-conversation-scroll]"))
+              .find((element) => element.dataset.ohStoryWorkbench === "drama" && element.getBoundingClientRect().width > 0);
+            const seat = scroll === undefined
+              ? undefined
+              : Array.from(scroll.children).find((element): element is HTMLElement => element instanceof HTMLElement && element.hasAttribute("data-composer-seat"));
+            const flow = scroll?.querySelector<HTMLElement>("[data-chat-flow]");
+            if (scroll === undefined || seat === undefined || flow == null) return { found: false };
+            const marked = Array.from(flow.querySelectorAll<HTMLElement>("*"))
+              .find((element) => element.children.length === 0 && (element.textContent ?? "").includes(marker));
+            if (marked === undefined) return { found: false };
+            const tailBox = marked.getBoundingClientRect();
+            const seatBox = seat.getBoundingClientRect();
+            return {
+              found: true,
+              coveredBySeat: tailBox.bottom > seatBox.top + 1,
+              belowViewport: tailBox.bottom > scroll.getBoundingClientRect().bottom + 1,
+              clearance: Number.parseFloat(getComputedStyle(flow).paddingBottom) - seatBox.height,
+              distanceFromBottom: scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight
+            };
+          }, longReplyTail);
+          if (!tail.found || tail.coveredBySeat === true || tail.belowViewport === true || (tail.clearance ?? 0) < 15) {
+            throw new Error(`Long answer lost its tail at ${String(size.width)}x${String(size.height)}: ${JSON.stringify(tail)}`);
+          }
+        }
+        // The same carry must not become a leash: a reader who scrolled up to
+        // re-read stays where they put themselves when the layout changes.
+        const held = await page.evaluate(() => {
+          const scroll = Array.from(document.querySelectorAll<HTMLElement>("[data-conversation-scroll]"))
+            .find((element) => element.dataset.ohStoryWorkbench === "drama" && element.getBoundingClientRect().width > 0);
+          if (scroll === undefined) return undefined;
+          scroll.dispatchEvent(new WheelEvent("wheel", { deltaY: -600, bubbles: true }));
+          scroll.scrollTop = Math.max(0, scroll.scrollTop - 600);
+          return Math.round(scroll.scrollTop);
+        });
+        await page.setViewportSize({ width: 1_200, height: 820 });
+        await page.waitForTimeout(400);
+        const stillHeld = await page.evaluate(() => {
+          const scroll = Array.from(document.querySelectorAll<HTMLElement>("[data-conversation-scroll]"))
+            .find((element) => element.dataset.ohStoryWorkbench === "drama" && element.getBoundingClientRect().width > 0);
+          return scroll === undefined ? undefined : { top: Math.round(scroll.scrollTop), fromBottom: Math.round(scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight) };
+        });
+        if (held === undefined || stillHeld === undefined || stillHeld.fromBottom < 100) {
+          throw new Error(`Resize dragged a reader back to the tail: ${JSON.stringify({ held, stillHeld })}`);
+        }
+        await page.setViewportSize({ width: 1_440, height: 900 });
+        await page.waitForTimeout(300);
         await rpc(origin, "session/prompt", { request: { requestId: crypto.randomUUID(), sessionId: dramaSession.sessionId, mode: "queue", content: [{ type: "text", text: todoLayoutPrompt }] } });
         const todo = page.locator('[data-testid="todo-panel"]');
         await todo.waitFor({ state: "visible", timeout: 30_000 });
