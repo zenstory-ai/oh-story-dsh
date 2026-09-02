@@ -57,8 +57,8 @@
 
 | 工作台 | 上游能力 | 主要入口 |
 | --- | --- | --- |
-| 小说 | [Oh Story 0.7.8](https://github.com/zenstory-ai/oh-story-claudecode/releases/tag/v0.7.8) · 13 Skills · 7 Roles | `/story`、`/story-long-write`、`/story-review` |
-| 短剧 | [Drama Skills 0.6.1](https://github.com/zenstory-ai/drama-skills/releases/tag/v0.6.1) · 10 Skills | `/short-drama`、`/short-drama-write`、`/short-drama-storyboard` |
+| 小说 | [Oh Story 0.7.9](https://github.com/zenstory-ai/oh-story-claudecode/releases/tag/v0.7.9) · 13 Skills · 7 Roles | `/story`、`/story-long-write`、`/story-review` |
+| 短剧 | [Drama Skills 0.6.4](https://github.com/zenstory-ai/drama-skills/releases/tag/v0.6.4) · 10 Skills | `/short-drama`、`/short-drama-write`、`/short-drama-storyboard` |
 | 游戏 | [NovelToGame 0.3.0](https://github.com/zenstory-ai/novel-to-game) · 7 Skills · 《金瓶梅》可玩示例 | `/novel-to-game quick`、`/game-build`、`/game-qa` |
 | 视频 | [video-recap-skills 0.4.0](https://github.com/zenstory-ai/video-recap-skills) · 6 Skills | `/video-recap`、`/video-script` |
 

@@ -115,15 +115,30 @@ MEDIA_TYPES = {
 CREATOR_SOURCE_NAMES = {
     "图片提示词.md": "image",
     "视频提示词.md": "video",
+    # A shot's frozen keyframe is a producible image and lives nowhere else, so
+    # without this the start frame a video job wants to bind has no stage that
+    # can render it.
+    "分镜.md": "image",
+}
+# Which H2 IDs a creator source may select, and where that entry keeps its
+# copyable body.
+CREATOR_SOURCE_ENTRIES = {
+    "图片提示词.md": ("IMG-", r"可复制(?:通用)?提示词", "参考"),
+    "视频提示词.md": ("MOTION-", r"可复制(?:通用)?提示词", "输入参考图"),
+    "分镜.md": ("SHOT-", r"冻结关键帧提示词", "输入参考图"),
 }
 
 REF_SLOT_RE = re.compile(r"REF-[A-Z0-9][A-Z0-9-]{0,79}")
 SOURCE_ENTRY_RE = re.compile(r"[A-Z][A-Z0-9-]{1,99}")
 REFERENCE_SUFFIX_RE = r"(?:png|jpe?g|webp)"
+# 用途 is the creator-facing question "what does this picture decide here"; the
+# job's own `role` is its production translation. The segment is optional so a
+# declaration written before that field existed still prepares, and so the
+# creator-side diagnostic stays with creator_markdown_check.py.
 REFERENCE_LINE_RE = re.compile(
     rf"(REF-[A-Z0-9][A-Z0-9-]{{0,79}})（顺序：([1-9]\d*)）· "
     rf"([^；\n]+?\.{REFERENCE_SUFFIX_RE})《([^》\n]+)》"
-    r"（控制：([^；）\n]+)；不得控制：([^）\n]+)）",
+    r"（(?:用途：[^；）\n]+；)?控制：([^；）\n]+)；不得控制：([^）\n]+)）",
     re.IGNORECASE,
 )
 
@@ -759,11 +774,11 @@ def _markdown_section(document: str, source_entry: str) -> str:
     return document[match.start() : end]
 
 
-def _copyable_prompt(section: str) -> str:
+def _copyable_prompt(
+    section: str, heading: str = r"可复制(?:通用)?提示词"
+) -> str:
     markers = list(
-        re.finditer(
-            r"^###\s+可复制(?:通用)?提示词\s*$", section, re.MULTILINE
-        )
+        re.finditer(rf"^###\s+{heading}\s*$", section, re.MULTILINE)
     )
     if not markers:
         raise ValueError("source entry has no copyable prompt")
@@ -851,9 +866,9 @@ def _verify_markdown_source(
         raise ValueError("source_entry requires a Markdown source")
     document = source_path.read_text(encoding="utf-8")
     section = _markdown_section(document, source_entry)
-    if _copyable_prompt(section) != prompt.strip():
+    _, heading, field_name = CREATOR_SOURCE_ENTRIES[source_path.name]
+    if _copyable_prompt(section, heading) != prompt.strip():
         raise ValueError("job prompt does not match the selected source entry")
-    field_name = "参考" if source_entry.startswith("IMG-") else "输入参考图"
     declared = _markdown_reference_bindings(section, field_name=field_name)
     comparable = [
         {key: binding[key] for key in (
@@ -906,16 +921,20 @@ def _normalize_job(root: Path, raw: object) -> dict[str, Any]:
         and source_entry is None
     ):
         raise ValueError("creator Markdown source does not match the job modality")
-    expected_entry_prefix = {"image": "IMG-", "video": "MOTION-"}.get(
-        str(modality)
+    expected_entry_prefix = (
+        CREATOR_SOURCE_ENTRIES[PurePosixPath(source).name][0]
+        if source is not None
+        and PurePosixPath(source).name in CREATOR_SOURCE_ENTRIES
+        and creator_source_modality == modality
+        else None
     )
+    if source_entry is not None and creator_source_modality != modality:
+        raise ValueError("source_entry requires the canonical creator Markdown path")
     if source_entry is not None and (
         expected_entry_prefix is None
         or not source_entry.startswith(expected_entry_prefix)
     ):
         raise ValueError("source_entry does not match the job modality")
-    if source_entry is not None and creator_source_modality != modality:
-        raise ValueError("source_entry requires the canonical creator Markdown path")
     references_supplied = "references" in raw
     supplied_references = [
         _relative_path(path)

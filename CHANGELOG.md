@@ -21,8 +21,8 @@
 - 新增第四个「视频」工作台：桌面端左侧预览、右侧 DSH 原生 Chat；支持原片/剪后片/最终成片切换、阶段提示、关键产物检查、全屏、刷新和显式载入新版本，不引入多轨编辑器。
 - 新增视频运行环境检查，只向浏览器返回 Python、ffmpeg/libass、ffprobe 与凭据是否就绪，不返回任何 Key 内容。
 - 本地视频预览改用 HTTP Range 文件流，可预览超过 256 MiB 的长视频而不在 Host 内整文件缓冲；远程文件系统保留有界回退读取。
-- 同步 Oh Story 0.7.8（`70c294b`，v0.7.8 之后 3 个提交）：新增工作区级作者记忆 `.story/作者记忆/` 与随包脚本 `author_memory_commit.py`；新增细纲结构验收 `check-outline-contract.js`、短篇 Phase 2 与交付验收 `check-phase2-contract.js` 与 `check-delivery-contract.js`；长篇字数改用 `storyctl.py` 的 `visible_chars_v1` 口径。上游 `agents_version` 升到 28，DSH 的七个 Role 随插件打包，用户无需重新部署。
-- 同步 Drama Skills 0.6.1（`3ab6b85`，v0.6.1 之后 3 个提交，含尚未发版的 0.6.2 修复）：新增 `creator_markdown_check.py`，按剧集校验 creator-first 五份 Markdown 的跨文档结构。
+- 同步 Oh Story 0.7.9（`5de060f`）：新增工作区级作者记忆 `.story/作者记忆/` 与随包脚本 `author_memory_commit.py`；新增细纲结构验收 `check-outline-contract.js`、短篇 Phase 2 与交付验收 `check-phase2-contract.js` 与 `check-delivery-contract.js`；长篇字数改用 `storyctl.py` 的 `visible_chars_v1` 口径；短篇改按场景功能分配篇幅与节奏，移除逐节最低字数、子事件数量、对白占比与固定钩子位置等机械配额，细纲的 `目标情绪` 与 `主角目标/关键选择` 不再接受 `[待补充]`。上游 `agents_version` 升到 29，DSH 的七个 Role 随插件打包，用户无需重新部署。
+- 同步 Drama Skills 0.6.4（`ebcb02e`）：新增 `creator_markdown_check.py`，按剧集校验 creator-first 五份 Markdown 的跨文档结构；`project_tool.py` 新增 `export`，把每集现有文档与 `剧集/<EP>/制作成果/` 导出为带 `manifest.json` 与 `checksums.sha256` 的当前状态快照；《视觉设定.md》可写「连续性锁」，把跨镜不变的颜色、材质与形制固定到指定镜头；新增 Seedance 2.0、Seedance 2.5 与 MiniMax H3 版本化视频提示词方言、目标模型能力档案与可选的 `minimax-h3` 生产 adapter。
 - 短剧每集 creator-first 文档新增「生产」视图：镜头卡、人物/场景/道具素材板、跨文档定位、批量生产、任务状态、版本选择、成片顺序与缺镜检查，以及可缩放拖拽的关系画布。
 - 图片、视频与音频成果可由当前 DSH Session 的 Agent FileSystem 列出和预览；图片/视频会按稳定对象 ID 与任务 ID 自动回填到镜头和素材版本。
 - 单项、批量与成片合成动作通过当前 DSH Conversation 发送 `/short-drama-produce` 精确任务，继续使用当前 Preset 可见工具、权限审批、Trajectory 和停止能力。
@@ -37,6 +37,7 @@
 
 ### Changed
 
+- 同步后的短剧文档契约有两处收紧（既有项目需要补字段，目录不变）：《分镜.md》每镜必写「视觉依据」并机械核对冻结关键帧点名的条目，`REF-...` 槽位必须声明 `用途`；未手工指定参考图时不再静默降级为文生视频，缺图会停在最终视频提示词之前，除非创作者明确选择文生视频。
 - 游戏试玩运行时在切换项目文件与 500px 窄屏对话时保持挂载；窄屏改为可触控的“制作 / 对话”单区切换。
 - 新构建不再因用户转去 Chat 导致 iframe 失焦而静默替换；状态文案区分文件更新、预览载入与载入失败。
 - QA 保留为 Skill、项目产物和自动化质量门，不在游戏制作面板展示独立 Tab、卡片、徽标或营销截图。

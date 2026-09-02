@@ -14,7 +14,7 @@ metadata: {"openclaw":{"source":"https://github.com/zenstory-ai/oh-story-claudec
 
 > Agent 兼容性：只检查当前运行时的 canonical 目录：Claude `.claude/agents/{agent}.md`、OpenCode `.opencode/agents/{agent}.md`、Codex `.codex/agents/{agent}.toml`、Antigravity `.agents/agents/agent-name/agent.md`（`agent-name` 为目标 agent 名），不得因其他端文件存在而误判。Codex 使用同名 `agent_type`；Antigravity 使用 `invoke_subagent` + `TypeName`。对应运行时未暴露 custom-agent registry / `invoke_subagent` 或返回未知 agent 时，必须降级 solo/direct。检测到 `.zcode/` 时同样直接 solo/direct，因为 ZCode 3.3.4 不执行项目 custom agents；报告 `Fallback: project custom agents unavailable -> solo`。Claude/OpenCode 兼容面保留 `subagent_type`。
 >
-> Spawn 版本提示（不阻断 spawn）：先读取项目根 `.story-deployed` 的 `agents_version`。与本版 `agents_version: 28` 不一致时（标记缺失、字段缺失/非整数、小于或大于 28）**照常按文件存在性检查并 spawn**，同时报告 `Notice: agents bundle 版本不匹配（项目 {N}，本版 28）` 并提示重新运行 `/story-setup` 后新开会话；大于 28 时额外提示先更新 oh-story-claudecode，不要用本地旧版 setup 降级覆盖。只有 agent 文件缺失、或运行时不暴露 custom agent 时才降级 solo/direct，报告 `Fallback: ... -> solo`。
+> Spawn 版本提示（不阻断 spawn）：先读取项目根 `.story-deployed` 的 `agents_version`。与本版 `agents_version: 29` 不一致时（标记缺失、字段缺失/非整数、小于或大于 29）**照常按文件存在性检查并 spawn**，同时报告 `Notice: agents bundle 版本不匹配（项目 {N}，本版 29）` 并提示重新运行 `/story-setup` 后新开会话；大于 29 时额外提示先更新 oh-story-claudecode，不要用本地旧版 setup 降级覆盖。只有 agent 文件缺失、或运行时不暴露 custom agent 时才降级 solo/direct，报告 `Fallback: ... -> solo`。
 
 ## 核心原则
 
@@ -485,7 +485,7 @@ story-short-analyze 的拆解管道（Stage 2-6）本身**无 Stage 1 停靠点*
 
 #### Step 3：小节大纲生成
 
-从 `情节节点.md` 的功能分段反推 `{标题}/小节大纲.md`，按开头段/铺垫段/升级段/反转段/结尾段映射；短篇只做轻量蓝图：每节写 `结构段/五段功能`、主事件、3-5 个子事件、目标情绪、人物/关系变化、因果/逻辑链、结尾承接/小钩子。钩子或关系无法判断时标 `[待补充]`，不套用长篇完整章节蓝图。
+从 `情节节点.md` 的功能分段反推 `{标题}/小节大纲.md`，按开头段/铺垫段/升级段/反转段/结尾段映射；短篇只做轻量蓝图：每节写 `结构段/五段功能`、主事件、一个或多个真实推进、目标情绪、人物/关系变化、因果/逻辑链、结尾承接/小钩子。相关情节点可由同一动作链或对话同时兑现，不为凑数量拆成多个子事件。钩子或关系无法判断时标 `[待补充]`，不套用长篇完整章节蓝图。
 
 #### Step 4：外部对标引用视图（可选）
 

@@ -47,6 +47,18 @@
   expression, and light legible?
 - Does it avoid ordered actions, performance arcs, camera moves, or transforming
   environments?
+- Read the finished keyframe text, not the shot's intent: is every visible character,
+  place, and prop whose identity, Look, or geography must stay recognizable listed in
+  this shot's `视觉依据` (`SHT-22`)? A second body that entered the composition while the
+  frame was being written is the usual miss.
+- Does each declared 控制 scope stay inside what this frame can carry, and is nothing
+  bound merely because it was bound in the previous shot (`SHT-24`)?
+- When real reference images are bound, does every `REF-...` slot declare a 用途, so the
+  shot says which start frame and which identity/geography/prop pictures it sends
+  (`SHT-25`, `VID-24`)?
+- Is anything the frames need kept consistent across shots — a carried prop, a garment —
+  absent from `视觉设定.md` entirely, so it can appear in no shot's basis at all? The
+  mechanical check cannot see this: an entry that does not exist cannot be reported missing.
 
 ## Motion
 

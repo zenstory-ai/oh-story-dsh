@@ -14,8 +14,15 @@ license: MIT
 
 只在用户明确要求实际生成后，从当前 `图片提示词.md`、`分镜.md` 或 `视频提示词.md` 中
 取出本次提示词，建立一个有边界的运行 job。creator-first job 的 `source` 必须指向拥有这条提示词的
-当前 Markdown，`source_entry` 必须点名对应的 `IMG-*` 或 `MOTION-*` 二级标题。存在真实参考图时，
+当前 Markdown，`source_entry` 必须点名该文档允许的二级标题：`图片提示词.md` 用 `IMG-*`，
+`视频提示词.md` 用 `MOTION-*`，`分镜.md` 用 `SHOT-*`（modality 为 `image`，正文取该镜的
+`### 冻结关键帧提示词`）。分镜这一路是本套件里唯一能把某一镜的起始画面渲染成文件的入口；
+产出落在 `剧集/<EP>/制作成果/images/` 后，分镜 owner 才能把它绑成 `用途：起始帧` 的 `REF-...`。存在真实参考图时，
 还必须逐张填写 `reference_bindings` 的槽位、顺序、路径、中文名、用途以及允许/禁止控制范围；
+内置视频 adapter 把这里的 `用途` 字段读成供应商自己的 role，只接受它公布的取值
+（MiniMax 为 `first_frame`/`last_frame`/`reference_image`/`reference_video`/`reference_audio`，
+Seedance 为三个 `reference_*`）；带参考图却没有绑定的 job 会直接失败，不替它猜一个 role。
+本地图片由内置 adapter 按 base64 data URI 直接送出，不需要自建上传服务。
 `references` 可以省略并由绑定顺序生成，也可以作为相同顺序的显式镜像。输出放在
 `剧集/<EP>/制作成果/`；这个 job 是生产工具的临时输入，不是第六份创作文档：
 
@@ -53,7 +60,9 @@ creator-first job 必须从 `图片提示词.md` 或 `视频提示词.md` 的对
 
 ## 命令
 
-只在进入生产边界后把当前提示词和运行参数写成临时 JSON；不要在创作阶段为每条提示词预建 job。
+只在进入生产边界后把当前提示词和运行参数写成临时 JSON；视频与图片 job 的
+`parameters.prompt_language` 跟随当前可复制正文已经解析出的提示词语言，使 adapter 追加的参考约束
+使用同一种语言，而不是重新回退成固定英文。不要在创作阶段为每条提示词预建 job。
 格式和 adapter 契约见
 [adapter-contract.md](references/adapter-contract.md)。命令由
 [production_tool.py](scripts/production_tool.py) 提供，然后运行：
@@ -73,10 +82,15 @@ python3 <本技能目录>/scripts/production_tool.py audit <project>
 
 ## 输入选择
 
-- **image**：读取 `图片提示词.md` 的当前 `IMG-*` 可复制正文、必要参考图和明确的输出尺寸/数量；
-  creator-first job 使用 `source_entry` 锁定这一条。
+- **image**：读取 `图片提示词.md` 的当前 `IMG-*` 可复制正文，或 `分镜.md` 的当前 `SHOT-*`
+  冻结关键帧正文，加上必要参考图和明确的输出尺寸/数量；creator-first job 使用 `source_entry`
+  锁定这一条。资产板走 `IMG-*`，某一镜的起始画面走 `SHOT-*`；两者不互相替代。
 - **video**：读取 `视频提示词.md` 的当前 `MOTION-*` 可复制正文，并核对 `分镜.md` 中对应镜头、
-  冻结关键帧、时长与画幅；creator-first job 使用 `source_entry` 锁定这一条。
+  冻结关键帧、时长与画幅；creator-first job 使用 `source_entry` 锁定这一条。连续段选择从上一段
+  生成结果续接时，下一段 job 同时绑定上一段实际视频和从该视频取得的实际尾帧，并保留
+  `continuity_video`、`actual_tail_frame` 的不同职责；供应商 role 由目标模型 adapter 翻译。H3 的这组
+  输入统一译为 `reference_video + reference_image`，不能混成 `reference_video + first_frame`；不以
+  计划尾帧或文字描述代替真实文件。
 - **tts**：从 `剧本.md` 读取原句与表演要求，声音参考由用户或现有媒体明确提供。不得在生产 job
   中改词，也不为 TTS 新建第六份创作文档。
 - **music**：读取 `视频提示词.md` 中创作者已确认的时间线音乐章节；主题曲使用已确认歌词，纯配乐
@@ -99,14 +113,17 @@ adapter 配置必须在项目外，只包含 argv 命令和超时；凭据由 ad
 引用语义说明（中文名、用途、允许控制与不得控制范围）；不会把槽位名误当成要渲染进画面的文字。
 外部 adapter 也必须保留这组语义或明确拒绝，不能只上传文件而静默丢失控制边界。
 
-本技能可选提供三个 stdlib adapter，均通过项目外 adapter config 选择，凭据只从运行环境读取：
+本技能可选提供四个 stdlib adapter，均通过项目外 adapter config 选择，凭据只从运行环境读取：
 
-- [Seedance](references/providers/seedance.md)：模型/Endpoint ID 必须由账号显式配置；内置 runtime
-  只承诺已验证的 text-to-video，未配置可信上传时本地参考图 fail closed。
+- [Seedance](references/providers/seedance.md)：模型/Endpoint ID 必须由账号显式配置；compiler 支持
+  官方图片、视频和音频参考 role，内置 runtime 未配置可信上传时仍拒绝本地参考文件。
 - [GPT Image 2](references/providers/gpt-image-2.md)：无参考图走 generation，有参考图走 edit；
   固定高保真引用并校验尺寸、格式与透明背景限制。
 - [MiniMax Music](references/providers/minimax-music.md)：使用 `music-3.0` 与 hex 结果，区分主题曲
   和纯配乐，不伪造时长请求字段。
+- [MiniMax H3 视频](references/providers/minimax-h3-video.md)：模型 ID、分辨率集合与时长区间必须
+  由账号显式配置；提示词进 `content` 的 text 项，参考图按显式 role 绑定，本地参考在没有可信上传时
+  fail closed。该模型与画面同一次生成声音，写法影响见视频提示词技能的目标模型能力档案。
 
 这些 adapter 是已验证请求契约，不是账号可用性或生成质量保证；正式生产仍必须通过上面的本次
 确认闸门，并由审查 Skill 判断产物质量。
