@@ -212,7 +212,8 @@ export function VideoStudio({
   labelledBy,
   onProject,
   onTab,
-  onWorkbench
+  onWorkbench,
+  onCollapse
 }: {
   readonly sessionId: string;
   readonly projects: readonly VideoProject[];
@@ -226,6 +227,7 @@ export function VideoStudio({
   readonly onProject: (id: string) => void;
   readonly onTab: (tab: "preview" | "artifacts") => void;
   readonly onWorkbench: (mode: WorkbenchMode) => void;
+  readonly onCollapse: () => void;
 }) {
   const project = projects.find((item) => item.id === projectId) ?? projects[0];
   const tabsId = useId();
@@ -233,10 +235,13 @@ export function VideoStudio({
   const tabs = ["preview", "artifacts"] as const;
   return <main id={paneId} className="oh-video-studio" role="tabpanel" aria-labelledby={labelledBy} hidden={hidden}>
     <header className="oh-video-toolbar">
-      <div className="oh-video-mode-tabs" role="tablist" aria-label="创作工作台">{workbenches.map((mode) => <button
-        type="button" role="tab" key={mode} aria-selected={mode === "video"} tabIndex={mode === "video" ? 0 : -1}
-        onKeyDown={(event) => { handleTabKey(event, workbenches, "video", onWorkbench); }} onClick={() => { onWorkbench(mode); }}
-      >{workbenchLabel(mode)}</button>)}</div>
+      <div className="oh-workbench-cluster">
+        <div className="oh-video-mode-tabs" role="tablist" aria-label="创作工作台">{workbenches.map((mode) => <button
+          type="button" role="tab" key={mode} aria-selected={mode === "video"} tabIndex={mode === "video" ? 0 : -1}
+          onKeyDown={(event) => { handleTabKey(event, workbenches, "video", onWorkbench); }} onClick={() => { onWorkbench(mode); }}
+        >{workbenchLabel(mode)}</button>)}</div>
+        <button className="oh-workbench-collapse" type="button" title="收起创作工作台" aria-label="收起创作工作台" onClick={onCollapse}>×</button>
+      </div>
       <label className="oh-video-project"><span>视频项目</span><select aria-label="视频项目" value={project?.id ?? ""} disabled={project === undefined} onChange={(event) => { onProject(event.target.value); }}>
         {projects.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}
       </select></label>

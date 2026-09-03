@@ -36,6 +36,13 @@ const agentMutationPrompt = "AGENT_WRITE_SMOKE：请使用 write 工具创建指
 const agentMutationPath = "设定/角色/_agent-write-smoke.md";
 const agentMutationContent = "# Agent 写入验证\n\n这段正文由真实 DSH Agent 工具调用流式写入。\n\n- 文件树自动定位\n- 编辑器同步更新\n";
 const agentMutationReply = "测试文件已通过 write 工具创建。";
+const plainProjectName = "plain-workspace";
+const plainPrompt = "PLAIN_WORKSPACE_SMOKE：确认这是一个没有创作项目的普通 DSH workspace。";
+const plainReply = "这是一个普通 workspace，没有创作项目。";
+const plainWritePrompt = "PLAIN_WRITE_SMOKE：请使用 write 工具在这个 workspace 中创建小说正文文件。";
+const plainWritePath = "正文/第001章_通用会话.md";
+const plainWriteContent = "# 通用会话中的第一章\n\n创作文件出现后，工作台才接管这次对话的布局。\n";
+const plainWriteReply = "正文文件已创建。";
 const gameUpdatePrompt = "GAME_BUILD_UPDATE_SMOKE：请使用 write 工具写入游戏构建版本标记。";
 const gameUpdatePath = `game-adaptations/${generatedGameId}/build/app/version.txt`;
 const gameUpdateContent = "game-build-update-smoke\n";
@@ -144,7 +151,8 @@ async function startMockDeepSeek(): Promise<MockDeepSeek> {
       const lastUserIndex = messages.findLastIndex((message) => message.role === "user");
       const currentTurn = JSON.stringify(messages.slice(Math.max(lastUserIndex, 0)));
       const gameUpdateTurn = currentTurn.includes(gameUpdatePrompt);
-      const mutationTurn = currentTurn.includes(agentMutationPrompt) || gameUpdateTurn;
+      const plainWriteTurn = currentTurn.includes(plainWritePrompt);
+      const mutationTurn = currentTurn.includes(agentMutationPrompt) || gameUpdateTurn || plainWriteTurn;
       const todoLayoutTurn = currentTurn.includes(todoLayoutPrompt);
       const longReplyTurn = currentTurn.includes(longReplyPrompt);
       const productionTurn = currentTurn.includes("/short-drama-produce");
@@ -189,8 +197,10 @@ async function startMockDeepSeek(): Promise<MockDeepSeek> {
             ? { id: "call_todo_layout", name: "todo_write", args: { todos: todoLayoutItems } }
             : gameUpdateTurn
               ? { id: "call_game_build_update_smoke", name: "write", args: { file_path: gameUpdatePath, content: gameUpdateContent } }
+            : plainWriteTurn
+              ? { id: "call_plain_write_smoke", name: "write", args: { file_path: plainWritePath, content: plainWriteContent } }
               : { id: "call_oh_story_write_smoke", name: "write", args: { file_path: agentMutationPath, content: agentMutationContent } };
-        requests.push(roleParentTurn ? "role-parent-start" : productionIntentTurn ? "production-intent" : todoLayoutTurn ? "todo" : gameUpdateTurn ? "game-write" : "write");
+        requests.push(roleParentTurn ? "role-parent-start" : productionIntentTurn ? "production-intent" : todoLayoutTurn ? "todo" : gameUpdateTurn ? "game-write" : plainWriteTurn ? "plain-write" : "write");
         const argumentsJson = JSON.stringify(tool.args);
         const chunks = argumentsJson.match(/.{1,14}/gu) ?? [argumentsJson];
         events = [
@@ -217,7 +227,9 @@ async function startMockDeepSeek(): Promise<MockDeepSeek> {
           : productionIntentTurn
             ? productionIntentReply
           : mutationTurn
-            ? gameUpdateTurn ? gameUpdateReply : agentMutationReply
+            ? gameUpdateTurn ? gameUpdateReply : plainWriteTurn ? plainWriteReply : agentMutationReply
+            : currentTurn.includes(plainPrompt)
+              ? plainReply
             : serialized.includes("Video Studio")
               ? videoReply
             : serialized.includes("Game Studio")
@@ -526,6 +538,7 @@ async function main(): Promise<void> {
   const projectsRoot = join(temporaryRoot, "projects");
   const storyRoot = join(projectsRoot, storyProjectName);
   const dramaRoot = join(projectsRoot, dramaProjectName);
+  const plainRoot = join(projectsRoot, plainProjectName);
   const origin = `http://127.0.0.1:${String(await freePort())}`;
   const logs: string[] = [];
   let child: ChildProcess | undefined;
@@ -533,7 +546,16 @@ async function main(): Promise<void> {
   try {
     await Promise.all([
       cp(storyFixture, storyRoot, { recursive: true }),
-      cp(dramaFixture, dramaRoot, { recursive: true })
+      cp(dramaFixture, dramaRoot, { recursive: true }),
+      mkdir(join(plainRoot, "src"), { recursive: true })
+    ]);
+    // DSH is a general Harness. This workspace holds ordinary work plus an empty
+    // creative directory, so the plugin has a place to write into later but nothing
+    // to show yet.
+    await Promise.all([
+      mkdir(join(plainRoot, "正文"), { recursive: true }),
+      writeFile(join(plainRoot, "README.md"), "# Plain DSH workspace\n\n没有小说、短剧、游戏或视频项目。\n"),
+      writeFile(join(plainRoot, "src", "main.ts"), "export const main = (): string => \"plain\";\n")
     ]);
     const generatedGameRoot = join(storyRoot, "game-adaptations", generatedGameId);
     await Promise.all([
@@ -648,6 +670,7 @@ async function main(): Promise<void> {
 
     const storyWorkspace = await rpc<{ readonly workspace: { readonly workspaceId: string; readonly title: string } }>(origin, "workspace/create", { request: { path: storyRoot } });
     const dramaWorkspace = await rpc<{ readonly workspace: { readonly workspaceId: string; readonly title: string } }>(origin, "workspace/create", { request: { path: dramaRoot } });
+    const plainWorkspace = await rpc<{ readonly workspace: { readonly workspaceId: string; readonly title: string } }>(origin, "workspace/create", { request: { path: plainRoot } });
     const storySession = await rpc<{ readonly sessionId: string }>(origin, "session/create", { request: { workspaceId: storyWorkspace.workspace.workspaceId } });
     const gameSession = await rpc<{ readonly sessionId: string }>(origin, "session/create", { request: { workspaceId: storyWorkspace.workspace.workspaceId } });
     // The Video Studio demo needs its own conversation beside the preview. The
@@ -657,6 +680,7 @@ async function main(): Promise<void> {
       ? undefined
       : await rpc<{ readonly sessionId: string }>(origin, "session/create", { request: { workspaceId: storyWorkspace.workspace.workspaceId } });
     const dramaSession = await rpc<{ readonly sessionId: string }>(origin, "session/create", { request: { workspaceId: dramaWorkspace.workspace.workspaceId } });
+    const plainSession = await rpc<{ readonly sessionId: string }>(origin, "session/create", { request: { workspaceId: plainWorkspace.workspace.workspaceId } });
     const catalog = await rpc<{ readonly skills: readonly { readonly name: string }[] }>(origin, "skills/list", { request: { sessionId: storySession.sessionId } });
     const ohStorySkills = catalog.skills.filter((skill) => skill.name === "story" || skill.name.startsWith("story-") || skill.name === "browser-cdp");
     const dramaSkills = catalog.skills.filter((skill) => skill.name === "short-drama" || skill.name.startsWith("short-drama-"));
@@ -676,10 +700,12 @@ async function main(): Promise<void> {
     const gameSessionTitle = "游戏 · Live Game Lab";
     const videoSessionTitle = "视频 · Recap Lab";
     const dramaSessionTitle = `短剧 · ${dramaProjectName}`;
+    const plainSessionTitle = "通用 · Plain Workspace";
     await prepareSession(origin, storySession.sessionId, storyPrompt, storySessionTitle);
     await prepareSession(origin, gameSession.sessionId, gamePrompt, gameSessionTitle);
     if (videoSession !== undefined) await prepareSession(origin, videoSession.sessionId, videoPrompt, videoSessionTitle);
     await prepareSession(origin, dramaSession.sessionId, dramaPrompt, dramaSessionTitle);
+    await prepareSession(origin, plainSession.sessionId, plainPrompt, plainSessionTitle);
 
     if (!useRealDeepSeek) {
       const previousEvents = await sessionEvents(origin, storySession.sessionId);
@@ -776,6 +802,20 @@ async function main(): Promise<void> {
     if (!generatedPreview.ok || !(await generatedPreview.text()).includes("试玩成功")
       || !generatedCsp.includes("/oh-story/game-preview/") || generatedCsp.includes("connect-src 'self'")) {
       throw new Error(`Workspace game preview route failed: ${String(generatedPreview.status)}.`);
+    }
+    const plainWorkspaceResponse = await dshFetch(`${origin}/oh-story/workspace?sessionId=${encodeURIComponent(plainSession.sessionId)}`);
+    const plainWorkspacePayload = await plainWorkspaceResponse.json() as {
+      readonly mode?: string;
+      readonly files?: readonly unknown[];
+      readonly videos?: readonly unknown[];
+      readonly games?: readonly { readonly source: string }[];
+    };
+    // The bundled game example ships with the plugin, so it must never make a
+    // workspace look like it holds creative work.
+    if (!plainWorkspaceResponse.ok || plainWorkspacePayload.mode !== "dsh-session"
+      || plainWorkspacePayload.files?.length !== 0 || plainWorkspacePayload.videos?.length !== 0
+      || plainWorkspacePayload.games?.some((game) => game.source === "workspace") !== false) {
+      throw new Error(`Plain workspace was not reported free of creative projects: ${JSON.stringify(plainWorkspacePayload)}`);
     }
     const dramaWorkspaceResponse = await dshFetch(`${origin}/oh-story/workspace?sessionId=${encodeURIComponent(dramaSession.sessionId)}`);
     const dramaWorkspacePayload = await dramaWorkspaceResponse.json() as { readonly mode?: string; readonly cwd?: string; readonly files?: readonly { readonly path: string; readonly kind?: string; readonly mimeType?: string }[]; readonly shortDrama?: unknown };
@@ -976,6 +1016,85 @@ async function main(): Promise<void> {
       if (await page.locator(".oh-story-split-surface").count() !== 1) {
         throw new Error("Blank DSH Session did not mount the three-column workbench.");
       }
+
+      // DSH is used for far more than creation, so an installed plugin may not
+      // claim every conversation: a workspace with no creative project keeps the
+      // official layout, the workbench arrives with the first creative file, and
+      // the creator can hand the layout back at any time (#29).
+      const layoutScroller = page.locator("[data-conversation-scroll]");
+      const layoutChat = page.locator('[data-slot="conversation.session"] > :not(.oh-story-split-surface)').first();
+      const chatWidth = async (): Promise<number> => {
+        const box = await layoutChat.boundingBox();
+        if (box === null) throw new Error("The official Chat column was not measurable.");
+        return box.width;
+      };
+      await selectSession(page, plainWorkspace.workspace.title, plainSessionTitle);
+      await page.getByText(plainPrompt, { exact: true }).waitFor({ state: "visible", timeout: 20_000 });
+      const plainChatWidth = await chatWidth();
+      if (await page.locator(".oh-story-split-surface").count() !== 0
+        || await page.getByRole("button", { name: "打开创作工作台" }).count() !== 0
+        || await layoutScroller.getAttribute("data-oh-story-layout") !== null) {
+        throw new Error("A workspace without creative projects still lost its official conversation layout.");
+      }
+
+      const beforePlainWrite = (await sessionEvents(origin, plainSession.sessionId)).at(-1)?.seq ?? -1;
+      const plainWriteRequest = rpc(origin, "session/prompt", {
+        request: {
+          requestId: crypto.randomUUID(),
+          sessionId: plainSession.sessionId,
+          mode: "queue",
+          content: [{ type: "text", text: plainWritePrompt }]
+        }
+      });
+      const plainApproval = page.getByRole("button", { name: /^(?:Allow once|允许一次)$/u });
+      try {
+        await plainApproval.waitFor({ state: "visible", timeout: 8_000 });
+        await plainApproval.click();
+      } catch { /* workspace writes may already be allowed by the active preset */ }
+      await plainWriteRequest;
+      await waitForCompletedTurn(origin, plainSession.sessionId, beforePlainWrite);
+      await page.getByRole("navigation", { name: "小说项目文件" }).waitFor({ state: "visible", timeout: 20_000 });
+      const workbenchChatWidth = await chatWidth();
+      if (await layoutScroller.getAttribute("data-oh-story-layout") !== "wide"
+        || plainChatWidth < workbenchChatWidth + 200) {
+        throw new Error(`The first creative file did not hand the layout to the workbench: ${JSON.stringify({ plainChatWidth, workbenchChatWidth })}`);
+      }
+
+      const collapseWorkbench = page.getByRole("button", { name: "收起创作工作台" }).first();
+      await collapseWorkbench.click();
+      const workbenchLauncher = page.getByRole("button", { name: "打开创作工作台" });
+      await workbenchLauncher.waitFor({ state: "visible", timeout: 10_000 });
+      await page.locator(".oh-story-tree").waitFor({ state: "detached", timeout: 10_000 });
+      const collapsedChatWidth = await chatWidth();
+      const [launcherBox, launcherScroller] = await Promise.all([workbenchLauncher.boundingBox(), layoutScroller.boundingBox()]);
+      if (await layoutScroller.getAttribute("data-oh-story-layout") !== null
+        || collapsedChatWidth < workbenchChatWidth + 200
+        || launcherBox === null || launcherScroller === null
+        || launcherBox.x < launcherScroller.x - 1
+        || launcherBox.x + launcherBox.width > launcherScroller.x + launcherScroller.width + 1
+        || launcherBox.y < launcherScroller.y - 1
+        || launcherBox.y + launcherBox.height > launcherScroller.y + launcherScroller.height + 1) {
+        throw new Error(`Collapsing the workbench did not restore the official conversation: ${JSON.stringify({ collapsedChatWidth, workbenchChatWidth, launcherBox, launcherScroller })}`);
+      }
+
+      // The Session Store is not persisted, so the choice has to survive on its own:
+      // a new Session in the same workspace must open collapsed.
+      const plainBlankSession = page.locator("button").filter({ hasText: /^\s*(?:New Session|新会话)\s*$/iu }).first();
+      await plainBlankSession.waitFor({ state: "visible", timeout: 10_000 });
+      await plainBlankSession.click();
+      await page.getByRole("treeitem", { selected: true }).filter({ hasText: /^(?:New Session|新会话)$/iu })
+        .waitFor({ state: "visible", timeout: 10_000 });
+      await workbenchLauncher.waitFor({ state: "visible", timeout: 10_000 });
+      if (await page.locator(".oh-story-tree").count() !== 0
+        || await layoutScroller.getAttribute("data-oh-story-layout") !== null) {
+        throw new Error("A collapsed workbench reopened itself in a new Session of the same workspace.");
+      }
+      await workbenchLauncher.click();
+      await page.getByRole("navigation", { name: "小说项目文件" }).waitFor({ state: "visible", timeout: 10_000 });
+      if (await layoutScroller.getAttribute("data-oh-story-layout") !== "wide") {
+        throw new Error("The launcher did not hand the layout back to the workbench.");
+      }
+
       await selectSession(page, storyWorkspace.workspace.title, storySessionTitle);
       const storyTree = page.getByRole("navigation", { name: "小说项目文件" });
       try { await storyTree.waitFor({ state: "visible", timeout: 20_000 }); }
@@ -2013,6 +2132,8 @@ async function main(): Promise<void> {
       provider: useRealDeepSeek ? "deepseek-official" : "local-fixture",
       fixtures: [storyProjectName, dramaProjectName, "金瓶梅 · 风月总账"],
       uiSlots: ["shell.overlay", "tool.call.toolview"],
+      workbenchGate: "creative-project-only",
+      workbenchCollapse: "per-workspace",
       threeColumn: true,
       gameStudio: "preview-left-chat-right",
       videoStudio: "preview-left-chat-right",
