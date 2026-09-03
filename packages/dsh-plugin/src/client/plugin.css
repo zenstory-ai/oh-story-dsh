@@ -1,10 +1,38 @@
 .oh-story-bridge-marker { display: none; }
 .oh-story-split-surface { display: contents; font-family: var(--dsw-font-family); }
 
+/* Collapsed, the plugin owns nothing but this control: DSH renders the
+   conversation exactly as it does without the plugin installed. The launcher is
+   fixed to the conversation column's own corner, which the bridge publishes,
+   because the surrounding shell is not ours to place things in. */
+.oh-story-launcher {
+  box-sizing: border-box;
+  display: flex;
+  position: fixed;
+  z-index: 9;
+  top: calc(var(--oh-story-seam-top, 0px) + 10px);
+  right: calc(var(--oh-story-seam-right, 0px) + 14px);
+  min-height: 28px;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 999px;
+  color: var(--dsw-alias-label-secondary);
+  background: var(--dsw-alias-bg-base);
+  padding: 3px 11px;
+  cursor: pointer;
+  font-family: var(--dsw-font-family);
+  font-size: 12px;
+  line-height: 20px;
+}
+.oh-story-launcher b { font-weight: 500; }
+.oh-story-launcher:hover { color: var(--dsw-alias-label-primary); background: var(--dsw-alias-interactive-bg-hover); }
+.oh-story-launcher:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: 2px; }
+
 /* DSH documents every [data-slot] wrapper as a stable addressable styling
    seam. The official Session body and composer stay mounted; this only turns
    their scroll host into a three-column writing surface. */
-[data-conversation-scroll]:has(> [data-slot="conversation.session"] > .oh-story-split-surface) {
+[data-conversation-scroll]:has(> [data-slot="conversation.session"] > .oh-story-split-surface[data-open="true"]) {
   --os-border: var(--dsw-alias-border-l2);
   --os-muted: var(--dsw-alias-label-secondary);
   display: grid;
@@ -19,7 +47,7 @@
 }
 
 /* Keep the final Chat flow above the overlapping official Composer. */
-[data-conversation-scroll]:has(> [data-slot="conversation.session"] > .oh-story-split-surface)
+[data-conversation-scroll]:has(> [data-slot="conversation.session"] > .oh-story-split-surface[data-open="true"])
   > [data-slot="conversation.session"] > :not(.oh-story-split-surface) {
   grid-column: 3;
   grid-row: 1;
@@ -28,12 +56,12 @@
   border-left: 1px solid var(--os-border);
 }
 
-[data-conversation-scroll]:has(> [data-slot="conversation.session"] > .oh-story-split-surface)
+[data-conversation-scroll]:has(> [data-slot="conversation.session"] > .oh-story-split-surface[data-open="true"])
   [data-chat-flow] {
   padding-bottom: calc(max(var(--dsh-composer-height, 152px), var(--oh-story-composer-height, 0px)) + 16px);
 }
 
-[data-conversation-scroll]:has(> [data-slot="conversation.session"] > .oh-story-split-surface)
+[data-conversation-scroll]:has(> [data-slot="conversation.session"] > .oh-story-split-surface[data-open="true"])
   > [data-composer-seat] {
   grid-column: 3;
   grid-row: 1;
@@ -47,7 +75,7 @@
 
 /* Game mode keeps the official Conversation on the right but merges the two
    creator columns into one playable Studio. */
-[data-conversation-scroll][data-oh-story-workbench="game"]:has(> [data-slot="conversation.session"] > .oh-story-split-surface) {
+[data-conversation-scroll][data-oh-story-workbench="game"]:has(> [data-slot="conversation.session"] > .oh-story-split-surface[data-open="true"]) {
   --game-stage: #0d100e;
   --game-stage-raised: #161a17;
   --game-accent: var(--dsw-alias-state-business-primary);
@@ -57,9 +85,9 @@
   overflow: hidden;
 }
 
-[data-conversation-scroll][data-oh-story-workbench="game"]:has(> [data-slot="conversation.session"] > .oh-story-split-surface)
+[data-conversation-scroll][data-oh-story-workbench="game"]:has(> [data-slot="conversation.session"] > .oh-story-split-surface[data-open="true"])
   > [data-slot="conversation.session"] > :not(.oh-story-split-surface),
-[data-conversation-scroll][data-oh-story-workbench="game"]:has(> [data-slot="conversation.session"] > .oh-story-split-surface)
+[data-conversation-scroll][data-oh-story-workbench="game"]:has(> [data-slot="conversation.session"] > .oh-story-split-surface[data-open="true"])
   > [data-composer-seat] { grid-column: 2; }
 
 /* DSH 0.1.2 lays two 40px column-resize strips (z-index 8) over the whole
@@ -334,6 +362,27 @@
 .oh-story-tree nav button:focus-visible,
 .oh-story-role button:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: -2px; }
 .oh-story-save:disabled { opacity: .48; cursor: default; }
+
+.oh-story-brand-actions { display: flex; flex: none; align-items: center; gap: 2px; }
+
+.oh-workbench-cluster { display: flex; min-width: 0; align-items: center; gap: 6px; }
+.oh-workbench-collapse {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  flex: none;
+  place-items: center;
+  border: 0;
+  border-radius: 5px;
+  color: var(--os-muted);
+  background: transparent;
+  padding: 0;
+  cursor: pointer;
+  font: inherit;
+  font-size: 16px;
+}
+.oh-workbench-collapse:hover { color: var(--dsw-alias-label-primary); background: var(--dsw-alias-interactive-bg-hover); }
+.oh-workbench-collapse:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: -2px; }
 
 .oh-story-mode-tabs { display: flex; margin: 0 4px 8px; padding: 2px; border: 1px solid var(--os-border); border-radius: 7px; background: var(--dsw-alias-bg-layer-1); }
 
@@ -718,11 +767,11 @@
 .oh-story-canvas article span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .oh-story-canvas article span { color: var(--os-muted); font-size: 10px; }
 
-[data-conversation-scroll][data-oh-story-layout="medium"]:has(> [data-slot="conversation.session"] > .oh-story-split-surface) {
+[data-conversation-scroll][data-oh-story-layout="medium"]:has(> [data-slot="conversation.session"] > .oh-story-split-surface[data-open="true"]) {
   grid-template-columns: clamp(104px, 18%, 184px) minmax(200px, 1fr) clamp(300px, 45%, 408px);
 }
 
-[data-conversation-scroll][data-oh-story-layout="compact"]:has(> [data-slot="conversation.session"] > .oh-story-split-surface) {
+[data-conversation-scroll][data-oh-story-layout="compact"]:has(> [data-slot="conversation.session"] > .oh-story-split-surface[data-open="true"]) {
   grid-template-columns: clamp(80px, 16%, 104px) minmax(0, 1fr) clamp(228px, 48%, 300px);
 }
 
@@ -765,12 +814,12 @@
 [data-oh-story-layout="compact"] .oh-story-jsonl summary > code,
 [data-oh-story-layout="compact"] .oh-story-jsonl summary > em { display: none; }
 
-[data-conversation-scroll][data-oh-story-workbench="game"][data-oh-story-layout="medium"]:has(> [data-slot="conversation.session"] > .oh-story-split-surface) {
+[data-conversation-scroll][data-oh-story-workbench="game"][data-oh-story-layout="medium"]:has(> [data-slot="conversation.session"] > .oh-story-split-surface[data-open="true"]) {
   grid-template-columns: minmax(0, 1fr) clamp(360px, 42%, 440px);
 }
 [data-oh-story-workbench="game"][data-oh-story-layout="medium"] .oh-game-toolbar { grid-template-columns: auto minmax(140px, 1fr) auto; }
 
-[data-conversation-scroll][data-oh-story-workbench="game"][data-oh-story-layout="compact"]:has(> [data-slot="conversation.session"] > .oh-story-split-surface) {
+[data-conversation-scroll][data-oh-story-workbench="game"][data-oh-story-layout="compact"]:has(> [data-slot="conversation.session"] > .oh-story-split-surface[data-open="true"]) {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   overflow: hidden;
@@ -805,7 +854,7 @@
   gap: 5px;
   padding: 4px 8px;
 }
-[data-conversation-scroll][data-oh-story-workbench="game"][data-oh-story-layout="compact"] .oh-game-mode-tabs { grid-column: 1; grid-row: 1; width: fit-content; }
+[data-conversation-scroll][data-oh-story-workbench="game"][data-oh-story-layout="compact"] .oh-game-toolbar > .oh-workbench-cluster { grid-column: 1; grid-row: 1; width: fit-content; }
 [data-conversation-scroll][data-oh-story-workbench="game"][data-oh-story-layout="compact"] .oh-game-project > span { display: none; }
 [data-conversation-scroll][data-oh-story-workbench="game"][data-oh-story-layout="compact"] .oh-game-project { grid-column: 1 / -1; grid-row: 2; }
 [data-conversation-scroll][data-oh-story-workbench="game"][data-oh-story-layout="compact"] .oh-game-project select { max-width: none; width: 100%; min-height: 44px; }
@@ -831,7 +880,7 @@
   align-content: center;
   padding: 4px 8px;
 }
-[data-conversation-scroll][data-oh-story-workbench="game"][data-oh-story-layout="compact"] .oh-game-studio[data-oh-game-narrow] .oh-game-mode-tabs {
+[data-conversation-scroll][data-oh-story-workbench="game"][data-oh-story-layout="compact"] .oh-game-studio[data-oh-game-narrow] .oh-game-toolbar > .oh-workbench-cluster {
   grid-column: 1;
   grid-row: 2;
   justify-self: start;
@@ -889,7 +938,7 @@
 
 /* Video mode intentionally stays a preview surface: one player, a read-only artifact view,
    and the official DSH Conversation. It shares no nonlinear-editor or timeline runtime. */
-[data-conversation-scroll][data-oh-story-workbench="video"]:has(> [data-slot="conversation.session"] > .oh-story-split-surface) {
+[data-conversation-scroll][data-oh-story-workbench="video"]:has(> [data-slot="conversation.session"] > .oh-story-split-surface[data-open="true"]) {
   --video-stage: #0b0d10;
   --video-stage-raised: #15181d;
   --video-accent: var(--dsw-alias-state-business-primary);
@@ -898,9 +947,9 @@
   grid-template-columns: minmax(0, 1fr) clamp(400px, 34%, 520px);
   overflow: hidden;
 }
-[data-conversation-scroll][data-oh-story-workbench="video"]:has(> [data-slot="conversation.session"] > .oh-story-split-surface)
+[data-conversation-scroll][data-oh-story-workbench="video"]:has(> [data-slot="conversation.session"] > .oh-story-split-surface[data-open="true"])
   > [data-slot="conversation.session"] > :not(.oh-story-split-surface),
-[data-conversation-scroll][data-oh-story-workbench="video"]:has(> [data-slot="conversation.session"] > .oh-story-split-surface)
+[data-conversation-scroll][data-oh-story-workbench="video"]:has(> [data-slot="conversation.session"] > .oh-story-split-surface[data-open="true"])
   > [data-composer-seat] { grid-column: 2; }
 
 .oh-video-studio {
@@ -1044,10 +1093,10 @@
 .oh-video-artifact-content { min-width: 0; min-height: 0; flex: 1; overflow: auto; }
 .oh-video-artifact-content pre { min-width: 0; min-height: 100%; box-sizing: border-box; margin: 0; padding: 20px; color: inherit; background: var(--dsw-alias-bg-base); white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.65 var(--dsw-font-family-mono, ui-monospace, monospace); }
 
-[data-conversation-scroll][data-oh-story-workbench="video"][data-oh-story-layout="medium"]:has(> [data-slot="conversation.session"] > .oh-story-split-surface) { grid-template-columns: minmax(0, 1fr) clamp(360px, 42%, 440px); }
+[data-conversation-scroll][data-oh-story-workbench="video"][data-oh-story-layout="medium"]:has(> [data-slot="conversation.session"] > .oh-story-split-surface[data-open="true"]) { grid-template-columns: minmax(0, 1fr) clamp(360px, 42%, 440px); }
 [data-oh-story-workbench="video"][data-oh-story-layout="medium"] .oh-video-project select { width: 100%; }
 
-[data-conversation-scroll][data-oh-story-workbench="video"][data-oh-story-layout="compact"]:has(> [data-slot="conversation.session"] > .oh-story-split-surface) { display: grid; grid-template-columns: minmax(0, 1fr); overflow: hidden; }
+[data-conversation-scroll][data-oh-story-workbench="video"][data-oh-story-layout="compact"]:has(> [data-slot="conversation.session"] > .oh-story-split-surface[data-open="true"]) { display: grid; grid-template-columns: minmax(0, 1fr); overflow: hidden; }
 [data-conversation-scroll][data-oh-story-workbench="video"][data-oh-story-layout="compact"]
   > [data-slot="conversation.session"] > :not(.oh-story-split-surface),
 [data-conversation-scroll][data-oh-story-workbench="video"][data-oh-story-layout="compact"]
@@ -1060,7 +1109,7 @@
 [data-conversation-scroll][data-oh-story-workbench="video"][data-oh-story-layout="compact"][data-oh-studio-pane="chat"] .oh-video-studio { display: none; }
 [data-conversation-scroll][data-oh-story-workbench="video"][data-oh-story-layout="compact"] .oh-game-mobile-switcher { display: flex; position: absolute; top: 8px; right: 8px; z-index: 20; border-color: var(--dsw-alias-border-l1); box-shadow: 0 4px 14px rgb(0 0 0 / 12%); }
 [data-conversation-scroll][data-oh-story-workbench="video"][data-oh-story-layout="compact"] .oh-video-toolbar { min-height: 142px; grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: 44px 44px 38px; align-content: center; gap: 2px 6px; padding: 4px 8px; }
-[data-conversation-scroll][data-oh-story-workbench="video"][data-oh-story-layout="compact"] .oh-video-mode-tabs { grid-column: 1 / -1; grid-row: 1; width: fit-content; }
+[data-conversation-scroll][data-oh-story-workbench="video"][data-oh-story-layout="compact"] .oh-video-toolbar > .oh-workbench-cluster { grid-column: 1 / -1; grid-row: 1; width: fit-content; }
 [data-conversation-scroll][data-oh-story-workbench="video"][data-oh-story-layout="compact"] .oh-video-tabs { grid-column: 2; grid-row: 2; justify-self: end; }
 [data-conversation-scroll][data-oh-story-workbench="video"][data-oh-story-layout="compact"] .oh-video-project { grid-column: 1; grid-row: 2; }
 [data-conversation-scroll][data-oh-story-workbench="video"][data-oh-story-layout="compact"] .oh-video-project > span { display: none; }
