@@ -1,6 +1,6 @@
 import { mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   DRAMA_ADAPTER_CONFIG_ENV,
@@ -37,7 +37,9 @@ describe("bundled Drama media adapters", () => {
     temporary.push(root);
     const location = await ensureDramaAdapterConfig(dramaRoot, { python: "python", env: {}, temporaryRoot: root });
     expect(location).toEqual({ path: dramaAdapterConfigPath(dramaRoot, {}, root).path, generated: true, ok: true });
-    expect(location.path).toMatch(/\/oh-story-dsh(?:-\d+)?\/drama-adapters-[0-9a-f]{12}\.json$/u);
+    // Compare segments, not separators: Windows joins with backslashes and has no uid.
+    expect(basename(dirname(location.path))).toMatch(/^oh-story-dsh(?:-\d+)?$/u);
+    expect(basename(location.path)).toMatch(/^drama-adapters-[0-9a-f]{12}\.json$/u);
     expect(dramaAdapterConfigPath(join(root, "elsewhere"), {}, root).path).not.toBe(location.path);
     const written = JSON.parse(await readFile(location.path, "utf8")) as ReturnType<typeof dramaAdapterConfigDocument>;
     expect(written).toEqual(dramaAdapterConfigDocument(dramaRoot, "python"));
