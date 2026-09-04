@@ -21,14 +21,14 @@
 ## 安装
 
 ```bash
-npx -y @deepseek-ai/dsh@0.1.2-rc.1 plugin --profile web add @oh-story/dsh@0.1.6
+npx -y @deepseek-ai/dsh@0.1.2-rc.1 plugin --profile web add @oh-story/dsh@0.1.7
 npx -y @deepseek-ai/dsh@0.1.2-rc.1 web
 ```
 
 也可以直接安装 GitHub Release 中的预构建包：
 
 ```bash
-npx -y @deepseek-ai/dsh@0.1.2-rc.1 plugin --profile web add https://github.com/zenstory-ai/oh-story-dsh/releases/download/v0.1.6/oh-story-dsh-0.1.6.tgz
+npx -y @deepseek-ai/dsh@0.1.2-rc.1 plugin --profile web add https://github.com/zenstory-ai/oh-story-dsh/releases/download/v0.1.7/oh-story-dsh-0.1.7.tgz
 npx -y @deepseek-ai/dsh@0.1.2-rc.1 web
 ```
 
@@ -69,7 +69,7 @@ Drama Skills 0.6.0 不支持把 v0.5 结构化项目原地升级为 creator-firs
 插件装进哪个 profile，那个 profile 的每个 Session 就都会加载创作 Skills 与三栏工作台。想让原版 `web` 保持干净、只在创作时打开工作台，就装进独立 profile：
 
 ```bash
-npx -y @deepseek-ai/dsh@0.1.2-rc.1 plugin --profile story add @oh-story/dsh@0.1.6
+npx -y @deepseek-ai/dsh@0.1.2-rc.1 plugin --profile story add @oh-story/dsh@0.1.7
 ```
 
 新 profile 默认没有界面。编辑 `~/.dsh/profiles/story/package.json`，把 `dsh.profile.bundles` 改成 `["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-web-app", "@oh-story/dsh"]`，顺序照抄，这个包不用另外安装。
