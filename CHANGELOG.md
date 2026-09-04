@@ -11,6 +11,8 @@
 
 ## [Unreleased]
 
+## [0.1.7] - 2026-09-04
+
 ### Changed
 
 - 工作台不再接管每一次会话（[#29](https://github.com/zenstory-ai/oh-story-dsh/issues/29)）。DSH 是通用 Harness，而此前只要装上插件，任何 Session 都会被改成三栏（游戏/视频为两栏）布局，官方 Chat 被压到右侧且无法关闭，写代码或普通对话时同样如此。现在只有当前 workspace 真的存在小说、短剧、游戏或视频项目时才接管布局；随包的《金瓶梅》示例不算作 workspace 创作项目。没有创作项目时插件在界面上完全不出现，会话由 DSH 原样渲染，`Ctrl/Cmd+S` 与 Chat 里的文件名点击也不再被工作台接管。Agent 写出第一个创作文件（例如 `/story-setup`）后，工作台会在同一次会话里自动出现。
@@ -171,7 +173,8 @@
 - 提供 13 个 Oh Story 小说 Skills、7 个专业 Roles 与 10 个 Drama Skills。
 - 提供文件树、Markdown/JSONL 编辑预览与官方 DSH Chat 同屏的三栏工作台。
 
-[Unreleased]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.6...HEAD
+[Unreleased]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.7...HEAD
+[0.1.7]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.6...v0.1.7
 [0.1.6]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.3...v0.1.4
