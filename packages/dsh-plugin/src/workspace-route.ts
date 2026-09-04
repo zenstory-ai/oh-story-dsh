@@ -3,8 +3,6 @@ import { createReadStream } from "node:fs";
 import { readFile as readNodeFile, realpath as nodeRealpath, stat as nodeStat } from "node:fs/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { extname, isAbsolute, relative, resolve } from "node:path";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import type { Context } from "@deepseek-ai/cordis";
 import type { Agent } from "@deepseek-ai/dsh-agent";
 import { FsError, type FileSystem, type FsInfo, type FsTarget, type FsVersion } from "@deepseek-ai/dsh-fs";
@@ -13,7 +11,9 @@ import type { SandboxPolicyService } from "@deepseek-ai/dsh-sandbox-policy";
 import { SessionId } from "@deepseek-ai/dsh-session";
 import type {} from "@deepseek-ai/dsh-typert-registry";
 import { type GameVerificationBinding, WorkspaceVerificationTracker } from "./game-verification.js";
-import { defaultNovelToGameSkillRoot } from "./skill-provider.js";
+import { dramaAdapterStatuses, ensureDramaAdapterConfig, type DramaAdapterStatus } from "./drama-adapters.js";
+import { commandOutput, hostPython } from "./host-python.js";
+import { defaultDramaSkillRoot, defaultNovelToGameSkillRoot } from "./skill-provider.js";
 import { skipVideoDirectory, summarizeVideoProject, VIDEO_DIRECTORY, videoProjectRoot, visibleVideoPath, type VideoProjectSummary } from "./video-project.js";
 import { isTrustedPreviewNavigation, isTrustedWorkspaceRequest } from "./workspace-request-trust.js";
 
@@ -37,8 +37,8 @@ const FILE_LIMIT = 1_000;
 const PREVIEW_FILE_LIMIT = 32 * 1024 * 1024;
 const BUNDLED_GAME_EXAMPLE = "jin-ping-mei";
 const workspaceVerificationTracker = new WorkspaceVerificationTracker();
-const execFileAsync = promisify(execFile);
 let videoPreflightCache: { readonly expires: number; readonly value: VideoPreflightSummary } | undefined;
+let dramaPreflightCache: { readonly expires: number; readonly value: DramaPreflightSummary } | undefined;
 
 interface WorkspaceRouteOptions {
   readonly maxBytes: number;
@@ -99,32 +99,42 @@ class WorkspaceHttpError extends Error {
   constructor(readonly status: number, message: string) { super(message); }
 }
 
-async function commandOutput(command: string, args: readonly string[]): Promise<string | undefined> {
-  try {
-    const { stdout, stderr } = await execFileAsync(command, [...args], { encoding: "utf8", timeout: 5_000, maxBuffer: 4 * 1_024 * 1_024 });
-    return `${stdout}${stderr}`.trim();
-  } catch { return undefined; }
-}
-
-function pythonVersion(value: string | undefined): { readonly ok: boolean; readonly version?: string | undefined } {
-  const match = /Python\s+(\d+)\.(\d+)(?:\.(\d+))?/u.exec(value ?? "");
-  if (match === null) return { ok: false };
-  const major = Number(match[1]);
-  const minor = Number(match[2]);
-  return { ok: major > 3 || (major === 3 && minor >= 10), version: match[0].replace(/^Python\s+/u, "") };
-}
-
 function configured(...names: readonly string[]): boolean {
   return names.some((name) => (process.env[name] ?? "") !== "");
 }
 
+/**
+ * Host-process view of short-drama production: which bundled media adapters
+ * have their environment set, and where the adapter config the Agent passes to
+ * `production_tool.py run` lives. Values never leave the process.
+ */
+interface DramaPreflightSummary {
+  readonly python: { readonly ok: boolean; readonly version?: string | undefined };
+  readonly adapterConfig: { readonly path: string; readonly generated: boolean; readonly ok: boolean };
+  readonly adapters: readonly DramaAdapterStatus[];
+}
+
+let dramaPreflightInFlight: Promise<DramaPreflightSummary> | undefined;
+
+async function dramaPreflight(): Promise<DramaPreflightSummary> {
+  if (dramaPreflightCache !== undefined && dramaPreflightCache.expires > Date.now()) return dramaPreflightCache.value;
+  // One probe per cache miss: concurrent requests share the write instead of
+  // racing it, and the write itself is atomic (temp file + rename).
+  dramaPreflightInFlight ??= (async () => {
+    try {
+      const python = await hostPython();
+      const adapterConfig = await ensureDramaAdapterConfig(defaultDramaSkillRoot(), { python: python.command });
+      const value = { python: python.probe, adapterConfig, adapters: dramaAdapterStatuses() };
+      dramaPreflightCache = { expires: Date.now() + 30_000, value };
+      return value;
+    } finally { dramaPreflightInFlight = undefined; }
+  })();
+  return dramaPreflightInFlight;
+}
+
 async function videoPreflight(): Promise<VideoPreflightSummary> {
   if (videoPreflightCache !== undefined && videoPreflightCache.expires > Date.now()) return videoPreflightCache.value;
-  let python: VideoPreflightSummary["python"] = { ok: false };
-  for (const command of ["python3", "python"]) {
-    const parsed = pythonVersion(await commandOutput(command, ["--version"]));
-    if (parsed.version !== undefined) { python = parsed; break; }
-  }
+  const python = (await hostPython()).probe;
   const [ffmpegOutput, ffmpegFilters, ffprobeOutput] = await Promise.all([
     commandOutput("ffmpeg", ["-version"]),
     commandOutput("ffmpeg", ["-hide_banner", "-filters"]),
@@ -742,6 +752,10 @@ async function handle(context: Context, request: IncomingMessage, response: Serv
     }
     if (url.pathname === "/oh-story/video-preflight" && request.method === "GET") {
       send(response, 200, await videoPreflight());
+      return;
+    }
+    if (url.pathname === "/oh-story/drama-preflight" && request.method === "GET") {
+      send(response, 200, await dramaPreflight());
       return;
     }
     if (url.pathname === "/oh-story/file" && request.method === "GET") {

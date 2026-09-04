@@ -60,6 +60,8 @@ npx -y @deepseek-ai/dsh@0.1.2-rc.1 web
 
 宿主机需要 Python 3.10+、`PATH` 上的 ffmpeg/ffprobe（默认烧录字幕，因此 ffmpeg 需带 libass 的 `subtitles` 滤镜），以及 `MIMO_API_KEY`；Fish Audio TTS 另需 `FISH_API_KEY`。安装按上游说明即可（macOS `brew install ffmpeg`、Debian/Ubuntu `sudo apt install ffmpeg`）。工作台的「运行环境」检查只报告 DSH Host 进程是否就绪，不返回 Key 内容，密钥也不会写入项目；Agent 实际的执行世界以 `video-recap --doctor` 为准。
 
+短剧生产的图片、视频与音乐不由 DeepSeek 生成，而是由 `short-drama-produce` 调用 GPT Image 2（`OPENAI_API_KEY`）、Seedance（`ARK_API_KEY` + `SEEDANCE_MODEL`）、MiniMax H3（`MINIMAX_API_KEY` + `MINIMAX_VIDEO_MODEL` + `MINIMAX_VIDEO_RESOLUTIONS`）或 MiniMax Music（`MINIMAX_API_KEY`）生成；Key 在启动 DSH 前写入环境变量，「生产」视图会显示每个供应商是否就绪，插件从不读取 Key 的值。内置 adapter 会自动登记到一份不含凭据的配置文件，自定义时用 `OH_STORY_DRAMA_ADAPTER_CONFIG` 指向自己的文件。
+
 Drama Skills 0.6.0 不支持把 v0.5 结构化项目原地升级为 creator-first 项目。旧项目应继续锁定 v0.5 并只读保留；迁移时请新建项目根，逐集人工确认当前工作实际需要的 `剧本.md`、`视觉设定.md`、`分镜.md`、`图片提示词.md` 或 `视频提示词.md`，不要预建空文档。
 
 ## 按需加载
