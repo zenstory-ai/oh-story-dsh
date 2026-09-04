@@ -1,5 +1,6 @@
 import { readdir, readFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { dramaAdapterConfigPath, dramaAdapterSummary, DRAMA_ADAPTER_CONFIG_ENV } from "./drama-adapters.js";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import {
   BUNDLED_SKILL_RANK,
@@ -48,9 +49,9 @@ const DSH_DRAMA_BRIDGE = [
   "Production credentials remain outside project files. Never treat a prior acceptance, preview, continuation request, or budget discussion as confirmation for a paid production run.",
   "</short-drama-dsh-integration>"
 ].join("\n");
-const DSH_DRAMA_OVERRIDES: Readonly<Partial<Record<string, string>>> = {
+const DSH_DRAMA_OVERRIDES: Readonly<Partial<Record<string, string | ((skillRoot: string) => string)>>> = {
   "short-drama": "A dashboard request means focus or use the native 短剧 tab in this DSH Session. Do not run the bundled standalone Dashboard script. New projects follow only the v0.6 creator-first contract and create only documents required by the current request.",
-  "short-drama-produce": "Use an upstream adapter only after the creator explicitly confirms the exact current job. Its source must be the current creator-first Markdown and its output belongs under 剧集/<EP>/制作成果/. DSH permissions and approval UI remain authoritative. When oh_story_production is visible, register the previewed job with track_job after the confirmation is valid and before run — never at prepare time — passing the same job ID, target, modality and count the creator just approved.",
+  "short-drama-produce": (skillRoot) => `Use an upstream adapter only after the creator explicitly confirms the exact current job. Its source must be the current creator-first Markdown and its output belongs under 剧集/<EP>/制作成果/. DSH permissions and approval UI remain authoritative. When oh_story_production is visible, register the previewed job with track_job after the confirmation is valid and before run — never at prepare time — passing the same job ID, target, modality and count the creator just approved. DeepSeek generates no media: every image, video, or music result comes from a provider adapter. The bundled adapters are ${dramaAdapterSummary()}; they are registered for this DSH host in ${dramaAdapterConfigPath(skillRoot).path} — pass that file as --adapter-config unless the creator names another config (${DRAMA_ADAPTER_CONFIG_ENV}). Credentials are read only from the DSH host process environment. Before preparing a paid job, name the adapter that will run it; if its variables are missing, tell the creator exactly which ones to export before starting DSH instead of failing inside run. Never read, print, or write credential values.`,
   "short-drama-assets": "Keep one stable `- ID：VISUAL-*` line on every 人物/造型/地点/道具/状态 entry in 视觉设定.md, and never change an existing ID when editing its heading or text. The 生产 view identifies canvas nodes by that ID; entries without one still render, but the workbench reports their node identity as unstable."
 };
 const DSH_GAME_BRIDGE = [
@@ -279,13 +280,16 @@ export function createOhStorySkillProvider(skillRoot = defaultBundledSkillRoot()
   return createBundledSkillProvider(STORY_PROVIDER_NAME, skillRoot, dshSkillContent);
 }
 
-export function dshDramaSkillContent(name: string, content: string): string {
-  const override = DSH_DRAMA_OVERRIDES[name];
+export function dshDramaSkillContent(name: string, content: string, skillRoot = defaultDramaSkillRoot()): string {
+  const entry = DSH_DRAMA_OVERRIDES[name];
+  // Resolved per read, not at import: the config path follows the environment
+  // the host actually runs with, and matches what /oh-story/drama-preflight reports.
+  const override = typeof entry === "function" ? entry(skillRoot) : entry;
   return `${DSH_DRAMA_BRIDGE}${override === undefined ? "" : `\n<skill-specific-dsh-override>${override}</skill-specific-dsh-override>`}\n\n${content}`;
 }
 
 export function createDramaSkillProvider(skillRoot = defaultDramaSkillRoot()): SkillProvider {
-  return createBundledSkillProvider(DRAMA_PROVIDER_NAME, skillRoot, dshDramaSkillContent);
+  return createBundledSkillProvider(DRAMA_PROVIDER_NAME, skillRoot, (name, content) => dshDramaSkillContent(name, content, skillRoot));
 }
 
 export function dshNovelToGameSkillContent(_name: string, content: string): string {

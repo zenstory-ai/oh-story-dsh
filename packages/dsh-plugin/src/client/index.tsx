@@ -1477,6 +1477,7 @@ function CreativeWorkbench({
           }}>放弃本地草稿</button></div>
         : editorMode === "production" && productionAvailable && episodeProduction !== undefined
           ? <DramaProductionView
+              sessionId={sessionId}
               production={episodeProduction}
               sessionRunning={sessionRunning}
               queue={productionQueue}

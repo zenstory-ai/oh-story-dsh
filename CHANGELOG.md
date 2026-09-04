@@ -18,6 +18,8 @@
 
 ### Added
 
+- 短剧「生产」视图顶部新增「生成环境」条，说明 DeepSeek 只写提示词、图片/视频/音乐由供应商 API 生成，并逐个显示 GPT Image 2、Seedance、MiniMax H3、MiniMax Music 是否已在宿主机环境里配置、缺哪个变量；只报告变量是否存在，从不读取或展示 Key 的值。此前这些 API 有哪些、Key 配在哪里既没写进文档也没出现在界面上，生产任务会在 adapter 之前莫名停下。
+- 插件启动时把四个内置 adapter 登记到一份不含凭据的 adapter 配置（默认在系统临时目录下仅当前用户可读写的 `oh-story-dsh-<uid>/` 里，按插件安装位置区分，原子写入，「生成环境」条会显示完整路径），并把该路径与每个 adapter 的必需环境变量写进 `short-drama-produce` 的 DSH 覆盖层：Agent 运行 `production_tool.py run` 时直接引用它，缺变量时先告诉创作者要导出什么，而不是在 run 里失败。自定义 adapter 时用 `OH_STORY_DRAMA_ADAPTER_CONFIG` 指向自己的文件。README 新增「配置媒体生成 API」一节。
 - 工作台可随时收起。四个工作台的标题栏都有「收起创作工作台」；收起后会话立即回到 DSH 原生布局，只在会话区角落留一个「创作工作台」按钮用于恢复。DSH 的 Session Store 不持久化，因此该选择按 workspace 记在浏览器本地存储里：同一 workspace 的新会话和重启后的会话都保持上次的选择，显式选择始终优先于自动判断。
 
 ## [0.1.6] - 2026-09-02

@@ -87,7 +87,28 @@ npx -y @deepseek-ai/dsh@0.1.2-rc.1 web
 
 首次使用需要在 DSH 的「设置 → 模型」中添加 Provider 并填入 API Key；也可以在启动前设置环境变量 `DEEPSEEK_API_KEY`。模型、凭据与权限均由 DSH 管理，本插件不接触。
 
-**3. 开始创作**
+**3. 配置媒体生成 API（短剧生产需要）**
+
+DeepSeek 只负责写剧本、分镜和提示词，本身不会生图、生视频或生音乐。短剧的「生产」把这些提示词交给 `short-drama-produce` Skill，由它调用下面的供应商 API 生成媒体。Key 不在界面里填，而是在启动 DSH 之前写入宿主机环境变量：
+
+| 能力 | 供应商 | 必需环境变量 | 可选 |
+| --- | --- | --- | --- |
+| 图片 | GPT Image 2 | `OPENAI_API_KEY` | `OPENAI_BASE_URL` |
+| 视频 | Seedance（火山方舟） | `ARK_API_KEY`、`SEEDANCE_MODEL` | `SEEDANCE_BASE_URL`、`SEEDANCE_ALLOWED_RATIOS`、`SEEDANCE_MIN_DURATION`/`SEEDANCE_MAX_DURATION` |
+| 视频 | MiniMax H3 | `MINIMAX_API_KEY`、`MINIMAX_VIDEO_MODEL`、`MINIMAX_VIDEO_RESOLUTIONS` | `MINIMAX_VIDEO_BASE_URL`、`MINIMAX_VIDEO_RATIOS`、`MINIMAX_VIDEO_MIN_DURATION`/`MINIMAX_VIDEO_MAX_DURATION` |
+| 音乐 | MiniMax Music | `MINIMAX_API_KEY` | `MINIMAX_BASE_URL` |
+
+```bash
+export OPENAI_API_KEY=...            # 图片
+export ARK_API_KEY=... SEEDANCE_MODEL=...   # 视频，模型/Endpoint ID 以账号开通的为准
+npx -y @deepseek-ai/dsh@0.1.2-rc.1 web
+```
+
+只配置用得到的那几个即可：没有视频 Key 仍然可以写分镜、生成关键帧图片。短剧工作台的「生产」视图顶部会显示每个供应商是否已配置、缺哪个变量；插件只报告变量是否存在，从不读取或展示 Key 的值。插件启动时会把这四个内置 adapter 登记到一份不含凭据的配置文件（默认在系统临时目录下仅当前用户可读写的 `oh-story-dsh-<uid>/` 里，「生成环境」条会显示完整路径），Agent 运行 `production_tool.py run` 时直接引用它；自己写 adapter 或改超时，就把文件路径写进 `OH_STORY_DRAMA_ADAPTER_CONFIG`。每个供应商的参数、分辨率与时长约束见随包的 `short-drama-produce/references/providers/`。
+
+视频解说工作台另用 `MIMO_API_KEY`（Fish Audio TTS 另需 `FISH_API_KEY`），小说封面则使用当前 Preset 里可见的图片生成工具。
+
+**4. 开始创作**
 
 添加作品目录为 workspace，新建或打开 Session 后使用 `/story`、`/short-drama`、`/novel-to-game quick` 或 `/video-recap`。四个工作台可随时通过顶部 Tab 切换。
 

@@ -98,6 +98,14 @@ second source of creative truth.
 - The video runtime check reports only whether Python, ffmpeg/libass, ffprobe
   and keys are ready inside the DSH Host process. Provider credentials are
   never sent to the browser; `video-recap --doctor` remains authoritative.
+- Short-drama media comes from provider adapters, never from the DeepSeek model.
+  The plugin registers the four bundled adapters (GPT Image 2, Seedance,
+  MiniMax H3, MiniMax Music) in a credential-free adapter config outside every
+  project, names that file and each adapter's required variables to the
+  `short-drama-produce` Skill, and the 生产 view reports per adapter whether
+  the Host environment has them. Presence only is reported; values never
+  reach the Skill text, the browser, or a project file. A creator-owned config
+  named by `OH_STORY_DRAMA_ADAPTER_CONFIG` is used untouched.
 
 ## Release boundary
 

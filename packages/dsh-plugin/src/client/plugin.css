@@ -644,6 +644,16 @@
 .oh-story-production-summary { color: var(--os-muted); white-space: nowrap; }
 .oh-story-production-notice { justify-content: space-between; margin: 8px 12px 0; padding: 7px 9px; border: 1px solid var(--os-border); border-radius: 7px; color: var(--dsw-alias-label-secondary); background: var(--dsw-alias-bg-layer-1); }
 .oh-story-production-notice button { border: 0; background: transparent; }
+.oh-story-production-environment { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: 5px 10px; margin: 8px 12px 0; padding: 7px 9px; border: 1px solid var(--os-border); border-radius: 7px; color: var(--os-muted); background: var(--dsw-alias-bg-layer-1); font-size: 10px; }
+/* Environment names such as MINIMAX_VIDEO_RESOLUTIONS and the temp-dir path are longer than the 500 px editor column; let them break rather than widen the view. */
+.oh-story-production-environment > * { min-width: 0; max-width: 100%; overflow-wrap: anywhere; }
+.oh-story-production-environment strong { color: var(--dsw-alias-label-secondary); font-size: 11px; }
+.oh-story-production-environment span::before { content: "●"; margin-right: 4px; color: var(--video-danger, #d9534f); }
+.oh-story-production-environment span[data-ready]::before { color: var(--dsw-alias-state-success-primary, #45b96f); }
+.oh-story-production-environment span[data-pending]::before { color: var(--os-muted); }
+.oh-story-production-environment em { flex-basis: 100%; font-style: normal; line-height: 1.5; }
+.oh-story-production-environment code { font-size: 10px; overflow-wrap: anywhere; }
+.oh-story-production-environment button { min-height: 24px; border: 1px solid var(--os-border); border-radius: 6px; padding: 0 8px; color: inherit; background: var(--dsw-alias-bg-base); cursor: pointer; font: inherit; }
 .oh-story-production-diagnostics { margin: 8px 12px 0; padding: 7px 9px; border: 1px solid var(--dsw-alias-state-warn-label); border-radius: 7px; background: var(--dsw-specific-tip); }
 .oh-story-production-diagnostics summary { color: var(--dsw-alias-state-warn-label); cursor: pointer; }
 .oh-story-production-diagnostics ul { display: grid; gap: 4px; margin: 8px 0 0; padding: 0; list-style: none; }
