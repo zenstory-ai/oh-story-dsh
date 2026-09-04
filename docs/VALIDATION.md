@@ -1,6 +1,6 @@
 # Validation
 
-Target: DeepSeek Harness `0.1.2-alpha.3` · validated 2026-09-01.
+Target: DeepSeek Harness `0.1.2-rc.1` · validated 2026-09-04.
 
 ## Test architecture
 

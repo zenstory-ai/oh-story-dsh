@@ -14,6 +14,7 @@
 ### Changed
 
 - 工作台不再接管每一次会话（[#29](https://github.com/zenstory-ai/oh-story-dsh/issues/29)）。DSH 是通用 Harness，而此前只要装上插件，任何 Session 都会被改成三栏（游戏/视频为两栏）布局，官方 Chat 被压到右侧且无法关闭，写代码或普通对话时同样如此。现在只有当前 workspace 真的存在小说、短剧、游戏或视频项目时才接管布局；随包的《金瓶梅》示例不算作 workspace 创作项目。没有创作项目时插件在界面上完全不出现，会话由 DSH 原样渲染，`Ctrl/Cmd+S` 与 Chat 里的文件名点击也不再被工作台接管。Agent 写出第一个创作文件（例如 `/story-setup`）后，工作台会在同一次会话里自动出现。
+- 固定的 DeepSeek Harness 从 `0.1.2-alpha.3` 升到 `0.1.2-rc.1`（上游 `a66e470204`，npm `next`）。插件源码不需要改动：上游这四个版本把 Session 序号改成品牌类型（`SessionSeq` / `SessionLogOffset`），fork 元数据 `seedLength` 改为 `isSeeded` 加 `inheritedEventCount`，Chat 改为按节点键订阅（`useChatNode` / `useChatNodeProcess`），Composer 的 `overlay` / `leftItems` / `rightItems` / `footer` 改由 InputBar 自己渲染 Slot，Chat 滚动几何改为每 500 ms 采样一次并以 `scrollend` 收尾；工作台依赖的 `conversation.session` Slot、`data-conversation-scroll` / `data-composer-seat` / `data-chat-flow` 锚点与 `useChat` 快照里的 `timeline` / `legacy.runningCalls` 都保持不变。`pnpm verify` 与 `pnpm test:dsh` 在 rc.1 上全部通过；README、npm 包 README、发布文档、两条原生测试脚本以及 `pnpm-workspace.yaml` 的 `overrides` / `minimumReleaseAgeExclude` 的 `@deepseek-ai/dsh` 版本同步更新——后者才决定真正装进来的版本，只改 `package.json` 时 typecheck 与单测仍在旧版本上跑。
 
 ### Added
 
