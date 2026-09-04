@@ -25,6 +25,8 @@ export interface DramaShot {
   readonly path: string;
   readonly offset: number;
   readonly source?: string | undefined;
+  /** Screenplay scene IDs named by 来源, in document order; empty when the field names none. */
+  readonly sceneIds: readonly string[];
   readonly durationSeconds?: number | undefined;
   readonly purpose?: string | undefined;
   readonly shotSpec?: string | undefined;
@@ -124,11 +126,12 @@ export function parseEpisodeProduction(documents: Readonly<Record<string, string
   for (const item of [...linkedShots, ...assets, ...motions, ...visualAssets]) {
     targets.set(item.id, { path: item.path, offset: item.offset, id: item.id });
   }
+  const screenplayPath = `${episodeDirectory}/剧本.md`;
   for (const shot of linkedShots) {
-    if (shot.source !== undefined) {
-      const screenplayPath = `${episodeDirectory}/剧本.md`;
-      const target = sectionTarget(screenplayPath, documents[screenplayPath] ?? "", shot.source);
-      if (target !== undefined) targets.set(shot.source, target);
+    for (const id of sourceKeys(shot)) {
+      const target = sectionTarget(screenplayPath, documents[screenplayPath] ?? "", id);
+      if (target === undefined) continue;
+      targets.set(id, target);
     }
   }
   const diagnostics = validateProductionProtocol({
@@ -158,12 +161,14 @@ export function parseStoryboard(path: string, content: string): DramaShot[] {
     if (match === null || match[1] === undefined) return [];
     const fields = bulletFields(section.body);
     const id = match[1].toLocaleUpperCase();
+    const source = firstField(fields, "来源", "场次");
     return [{
       id,
       title: match[2]?.trim() || id,
       path,
       offset: section.offset,
-      source: firstField(fields, "来源", "场次"),
+      source,
+      sceneIds: sourceSceneIds(source),
       durationSeconds: seconds(firstField(fields, "时长")),
       purpose: firstField(fields, "目的", "镜头目的"),
       shotSpec: firstField(fields, "景别/机位", "景别", "镜头规格"),
@@ -262,8 +267,10 @@ function validateProductionProtocol(input: {
     for (const reference of shot.references) {
       if (!knownReferences.has(reference)) add({ severity: "warning", code: "unknown_reference", path: shot.path, offset: shot.offset, targetId: shot.id, message: `${shot.id} 引用了未解析的 ${reference}。` });
     }
-    if (shot.source !== undefined && sectionTarget(screenplayPath, input.documents[screenplayPath] ?? "", shot.source) === undefined) {
-      add({ severity: "warning", code: "unknown_source", path: shot.path, offset: shot.offset, targetId: shot.id, message: `${shot.id} 的来源 ${shot.source} 在剧本中不存在。` });
+    for (const id of sourceKeys(shot)) {
+      if (sectionTarget(screenplayPath, input.documents[screenplayPath] ?? "", id) === undefined) {
+        add({ severity: "warning", code: "unknown_source", path: shot.path, offset: shot.offset, targetId: shot.id, message: `${shot.id} 的来源 ${id} 在剧本中不存在。` });
+      }
     }
   }
 
@@ -375,6 +382,22 @@ function slug(value: string): string {
 
 function lineAt(content: string, offset: number): number {
   return content.slice(0, Math.max(0, offset)).split(/\r?\n/u).length;
+}
+
+// Drama Skills 0.6.5 (#100): 来源 starts with a screenplay scene ID and may
+// continue with a short quote or further IDs joined by 、. The ID shape is the
+// one creator_markdown_check.py uses; the checker additionally requires the
+// field to *start* with an ID, which the workbench leaves to it — here an ID
+// anywhere in the field still navigates.
+export function sourceSceneIds(source: string | undefined): string[] {
+  if (source === undefined) return [];
+  return [...new Set([...source.matchAll(/(?:[A-Za-z0-9]+-)+SC[0-9]+/gu)].map((match) => match[0]))];
+}
+
+/** Scene IDs to resolve; a 来源 naming no ID falls back to matching the whole field. */
+function sourceKeys(shot: DramaShot): readonly string[] {
+  if (shot.sceneIds.length > 0) return shot.sceneIds;
+  return shot.source === undefined ? [] : [shot.source];
 }
 
 function sectionTarget(path: string, content: string, id: string): DramaDocumentTarget | undefined {

@@ -168,3 +168,39 @@ describe("storyboard contract regressions", () => {
     expect(production.diagnostics.map((item) => item.code)).not.toContain("generated_visual_id");
   });
 });
+
+describe("storyboard scene sources (Drama Skills 0.6.5, #100)", () => {
+  const screenplay = "## EP001-SC001 内 · 门外 · 夜\n\n## EP001-SC002 内 · 走廊 · 夜";
+
+  it("resolves every scene ID named by 来源, including quotes and 、-joined lists", () => {
+    const production = parseEpisodeProduction({
+      [`${episode}/剧本.md`]: screenplay,
+      [`${episode}/分镜.md`]: "## SHOT-EP001-001 · A\n- 来源：EP001-SC001 「你先进去」、EP001-SC002\n"
+    }, episode);
+    expect(production.shots[0]?.sceneIds).toEqual(["EP001-SC001", "EP001-SC002"]);
+    expect(production.targets.get("EP001-SC002")?.path).toBe(`${episode}/剧本.md`);
+    expect(production.targets.get("EP001-SC001")?.id).toBe("EP001-SC001");
+    expect(production.diagnostics.filter((item) => item.code === "unknown_source")).toEqual([]);
+  });
+
+  it("names the one scene ID the screenplay lacks instead of rejecting the whole field", () => {
+    const production = parseEpisodeProduction({
+      [`${episode}/剧本.md`]: screenplay,
+      [`${episode}/分镜.md`]: "## SHOT-EP001-002 · B\n- 来源：EP001-SC002、EP001-SC404\n"
+    }, episode);
+    expect(production.diagnostics.filter((item) => item.code === "unknown_source").map((item) => item.message))
+      .toEqual(["SHOT-EP001-002 的来源 EP001-SC404 在剧本中不存在。"]);
+    expect(production.targets.has("EP001-SC002")).toBe(true);
+  });
+
+  it("keeps matching a 来源 that names no scene ID against the whole heading", () => {
+    const production = parseEpisodeProduction({
+      [`${episode}/剧本.md`]: "## 序幕 · 夜",
+      [`${episode}/分镜.md`]: "## SHOT-EP001-001 · A\n- 来源：序幕\n\n## SHOT-EP001-002 · B\n- 来源：尾声\n"
+    }, episode);
+    expect(production.shots.map((shot) => shot.sceneIds)).toEqual([[], []]);
+    expect(production.targets.get("序幕")?.path).toBe(`${episode}/剧本.md`);
+    expect(production.diagnostics.filter((item) => item.code === "unknown_source").map((item) => item.message))
+      .toEqual(["SHOT-EP001-002 的来源 尾声 在剧本中不存在。"]);
+  });
+});
