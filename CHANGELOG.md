@@ -11,6 +11,12 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- 首次首页尚无会话时显示「Oh Story 已加载」与添加作品目录、生成首个创作文件的使用引导，避免安装成功却看不到工作台入口；进入会话后自动收起。
+- README 安装命令显式提供 pnpm，修复仅安装 Node.js 时 `plugin add` 报 `pnpm not found on PATH`；补充带 token 的浏览器入口、工作区与会话步骤及无界面排查说明。
+- 原生集成测试增加没有 workspace / Session 的首次启动检查，覆盖引导的窄屏布局及进入会话后的移除。
+
 ## [0.1.7] - 2026-09-04
 
 ### Changed

@@ -543,6 +543,7 @@ async function main(): Promise<void> {
   const logs: string[] = [];
   let child: ChildProcess | undefined;
   let mockDeepSeek: MockDeepSeek | undefined;
+  let firstRunBrowser: Awaited<ReturnType<typeof chromium.launch>> | undefined;
   try {
     await Promise.all([
       cp(storyFixture, storyRoot, { recursive: true }),
@@ -668,6 +669,26 @@ async function main(): Promise<void> {
     child.stderr?.on("data", (chunk: Buffer) => logs.push(chunk.toString("utf8")));
     const dshTokenUrl = await authorizeDsh(origin, logs);
 
+    // A real first launch has no workspace or Session. Previously all browser
+    // coverage started after fixture Sessions existed and missed this surface.
+    firstRunBrowser = await chromium.launch({ channel: browserChannel, headless: true });
+    const firstRunPage = await firstRunBrowser.newPage({ viewport: { width: 1_440, height: 900 } });
+    const firstRunErrors: string[] = [];
+    firstRunPage.on("pageerror", (error) => firstRunErrors.push(error.message));
+    await firstRunPage.goto(dshTokenUrl, { waitUntil: "networkidle" });
+    for (const name of [/^(?:Continue|继续)$/u, /^(?:Configure later|稍后配置)$/u]) {
+      const button = firstRunPage.getByRole("button", { name });
+      if (await button.isVisible()) await button.click();
+    }
+    const welcome = firstRunPage.getByRole("region", { name: "Oh Story 使用引导" });
+    await welcome.waitFor({ state: "visible", timeout: 20_000 });
+    if (!(await welcome.innerText()).includes("Oh Story 已加载")) throw new Error("First launch did not explain how to open the workbench.");
+    await firstRunPage.setViewportSize({ width: 500, height: 900 });
+    const bounds = await welcome.boundingBox();
+    if (bounds === null || bounds.width <= 0 || bounds.x < 0 || bounds.x + bounds.width > 500) {
+      throw new Error("First-launch guide overflowed the compact viewport.");
+    }
+
     const storyWorkspace = await rpc<{ readonly workspace: { readonly workspaceId: string; readonly title: string } }>(origin, "workspace/create", { request: { path: storyRoot } });
     const dramaWorkspace = await rpc<{ readonly workspace: { readonly workspaceId: string; readonly title: string } }>(origin, "workspace/create", { request: { path: dramaRoot } });
     const plainWorkspace = await rpc<{ readonly workspace: { readonly workspaceId: string; readonly title: string } }>(origin, "workspace/create", { request: { path: plainRoot } });
@@ -706,6 +727,16 @@ async function main(): Promise<void> {
     if (videoSession !== undefined) await prepareSession(origin, videoSession.sessionId, videoPrompt, videoSessionTitle);
     await prepareSession(origin, dramaSession.sessionId, dramaPrompt, dramaSessionTitle);
     await prepareSession(origin, plainSession.sessionId, plainPrompt, plainSessionTitle);
+
+    // Reuse the fixture Session to test the transition without reloading or
+    // leaving extra workspaces and Sessions in the rest of the smoke run.
+    await firstRunPage.setViewportSize({ width: 1_440, height: 900 });
+    await selectSession(firstRunPage, storyWorkspace.workspace.title, storySessionTitle);
+    await firstRunPage.getByRole("tablist", { name: "创作工作台" }).waitFor({ state: "visible", timeout: 20_000 });
+    await welcome.waitFor({ state: "detached", timeout: 10_000 });
+    if (firstRunErrors.length > 0) throw new Error(`First-launch browser errors: ${JSON.stringify(firstRunErrors)}`);
+    await firstRunBrowser.close();
+    firstRunBrowser = undefined;
 
     if (!useRealDeepSeek) {
       const previousEvents = await sessionEvents(origin, storySession.sessionId);
@@ -1015,6 +1046,9 @@ async function main(): Promise<void> {
       await page.getByRole("navigation", { name: "小说项目文件" }).waitFor({ state: "visible", timeout: 20_000 });
       if (await page.locator(".oh-story-split-surface").count() !== 1) {
         throw new Error("Blank DSH Session did not mount the three-column workbench.");
+      }
+      if (await page.getByRole("region", { name: "Oh Story 使用引导" }).count() !== 0) {
+        throw new Error("First-launch guide remained after entering a Session.");
       }
 
       // DSH is used for far more than creation, so an installed plugin may not
@@ -2157,6 +2191,7 @@ async function main(): Promise<void> {
     const redact = (value: string): string => apiKey === undefined ? value : value.replaceAll(apiKey, "[REDACTED]");
     throw new Error(`${redact(String(error))}\nMock requests: ${JSON.stringify(mockDeepSeek?.requests ?? [])}\nDSH logs:\n${redact(logs.join("").slice(-16_000))}`, { cause: error });
   } finally {
+    if (firstRunBrowser !== undefined) await firstRunBrowser.close();
     if (child !== undefined) await stop(child);
     if (mockDeepSeek !== undefined) await closeServer(mockDeepSeek.server);
     await rm(temporaryRoot, { recursive: true, force: true });

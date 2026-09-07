@@ -20,21 +20,27 @@
 
 ## 安装
 
+安装命令会临时提供 pnpm；只安装 Node.js 的机器也能执行。DSH 的 `plugin add` 内部需要 pnpm，单独运行 `npx @deepseek-ai/dsh ... plugin add` 不会自动补上它。
+
 ```bash
-npx -y @deepseek-ai/dsh@0.1.2-rc.1 plugin --profile web add @oh-story/dsh@0.1.7
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.1.2-rc.1 dsh plugin --profile web add @oh-story/dsh@0.1.7 &&
 npx -y @deepseek-ai/dsh@0.1.2-rc.1 web
 ```
 
 也可以直接安装 GitHub Release 中的预构建包：
 
 ```bash
-npx -y @deepseek-ai/dsh@0.1.2-rc.1 plugin --profile web add https://github.com/zenstory-ai/oh-story-dsh/releases/download/v0.1.7/oh-story-dsh-0.1.7.tgz
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.1.2-rc.1 dsh plugin --profile web add https://github.com/zenstory-ai/oh-story-dsh/releases/download/v0.1.7/oh-story-dsh-0.1.7.tgz &&
 npx -y @deepseek-ai/dsh@0.1.2-rc.1 web
 ```
 
-需要 Node.js 24+。首次使用需要在 DSH 的「设置 → 模型」中添加 Provider 并填入 API Key，或在启动前设置环境变量 `DEEPSEEK_API_KEY`。
+保持终端运行。若浏览器未自动打开，访问终端打印的完整 `http://127.0.0.1:3080/?token=...` 链接完成首次认证。
 
-将作品目录添加为 DSH workspace，然后在普通 Agent 会话中使用 `/story`、`/short-drama`、`/novel-to-game quick` 或 `/video-recap`。四个入口始终可见；尚未创建的类型显示对应的创建引导。模型、凭据、Preset、权限、会话记录、停止/继续、Todo、审批和 Composer 均沿用当前 DeepSeek Harness 配置与界面。
+需要 Node.js 24+。开始 AI 创作前需要在 DSH 的「设置 → 模型」中添加 Provider 并填入 API Key，或在启动前设置环境变量 `DEEPSEEK_API_KEY`。
+
+首次首页尚无创作工作台。点击左侧 Workspaces 旁的 ＋（添加工作区 / Add workspace）选择作品文件夹，再在下方「选择工作区 / Choose workspace」中选中该目录（或打开已有会话），目录里已有创作项目时，会显示「小说 / 短剧 / 游戏 / 视频」标签；查看已有作品无需 API Key。
+
+配置模型后，在普通 Agent 会话中使用 `/story`、`/short-drama`、`/novel-to-game quick` 或 `/video-recap`。空目录会保留 DSH 原生 Chat，Agent 写出第一个创作文件后工作台才会自动出现。工作台收起后，可通过会话区的「创作工作台」按钮重新打开。模型、凭据、Preset、权限、会话记录、停止/继续、Todo、审批和 Composer 均沿用当前 DeepSeek Harness 配置与界面。
 
 ## 短剧工作台
 
@@ -64,15 +70,24 @@ npx -y @deepseek-ai/dsh@0.1.2-rc.1 web
 
 Drama Skills 0.6.0 不支持把 v0.5 结构化项目原地升级为 creator-first 项目。旧项目应继续锁定 v0.5 并只读保留；迁移时请新建项目根，逐集人工确认当前工作实际需要的 `剧本.md`、`视觉设定.md`、`分镜.md`、`图片提示词.md` 或 `视频提示词.md`，不要预建空文档。
 
+## 没看到界面时
+
+- **安装报 `pnpm not found on PATH`**：重新执行上面带 `--package pnpm@11.7.0` 的完整安装命令，确认安装成功后再启动。
+- **浏览器未打开或要求认证**：打开终端打印的完整带 `?token=...` 链接；端口被占用时用 `web --port 3081`，并访问新打印的链接。
+- **没有四个创作标签**：先添加作品目录并打开会话。空目录需要先在 Chat 中运行创作命令，生成创作文件后工作台才会出现；已收起的工作台可用会话区的「创作工作台」按钮恢复。已有作品仍不显示时，检查安装与启动是否使用同一个 profile，重启 DSH 并刷新页面。
+- **独立 `story` profile 没有网页服务**：按下节补上 `@deepseek-ai/dsh-web-app`，仅安装创作插件不会给新 profile 添加 Web 界面。
+
 ## 按需加载
 
-插件装进哪个 profile，那个 profile 的每个 Session 就都会加载创作 Skills 与三栏工作台。想让原版 `web` 保持干净、只在创作时打开工作台，就装进独立 profile：
+插件装进哪个 profile，那个 profile 的每个 Session 就都会加载创作 Skills；工作台只在有创作项目时显示。想让原版 `web` 保持干净、只在创作时打开工作台，就装进独立 profile：
 
 ```bash
-npx -y @deepseek-ai/dsh@0.1.2-rc.1 plugin --profile story add @oh-story/dsh@0.1.7
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.1.2-rc.1 dsh plugin --profile story add @oh-story/dsh@0.1.7
 ```
 
-新 profile 默认没有界面。编辑 `~/.dsh/profiles/story/package.json`，把 `dsh.profile.bundles` 改成 `["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-web-app", "@oh-story/dsh"]`，顺序照抄，这个包不用另外安装。
+新 profile 默认没有界面。编辑 `~/.dsh/profiles/story/package.json`，把 `dsh.profile.bundles` 改成 `["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-web-app", "@oh-story/dsh"]`。
+
+`@deepseek-ai/dsh-web-app` 是 DSH 自带的 Web 界面包，需要在创作插件之前加载。
 
 ```bash
 npx -y @deepseek-ai/dsh@0.1.2-rc.1 web                          # 原版 DSH
