@@ -1,4 +1,21 @@
 .oh-story-bridge-marker { display: none; }
+.oh-story-welcome {
+  box-sizing: border-box;
+  order: -1;
+  flex-shrink: 0;
+  width: min(640px, calc(100% - 32px));
+  margin: 24px auto;
+  padding: 20px 24px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 12px;
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-bg-base);
+  font: 14px/1.7 var(--dsw-font-family);
+  overflow-wrap: anywhere;
+}
+.oh-story-welcome h2 { margin: 0 0 8px; font-size: 20px; }
+.oh-story-welcome p { margin: 8px 0 0; }
+.oh-story-welcome ol { margin: 12px 0; padding-left: 24px; }
 .oh-story-split-surface { display: contents; font-family: var(--dsw-font-family); }
 
 /* Collapsed, the plugin owns nothing but this control: DSH renders the

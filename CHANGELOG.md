@@ -11,6 +11,15 @@
 
 ## [Unreleased]
 
+## [0.1.8] - 2026-09-06
+
+### Fixed
+
+- 首次首页尚无会话时显示「Oh Story 已加载」与添加作品目录、生成首个创作文件的使用引导，避免安装成功却看不到工作台入口；进入会话后自动收起。
+- README 安装命令显式提供 pnpm，修复仅安装 Node.js 时 `plugin add` 报 `pnpm not found on PATH`；补充带 token 的浏览器入口、工作区与会话步骤及无界面排查说明。
+- 原生集成测试增加没有 workspace / Session 的首次启动检查，覆盖引导的窄屏布局及进入会话后的移除。
+- 修复点击编辑器预览等按钮后，缩小窗口可能使长答复尾部被输入框遮挡的问题：按钮点击不再被误判为拖动 Chat 滚动条。
+
 ## [0.1.7] - 2026-09-04
 
 ### Changed
@@ -173,7 +182,8 @@
 - 提供 13 个 Oh Story 小说 Skills、7 个专业 Roles 与 10 个 Drama Skills。
 - 提供文件树、Markdown/JSONL 编辑预览与官方 DSH Chat 同屏的三栏工作台。
 
-[Unreleased]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.7...HEAD
+[Unreleased]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.8...HEAD
+[0.1.8]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.7...v0.1.8
 [0.1.7]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.6...v0.1.7
 [0.1.6]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.4...v0.1.5

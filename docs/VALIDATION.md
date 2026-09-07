@@ -74,6 +74,7 @@ The gate discovers all `*.test.ts` and `*.contract.test.ts` files. Coverage clai
 - running + queued submissions, exact Queue removal, current-Turn cancellation with the remaining Queue preserved but not auto-executed, and a late real MP4 that upgrades a completed batch from 0/8 to an explicit 1/8 partial result without a render loop;
 - a fully populated eight-video sequence that enables composition, dispatches the ordered native composition request, and becomes completed only after a task-ID-linked MP4 appears in the Agent FileSystem;
 - the short-drama production shot board, two-version selection and restoration, image-only reference resolution, video-only sequence resolution, asset board, missing-video sequence reorder/blockers, relationship canvas, keyboard layout movement, native `/short-drama-produce` Conversation dispatch, realistic image/video version backfill and cross-document source navigation;
+- first-launch guidance before any workspace / Session exists, its containment at 500 px, and removal when entering a Session;
 - blank-session mounting, Session-switch draft recovery, source editing, conflict isolation and saved-state behavior;
 - ordered tree/editor/Chat geometry at desktop and 500 px widths, a Composer that remains fixed during long-message scrolling, and anchor clearance in wide, medium and compact layouts.
 
