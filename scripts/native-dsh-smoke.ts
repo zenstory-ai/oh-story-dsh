@@ -686,11 +686,18 @@ async function main(): Promise<void> {
     const welcome = firstRunPage.getByRole("region", { name: "Oh Story 使用引导" });
     await welcome.waitFor({ state: "visible", timeout: 20_000 });
     if (!(await welcome.innerText()).includes("Oh Story 已加载")) throw new Error("First launch did not explain how to open the workbench.");
-    await firstRunPage.setViewportSize({ width: 500, height: 900 });
-    const bounds = await welcome.boundingBox();
+    // Check compact layout on a separate page so resizing does not switch the
+    // desktop page's sidebar into a drawer while fixture Sessions arrive.
+    const compactFirstRunPage = await firstRunPage.context().newPage();
+    await compactFirstRunPage.setViewportSize({ width: 500, height: 900 });
+    await compactFirstRunPage.goto(dshTokenUrl, { waitUntil: "networkidle" });
+    const compactWelcome = compactFirstRunPage.getByRole("region", { name: "Oh Story 使用引导" });
+    await compactWelcome.waitFor({ state: "visible", timeout: 20_000 });
+    const bounds = await compactWelcome.boundingBox();
     if (bounds === null || bounds.width <= 0 || bounds.x < 0 || bounds.x + bounds.width > 500) {
       throw new Error("First-launch guide overflowed the compact viewport.");
     }
+    await compactFirstRunPage.close();
 
     const storyWorkspace = await rpc<{ readonly workspace: { readonly workspaceId: string; readonly title: string } }>(origin, "workspace/create", { request: { path: storyRoot } });
     const dramaWorkspace = await rpc<{ readonly workspace: { readonly workspaceId: string; readonly title: string } }>(origin, "workspace/create", { request: { path: dramaRoot } });
@@ -733,7 +740,6 @@ async function main(): Promise<void> {
 
     // Reuse the fixture Session to test the transition without reloading or
     // leaving extra workspaces and Sessions in the rest of the smoke run.
-    await firstRunPage.setViewportSize({ width: 1_440, height: 900 });
     try {
       await selectSession(firstRunPage, storyWorkspace.workspace.title, storySessionTitle);
     } catch (error) {
