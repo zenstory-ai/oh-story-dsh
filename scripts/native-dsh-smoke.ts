@@ -480,7 +480,10 @@ async function selectSession(page: Page, workspaceTitle: string, sessionTitle: s
   const sessionRow = page.getByRole("treeitem").filter({ hasText: sessionTitle }).first();
   await sessionRow.waitFor({ state: "visible", timeout: 10_000 });
   await sessionRow.click();
-  await page.getByRole("treeitem", { selected: true }).filter({ hasText: sessionTitle }).first()
+  // The compact sidebar can close after navigation. Verify the destination in
+  // the conversation header instead of requiring its sidebar row to stay visible.
+  await page.getByRole("navigation", { name: /^(?:Session hierarchy|会话层级)$/u })
+    .getByRole("button", { name: sessionTitle, exact: true })
     .waitFor({ state: "visible", timeout: 10_000 });
 }
 
