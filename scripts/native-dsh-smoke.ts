@@ -675,7 +675,8 @@ async function main(): Promise<void> {
     // A real first launch has no workspace or Session. Previously all browser
     // coverage started after fixture Sessions existed and missed this surface.
     firstRunBrowser = await chromium.launch({ channel: browserChannel, headless: true });
-    const firstRunPage = await firstRunBrowser.newPage({ viewport: { width: 1_440, height: 900 } });
+    const firstRunContext = await firstRunBrowser.newContext({ viewport: { width: 1_440, height: 900 } });
+    const firstRunPage = await firstRunContext.newPage();
     const firstRunErrors: string[] = [];
     firstRunPage.on("pageerror", (error) => firstRunErrors.push(error.message));
     await firstRunPage.goto(dshTokenUrl, { waitUntil: "networkidle" });
