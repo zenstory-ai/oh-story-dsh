@@ -1623,6 +1623,9 @@ function CreativeSplitBridge({ sessionId, useSession, useChat, useStore, actions
     let drivenAt = 0;
     const markDriven = (event: Event): void => {
       if (event.target instanceof Node && composerSeat()?.contains(event.target) === true) return;
+      // A button click (for example switching the editor preview) is not a
+      // scrollbar drag. Its subsequent reflow must not release the Chat tail.
+      if (event.type === "pointerdown" && event.target !== scroller) return;
       drivenAt = performance.now();
     };
     const trackParked = (): void => {

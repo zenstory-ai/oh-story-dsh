@@ -676,10 +676,10 @@ async function main(): Promise<void> {
     const firstRunErrors: string[] = [];
     firstRunPage.on("pageerror", (error) => firstRunErrors.push(error.message));
     await firstRunPage.goto(dshTokenUrl, { waitUntil: "networkidle" });
-    for (const name of [/^(?:Continue|继续)$/u, /^(?:Configure later|稍后配置)$/u]) {
-      const button = firstRunPage.getByRole("button", { name });
-      if (await button.isVisible()) await button.click();
-    }
+    // The fresh Host always shows this notice, but its settings arrive after
+    // the page loads. Wait for it instead of skipping a not-yet-mounted dialog.
+    await firstRunPage.getByRole("button", { name: /^(?:Continue|继续)$/u }).click({ timeout: 20_000 });
+    await firstRunPage.getByRole("dialog").waitFor({ state: "detached", timeout: 10_000 });
     const welcome = firstRunPage.getByRole("region", { name: "Oh Story 使用引导" });
     await welcome.waitFor({ state: "visible", timeout: 20_000 });
     if (!(await welcome.innerText()).includes("Oh Story 已加载")) throw new Error("First launch did not explain how to open the workbench.");
