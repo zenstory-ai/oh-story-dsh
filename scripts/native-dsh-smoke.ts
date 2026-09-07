@@ -731,7 +731,11 @@ async function main(): Promise<void> {
     // Reuse the fixture Session to test the transition without reloading or
     // leaving extra workspaces and Sessions in the rest of the smoke run.
     await firstRunPage.setViewportSize({ width: 1_440, height: 900 });
-    await selectSession(firstRunPage, storyWorkspace.workspace.title, storySessionTitle);
+    try {
+      await selectSession(firstRunPage, storyWorkspace.workspace.title, storySessionTitle);
+    } catch (error) {
+      throw new Error(`First-launch navigation failed: ${String(error)}\nBrowser errors: ${JSON.stringify(firstRunErrors)}\n${await firstRunPage.locator("body").ariaSnapshot()}`, { cause: error });
+    }
     await firstRunPage.getByRole("tablist", { name: "创作工作台" }).waitFor({ state: "visible", timeout: 20_000 });
     await welcome.waitFor({ state: "detached", timeout: 10_000 });
     if (firstRunErrors.length > 0) throw new Error(`First-launch browser errors: ${JSON.stringify(firstRunErrors)}`);
