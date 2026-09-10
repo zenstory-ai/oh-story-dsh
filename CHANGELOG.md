@@ -18,7 +18,7 @@
 
 ### Changed
 
-- 短剧「成片」页改为把排定的镜序交给 `/short-drama-edit`，而不再让 `/short-drama-produce` 用临时的媒体/命令工具自行拼接。上游 0.7.0 之前套件没有装配阶段，成片只能由插件即兴合成到 `制作成果/成片-<任务 ID>.mp4`；现在装配由上游拥有，插件只负责把镜序、剪辑单路径和 DSH 权限边界交代清楚。成片任务因此改按交付物路径（`制作成果/成片/成片.mp4`）关联——上游用固定文件名，文件名里不会带工作台的任务 ID——并记下派发时已存在的版本，避免上一版成片把新任务直接标成已完成。
+- 短剧「成片」页改为把排定的镜序交给 `/short-drama-edit`，而不再让 `/short-drama-produce` 用临时的媒体/命令工具自行拼接。上游 0.7.0 之前套件没有装配阶段，成片只能由插件即兴合成到 `制作成果/成片-<任务 ID>.mp4`；现在装配由上游拥有，插件只负责把镜序、剪辑单路径和 DSH 权限边界交代清楚。成片任务因此改按交付物路径（`制作成果/成片/成片.mp4`）关联——上游用固定文件名，文件名里不会带工作台的任务 ID——并记下派发时已存在的版本，避免上一版成片把新任务直接标成已完成。固定文件名不带任务 ID，一条成片就能对上同一集的每个成片任务，所以已取消或已失败的成片任务不再被后来的成片改写成「已完成」（失败任务的报错也不会被抹掉），已完成的任务继续指向它自己渲出的那条；「合成成片」在上一个成片任务落定前不可点，避免第二个任务被第一条成片直接判完、连带失去从 DSH Queue 移除它的入口。
 - 固定的 DeepSeek Harness 从 `0.1.2-rc.1` 升到 `0.1.5-rc.1`（npm `next`）。插件源码不需要改动：Queue、`updateQueue` / `QueueAction` 与工作台依赖的 Slot、锚点和快照字段都保持不变。`pnpm-workspace.yaml` 的 `overrides` / `minimumReleaseAgeExclude`、npm 包 peer/dev 依赖、README 与发布文档的安装命令，以及两条原生测试脚本里的 `dshVersion` 同步更新——最后一项才决定 `pnpm test:dsh` 真正装进来的 DSH 版本。
 - 同步 [Oh Story 0.7.10](https://github.com/zenstory-ai/oh-story-claudecode/releases/tag/v0.7.10)（`abe9663`，`agents_version` 29 → 30）：长篇新增排纲供给自查、A/B/C 创作授权与写手自由区，新增物按后续义务分三档（细纲情节点表因此多出「分辨率」一列），写手 prompt 改由脚本组装并按当前单元读取卷纲；短篇新增写前交付参数预检；长短篇按需分阶段加载参考，去味仅执行指定 Gate。
 - 同步 [NovelToGame 0.3.1](https://github.com/zenstory-ai/novel-to-game)（`e13a6fb`）与 [video-recap-skills 0.5.0](https://github.com/zenstory-ai/video-recap-skills)（`ec369e7`）：两者均为上游的边界校验收敛与冗余代码清理，Skill 目录与产物协议不变。

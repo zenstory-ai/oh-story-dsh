@@ -104,6 +104,17 @@ export function outputsForJob(job: ProductionJob, versions: readonly ProductionM
   return versions.filter((version) => version.path === job.outputPath && !superseded.has(version.id));
 }
 
+/**
+ * True while a composition the creator already dispatched has not settled. Every composition
+ * for an episode renders to the same upstream path, so a second one dispatched now would be
+ * completed by the first one's cut — and, once marked succeeded, could no longer be removed
+ * from the DSH Queue.
+ */
+export function compositionInFlight(jobs: readonly ProductionJob[]): boolean {
+  return jobs.some((job) => job.kind === "composition"
+    && (job.status === "awaiting_confirmation" || job.status === "pending" || job.status === "running"));
+}
+
 export function referencesForTarget(
   targetId: string,
   production: { readonly shots: readonly { readonly id: string; readonly references: readonly string[] }[] },
@@ -159,6 +170,12 @@ export function reconcileProductionJobs(
 
   return jobs.map((job) => {
     const queued = queuedItemForJob(job.id, queue) !== undefined;
+    // A terminal job is never revived by a result that arrived later. This matters most for
+    // `outputPath`: a shared deliverable name carries no job identity, so without this guard
+    // the next cut would complete a job the creator canceled, and bury the error a failed one
+    // reported. A job-id correlated failure keeps its old behaviour — that output really is its own.
+    if (job.status === "canceled" || job.status === "succeeded") return job;
+    if (job.status === "failed" && job.outputPath !== undefined) return job;
     const outputs = outputsForJob(job, versions);
 
     if (outputs.length >= job.expectedOutputs) {
@@ -171,7 +188,7 @@ export function reconcileProductionJobs(
         error: undefined
       };
     }
-    if (job.status === "canceled" || job.status === "succeeded" || (job.status === "awaiting_confirmation" && outputs.length === 0)) return job;
+    if (job.status === "awaiting_confirmation" && outputs.length === 0) return job;
     if (job.status === "running" && queued) return { ...job, status: "pending", progress: 0 };
     if (job.status === "pending" && sessionRunning && !queued && job === latestPending) {
       return { ...job, status: "running", progress: Math.max(10, job.progress), error: undefined };

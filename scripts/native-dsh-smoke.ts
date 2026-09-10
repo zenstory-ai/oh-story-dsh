@@ -155,7 +155,10 @@ async function startMockDeepSeek(): Promise<MockDeepSeek> {
       const mutationTurn = currentTurn.includes(agentMutationPrompt) || gameUpdateTurn || plainWriteTurn;
       const todoLayoutTurn = currentTurn.includes(todoLayoutPrompt);
       const longReplyTurn = currentTurn.includes(longReplyPrompt);
-      const productionTurn = currentTurn.includes("/short-drama-produce");
+      // Both drama stages that the workbench dispatches stream slowly, so their task cards
+      // stay in flight long enough to assert the running-turn controls. Assembly moved to
+      // /short-drama-edit in Drama 0.7; leaving it out made that turn settle instantly.
+      const productionTurn = currentTurn.includes("/short-drama-produce") || currentTurn.includes("/short-drama-edit");
       const roleParentTurn = currentTurn.includes(roleSmokePrompt);
       const productionIntentTurn = currentTurn.includes(productionIntentSmokePrompt);
       const roleChildTurn = serialized.includes(roleChildPrompt) && !serialized.includes(roleSmokePrompt);
@@ -1987,6 +1990,11 @@ async function main(): Promise<void> {
           .waitFor({ state: "visible", timeout: 10_000 });
         const compositionJobId = await compositionTask.getAttribute("data-job-id");
         if (compositionJobId === null) throw new Error("Composition task did not expose its stable projection id.");
+        // Every composition renders to the same upstream path, so a second one dispatched now
+        // would be completed by this one's cut.
+        await productionTabs.getByRole("tab", { name: "成片", exact: true }).click();
+        if (await composeButton.isEnabled()) throw new Error("合成成片 stayed available while the first assembly was still in flight.");
+        await productionTabs.getByRole("tab", { name: "任务", exact: true }).click();
         // short-drama-edit renders to this fixed path; the job correlates on the deliverable.
         const compositionOutput = "剧集/EP001/制作成果/成片/成片.mp4";
         await mkdir(dirname(join(dramaRoot, compositionOutput)), { recursive: true });
