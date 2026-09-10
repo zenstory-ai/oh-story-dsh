@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "upstream": {
     "repository": "git@github.com:zenstory-ai/novel-to-game.git",
-    "commit": "57b54fa9253309cf46071380cc3ec43259ce1ed5",
-    "releaseVersion": "0.3.0"
+    "commit": "e13a6fb4d61367be221d323c23159dff32d59a2e",
+    "releaseVersion": "0.3.1"
   },
-  "generatedAt": "2026-08-29T04:50:35.078Z",
+  "generatedAt": "2026-09-10T13:26:15.874Z",
   "skills": [
     "game-art-direction",
     "game-build",
@@ -36,7 +36,7 @@
     },
     {
       "path": "VERSION",
-      "sha256": "d915cc95d6ca8f47ae297713ed46d4e5c5d99ddd29fc3c61e263bdf305f2b5b0",
+      "sha256": "79e3f22ca37c7fdf4c29ae3648d6b008c3cb6547260a453409275470919dc674",
       "bytes": 6
     },
     {
@@ -351,8 +351,8 @@
     },
     {
       "path": "skills/game-art-direction/SKILL.md",
-      "sha256": "1a798bab9818580c1bfe08b175794a060bbe3065bdb2b778822de9b9f29d1c7b",
-      "bytes": 6039
+      "sha256": "cb205230e55d06f697874758af33e440ac69b6a93f4e88f59ff12101ff486377",
+      "bytes": 3919
     },
     {
       "path": "skills/game-art-direction/agents/openai.yaml",
@@ -366,8 +366,8 @@
     },
     {
       "path": "skills/game-build/SKILL.md",
-      "sha256": "4aaf579704e864339387697f351cc4c98da8661b6910704ab39b5fb00bad4224",
-      "bytes": 6668
+      "sha256": "09d235ef85d5d238936dd451067497750bb6b99924a5a8b95ca526648c759dd6",
+      "bytes": 4789
     },
     {
       "path": "skills/game-build/agents/openai.yaml",
@@ -396,8 +396,8 @@
     },
     {
       "path": "skills/game-concept/SKILL.md",
-      "sha256": "7080002eb9aaf684192f3dfaf3feb81446ea35ba3297b9e8b86402456043b099",
-      "bytes": 4912
+      "sha256": "a8d321eb3d6469ee142f128800060e284c563ff0639c047e20e55708a67a8b25",
+      "bytes": 3718
     },
     {
       "path": "skills/game-concept/agents/openai.yaml",
@@ -411,8 +411,8 @@
     },
     {
       "path": "skills/game-qa/SKILL.md",
-      "sha256": "6835e17fcdec987bc10a3091716e953033442388aca7824f87553f9a7e5a8e01",
-      "bytes": 3767
+      "sha256": "5f76bc51fe8957540f8099cb19550b4158df6075662a2d5ad5c95e453a441794",
+      "bytes": 2800
     },
     {
       "path": "skills/game-qa/agents/openai.yaml",
@@ -426,13 +426,13 @@
     },
     {
       "path": "skills/game-qa/references/test-design-method.md",
-      "sha256": "5e720bfd7cf955998fb4f6beb73b1236b22d7e73d13fceb10515cab59b11b96a",
-      "bytes": 3558
+      "sha256": "b6ef8e16a0cb84790674a20b5a3daa08283589f02223af1ff074f37beb00513b",
+      "bytes": 3495
     },
     {
       "path": "skills/game-world-design/SKILL.md",
-      "sha256": "357cbc9ec023796a92179cd7044c23b2de8318482cf70b5f29bd7dedc4efae19",
-      "bytes": 5284
+      "sha256": "0fbf8b1036c29a6a3951d050360d8880549d60159be74539654059ec0f8d06c4",
+      "bytes": 4305
     },
     {
       "path": "skills/game-world-design/agents/openai.yaml",
@@ -441,8 +441,8 @@
     },
     {
       "path": "skills/game-world-design/references/dialogue-design-method.md",
-      "sha256": "61202bd7c9ba310f56375ad962d61caa51870ccfb0d2356e52ebad28bde4f34d",
-      "bytes": 3291
+      "sha256": "4934b97a4587a4c68fe5e12c963d9c4b87ae9c02400de416ff74801c9ddb2f86",
+      "bytes": 3167
     },
     {
       "path": "skills/game-world-design/references/game-writing-craft.md",
@@ -466,8 +466,8 @@
     },
     {
       "path": "skills/novel-game-analyze/SKILL.md",
-      "sha256": "d0bd415c694c92c1f7d15ab85fe7cff9a848a70e6cf8bf2e24ff49f85a8847b1",
-      "bytes": 6044
+      "sha256": "2b4608a882c3c3c90f001de95ae21341739d496f1b6ca5d672a6725114d2a66c",
+      "bytes": 5743
     },
     {
       "path": "skills/novel-game-analyze/agents/openai.yaml",
@@ -481,8 +481,8 @@
     },
     {
       "path": "skills/novel-to-game/SKILL.md",
-      "sha256": "15b8bcaa2cf13d53de86f871add34c8ffcc8ea7c40682941b50a5405fd4ae2d1",
-      "bytes": 5725
+      "sha256": "795732e43690e99a62223aa70ca302bc340bac32374bd9e4ed7e2218012dc02f",
+      "bytes": 5602
     },
     {
       "path": "skills/novel-to-game/agents/openai.yaml",
@@ -491,18 +491,18 @@
     },
     {
       "path": "skills/novel-to-game/references/intake-benchmark-reference.md",
-      "sha256": "4aada4b5b5d24558e295aec8febc93a8c1e7181b5a510923275cfcb73e99c9e7",
-      "bytes": 2428
+      "sha256": "4f0411df62170dd7a91f39058ade44ca9f12663d72d3f571bd67b0bc5a784ea8",
+      "bytes": 2126
     },
     {
       "path": "skills/novel-to-game/references/intake-method.md",
-      "sha256": "dd75a46879ee88e8bf5461e570d15eb91583a37d574333d5fda75332839203b4",
-      "bytes": 3119
+      "sha256": "1afbc535f6d7b7fcb1790c7f566673b6279fbfbee59510bd5a261665dfca3d2e",
+      "bytes": 2925
     },
     {
       "path": "skills/novel-to-game/references/pipeline-contract.md",
-      "sha256": "b77b8ec9229d01ee56c3b42a9069c11bc69c821462ffcbac69ab8cdbd09e1d2a",
-      "bytes": 3390
+      "sha256": "130df7d50c99ebd634183e5a1c23c3dd119ba80b675f5f6b01afa3c5cb8a9206",
+      "bytes": 3122
     }
   ]
 }

@@ -14,7 +14,7 @@ metadata: {"openclaw":{"source":"https://github.com/zenstory-ai/oh-story-claudec
 
 > Agent 兼容性：只检查当前运行时的 canonical 目录：Claude `.claude/agents/{agent}.md`、OpenCode `.opencode/agents/{agent}.md`、Codex `.codex/agents/{agent}.toml`、Antigravity `.agents/agents/agent-name/agent.md`（`agent-name` 为目标 agent 名），不得因其他端文件存在而误判。Codex 使用同名 `agent_type`；Antigravity 使用 `invoke_subagent` + `TypeName`。对应运行时未暴露 custom-agent registry / `invoke_subagent` 或返回未知 agent 时，必须降级 solo/direct。检测到 `.zcode/` 时同样直接 solo/direct，因为 ZCode 3.3.4 不执行项目 custom agents；报告 `Fallback: project custom agents unavailable -> solo`。Claude/OpenCode 兼容面保留 `subagent_type`。
 >
-> Spawn 版本提示（不阻断 spawn）：先读取项目根 `.story-deployed` 的 `agents_version`。与本版 `agents_version: 29` 不一致时（标记缺失、字段缺失/非整数、小于或大于 29）**照常按文件存在性检查并 spawn**，同时报告 `Notice: agents bundle 版本不匹配（项目 {N}，本版 29）` 并提示重新运行 `/story-setup` 后新开会话；大于 29 时额外提示先更新 oh-story-claudecode，不要用本地旧版 setup 降级覆盖。只有 agent 文件缺失、或运行时不暴露 custom agent 时才降级 solo/direct，报告 `Fallback: ... -> solo`。
+> Spawn 版本提示（不阻断 spawn）：先读取项目根 `.story-deployed` 的 `agents_version`。与本版 `agents_version: 30` 不一致时（标记缺失、字段缺失/非整数、小于或大于 30）**照常按文件存在性检查并 spawn**，同时报告 `Notice: agents bundle 版本不匹配（项目 {N}，本版 30）` 并提示重新运行 `/story-setup` 后新开会话；大于 30 时额外提示先更新 oh-story-claudecode，不要用本地旧版 setup 降级覆盖。只有 agent 文件缺失、或运行时不暴露 custom agent 时才降级 solo/direct，报告 `Fallback: ... -> solo`。
 
 ## 核心原则
 
@@ -54,7 +54,7 @@ metadata: {"openclaw":{"source":"https://github.com/zenstory-ai/oh-story-claudec
 
 1. 数清最后一个完整章号 `N`（`正文/第NNN章_*.md` 的最大值）。
 2. 从旧 `追踪/` 现有文件（角色状态、伏笔、时间线等，文件名按项目实际情况）和最近 3-5 章正文，重建当前状态：核心角色快照、未回收伏笔、已揭示时间线事件、长期约束、下一章承诺。角色快照的反推方法见 [references/character-state-reverse.md](references/character-state-reverse.md)。
-3. 按 [references/tracking-transaction.md](references/tracking-transaction.md) 的初始化事务格式构造 JSON，`last_chapter` 写 `N`（第 1..N 章不伪造逐章记录），执行 `tracking_commit.py init`。
+3. 完整读取 [references/tracking-initialization.md](references/tracking-initialization.md)，按其初始化事务格式构造 JSON，`last_chapter` 写 `N`（第 1..N 章不伪造逐章记录），执行 `tracking_commit.py init`。
 4. `init` 会把旧追踪结构按原样整体移入 `追踪/_旧追踪存档/` 再建当前协议——旧内容不删除、不参与解析，留给作者查阅。
 5. 跑 `tracking_commit.py check` 确认通过，再回 `/story-long-write 日更` 续写。
 

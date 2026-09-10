@@ -20,14 +20,13 @@ Markdown 只负责给作者和 Agent 阅读，工具不再反向解析 Markdown�
 ```text
 {PYTHON} {当前 skill 根}/scripts/tracking_commit.py init   --project {书项目根} --input {初始化事务.json}
 {PYTHON} {当前 skill 根}/scripts/tracking_commit.py check  --project {书项目根}
-{PYTHON} {story-long-write skill 根}/scripts/storyctl.py wordcount checkpoint --file {前半段临时文件} --target {目标} --chapter {N}
 {PYTHON} {story-long-write skill 根}/scripts/storyctl.py chapter check   --project {书项目根} --chapter {N}
 {PYTHON} {story-long-write skill 根}/scripts/storyctl.py chapter commit  --project {书项目根} --chapter {N} --input {逐章事务.json}
 {PYTHON} {story-long-write skill 根}/scripts/storyctl.py chapter accept-current-length --project {书项目根} --chapter {N} --input {逐章事务.json}
 ```
 
 - `init`：只在 `_tracking-state.json` 不存在时执行，绝不覆盖已初始化项目。
-- `wordcount checkpoint`：纯测量；返回当前实际字数、用户带与剩余用户区间，不写正文、不写 tracking、不做语义判断。每章最多调用一次。
+- `wordcount measure` / `wordcount checkpoint`：纯测量入口；不写正文、不写 tracking、不做语义判断。长篇正文流程一次写完整章，**不在章中调用测量**，长度由 `chapter check` 一次收口；这两个入口供导入、审查等其他场景使用。
 - `chapter check`：重新读取当前正文与细纲目标，返回确定性长度状态、现有 blocking quality、`state_revision` 和当前可执行动作，不保存 approval。`under` 不提供自动补写；`over` 额外返回一次净删型 `compress-once` 及进入内带/用户带所需的机器删除区间。
 - `chapter commit`：再次读取当前文件、重新计数并重跑 blocking quality；只接受用户带内章节，把简短字数记录与逐章事务一起原子提交。
 - `chapter accept-current-length`：只接受带外但 quality pass 的章节；接受动作发生时重新读取、重新计数并立即原子提交，不保存可陈旧的历史决议。
@@ -43,33 +42,7 @@ Markdown 只负责给作者和 Agent 阅读，工具不再反向解析 Markdown�
 
 ## 初始化事务
 
-新书从第 0 章初始化。`story-import` 导入已有小说时把最后完整章写入 `last_chapter=N`；第 1..N 章不伪造日更记录，常规续写从 N+1 章开始。
-
-```json
-{
-  "schema_version": 1,
-  "book_title": "让你管账号，你高燃混剪炸全网",
-  "last_chapter": 0,
-  "context": {
-    "position": {
-      "volume": "第一卷·军宣整顿",
-      "volume_start_chapter": 1,
-      "story_time": "江晨到火箭军文工团报到前",
-      "scene": "火箭军文工团"
-    },
-    "long_term_constraints": ["军宣爽点要用作品效果和围观反应链兑现，不能只靠系统播报"],
-    "active_character_names": [],
-    "continuity_risks": [],
-    "recent_chapters": [],
-    "next_chapter_commitments": ["让江晨报到，并落下五天百万粉的新手任务"]
-  },
-  "character_snapshots": {},
-  "foreshadow": [],
-  "timeline_events": []
-}
-```
-
-导入初始化时直接传入当前核心角色快照、伏笔当前行、时间线事件和固定 7 栏状态输入。阶段/卷级回看按需查询正文，不作为每章强一致追踪产物。
+仅新书或导入初始化时，执行 `init` 前必须完整读取 [tracking-initialization.md](tracking-initialization.md)，按其中原始 JSON 与导入边界构造事务。已有项目续写直接使用下方逐章事务，不重复读初始化示例。
 
 调用方的逐章 JSON 不写 `wordcount`；正式入口 `chapter commit` 或 `chapter accept-current-length` 在提交当下生成并注入。最终 state 只为已提交章节保留 `metric / target / actual / status / resolution / body_sha256`，不保存 MEASURE/RESOLVE 事件、ID 链、policy fingerprint 或独立 chapter state。
 

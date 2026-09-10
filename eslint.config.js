@@ -11,8 +11,9 @@ export default tseslint.config(
       "**/coverage/**",
       "**/node_modules/**",
       "docs/blueprint/**",
-      "packages/knowledge/oh-story/**",
-      "packages/knowledge/novel-to-game/**",
+      // Bundled upstream knowledge is vendored verbatim and hashed by the parity
+      // checks, so it is never ours to restyle.
+      "packages/knowledge/**",
       "release/**"
     ]
   },

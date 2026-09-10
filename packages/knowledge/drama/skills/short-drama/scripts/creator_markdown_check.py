@@ -94,8 +94,14 @@ SPOKEN_RUN_RE = re.compile(r"[\u3400-\u9fff]{4,}")
 EXPLICIT_TEXT_TO_VIDEO = "无（创作者已明确选择文生视频）"
 PENDING_REFERENCE_SUFFIX_RE = re.compile(r"；待补参考图：[^；。\n]+。?$")
 VISUAL_CATEGORIES = ("人物", "造型", "地点", "道具")
+# A malformed entry always tries to name something; a heading that is only the
+# category word is a section divider ("## 人物"), and rejecting it left the
+# document with no way to group entries at all.
 VISUAL_SETTING_LINE_RE = re.compile(
-    r"^#{2,4}[ \t　]*(?:" + "|".join(VISUAL_CATEGORIES) + r")[^\n]*$", re.MULTILINE
+    r"^#{2,4}[ \t　]*(?:"
+    + "|".join(VISUAL_CATEGORIES)
+    + r")(?![ \t　]*$)[^\n]*$",
+    re.MULTILINE,
 )
 VISUAL_SETTING_HEADING_RE = re.compile(
     r"^## (" + "|".join(VISUAL_CATEGORIES) + r") · (.+?)[ \t　]*$", re.MULTILINE
@@ -175,6 +181,10 @@ def _fields(section: str, *, owner: str, errors: list[str]) -> dict[str, str]:
     pairs = re.findall(r"^- ([^：\n]+)：(.+)$", section, re.MULTILINE)
     fields: dict[str, str] = {}
     for key, value in pairs:
+        # `- **参考**：…` is ordinary Markdown and reads as the same field to a
+        # human. Taking the emphasis literally turned it into a different key,
+        # so the author got "缺少参考字段" while looking straight at 参考.
+        key = re.sub(r"^(?:\*\*|__|\*|_)(.+?)(?:\*\*|__|\*|_)$", r"\1", key.strip())
         if key in fields:
             errors.append(f"{owner}: 字段重复: {key}")
         fields[key] = value
@@ -240,6 +250,43 @@ def _copyable_prompt(
         return None
     prompt = "\n".join(line[1:].lstrip() for line in lines).strip()
     return prompt or None
+
+
+def _copyable_prompt_cause(
+    section: str, heading: str = r"可复制(?:通用)?提示词"
+) -> str:
+    """Why `_copyable_prompt` returned None, as a suffix for the error.
+
+    "缺少唯一且非空的可复制提示词" is true of four different documents and tells
+    the author nothing about which one they wrote. The expensive case is a
+    single stray line -- a separator, an HTML comment, a note -- inside an
+    otherwise complete block: the prompt is visibly right there, so the message
+    reads as a checker bug and the real line goes unlooked at.
+    """
+
+    # Name the heading the author actually has to write, not this one's default:
+    # the keyframe caller passes a different one, and pointing at the wrong
+    # heading is worse than saying nothing.
+    label = "### " + re.sub(r"\(\?:([^)]*)\)\?", "", heading).replace("\\", "")
+    markers = list(re.finditer(rf"^### {heading}\s*$", section, re.MULTILINE))
+    if not markers:
+        return f"：没有 `{label}` 小节标题"
+    if len(markers) > 1:
+        return f"：`{label}` 出现了 {len(markers)} 次，只能有一个"
+    body = section[markers[0].end() :]
+    following = re.search(r"^###\s+|^##\s+", body, re.MULTILINE)
+    if following is not None:
+        body = body[: following.start()]
+    lines = [line for line in body.splitlines() if line.strip()]
+    if not lines:
+        return f"：`{label}` 下面是空的"
+    intruders = [line for line in lines if not line.startswith(">")]
+    if intruders:
+        return (
+            "：小节内有不以 `>` 开头的行，整块因此不算引用块——"
+            f"把它移到小节外，或删掉：{_excerpt(intruders[0])}"
+        )
+    return "：引用块里只有空白"
 
 
 def _portable_path(value: str) -> bool:
@@ -566,7 +613,11 @@ def _visual_entries(document: str, errors: list[str]) -> list[VisualEntry]:
 
 
 def _named_entries(
-    prompt: str, entries: list[VisualEntry], *, fold_case: bool = False
+    prompt: str,
+    entries: list[VisualEntry],
+    *,
+    fold_case: bool = False,
+    by_entry_name: bool = False,
 ) -> set[tuple[str, str]]:
     """Which declared entries does this frozen keyframe actually call by name?
 
@@ -578,7 +629,16 @@ def _named_entries(
         haystack = haystack.casefold()
     owners: dict[str, list[VisualEntry]] = {}
     for entry in entries:
-        for designator in entry.designators:
+        # 来源 quotes 剧本.md, which is written in the project's own language and
+        # calls people by their entry names — not by the 画面代称 a prompt body
+        # uses. Matching a Chinese screenplay quote against an English designator
+        # would never fire, so that text is matched by entry name instead. An
+        # entry that opted out with `画面代称：无` opted out of being found by
+        # name at all, and stays out of both.
+        needles = (
+            [entry.name] if by_entry_name and entry.designators else entry.designators
+        )
+        for designator in needles:
             needle = re.sub(r"\s+", " ", designator).strip()
             if fold_case:
                 needle = needle.casefold()
@@ -665,13 +725,17 @@ def _check_named_coverage(
     basis: "VisualBasis",
     entries: list[VisualEntry],
     errors: list[str],
+    *,
+    by_entry_name: bool = False,
 ) -> None:
     """Every entry this text calls by name is either in frame or declared 画外."""
     # Matching is case-sensitive so an ordinary English word never impersonates a
     # character called May or Will. A body that writes the name in another case
     # would otherwise fall out of the check silently, so it is reported here.
-    named = _named_entries(prompt, entries)
-    folded = _named_entries(prompt, entries, fold_case=True)
+    named = _named_entries(prompt, entries, by_entry_name=by_entry_name)
+    folded = _named_entries(
+        prompt, entries, fold_case=True, by_entry_name=by_entry_name
+    )
     for category, name in sorted(folded - named):
         errors.append(
             f"{owner}: {where}里的名字与画面代称大小写不一致: {category}「{name}」；"
@@ -868,6 +932,17 @@ def _check_language_designators(
                 "提示词正文不是中文时，写「画面代称：<正文里的拼写>」，"
                 "正文从不点名时写「画面代称：无」"
             )
+
+
+def _declared_seconds(value: str) -> Optional[float]:
+    """The number of seconds a 时长 field declares, however it is spelled.
+
+    `4s`, `4 秒` and `4秒` are the same duration. Returning None for anything
+    else keeps an unparseable value out of the comparison instead of turning a
+    formatting difference into a false duration conflict.
+    """
+    match = re.search(r"(\d+(?:\.\d+)?)", value or "")
+    return float(match.group(1)) if match else None
 
 
 def _check_continuity_locks(
@@ -1091,7 +1166,10 @@ def validate_episode(episode: Path, project_root: Optional[Path] = None) -> list
         image_prompt = _copyable_prompt(body)
         image_prompts[match.group(1)] = image_prompt
         if image_prompt is None:
-            errors.append(f"{match.group(1)}: 缺少唯一且非空的可复制提示词")
+            errors.append(
+                f"{match.group(1)}: 缺少唯一且非空的可复制提示词"
+                + _copyable_prompt_cause(body)
+            )
 
     motions = _sections(video, "MOTION")
     shot_ids = re.findall(r"^## (SHOT-[A-Z0-9-]+)\b", storyboard, re.MULTILINE)
@@ -1122,9 +1200,11 @@ def validate_episode(episode: Path, project_root: Optional[Path] = None) -> list
         errors.append("视频提示词.md: 没有 MOTION 条目")
 
     motion_by_shot: dict[str, tuple[str, str, Optional[str]]] = {}
+    motion_duration: dict[str, str] = {}
     for motion_id, body in motions.items():
         fields = _fields(body, owner=motion_id, errors=errors)
         shot_id = _plain(fields.get("分镜", ""))
+        motion_duration[shot_id] = _plain(fields.get("时长", ""))
         copyable_prompt = _copyable_prompt(body)
         if not shot_id:
             errors.append(f"{motion_id}: 缺少分镜字段")
@@ -1135,16 +1215,34 @@ def validate_episode(episode: Path, project_root: Optional[Path] = None) -> list
         if motion_id.removeprefix("MOTION-") != shot_id.removeprefix("SHOT-"):
             errors.append(f"{motion_id}: ID 必须与分镜 {shot_id} 一一对应")
         if copyable_prompt is None:
-            errors.append(f"{motion_id}: 缺少唯一且非空的可复制提示词")
+            errors.append(
+                f"{motion_id}: 缺少唯一且非空的可复制提示词"
+                + _copyable_prompt_cause(body)
+            )
 
     if set(motion_by_shot) != set(shots):
         errors.append("分镜.md/视频提示词.md: SHOT 与 MOTION 未一一对应")
 
     for shot_id, shot_body in shots.items():
         fields = _fields(shot_body, owner=shot_id, errors=errors)
+        source_value = fields.get("来源", "")
         claimed_scenes.update(
-            _shot_sources(fields.get("来源", ""), shot_id, scenes, errors)
+            _shot_sources(source_value, shot_id, scenes, errors)
         )
+        shot_seconds = _declared_seconds(_plain(fields.get("时长", "")))
+        motion_seconds = _declared_seconds(motion_duration.get(shot_id, ""))
+        if (
+            shot_seconds is not None
+            and motion_seconds is not None
+            and shot_seconds != motion_seconds
+        ):
+            # 时长 is the value actually sent to the execution end and the term
+            # VID-04/VID-13 arithmetic is built on. A downstream copy that drifts
+            # from its accepted upstream is invisible in every other check.
+            errors.append(
+                f"{shot_id}: 分镜时长 {shot_seconds:g} 秒与视频提示词 "
+                f"{motion_seconds:g} 秒不一致；视频提示词只能原样照抄已接受的镜头时长"
+            )
         image_value = fields.get("图片提示词项", "")
         if not image_value:
             errors.append(f"{shot_id}: 缺少图片提示词项字段")
@@ -1178,10 +1276,29 @@ def validate_episode(episode: Path, project_root: Optional[Path] = None) -> list
         # shot without one would make the coverage check below vacuous.
         keyframe = _copyable_prompt(shot_body, heading=r"冻结关键帧提示词")
         if keyframe is None:
-            errors.append(f"{shot_id}: 缺少唯一且非空的冻结关键帧提示词")
+            errors.append(
+                f"{shot_id}: 缺少唯一且非空的冻结关键帧提示词"
+                + _copyable_prompt_cause(shot_body, heading=r"冻结关键帧提示词")
+            )
         elif basis.parsed:
             _check_named_coverage(
                 keyframe, shot_id, "冻结关键帧提示词", basis, visual_entries, errors
+            )
+        if basis.parsed and source_value:
+            # A shot's 来源 is its claim on the screenplay: whatever it quotes,
+            # this shot is the one that films it. Quoting an action performed by
+            # someone the frame never shows takes that action off everyone's
+            # list — no other shot claims it, and nothing reports it missing, so
+            # it simply never gets filmed. Same rule as the keyframe: in frame,
+            # or declared 画外.
+            _check_named_coverage(
+                source_value,
+                shot_id,
+                "来源引文",
+                basis,
+                visual_entries,
+                errors,
+                by_entry_name=True,
             )
 
         motion = motion_by_shot.get(shot_id)

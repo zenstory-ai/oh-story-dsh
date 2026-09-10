@@ -739,7 +739,10 @@ function CreativeWorkbench({
     const fromWorkspace = productionLibrary.flatMap((version) => {
       if (version.path === undefined || (!version.path.startsWith(`${episodeProduction.episodeDirectory}/`) && !version.path.startsWith(`交付/${episodeName}/`))) return [];
       const matched = mediaTargetFromPath(version.path, knownTargets);
-      const composition = /(?:^|\/)成片-[^/]+\.mp4$/iu.test(version.path);
+      // Drama Skills 0.7 renders the assembled cut into 制作成果/成片/; earlier native
+      // compositions wrote 成片-<job>.mp4 beside the per-shot results.
+      const composition = /(?:^|\/)成片-[^/]+\.mp4$/iu.test(version.path)
+        || /(?:^|\/)制作成果\/成片\//u.test(version.path);
       if (matched === undefined && !composition) return [];
       const targetId = matched === undefined ? episodeProduction.episodeDirectory : motionTargets.get(matched) ?? matched;
       return [{ ...version, targetId }];

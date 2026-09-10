@@ -4,14 +4,14 @@
     {
       "kind": "story",
       "repository": "https://github.com/zenstory-ai/oh-story-claudecode",
-      "commit": "5de060f9a47e7c4781c81edb320436b772e2955e",
+      "commit": "abe96630d115afbd528f2329e2d8d604d5d5673c",
       "sourcePath": "demo/长篇/让你管账号，你高燃混剪炸全网",
       "localPath": "story/让你管账号，你高燃混剪炸全网"
     },
     {
       "kind": "drama",
       "repository": "https://github.com/zenstory-ai/drama-skills",
-      "commit": "4cd584668bf6dc613a51d1ca40d00de352db9713",
+      "commit": "bc96c5eb9c91cccd1c613c2b34645c35f1989a28",
       "sourcePath": "examples/creator-first/EP001",
       "localPath": "drama/让你管账号/剧集/EP001",
       "files": [

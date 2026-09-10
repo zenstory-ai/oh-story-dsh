@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   activeProductionJobId,
+  compositionInFlight,
   createPendingJob,
   mediaTargetFromPath,
   mediaVersionMatchesJob,
@@ -9,6 +10,7 @@ import {
   reconcileSequence,
   reorderSequence,
   sequenceIssues,
+  type ProductionJob,
   type ProductionMediaVersion
 } from "../src/client/production-runtime.js";
 
@@ -35,6 +37,78 @@ describe("production runtime", () => {
     const version = { id: "opaque", targetId: "SHOT-001", kind: "video" as const, url: "/media", path: "剧集/EP001/SHOT-001-job-10.mp4" };
     expect(mediaVersionMatchesJob(version, "job-10")).toBe(true);
     expect(mediaVersionMatchesJob(version, "job-1")).toBe(false);
+  });
+
+  it("completes an assembly job on the newly rendered cut rather than a stale one", () => {
+    const cutPath = "剧集/EP001/制作成果/成片/成片.mp4";
+    const stale: ProductionMediaVersion = { id: `workspace:${cutPath}:3`, targetId: "剧集/EP001", kind: "video", url: "/media/old", path: cutPath };
+    const job = createPendingJob({
+      id: "compose-1",
+      targetId: "剧集/EP001",
+      kind: "composition",
+      prompt: "按成片顺序合成",
+      outputPath: cutPath,
+      supersededOutputIds: [stale.id]
+    });
+
+    // short-drama-edit names the cut, not the workbench, so the job id never reaches the filename.
+    expect(mediaVersionMatchesJob(stale, job.id)).toBe(false);
+    const beforeRender = reconcileProductionJobs([{ ...job, status: "running" }], [], true, [stale]);
+    expect(beforeRender[0]).toMatchObject({ status: "running", completedOutputs: 0 });
+
+    const rendered: ProductionMediaVersion = { ...stale, id: `workspace:${cutPath}:4`, url: "/media/new" };
+    const afterRender = reconcileProductionJobs([{ ...job, status: "running" }], [], true, [rendered]);
+    expect(afterRender[0]).toMatchObject({ status: "succeeded", progress: 100, completedOutputs: 1 });
+    expect(afterRender[0]?.output?.id).toBe(rendered.id);
+  });
+
+  it("never lets a later cut revive an assembly job the creator canceled or that failed", () => {
+    const cutPath = "剧集/EP001/制作成果/成片/成片.mp4";
+    const assembly = (id: string) => createPendingJob({
+      id, targetId: "剧集/EP001", kind: "composition", prompt: "按成片顺序合成", outputPath: cutPath, supersededOutputIds: []
+    });
+    // Every composition renders to this one upstream path, so the cut carries no job identity.
+    const cut: ProductionMediaVersion = { id: `workspace:${cutPath}:1`, targetId: "剧集/EP001", kind: "video", url: "/media/new", path: cutPath };
+
+    const canceled = reconcileProductionJobs([{ ...assembly("compose-canceled"), status: "canceled" }], [], true, [cut]);
+    expect(canceled[0]).toMatchObject({ status: "canceled", progress: 0 });
+
+    const failed = reconcileProductionJobs(
+      [{ ...assembly("compose-failed"), status: "failed", error: "CUT-EP001-002 的素材不存在" }], [], true, [cut]
+    );
+    expect(failed[0]).toMatchObject({ status: "failed", error: "CUT-EP001-002 的素材不存在" });
+
+    // A job keyed on its own id keeps the old behaviour: that output really is its own.
+    const legacy = createPendingJob({ id: "compose-legacy", targetId: "剧集/EP001", kind: "composition", prompt: "合成" });
+    const legacyCut: ProductionMediaVersion = {
+      id: "workspace:legacy:1", targetId: "剧集/EP001", kind: "video", url: "/media", path: "剧集/EP001/制作成果/成片-compose-legacy.mp4"
+    };
+    expect(reconcileProductionJobs([{ ...legacy, status: "failed" }], [], true, [legacyCut])[0]).toMatchObject({ status: "succeeded" });
+  });
+
+  it("keeps a succeeded assembly job pinned to the cut it produced", () => {
+    const cutPath = "剧集/EP001/制作成果/成片/成片.mp4";
+    const first: ProductionMediaVersion = { id: `workspace:${cutPath}:1`, targetId: "剧集/EP001", kind: "video", url: "/media/1", path: cutPath };
+    const job = {
+      ...createPendingJob({ id: "compose-1", targetId: "剧集/EP001", kind: "composition", prompt: "合成", outputPath: cutPath, supersededOutputIds: [] }),
+      status: "succeeded" as const, output: first, completedOutputs: 1, progress: 100
+    };
+    const second: ProductionMediaVersion = { ...first, id: `workspace:${cutPath}:2`, url: "/media/2" };
+    expect(reconcileProductionJobs([job], [], true, [second])[0]?.output?.id).toBe(first.id);
+  });
+
+  it("reports an unsettled composition so a second one cannot claim the same cut", () => {
+    const assembly = (id: string, status: ProductionJob["status"]) => ({
+      ...createPendingJob({ id, targetId: "剧集/EP001", kind: "composition", prompt: "合成" }), status
+    });
+    expect(compositionInFlight([])).toBe(false);
+    expect(compositionInFlight([assembly("a", "running")])).toBe(true);
+    expect(compositionInFlight([assembly("a", "pending")])).toBe(true);
+    expect(compositionInFlight([assembly("a", "awaiting_confirmation")])).toBe(true);
+    // Settled either way, so re-composing is the creator's call again.
+    expect(compositionInFlight([assembly("a", "succeeded"), assembly("b", "canceled"), assembly("c", "failed")])).toBe(false);
+    // Per-shot work never blocks assembly.
+    expect(compositionInFlight([{ ...assembly("a", "running"), kind: "video" }])).toBe(false);
   });
 
   it("reconciles and reorders the delivery sequence while reporting missing shots", () => {

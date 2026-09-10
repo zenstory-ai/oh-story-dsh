@@ -29,7 +29,7 @@ describe("Oh Story bundled skill provider", () => {
     }
     expect(skill?.content).toContain("Keep the upstream writing, Tracking, lint, outline, revision, and quality workflows");
     const workflowSetup = await readFile(resolve(skillRoot, "story-long-write/references/workflow-setup.md"), "utf8");
-    expect(workflowSetup).toContain("| # | 情节点（谁做了什么） | 功能标签 | 执行边界 |");
+    expect(workflowSetup).toContain("| # | 情节点（谁做了什么） | 功能标签 | 分辨率 | 执行边界 |");
     expect(skill?.content.startsWith("---")).toBe(false);
     const setupCandidate = candidates.find((candidate) => candidate.name === "story-setup");
     const setup = await provider.get(setupCandidate!, {});
@@ -94,9 +94,9 @@ describe("Drama Skills bundled provider", () => {
     const provider = createDramaSkillProvider(dramaRoot);
     const listed = await provider.list({});
     if (!Array.isArray(listed)) throw new Error("Expected a complete Drama Skills catalog.");
-    expect(listed).toHaveLength(10);
+    expect(listed).toHaveLength(11);
     expect(listed.map((candidate) => candidate.name)).toEqual(expect.arrayContaining([
-      "short-drama", "short-drama-write", "short-drama-storyboard", "short-drama-produce"
+      "short-drama", "short-drama-write", "short-drama-storyboard", "short-drama-produce", "short-drama-edit"
     ]));
     for (const candidate of listed) {
       const skill = await provider.get(candidate, {});
@@ -105,6 +105,7 @@ describe("Drama Skills bundled provider", () => {
       expect(skill?.content).toContain("an oral review writes nothing");
       expect(skill?.content).toContain("never create a parallel JSON/JSONL lifecycle truth");
       expect(skill?.content).toContain("Never upgrade a v0.5 structured project in place");
+      expect(skill?.content).toContain("剧集/<EP>/剪辑单.md is the v0.7 assembly record, not a sixth creative truth");
     }
     const routeCandidate = listed.find((candidate) => candidate.name === "short-drama");
     const route = await provider.get(routeCandidate!, {});
@@ -124,6 +125,13 @@ describe("Drama Skills bundled provider", () => {
     expect(production?.content).toContain("DSH permissions and approval UI");
     expect(production?.content).toContain("source must be the current creator-first Markdown");
     expect(production?.content).toContain("剧集/<EP>/制作成果/");
+    expect(production?.content).toContain("orphaned_provider_job");
+    expect(production?.content).toContain("collect spends nothing and does not need the confirmation gate");
+    const editCandidate = listed.find((candidate) => candidate.name === "short-drama-edit");
+    const edit = await provider.get(editCandidate!, {});
+    expect(edit?.content).toContain("剧集/<EP>/制作成果/成片/");
+    expect(edit?.content).toContain("Keep the zero-dependency ffmpeg subtitle route by default");
+    expect(edit?.content).toContain("This stage never generates footage");
   });
 });
 

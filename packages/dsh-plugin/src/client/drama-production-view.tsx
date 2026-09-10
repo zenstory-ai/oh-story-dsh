@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent a
 import { productionCompleteness, type DramaDocumentTarget, type DramaEpisodeProduction, type DramaProductionSection } from "./drama-production.js";
 import { endpoint } from "./workbench-ui.js";
 import { nativeBatchPrompt, nativeCompositionPrompt, nativeProductionPrompt } from "./production-prompts.js";
-import { activeProductionJobId, createPendingJob, queuedItemForJob, reconcileProductionJobs, reconcileSequence, referencesForTarget, reorderSequence, sequenceIssues, selectedVersionForTarget, type CanvasPoint, type ProductionJob, type ProductionMediaVersion, type ProductionQueueEntry, type ProductionSequenceItem } from "./production-runtime.js";
+import { activeProductionJobId, compositionInFlight, createPendingJob, queuedItemForJob, reconcileProductionJobs, reconcileSequence, referencesForTarget, reorderSequence, sequenceIssues, selectedVersionForTarget, type CanvasPoint, type ProductionJob, type ProductionMediaVersion, type ProductionQueueEntry, type ProductionSequenceItem } from "./production-runtime.js";
 
 interface Props {
   readonly sessionId: string;
@@ -40,6 +40,8 @@ const SECTION_ORDER = Object.keys(SECTION_LABELS) as DramaProductionSection[];
 const STATUS_LABELS: Readonly<Record<ProductionJob["status"], string>> = { awaiting_confirmation: "等待确认", pending: "已提交", running: "DSH 执行中", dispatched_unknown: "待核对", succeeded: "已完成", failed: "失败", canceled: "已取消" };
 const ASSET_KIND_LABEL = { character: "人物", scene: "场景", prop: "道具", state: "状态", unknown: "设定" } as const;
 const JOB_KIND_LABEL = { image: "图片", video: "视频", composition: "成片" } as const;
+/** Where `short-drama-edit` renders the assembled cut, relative to the episode directory. */
+const ASSEMBLED_CUT_PATH = "制作成果/成片/成片.mp4";
 
 /** Mirror of the host `/oh-story/drama-preflight` summary: presence only, never values. */
 interface DramaPreflight {
@@ -161,7 +163,21 @@ export function DramaProductionView(props: Props) {
     try { await props.onRemoveQueued(itemId); commitJobs(jobsRef.current.map((item) => item.id === job.id ? { ...item, status: "canceled", progress: 0 } : item)); setNotice(`${job.targetId} 已从 DSH Queue 移除。`); }
     catch (error) { setNotice(error instanceof Error ? error.message : String(error)); }
   };
-  const composeSequence = () => { const issues = sequenceIssues(props.sequence, props.versions); if (issues.length > 0) { setNotice(issues[0]); return; } void dispatchComposition(createPendingJob({ id: crypto.randomUUID(), targetId: props.production.episodeDirectory, kind: "composition", prompt: "按成片顺序合成" })); };
+  const composeSequence = () => {
+    const issues = sequenceIssues(props.sequence, props.versions);
+    if (issues.length > 0) { setNotice(issues[0]); return; }
+    // short-drama-edit renders to this fixed path, so the job correlates on the deliverable
+    // rather than on a job id in the filename, and ignores a cut that was already there.
+    const outputPath = `${props.production.episodeDirectory}/${ASSEMBLED_CUT_PATH}`;
+    void dispatchComposition(createPendingJob({
+      id: crypto.randomUUID(),
+      targetId: props.production.episodeDirectory,
+      kind: "composition",
+      prompt: "按成片顺序合成",
+      outputPath,
+      supersededOutputIds: props.libraryVersions.flatMap((version) => version.path === outputPath ? [version.id] : [])
+    }));
+  };
 
   return <div className="oh-story-production">
     <div className="oh-story-production-bar"><div className="oh-story-production-tabs" role="tablist" aria-label="短剧生产视图">{SECTION_ORDER.map((item) => <button type="button" role="tab" tabIndex={props.section === item ? 0 : -1} aria-selected={props.section === item} key={item} onKeyDown={(event) => { handleSectionKey(event, item, props.onSectionChange); }} onClick={() => { props.onSectionChange(item); }}>{SECTION_LABELS[item]}</button>)}</div><div className="oh-story-production-meta"><span className="oh-story-production-summary">{props.production.shots.length} 镜 · {props.production.assets.length + props.production.visualAssets.length} 素材 · {props.jobs.filter((job) => job.status === "awaiting_confirmation" || job.status === "running" || job.status === "pending").length} 任务</span><button type="button" onClick={props.onRefresh}>刷新</button></div></div>
@@ -227,8 +243,9 @@ function TaskBoard({ jobs, queue, sessionRunning, onCancel, onRemoveQueued }: {
 }
 
 function SequenceBoard(props: Props & { readonly onCompose: () => void }) {
+  const composing = compositionInFlight(props.jobs);
   const issues = sequenceIssues(props.sequence, props.versions); const versionById = new Map(props.versions.map((version) => [version.id, version])); const move = (index: number, delta: number) => { const source = props.sequence[index]; const target = props.sequence[index + delta]; if (source !== undefined && target !== undefined) props.onSequenceChange(reorderSequence(props.sequence, index, index + delta)); };
-  return <section className="oh-story-sequence"><div className="oh-story-sequence-summary"><strong>{props.sequence.length} 个镜头</strong><span>{props.sequence.length === 0 ? "还没有镜头" : issues.length === 0 ? "已可合成" : `${String(issues.length)} 个阻塞项`}</span><button type="button" disabled={issues.length > 0 || props.sequence.length < 2} onClick={props.onCompose}>合成成片</button></div>{issues.length > 0 && <ul className="oh-story-sequence-issues">{issues.slice(0, 3).map((issue) => <li key={issue}>{issue}</li>)}{issues.length > 3 && <li>另有 {issues.length - 3} 个阻塞项，请在下方镜头行补齐视频。</li>}</ul>}<ol>{props.sequence.map((item, index) => { const version = item.versionId === undefined ? undefined : versionById.get(item.versionId); return <li key={item.shotId}><span>{String(index + 1).padStart(2, "0")}</span>{version === undefined ? <div className="oh-story-sequence-missing">缺少视频</div> : <MediaPreview version={version} interactive={false} />}<strong>{item.shotId}</strong><div><button type="button" aria-label={`上移 ${item.shotId}`} disabled={index === 0} onClick={() => { move(index, -1); }}>↑</button><button type="button" aria-label={`下移 ${item.shotId}`} disabled={index === props.sequence.length - 1} onClick={() => { move(index, 1); }}>↓</button></div></li>; })}</ol></section>;
+  return <section className="oh-story-sequence"><div className="oh-story-sequence-summary"><strong>{props.sequence.length} 个镜头</strong><span>{props.sequence.length === 0 ? "还没有镜头" : composing ? "成片任务进行中" : issues.length === 0 ? "已可合成" : `${String(issues.length)} 个阻塞项`}</span><button type="button" disabled={composing || issues.length > 0 || props.sequence.length < 2} onClick={props.onCompose}>合成成片</button></div>{issues.length > 0 && <ul className="oh-story-sequence-issues">{issues.slice(0, 3).map((issue) => <li key={issue}>{issue}</li>)}{issues.length > 3 && <li>另有 {issues.length - 3} 个阻塞项，请在下方镜头行补齐视频。</li>}</ul>}<ol>{props.sequence.map((item, index) => { const version = item.versionId === undefined ? undefined : versionById.get(item.versionId); return <li key={item.shotId}><span>{String(index + 1).padStart(2, "0")}</span>{version === undefined ? <div className="oh-story-sequence-missing">缺少视频</div> : <MediaPreview version={version} interactive={false} />}<strong>{item.shotId}</strong><div><button type="button" aria-label={`上移 ${item.shotId}`} disabled={index === 0} onClick={() => { move(index, -1); }}>↑</button><button type="button" aria-label={`下移 ${item.shotId}`} disabled={index === props.sequence.length - 1} onClick={() => { move(index, 1); }}>↓</button></div></li>; })}</ol></section>;
 }
 
 function ProductionCanvas(props: Props) {
