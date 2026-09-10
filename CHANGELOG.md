@@ -14,7 +14,7 @@
 ### Added
 
 - 同步 [Drama Skills 0.7.0](https://github.com/zenstory-ai/drama-skills/releases/tag/v0.7.0)（`bc96c5e`），新增第 11 个 Skill `short-drama-edit`：把已生产的逐镜素材装配成成片。它把每一刀的入出点、镜序、字幕、声音与接镜校正写进《剪辑单.md》，再由 `edit_tool.py` 的 `check` / `render` / `verify` 核对文档、渲染成片、测量交付数字，输出落在 `剧集/<EP>/制作成果/成片/`。《剪辑单.md》不是第六份创作文档——五文档仍是创作真相，剪辑只记录「已有的这些素材，哪些帧进成片」，改台词、镜头职责或时长仍回到拥有它们的文档。
-- `short-drama-produce` 的 DSH 覆盖层写明中断任务的取回路径：视频任务在提交那一刻就已计费，`audit` 报出 `orphaned_provider_job` 时用 `collect` 按供应商任务 ID 取回结果。`collect` 不花钱，因而不走确认闸门；直接重投同一个任务会让创作者付两次。
+- `short-drama-produce` 的 DSH 覆盖层写明中断任务的取回路径：视频任务在提交那一刻就已计费，`audit` 报出 `orphaned_provider_job` 时用 `collect` 取回结果——传的是 `--job-id`，即报告里那个 drama 任务 ID，供应商任务 ID 由 `collect` 自己从 run handle 读出。`collect` 不花钱，因而不走确认闸门；直接重投同一个任务会让创作者付两次。
 
 ### Changed
 
