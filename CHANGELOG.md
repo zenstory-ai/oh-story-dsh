@@ -11,6 +11,8 @@
 
 ## [Unreleased]
 
+## [0.1.9] - 2026-09-10
+
 ### Added
 
 - 同步 [Drama Skills 0.7.0](https://github.com/zenstory-ai/drama-skills/releases/tag/v0.7.0)（`bc96c5e`），新增第 11 个 Skill `short-drama-edit`：把已生产的逐镜素材装配成成片。它把每一刀的入出点、镜序、字幕、声音与接镜校正写进《剪辑单.md》，再由 `edit_tool.py` 的 `check` / `render` / `verify` 核对文档、渲染成片、测量交付数字，输出落在 `剧集/<EP>/制作成果/成片/`。《剪辑单.md》不是第六份创作文档——五文档仍是创作真相，剪辑只记录「已有的这些素材，哪些帧进成片」，改台词、镜头职责或时长仍回到拥有它们的文档。
@@ -199,7 +201,8 @@
 - 提供 13 个 Oh Story 小说 Skills、7 个专业 Roles 与 10 个 Drama Skills。
 - 提供文件树、Markdown/JSONL 编辑预览与官方 DSH Chat 同屏的三栏工作台。
 
-[Unreleased]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.8...HEAD
+[Unreleased]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.9...HEAD
+[0.1.9]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.8...v0.1.9
 [0.1.8]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.7...v0.1.8
 [0.1.7]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.6...v0.1.7
 [0.1.6]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.5...v0.1.6
