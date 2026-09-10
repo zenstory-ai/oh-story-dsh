@@ -72,14 +72,14 @@
 **1. 安装插件并启动 DSH Web**
 
 ```bash
-npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.1.5-rc.1 dsh plugin --profile web add @oh-story/dsh@0.1.8 &&
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.1.5-rc.1 dsh plugin --profile web add @oh-story/dsh@0.1.9 &&
 npx -y @deepseek-ai/dsh@0.1.5-rc.1 web
 ```
 
 也可以直接安装 GitHub Release 中经过同一套测试的预构建包：
 
 ```bash
-npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.1.5-rc.1 dsh plugin --profile web add https://github.com/zenstory-ai/oh-story-dsh/releases/download/v0.1.8/oh-story-dsh-0.1.8.tgz &&
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.1.5-rc.1 dsh plugin --profile web add https://github.com/zenstory-ai/oh-story-dsh/releases/download/v0.1.9/oh-story-dsh-0.1.9.tgz &&
 npx -y @deepseek-ai/dsh@0.1.5-rc.1 web
 ```
 
@@ -130,7 +130,7 @@ npx -y @deepseek-ai/dsh@0.1.5-rc.1 web
 **1. 装进独立 profile**
 
 ```bash
-npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.1.5-rc.1 dsh plugin --profile story add @oh-story/dsh@0.1.8
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.1.5-rc.1 dsh plugin --profile story add @oh-story/dsh@0.1.9
 ```
 
 **2. 补上界面**
