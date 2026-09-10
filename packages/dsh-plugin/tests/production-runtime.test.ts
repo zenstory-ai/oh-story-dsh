@@ -37,6 +37,29 @@ describe("production runtime", () => {
     expect(mediaVersionMatchesJob(version, "job-1")).toBe(false);
   });
 
+  it("completes an assembly job on the newly rendered cut rather than a stale one", () => {
+    const cutPath = "剧集/EP001/制作成果/成片/成片.mp4";
+    const stale: ProductionMediaVersion = { id: `workspace:${cutPath}:3`, targetId: "剧集/EP001", kind: "video", url: "/media/old", path: cutPath };
+    const job = createPendingJob({
+      id: "compose-1",
+      targetId: "剧集/EP001",
+      kind: "composition",
+      prompt: "按成片顺序合成",
+      outputPath: cutPath,
+      supersededOutputIds: [stale.id]
+    });
+
+    // short-drama-edit names the cut, not the workbench, so the job id never reaches the filename.
+    expect(mediaVersionMatchesJob(stale, job.id)).toBe(false);
+    const beforeRender = reconcileProductionJobs([{ ...job, status: "running" }], [], true, [stale]);
+    expect(beforeRender[0]).toMatchObject({ status: "running", completedOutputs: 0 });
+
+    const rendered: ProductionMediaVersion = { ...stale, id: `workspace:${cutPath}:4`, url: "/media/new" };
+    const afterRender = reconcileProductionJobs([{ ...job, status: "running" }], [], true, [rendered]);
+    expect(afterRender[0]).toMatchObject({ status: "succeeded", progress: 100, completedOutputs: 1 });
+    expect(afterRender[0]?.output?.id).toBe(rendered.id);
+  });
+
   it("reconciles and reorders the delivery sequence while reporting missing shots", () => {
     const versions: ProductionMediaVersion[] = [{
       id: "image-v1", targetId: "SHOT-EP001-001", kind: "image", url: "/oh-story/media", path: "剧集/EP001/制作成果/1.png"

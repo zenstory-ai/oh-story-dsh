@@ -2,11 +2,11 @@
   "schemaVersion": 2,
   "upstream": {
     "repository": "git@github.com:zenstory-ai/oh-story-claudecode.git",
-    "commit": "5de060f9a47e7c4781c81edb320436b772e2955e",
-    "releaseVersion": "0.7.9",
-    "agentsVersion": 29
+    "commit": "abe96630d115afbd528f2329e2d8d604d5d5673c",
+    "releaseVersion": "0.7.10",
+    "agentsVersion": 30
   },
-  "generatedAt": "2026-09-02T02:39:34.565Z",
+  "generatedAt": "2026-09-10T13:26:12.998Z",
   "skills": [
     "browser-cdp",
     "story",
@@ -44,8 +44,8 @@
     },
     {
       "path": "roles/character-designer.md",
-      "sha256": "d223ed1a0038dfb4295cdbfe6763bb4223c720ab8fc16a9b9888f5116f229bd1",
-      "bytes": 9347
+      "sha256": "b287c18b0b3299d67f1570598cc6f5e69138fd92f9b75841fc1268a720ae9bee",
+      "bytes": 9343
     },
     {
       "path": "roles/consistency-checker.md",
@@ -54,13 +54,13 @@
     },
     {
       "path": "roles/narrative-writer.md",
-      "sha256": "0027d342b4771d269459299d2ac520953e87f084119718d5ea1044d8f9820187",
-      "bytes": 32208
+      "sha256": "8d7ba053dd51c6cf82bd83b1c1c8ffebd29816f4d099fab70aff9ca285593197",
+      "bytes": 15819
     },
     {
       "path": "roles/story-architect.md",
-      "sha256": "b3599a5963abef5c94c227df0aa278062c4132f5e9dc54705c46ef1046b84713",
-      "bytes": 12139
+      "sha256": "7f5cf91ae7dbe5d227133d0400c9710c52453844bf0cd01e31a80ad2c4ebfdd8",
+      "bytes": 12135
     },
     {
       "path": "roles/story-explorer.md",
@@ -89,23 +89,33 @@
     },
     {
       "path": "skills/story-deslop/SKILL.md",
-      "sha256": "97abadf6ea64190b6c1afe8a19b40ad37370e09e614f2210322220bf6398f5e0",
-      "bytes": 30428
+      "sha256": "f6d8519683c50035e41ae8cf6436910b75a9c02ec07c37efd68260bd00972632",
+      "bytes": 21813
     },
     {
       "path": "skills/story-deslop/references/anti-ai-writing.md",
-      "sha256": "011bfda41a22f4ba467517bb260954db1cb11ff32a542a887022e51ece1ed717",
-      "bytes": 37029
+      "sha256": "d3f6eb36db0e2416a195b92d684ce39ae0ac254906ea4e2cd2a1adb9b6bc4b93",
+      "bytes": 37154
     },
     {
       "path": "skills/story-deslop/references/author-memory.md",
-      "sha256": "04077171ce2eb189985b555362fce60daad9fa3f966e32273e277062f65973d1",
-      "bytes": 9942
+      "sha256": "15a05bc83bfcc82d7aaa66f95e622b41c550db39c388d882d835e7f6a29fdf69",
+      "bytes": 10611
     },
     {
       "path": "skills/story-deslop/references/banned-words.md",
-      "sha256": "bb9512f5b81e2dd0d8d47a8165b0372ed6c147475502a4aa207f763ab694d5e1",
-      "bytes": 10337
+      "sha256": "f68afa5493557acd331da18ea07b14af7dc357fd3c8cd7e3c56be39ff23f85bd",
+      "bytes": 10447
+    },
+    {
+      "path": "skills/story-deslop/references/deslop-gates.md",
+      "sha256": "6bfcb498187c8498667450900069e3d1ff7d1ea3e03a47982492473449363cc7",
+      "bytes": 12105
+    },
+    {
+      "path": "skills/story-deslop/references/style-resolution.md",
+      "sha256": "95a863cd7cd89b983d9d3702756e176d51ea69996e6ba7ed671123368f7ee1d5",
+      "bytes": 4017
     },
     {
       "path": "skills/story-deslop/scripts/author_memory_commit.py",
@@ -114,23 +124,28 @@
     },
     {
       "path": "skills/story-deslop/scripts/check-ai-patterns.js",
-      "sha256": "90a2fc9c5ab4a9105714c439ab0c8212035a18091af01593700286afdc8b2707",
-      "bytes": 67088
+      "sha256": "f58254b35af44e004e1a08252d210866647e50c011f6edd1aade4e154af12382",
+      "bytes": 67463
     },
     {
       "path": "skills/story-deslop/scripts/check-degeneration.js",
-      "sha256": "d6c212118dcf5c89018f337e05833265d6741d1d178789efba5b04f37a01a17d",
-      "bytes": 14387
+      "sha256": "6c065c563e82b4b2ce4d66ad3dc1f57f0b742de41a8a65c2ae677ebeff5b7dea",
+      "bytes": 15104
     },
     {
       "path": "skills/story-deslop/scripts/normalize-punctuation.js",
-      "sha256": "b9fa7ea6482da1ab76de4c1268d9583ef777d13be4a9f57cb6f8725fe1a7f1da",
-      "bytes": 13083
+      "sha256": "8424ba7ebf6ea2b54a9c9f5812bdaa61e532e0c5da4527a73171e9f4531c179c",
+      "bytes": 13480
+    },
+    {
+      "path": "skills/story-deslop/scripts/style-whitelist.js",
+      "sha256": "398018c5acff324009493d1e7661f8864bf62d6d95616d00fa5141cc86eb3908",
+      "bytes": 1168
     },
     {
       "path": "skills/story-import/SKILL.md",
-      "sha256": "a0267be37ed7e35261720fa35310155633708d0bb7caaf19a2abd21b18e6a882",
-      "bytes": 42702
+      "sha256": "2da7bbf6109e9771d454cd51465096eae894d2caacdfa5ff64a2498410929058",
+      "bytes": 42722
     },
     {
       "path": "skills/story-import/references/character-state-reverse.md",
@@ -139,8 +154,8 @@
     },
     {
       "path": "skills/story-import/references/format-and-structure.md",
-      "sha256": "1c5e69b60e87fe07a8425cae8bbdf51f2f47b35d51241397f279d000715066a5",
-      "bytes": 10538
+      "sha256": "4e72e10123fc875f0b392bbb2a3addb1c006ea5c4e4256796deafd287623452e",
+      "bytes": 10599
     },
     {
       "path": "skills/story-import/references/length-routing.md",
@@ -163,14 +178,19 @@
       "bytes": 7702
     },
     {
+      "path": "skills/story-import/references/tracking-initialization.md",
+      "sha256": "e8e13495b054ebc8b5a70b58a32871aa8bf6b9ff64cee45a228ae7af6837fb5c",
+      "bytes": 1137
+    },
+    {
       "path": "skills/story-import/references/tracking-transaction.md",
-      "sha256": "c1b166f047c5269b9fdac2eb85494efdce51b9b1a3596874ea1c1090ba828b13",
-      "bytes": 13253
+      "sha256": "3452e4ebe8bf6fdfd8f93f5700a6c647ab0ce32324609ec901d861541eba634c",
+      "bytes": 12389
     },
     {
       "path": "skills/story-import/scripts/check-outline-contract.js",
-      "sha256": "00c47d32d3b5cf8ffd11934bd55c5f5623956427d94b9b546056b6071a55d0c2",
-      "bytes": 9536
+      "sha256": "f2c5f833d95025d251776b6d8afa16a7d76e6e7f7d78c3c5d8838a34c4099de4",
+      "bytes": 17799
     },
     {
       "path": "skills/story-import/scripts/tracking_commit.py",
@@ -184,7 +204,7 @@
     },
     {
       "path": "skills/story-long-analyze/SKILL.md",
-      "sha256": "d96df880231af80f6ce18163a2e5651bc4fc0e77e6c4774206492568b28e3a32",
+      "sha256": "d023b6d0c26d7076c29d3094413fa0c19617bcc110a6285a6a4de5da6dd13f23",
       "bytes": 30188
     },
     {
@@ -279,28 +299,33 @@
     },
     {
       "path": "skills/story-long-write/SKILL.md",
-      "sha256": "93a4b9ce6f8f46c0d07c59eee825223fa13c0c58b27af4eba638958725bffc27",
-      "bytes": 29595
+      "sha256": "365cf30e386e08d5802c3d02171b138a9853cf009da603f884870ea15c88c2c4",
+      "bytes": 14302
     },
     {
       "path": "skills/story-long-write/references/anti-ai-writing.md",
-      "sha256": "011bfda41a22f4ba467517bb260954db1cb11ff32a542a887022e51ece1ed717",
-      "bytes": 37029
+      "sha256": "d3f6eb36db0e2416a195b92d684ce39ae0ac254906ea4e2cd2a1adb9b6bc4b93",
+      "bytes": 37154
     },
     {
       "path": "skills/story-long-write/references/artifact-protocols.md",
-      "sha256": "4a87737d479574a6d7be84296a21d7dfa480dfbf4b42ca85c38fc2cd98366223",
-      "bytes": 17597
+      "sha256": "4e5cec92ebce4ca293b8058a5634ce126ad32cc0a65f173336a3c3f2e81262fa",
+      "bytes": 24100
     },
     {
       "path": "skills/story-long-write/references/author-memory.md",
-      "sha256": "04077171ce2eb189985b555362fce60daad9fa3f966e32273e277062f65973d1",
-      "bytes": 9942
+      "sha256": "15a05bc83bfcc82d7aaa66f95e622b41c550db39c388d882d835e7f6a29fdf69",
+      "bytes": 10611
     },
     {
       "path": "skills/story-long-write/references/banned-words.md",
-      "sha256": "bb9512f5b81e2dd0d8d47a8165b0372ed6c147475502a4aa207f763ab694d5e1",
-      "bytes": 10337
+      "sha256": "f68afa5493557acd331da18ea07b14af7dc357fd3c8cd7e3c56be39ff23f85bd",
+      "bytes": 10447
+    },
+    {
+      "path": "skills/story-long-write/references/benchmark-recall.md",
+      "sha256": "6b034f593d253e99c8278adf8de8f9bb99bec2838b4075e8b497b8a7acf5f7b2",
+      "bytes": 5980
     },
     {
       "path": "skills/story-long-write/references/character-basics.md",
@@ -329,8 +354,8 @@
     },
     {
       "path": "skills/story-long-write/references/dialogue-mastery.md",
-      "sha256": "b539a561872e2563316c33b300016a8f0150afba02a9dc33471010e3e81cc754",
-      "bytes": 11327
+      "sha256": "a81e029137e3a3bc5d12632ccad81345a947da8e8a8639664a1d867fda1f548d",
+      "bytes": 11495
     },
     {
       "path": "skills/story-long-write/references/emotional-arc-design.md",
@@ -524,13 +549,13 @@
     },
     {
       "path": "skills/story-long-write/references/long-chapter-quality.md",
-      "sha256": "9a5e554c864c1a1e96ce90e287e2a86c774c73a46a124c7e850105d9f5c717bf",
-      "bytes": 10002
+      "sha256": "2ea04c119e301b2f0a5bba3b3f546e73c2570f4b8a427e49d44e8d1e3ffcbbea",
+      "bytes": 10129
     },
     {
       "path": "skills/story-long-write/references/long-format.md",
-      "sha256": "1d41dd2110452281280cb6d85008852b6e010ae8a858110715d784de3fa97d61",
-      "bytes": 2841
+      "sha256": "9eccf21c91220804ccdd760fdad051fe8bd19ad13118ae46e9b44da29855c069",
+      "bytes": 2951
     },
     {
       "path": "skills/story-long-write/references/long-genre-catalog.md",
@@ -574,8 +599,8 @@
     },
     {
       "path": "skills/story-long-write/references/outline-structure-theory.md",
-      "sha256": "529ca28bed2850b7f9ff5293d9bed5f253a7c1d0e5e9ebae5a1e9c1e707be0b4",
-      "bytes": 22085
+      "sha256": "ec93a5f21db2d72e13d930146f384733c40270693038a70044bb0b0a2a1968d3",
+      "bytes": 22692
     },
     {
       "path": "skills/story-long-write/references/plot-core-methods.md",
@@ -598,9 +623,19 @@
       "bytes": 25544
     },
     {
+      "path": "skills/story-long-write/references/project-files.md",
+      "sha256": "ec040bd8fcdb01e706b5ff4ecbe60a824272e6b9902df20d251ecaaa10ab811c",
+      "bytes": 10891
+    },
+    {
       "path": "skills/story-long-write/references/reader-contract-and-progression.md",
       "sha256": "e5c66dad88095dfb25f67294d70a2a5a98b035f9fa87e83b9876676d97840fde",
       "bytes": 11144
+    },
+    {
+      "path": "skills/story-long-write/references/reference-index.md",
+      "sha256": "24bddf0a89323734b2d7e0bd0e5c92d6a9142bbd64871a7f6d5a77f88af68948",
+      "bytes": 6169
     },
     {
       "path": "skills/story-long-write/references/state-tracking.md",
@@ -609,33 +644,43 @@
     },
     {
       "path": "skills/story-long-write/references/style-combat-face.md",
-      "sha256": "0c3065f3bca11c87daf7fa343e5d0e51981f3adf3a78672ffdaa65222e69bdd0",
-      "bytes": 20057
+      "sha256": "d76e218cdae757ff2bc00643061129ed699d20bd27f4757b01bd0c557ddfa78b",
+      "bytes": 20072
     },
     {
       "path": "skills/story-long-write/references/style-craft.md",
-      "sha256": "8be7fb2328e62d66094d97ee9cdf8ab659e9ba8d4acc7945b91bcb8a2a0a06da",
-      "bytes": 13896
+      "sha256": "f9e9f9b055962f90c9fc23d1e03f1e624fd070a443fdfc51941363759eceab8b",
+      "bytes": 13392
     },
     {
       "path": "skills/story-long-write/references/style-genre-modules.md",
-      "sha256": "b4cfe79dd3138bc29f84dfd8178b15476a70b14c5c4943bf8b8b7e393007eada",
-      "bytes": 24739
+      "sha256": "6c6c0da902c82f867f2f6a03738764612363ede1ffef52591dbfba1d29554270",
+      "bytes": 24808
+    },
+    {
+      "path": "skills/story-long-write/references/style-resolution.md",
+      "sha256": "95a863cd7cd89b983d9d3702756e176d51ea69996e6ba7ed671123368f7ee1d5",
+      "bytes": 4017
+    },
+    {
+      "path": "skills/story-long-write/references/tracking-initialization.md",
+      "sha256": "e8e13495b054ebc8b5a70b58a32871aa8bf6b9ff64cee45a228ae7af6837fb5c",
+      "bytes": 1137
     },
     {
       "path": "skills/story-long-write/references/tracking-transaction.md",
-      "sha256": "c1b166f047c5269b9fdac2eb85494efdce51b9b1a3596874ea1c1090ba828b13",
-      "bytes": 13253
+      "sha256": "3452e4ebe8bf6fdfd8f93f5700a6c647ab0ce32324609ec901d861541eba634c",
+      "bytes": 12389
     },
     {
       "path": "skills/story-long-write/references/workflow-chapter.md",
-      "sha256": "85b832ec018f3a18aa928bc9bdbad5046b6aafc462ea2a0b6fbf617428b61c5c",
-      "bytes": 26858
+      "sha256": "8c4f40932ad91f1f8d08df105241a07c26e6584b646a1310ed2052fe3c490567",
+      "bytes": 28640
     },
     {
       "path": "skills/story-long-write/references/workflow-daily.md",
-      "sha256": "c89d2978b1108e7439d9b588330a9cc857edafa78d1f33102cce11a4b79aff7d",
-      "bytes": 25160
+      "sha256": "291d1f74b02ba36188913e5da65938f653c4bbd38650ad448771322d302c07d7",
+      "bytes": 26366
     },
     {
       "path": "skills/story-long-write/references/workflow-revision.md",
@@ -644,13 +689,18 @@
     },
     {
       "path": "skills/story-long-write/references/workflow-setup.md",
-      "sha256": "f677e4961fc0d9e7627a8b67e574dcff407016de96bb2999b86c2b38df4e2d8f",
-      "bytes": 30096
+      "sha256": "29b4c2a1cd68ef219dda0d9bbb31fc3b2762205e250b4d2b1da49d9441d59c4a",
+      "bytes": 36615
+    },
+    {
+      "path": "skills/story-long-write/references/writer-prompt-fallback.md",
+      "sha256": "09604eb314adc9bf6b7bfcdeb8d771a3e784fdf775827f67838919f0e1f6baf4",
+      "bytes": 3132
     },
     {
       "path": "skills/story-long-write/references/writing-craft.md",
-      "sha256": "7543a65921b1b7190b40f6621ee067dcd28ff233093563621afb273ee78e315a",
-      "bytes": 24966
+      "sha256": "37c542c95f7fa29e9a0087ed94b7ec1a84dfb53d0707520fb90967000bd70610",
+      "bytes": 32942
     },
     {
       "path": "skills/story-long-write/scripts/author_memory_commit.py",
@@ -658,34 +708,49 @@
       "bytes": 41806
     },
     {
+      "path": "skills/story-long-write/scripts/build_writer_prompt.py",
+      "sha256": "d48175907be257e27bebe4432af7e8aae663c875f61a4d595921f9561296309b",
+      "bytes": 20235
+    },
+    {
       "path": "skills/story-long-write/scripts/check-ai-patterns.js",
-      "sha256": "90a2fc9c5ab4a9105714c439ab0c8212035a18091af01593700286afdc8b2707",
-      "bytes": 67088
+      "sha256": "f58254b35af44e004e1a08252d210866647e50c011f6edd1aade4e154af12382",
+      "bytes": 67463
     },
     {
       "path": "skills/story-long-write/scripts/check-degeneration.js",
-      "sha256": "d6c212118dcf5c89018f337e05833265d6741d1d178789efba5b04f37a01a17d",
-      "bytes": 14387
+      "sha256": "6c065c563e82b4b2ce4d66ad3dc1f57f0b742de41a8a65c2ae677ebeff5b7dea",
+      "bytes": 15104
     },
     {
       "path": "skills/story-long-write/scripts/check-outline-contract.js",
-      "sha256": "00c47d32d3b5cf8ffd11934bd55c5f5623956427d94b9b546056b6071a55d0c2",
-      "bytes": 9536
+      "sha256": "f2c5f833d95025d251776b6d8afa16a7d76e6e7f7d78c3c5d8838a34c4099de4",
+      "bytes": 17799
     },
     {
       "path": "skills/story-long-write/scripts/check-outline-copy.js",
-      "sha256": "574dd78da11f934837e2b56f658b6c598935e16dd7dec2830272d0134d1587d3",
-      "bytes": 9845
+      "sha256": "e996f290139041480f18e6c81ade89709d8f71b63cc021c6b48cfdcf15578331",
+      "bytes": 12637
     },
     {
       "path": "skills/story-long-write/scripts/normalize-punctuation.js",
-      "sha256": "b9fa7ea6482da1ab76de4c1268d9583ef777d13be4a9f57cb6f8725fe1a7f1da",
-      "bytes": 13083
+      "sha256": "8424ba7ebf6ea2b54a9c9f5812bdaa61e532e0c5da4527a73171e9f4531c179c",
+      "bytes": 13480
+    },
+    {
+      "path": "skills/story-long-write/scripts/outline_view.py",
+      "sha256": "c6fd9769749bd199e9d5a230c352bb9959e2c15b93f7894697912ba1d6558ba6",
+      "bytes": 11727
     },
     {
       "path": "skills/story-long-write/scripts/storyctl.py",
       "sha256": "0fe250cbc02376b8216b52ba95310413b728dc4788691baba55e70dda9761f16",
       "bytes": 12666
+    },
+    {
+      "path": "skills/story-long-write/scripts/style-whitelist.js",
+      "sha256": "398018c5acff324009493d1e7661f8864bf62d6d95616d00fa5141cc86eb3908",
+      "bytes": 1168
     },
     {
       "path": "skills/story-long-write/scripts/tracking_commit.py",
@@ -699,23 +764,23 @@
     },
     {
       "path": "skills/story-review/SKILL.md",
-      "sha256": "de5e5ecc1f06c78861449ab0f7bcad641ae7c49ce4bf14ee34e0fc6da29ea56b",
-      "bytes": 39913
+      "sha256": "cd536e535441728491eebdbac5b7a80944c567974530f829326f021d59000552",
+      "bytes": 41029
     },
     {
       "path": "skills/story-review/references/anti-ai-writing.md",
-      "sha256": "011bfda41a22f4ba467517bb260954db1cb11ff32a542a887022e51ece1ed717",
-      "bytes": 37029
+      "sha256": "d3f6eb36db0e2416a195b92d684ce39ae0ac254906ea4e2cd2a1adb9b6bc4b93",
+      "bytes": 37154
     },
     {
       "path": "skills/story-review/references/author-memory.md",
-      "sha256": "04077171ce2eb189985b555362fce60daad9fa3f966e32273e277062f65973d1",
-      "bytes": 9942
+      "sha256": "15a05bc83bfcc82d7aaa66f95e622b41c550db39c388d882d835e7f6a29fdf69",
+      "bytes": 10611
     },
     {
       "path": "skills/story-review/references/banned-words.md",
-      "sha256": "bb9512f5b81e2dd0d8d47a8165b0372ed6c147475502a4aa207f763ab694d5e1",
-      "bytes": 10337
+      "sha256": "f68afa5493557acd331da18ea07b14af7dc357fd3c8cd7e3c56be39ff23f85bd",
+      "bytes": 10447
     },
     {
       "path": "skills/story-review/references/character-relations.md",
@@ -724,8 +789,8 @@
     },
     {
       "path": "skills/story-review/references/dialogue-mastery.md",
-      "sha256": "b539a561872e2563316c33b300016a8f0150afba02a9dc33471010e3e81cc754",
-      "bytes": 11327
+      "sha256": "a81e029137e3a3bc5d12632ccad81345a947da8e8a8639664a1d867fda1f548d",
+      "bytes": 11495
     },
     {
       "path": "skills/story-review/references/plot-core-methods.md",
@@ -739,8 +804,8 @@
     },
     {
       "path": "skills/story-review/references/review-quality.md",
-      "sha256": "b8c4b0ae2056bb8b3cdf09b8f896974c2071080861f790c57adb1c8bb19072a6",
-      "bytes": 13991
+      "sha256": "7e3ca2c80f8a0c5d65026925cbec8f652202f9ada7d19595517947e28288f127",
+      "bytes": 14118
     },
     {
       "path": "skills/story-review/references/rubrics/fanqie.md",
@@ -758,9 +823,19 @@
       "bytes": 1165
     },
     {
+      "path": "skills/story-review/references/style-resolution.md",
+      "sha256": "95a863cd7cd89b983d9d3702756e176d51ea69996e6ba7ed671123368f7ee1d5",
+      "bytes": 4017
+    },
+    {
+      "path": "skills/story-review/references/tracking-initialization.md",
+      "sha256": "e8e13495b054ebc8b5a70b58a32871aa8bf6b9ff64cee45a228ae7af6837fb5c",
+      "bytes": 1137
+    },
+    {
       "path": "skills/story-review/references/tracking-transaction.md",
-      "sha256": "c1b166f047c5269b9fdac2eb85494efdce51b9b1a3596874ea1c1090ba828b13",
-      "bytes": 13253
+      "sha256": "3452e4ebe8bf6fdfd8f93f5700a6c647ab0ce32324609ec901d861541eba634c",
+      "bytes": 12389
     },
     {
       "path": "skills/story-review/scripts/author_memory_commit.py",
@@ -769,18 +844,23 @@
     },
     {
       "path": "skills/story-review/scripts/check-ai-patterns.js",
-      "sha256": "90a2fc9c5ab4a9105714c439ab0c8212035a18091af01593700286afdc8b2707",
-      "bytes": 67088
+      "sha256": "f58254b35af44e004e1a08252d210866647e50c011f6edd1aade4e154af12382",
+      "bytes": 67463
     },
     {
       "path": "skills/story-review/scripts/check-degeneration.js",
-      "sha256": "d6c212118dcf5c89018f337e05833265d6741d1d178789efba5b04f37a01a17d",
-      "bytes": 14387
+      "sha256": "6c065c563e82b4b2ce4d66ad3dc1f57f0b742de41a8a65c2ae677ebeff5b7dea",
+      "bytes": 15104
     },
     {
       "path": "skills/story-review/scripts/normalize-punctuation.js",
-      "sha256": "b9fa7ea6482da1ab76de4c1268d9583ef777d13be4a9f57cb6f8725fe1a7f1da",
-      "bytes": 13083
+      "sha256": "8424ba7ebf6ea2b54a9c9f5812bdaa61e532e0c5da4527a73171e9f4531c179c",
+      "bytes": 13480
+    },
+    {
+      "path": "skills/story-review/scripts/style-whitelist.js",
+      "sha256": "398018c5acff324009493d1e7661f8864bf62d6d95616d00fa5141cc86eb3908",
+      "bytes": 1168
     },
     {
       "path": "skills/story-review/scripts/tracking_commit.py",
@@ -794,8 +874,8 @@
     },
     {
       "path": "skills/story-setup/SKILL.md",
-      "sha256": "a5abd4092ee917bb80684cbd5ca3a2d7fd637084ea4a7c821771dbb4988b5cac",
-      "bytes": 61902
+      "sha256": "b28f4ccc3a668ca9ae97fb1fdf7b7d5c0d91d3e5d150c9365db7fff347cd1e1c",
+      "bytes": 62843
     },
     {
       "path": "skills/story-setup/references/agent-references/agent-quality.md",
@@ -809,13 +889,13 @@
     },
     {
       "path": "skills/story-setup/references/agent-references/anti-ai-writing.md",
-      "sha256": "011bfda41a22f4ba467517bb260954db1cb11ff32a542a887022e51ece1ed717",
-      "bytes": 37029
+      "sha256": "d3f6eb36db0e2416a195b92d684ce39ae0ac254906ea4e2cd2a1adb9b6bc4b93",
+      "bytes": 37154
     },
     {
       "path": "skills/story-setup/references/agent-references/banned-words.md",
-      "sha256": "bb9512f5b81e2dd0d8d47a8165b0372ed6c147475502a4aa207f763ab694d5e1",
-      "bytes": 10337
+      "sha256": "f68afa5493557acd331da18ea07b14af7dc357fd3c8cd7e3c56be39ff23f85bd",
+      "bytes": 10447
     },
     {
       "path": "skills/story-setup/references/agent-references/character-basics.md",
@@ -833,9 +913,14 @@
       "bytes": 15470
     },
     {
+      "path": "skills/story-setup/references/agent-references/deslop-gates.md",
+      "sha256": "6bfcb498187c8498667450900069e3d1ff7d1ea3e03a47982492473449363cc7",
+      "bytes": 12105
+    },
+    {
       "path": "skills/story-setup/references/agent-references/dialogue-mastery.md",
-      "sha256": "b539a561872e2563316c33b300016a8f0150afba02a9dc33471010e3e81cc754",
-      "bytes": 11327
+      "sha256": "a81e029137e3a3bc5d12632ccad81345a947da8e8a8639664a1d867fda1f548d",
+      "bytes": 11495
     },
     {
       "path": "skills/story-setup/references/agent-references/emotional-arc-design.md",
@@ -844,8 +929,8 @@
     },
     {
       "path": "skills/story-setup/references/agent-references/format-and-structure.md",
-      "sha256": "1c5e69b60e87fe07a8425cae8bbdf51f2f47b35d51241397f279d000715066a5",
-      "bytes": 10538
+      "sha256": "4e72e10123fc875f0b392bbb2a3addb1c006ea5c4e4256796deafd287623452e",
+      "bytes": 10599
     },
     {
       "path": "skills/story-setup/references/agent-references/genre-prose-cards.md",
@@ -1089,8 +1174,8 @@
     },
     {
       "path": "skills/story-setup/references/agent-references/short-genre-formulas.md",
-      "sha256": "c4ff08dab0359c857b19c4226eb122e72d4f54f59df1f653129ce4e87bba879f",
-      "bytes": 21427
+      "sha256": "5e61ed7f77c9c585d6165256dce99bfdbcd03a5d8fc4b8512e14dab14b762848",
+      "bytes": 21439
     },
     {
       "path": "skills/story-setup/references/agent-references/short-paragraph-hooks.md",
@@ -1114,18 +1199,28 @@
     },
     {
       "path": "skills/story-setup/references/agent-references/style-combat-face.md",
-      "sha256": "0c3065f3bca11c87daf7fa343e5d0e51981f3adf3a78672ffdaa65222e69bdd0",
-      "bytes": 20057
+      "sha256": "d76e218cdae757ff2bc00643061129ed699d20bd27f4757b01bd0c557ddfa78b",
+      "bytes": 20072
     },
     {
       "path": "skills/story-setup/references/agent-references/style-genre-modules.md",
-      "sha256": "b4cfe79dd3138bc29f84dfd8178b15476a70b14c5c4943bf8b8b7e393007eada",
-      "bytes": 24739
+      "sha256": "6c6c0da902c82f867f2f6a03738764612363ede1ffef52591dbfba1d29554270",
+      "bytes": 24808
+    },
+    {
+      "path": "skills/story-setup/references/agent-references/style-resolution.md",
+      "sha256": "95a863cd7cd89b983d9d3702756e176d51ea69996e6ba7ed671123368f7ee1d5",
+      "bytes": 4017
     },
     {
       "path": "skills/story-setup/references/agent-references/writing-craft.md",
-      "sha256": "d954eebeef4fd9006899dac0718c29a1e4e0464d7287a4e648879097eb6e6ed6",
-      "bytes": 24881
+      "sha256": "098d3904581a781c8c69cb053015d21fa1dc352deaa8349949d805c46321c8ee",
+      "bytes": 32857
+    },
+    {
+      "path": "skills/story-setup/references/diagnostics.md",
+      "sha256": "1b7e86f22ab1b2b9743a731e1b2996f0056e0c7db1223a162b46ec1c01019be9",
+      "bytes": 3980
     },
     {
       "path": "skills/story-short-analyze/SKILL.md",
@@ -1189,8 +1284,8 @@
     },
     {
       "path": "skills/story-short-analyze/references/analysis-writing-techniques.md",
-      "sha256": "7a8a9797b1971ce20306001705d426631b6e93e4ba5eab11b81878f0007928df",
-      "bytes": 21760
+      "sha256": "6a0c8bc2c8a91f156707a28ef5a461b49aed22a427e3aa23adb2ed5e22df4345",
+      "bytes": 21707
     },
     {
       "path": "skills/story-short-analyze/references/deconstruction-examples.md",
@@ -1219,8 +1314,8 @@
     },
     {
       "path": "skills/story-short-analyze/references/source-story-quality.md",
-      "sha256": "82ee323ec9db08d786f4f444418a639a9d959f4f534e289429a8c49818e67391",
-      "bytes": 10514
+      "sha256": "f418c7572fa930a2c137b39857cb21ab245cef5496e8dd0344fbe773f58f9eed",
+      "bytes": 10641
     },
     {
       "path": "skills/story-short-analyze/references/zhihu-style.md",
@@ -1254,18 +1349,23 @@
     },
     {
       "path": "skills/story-short-write/SKILL.md",
-      "sha256": "c7cb71da8d621bfcea3472f52edf3b3e2b4e87dd35cfc32df2aba73232dc1a4e",
-      "bytes": 39406
+      "sha256": "aa422c159885f5b20db7cef3800149b1ef78ddaa52ffd7e11c8d8a76f40f0aa1",
+      "bytes": 25731
     },
     {
       "path": "skills/story-short-write/references/author-memory.md",
-      "sha256": "04077171ce2eb189985b555362fce60daad9fa3f966e32273e277062f65973d1",
-      "bytes": 9942
+      "sha256": "15a05bc83bfcc82d7aaa66f95e622b41c550db39c388d882d835e7f6a29fdf69",
+      "bytes": 10611
     },
     {
       "path": "skills/story-short-write/references/banned-words.md",
-      "sha256": "bb9512f5b81e2dd0d8d47a8165b0372ed6c147475502a4aa207f763ab694d5e1",
-      "bytes": 10337
+      "sha256": "f68afa5493557acd331da18ea07b14af7dc357fd3c8cd7e3c56be39ff23f85bd",
+      "bytes": 10447
+    },
+    {
+      "path": "skills/story-short-write/references/benchmark-recall.md",
+      "sha256": "635c39c74216af70b794a9907cacb0fef9e322c79e7a1c35a57fdbd99b35185b",
+      "bytes": 4174
     },
     {
       "path": "skills/story-short-write/references/cross-book-recall.md",
@@ -1274,8 +1374,8 @@
     },
     {
       "path": "skills/story-short-write/references/dialogue-mastery.md",
-      "sha256": "b539a561872e2563316c33b300016a8f0150afba02a9dc33471010e3e81cc754",
-      "bytes": 11327
+      "sha256": "a81e029137e3a3bc5d12632ccad81345a947da8e8a8639664a1d867fda1f548d",
+      "bytes": 11495
     },
     {
       "path": "skills/story-short-write/references/emotional-methods.md",
@@ -1284,38 +1384,38 @@
     },
     {
       "path": "skills/story-short-write/references/genre-styles/世情打脸.md",
-      "sha256": "54b4812b6ee102ff743fac28e6baec81e1c6e9ca6b83c9bed274bae78ec1a6c6",
-      "bytes": 16476
+      "sha256": "d23e9ccb9e083a4c33f26f55f41b85558e47c3abf4315deb602713887fe83865",
+      "bytes": 16485
     },
     {
       "path": "skills/story-short-write/references/genre-styles/双男主.md",
-      "sha256": "e92352d371f1498c1fd2e080ad019b90630580a8bd8000cbb7693767377d09a8",
+      "sha256": "ecdcd8c2f93f2b7beef0cfcc453143022b4abbc0429d5eeb22413e6aa913a7ac",
       "bytes": 12646
     },
     {
       "path": "skills/story-short-write/references/genre-styles/复仇打脸.md",
-      "sha256": "c3dcf50e806fe39a1727b2a4b694302bfc85b53a2ca61e3e7d23ab5ef4a325a1",
+      "sha256": "f66954aed7c290b58311104155644780982a761e8c7c0156bed27b38e1f47cf8",
       "bytes": 14846
     },
     {
       "path": "skills/story-short-write/references/genre-styles/宅斗宫斗.md",
-      "sha256": "8e6d40bfcd4332f36411f8eba6c32d55614ab890284a506eba82c9fe477f65cb",
-      "bytes": 15819
+      "sha256": "388b075dce95e34bb3954b2c5e96ec7938d3a5c769eea18644e9786be444a302",
+      "bytes": 15840
     },
     {
       "path": "skills/story-short-write/references/genre-styles/总裁豪门.md",
-      "sha256": "8dafcfce78d62641a3e4640e8eb449d2a24ac31648131a3184d871ae221de99e",
-      "bytes": 17423
+      "sha256": "0c7271a9768d7d83f673e03c40a2b4284f4796e1a34e6fb5def2edfd4d142176",
+      "bytes": 17383
     },
     {
       "path": "skills/story-short-write/references/genre-styles/悬疑.md",
-      "sha256": "509be5eb455e84a4e0b6b302fa67afe81f912d955cc11bdd632ded837ba37ba9",
-      "bytes": 13648
+      "sha256": "a9aa811afc4292c57531ab398ddc703b3be18156bf3a97f7ca42e8dd3eff6323",
+      "bytes": 13711
     },
     {
       "path": "skills/story-short-write/references/genre-styles/民俗怪谈.md",
-      "sha256": "3cc947c44bafca816e45097406c0612b6d20f1db7e776fee96a9f6f390689e40",
-      "bytes": 13216
+      "sha256": "2199376580586788f17f67439300582b2b0e84da4a3d7e57d2e0fc34bfd1bf8b",
+      "bytes": 13204
     },
     {
       "path": "skills/story-short-write/references/genre-styles/沙雕脑洞.md",
@@ -1324,23 +1424,23 @@
     },
     {
       "path": "skills/story-short-write/references/genre-styles/甜宠.md",
-      "sha256": "9c1d6b910b5e678bce09091e138081c872229af236999ce58c5bf8b683229a22",
-      "bytes": 11853
+      "sha256": "f9dafd51e1e69bfacccfe588769eb43f58619f283d07847faa72e80a97f78d91",
+      "bytes": 11894
     },
     {
       "path": "skills/story-short-write/references/genre-styles/追妻火葬场.md",
-      "sha256": "19490647fea878aff99b9dac87c02faa5a6a0149475dc95b6fe21bf4fb27c286",
-      "bytes": 15967
+      "sha256": "474f316409f1fd0b0142304d5832d3a77eea830f09a88c91a4425376d6d31ff7",
+      "bytes": 15930
     },
     {
       "path": "skills/story-short-write/references/genre-writing-formulas.md",
-      "sha256": "c4ff08dab0359c857b19c4226eb122e72d4f54f59df1f653129ce4e87bba879f",
-      "bytes": 21427
+      "sha256": "5e61ed7f77c9c585d6165256dce99bfdbcd03a5d8fc4b8512e14dab14b762848",
+      "bytes": 21439
     },
     {
       "path": "skills/story-short-write/references/genre-writing-techniques.md",
-      "sha256": "113cfab1a27a7a67e40dd476072df7907ca344285c85415dfd7014ef348dd375",
-      "bytes": 23213
+      "sha256": "9314d0567f1673afa9e8c82c3c364fad0e974fabc9667417ae95b7596f80b468",
+      "bytes": 23162
     },
     {
       "path": "skills/story-short-write/references/hooks-chapter.md",
@@ -1358,24 +1458,29 @@
       "bytes": 9076
     },
     {
+      "path": "skills/story-short-write/references/reference-index.md",
+      "sha256": "cd1e330a271d5e8d033c03a234953bc590eefdc205c2a576b6fdb0888e35b652",
+      "bytes": 6701
+    },
+    {
       "path": "skills/story-short-write/references/short-craft.md",
-      "sha256": "1e2be00eec0fbc0f4bca6583861d21c2484f2fe1389f34f0a4703ddbe29648eb",
-      "bytes": 13960
+      "sha256": "8c263a10bca942e89b70c9c7a44e22e77ba9b005d5f50cb3641bcd75505611b8",
+      "bytes": 13577
     },
     {
       "path": "skills/story-short-write/references/short-deslop.md",
-      "sha256": "ad2f8d82d6f37b7bc080803844411f7b46937f95361c1fe54c0fd2b8923602e6",
-      "bytes": 8592
+      "sha256": "cb9c0c1d2ba2266edc71968db553e44ffdd21fdd19263ebf41884000f4dda668",
+      "bytes": 8543
     },
     {
       "path": "skills/story-short-write/references/short-format.md",
-      "sha256": "675843a3ad707ac06286fea4cd59aa45f54a62b0c4675600d5ff6bab1deed9c4",
-      "bytes": 8649
+      "sha256": "8e01dd33e848d8561760ea02c00bdaffa0c2d50e5c174792e15381803737edfb",
+      "bytes": 8835
     },
     {
       "path": "skills/story-short-write/references/short-prose-quality.md",
-      "sha256": "d7963fb96a55a29a0ad866c222e09d1697b837c25579422a07cde3a1e55e2fde",
-      "bytes": 10536
+      "sha256": "8f27971e7433a51895cf7307e1d4a44d8b777b7244b6b340359d84b160a62ce3",
+      "bytes": 10663
     },
     {
       "path": "skills/story-short-write/references/short-reversal.md",
@@ -1388,6 +1493,11 @@
       "bytes": 15939
     },
     {
+      "path": "skills/story-short-write/references/style-resolution.md",
+      "sha256": "95a863cd7cd89b983d9d3702756e176d51ea69996e6ba7ed671123368f7ee1d5",
+      "bytes": 4017
+    },
+    {
       "path": "skills/story-short-write/references/submission-craft.md",
       "sha256": "0de2487e37de3eccb3005e57587b7ddb409538a36836b948f6dd61e0071f31a7",
       "bytes": 4860
@@ -1398,9 +1508,14 @@
       "bytes": 6141
     },
     {
+      "path": "skills/story-short-write/references/workflow-design.md",
+      "sha256": "ef31f9682532143b7a51a8861f957b4998f139001f324daf2528f466bbfd6dfa",
+      "bytes": 5089
+    },
+    {
       "path": "skills/story-short-write/references/writing-workflow.md",
-      "sha256": "dd0a9039690084797fdc85152d41fda228f2ee9630f8e37a70b67b9e9d3479d0",
-      "bytes": 10296
+      "sha256": "ce6a6cf589a08dddf22f2b4c0020cc956235d0d095060d44c91fb5451de5ea27",
+      "bytes": 10262
     },
     {
       "path": "skills/story-short-write/scripts/author_memory_commit.py",
@@ -1409,23 +1524,23 @@
     },
     {
       "path": "skills/story-short-write/scripts/check-ai-patterns.js",
-      "sha256": "90a2fc9c5ab4a9105714c439ab0c8212035a18091af01593700286afdc8b2707",
-      "bytes": 67088
+      "sha256": "f58254b35af44e004e1a08252d210866647e50c011f6edd1aade4e154af12382",
+      "bytes": 67463
     },
     {
       "path": "skills/story-short-write/scripts/check-degeneration.js",
-      "sha256": "d6c212118dcf5c89018f337e05833265d6741d1d178789efba5b04f37a01a17d",
-      "bytes": 14387
+      "sha256": "6c065c563e82b4b2ce4d66ad3dc1f57f0b742de41a8a65c2ae677ebeff5b7dea",
+      "bytes": 15104
     },
     {
       "path": "skills/story-short-write/scripts/check-delivery-contract.js",
-      "sha256": "15ab29cfc17d0f466b80a097ce4cfc0a04b70040df3ae6b70abf08f282cb3d91",
-      "bytes": 7301
+      "sha256": "a37984b28e44963e64bb6247a80f4eb72c7d539386229d5e4d7281e59ea45902",
+      "bytes": 9055
     },
     {
       "path": "skills/story-short-write/scripts/check-outline-copy.js",
-      "sha256": "574dd78da11f934837e2b56f658b6c598935e16dd7dec2830272d0134d1587d3",
-      "bytes": 9845
+      "sha256": "e996f290139041480f18e6c81ade89709d8f71b63cc021c6b48cfdcf15578331",
+      "bytes": 12637
     },
     {
       "path": "skills/story-short-write/scripts/check-phase2-contract.js",
@@ -1434,23 +1549,28 @@
     },
     {
       "path": "skills/story-short-write/scripts/normalize-punctuation.js",
-      "sha256": "b9fa7ea6482da1ab76de4c1268d9583ef777d13be4a9f57cb6f8725fe1a7f1da",
-      "bytes": 13083
+      "sha256": "8424ba7ebf6ea2b54a9c9f5812bdaa61e532e0c5da4527a73171e9f4531c179c",
+      "bytes": 13480
+    },
+    {
+      "path": "skills/story-short-write/scripts/style-whitelist.js",
+      "sha256": "398018c5acff324009493d1e7661f8864bf62d6d95616d00fa5141cc86eb3908",
+      "bytes": 1168
     },
     {
       "path": "skills/story/SKILL.md",
-      "sha256": "16d46f035a5dfdf79769e60fc2911efa5b996f6a2509ca2354a84ffa8ccc7e02",
+      "sha256": "e8dc664f982d59cdf78ae733c16b5b3fb0ec34550cb349f0d92d9a17b78a5686",
       "bytes": 10883
     },
     {
       "path": "skills/story/VERSION",
-      "sha256": "112064d2eef87b1b3566a13e7673e42db7030d364bc7d8f9f6f53d339119a0ac",
-      "bytes": 6
+      "sha256": "829e3545dc954bb1c7a00f5ae122384f679faee259f9ccd5913610610f953e52",
+      "bytes": 7
     },
     {
       "path": "skills/story/references/author-memory.md",
-      "sha256": "04077171ce2eb189985b555362fce60daad9fa3f966e32273e277062f65973d1",
-      "bytes": 9942
+      "sha256": "15a05bc83bfcc82d7aaa66f95e622b41c550db39c388d882d835e7f6a29fdf69",
+      "bytes": 10611
     },
     {
       "path": "skills/story/scripts/author_memory_commit.py",

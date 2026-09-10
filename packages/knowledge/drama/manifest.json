@@ -2,13 +2,14 @@
   "schemaVersion": 1,
   "upstream": {
     "repository": "https://github.com/zenstory-ai/drama-skills.git",
-    "commit": "4cd584668bf6dc613a51d1ca40d00de352db9713"
+    "commit": "bc96c5eb9c91cccd1c613c2b34645c35f1989a28"
   },
-  "generatedAt": "2026-09-04T14:24:07.064Z",
+  "generatedAt": "2026-09-10T13:26:14.809Z",
   "skills": [
     "short-drama",
     "short-drama-assets",
     "short-drama-develop",
+    "short-drama-edit",
     "short-drama-image-prompts",
     "short-drama-novel-analyze",
     "short-drama-produce",
@@ -80,8 +81,8 @@
     },
     {
       "path": "skills/short-drama-assets/references/character-and-look.md",
-      "sha256": "ae7e949ebc8c686d75a780597b43996d868e15b0c633801bf13f82f5c74752e9",
-      "bytes": 10066
+      "sha256": "4c542e4df9e69fe21f7932dcf874ab65693e18b05e8f2f1249878a8f5da3e7c0",
+      "bytes": 11172
     },
     {
       "path": "skills/short-drama-assets/references/continuity-delta.md",
@@ -90,8 +91,8 @@
     },
     {
       "path": "skills/short-drama-assets/references/continuity-lock.md",
-      "sha256": "5ba6bfa82597c89756b765263f618a21f98d9b534d9f2ee3c23308c026f97f41",
-      "bytes": 6746
+      "sha256": "603e94313f052bff039a5c8c5115dd77be55b50f681ff3a7acf5798747240452",
+      "bytes": 7668
     },
     {
       "path": "skills/short-drama-assets/references/identity-vs-variant.md",
@@ -299,6 +300,101 @@
       "bytes": 1533
     },
     {
+      "path": "skills/short-drama-edit/SKILL.md",
+      "sha256": "ff27a30ed5fddb26a2824a4975bf78d18a506cb1db8d87cf4059716514a2e24e",
+      "bytes": 11031
+    },
+    {
+      "path": "skills/short-drama-edit/agents/openai.yaml",
+      "sha256": "5f6f131727496be7d4512e6516722a5a33be83e55a11fefa6ca9c7d9a355a653",
+      "bytes": 254
+    },
+    {
+      "path": "skills/short-drama-edit/assets/remotion/README.md",
+      "sha256": "13cccd696d78e59f55e0ffa1aa4aa75c3d2be8fc7a7c12a2106dbca82c388a17",
+      "bytes": 2929
+    },
+    {
+      "path": "skills/short-drama-edit/assets/remotion/package.json",
+      "sha256": "437058ea7afd499fcc03f57f2f5b2470254826ebbe092d1c515b26bd01db1031",
+      "bytes": 386
+    },
+    {
+      "path": "skills/short-drama-edit/assets/remotion/remotion.config.ts",
+      "sha256": "a13e13dc5e99eba7fc8861ba1fbc6c1455fd068801a476432120d663e5ea7145",
+      "bytes": 219
+    },
+    {
+      "path": "skills/short-drama-edit/assets/remotion/src/Root.tsx",
+      "sha256": "522487f39c9b4d91c32304be4867f64784aab3ae5b25135b8d9fdbc6362a0dbc",
+      "bytes": 941
+    },
+    {
+      "path": "skills/short-drama-edit/assets/remotion/src/Subtitles.tsx",
+      "sha256": "21fbb6548fbe57842a59b2e9002513bcedd08b4bec488c1dd0c80c637499b87a",
+      "bytes": 3095
+    },
+    {
+      "path": "skills/short-drama-edit/assets/remotion/src/font.ts",
+      "sha256": "8b42d2fbc238e36cf74955492433fc56ea5197843875c62ef56e815337e61b54",
+      "bytes": 1794
+    },
+    {
+      "path": "skills/short-drama-edit/assets/remotion/src/index.ts",
+      "sha256": "957e481dd33a29b4a55ae0e95dbf763b7e48c37c427ca4bd1275faf34bc07a74",
+      "bytes": 109
+    },
+    {
+      "path": "skills/short-drama-edit/assets/remotion/src/schema.ts",
+      "sha256": "9dc78db7e6334673ca2086cfd632da1d2cd3bc9746dd441237926b2d79ac9a59",
+      "bytes": 835
+    },
+    {
+      "path": "skills/short-drama-edit/assets/remotion/tsconfig.json",
+      "sha256": "e58a703515f2767b0c4a7fb872a882f98cc05674aa641fd87e279f697d548f87",
+      "bytes": 255
+    },
+    {
+      "path": "skills/short-drama-edit/assets/剪辑单.md",
+      "sha256": "fe495fe94d65e04a99918567abdd901c025f6d216bdbff6e9fc93ea8146c53f6",
+      "bytes": 2054
+    },
+    {
+      "path": "skills/short-drama-edit/references/cut-craft.md",
+      "sha256": "456b4aa70b0039739751b8fbba54f9a00a103ccb91d0116a09707021f902ca6e",
+      "bytes": 4297
+    },
+    {
+      "path": "skills/short-drama-edit/references/delivery-verify.md",
+      "sha256": "f417d537cb87d65562e5838ebf2556b5f5f9412f5b0a522a64f733fe59fef8c5",
+      "bytes": 3242
+    },
+    {
+      "path": "skills/short-drama-edit/references/generated-footage.md",
+      "sha256": "8493ca0a1e45b798c402b8f659b6f61845eed42ac2bd33e0c29e06100665da02",
+      "bytes": 6550
+    },
+    {
+      "path": "skills/short-drama-edit/references/sound-and-subtitles.md",
+      "sha256": "68fa771e8d3c1a18eba0d03e865c350fa7b7d05d8bf22d3c1c6b33189e26447a",
+      "bytes": 7368
+    },
+    {
+      "path": "skills/short-drama-edit/references/stage-contract.md",
+      "sha256": "fc5ec18b416b992268eece21b6350299a49c8796992f1e6086849149d9bdc1a6",
+      "bytes": 6307
+    },
+    {
+      "path": "skills/short-drama-edit/scripts/edit_tool.py",
+      "sha256": "3b93f7c77c62a61978694dc679606c61366b4ddc131ce9ed3e1f4916aeb17db8",
+      "bytes": 42565
+    },
+    {
+      "path": "skills/short-drama-edit/scripts/selftest.py",
+      "sha256": "b28f420d35941ab3a2e6439c91cc5bdf06d572d97865b8d9abcfef0113eb18bb",
+      "bytes": 19403
+    },
+    {
       "path": "skills/short-drama-image-prompts/SKILL.md",
       "sha256": "a3341fc0c5562ab2808c3e61ed5b9c57e720ea339bea58cf3a65268660d9032f",
       "bytes": 4255
@@ -315,8 +411,8 @@
     },
     {
       "path": "skills/short-drama-image-prompts/assets/image-prompts.md",
-      "sha256": "fd4a629b4c4332fc510f0229855c7f14ed344abbe69d5dcab7cc23c01ee55167",
-      "bytes": 1980
+      "sha256": "4bae26f62b9a6374a9d6a5a4bde55b8afc28374a0c483835b00d160b39848fa0",
+      "bytes": 2559
     },
     {
       "path": "skills/short-drama-image-prompts/assets/lookdev-frame-spec.jsonl.md",
@@ -325,8 +421,8 @@
     },
     {
       "path": "skills/short-drama-image-prompts/assets/lookdev-prompts.md",
-      "sha256": "3211141935eb5f8b34ca1bb0476e055dd4ad455f5c877df0f4daf75dcf451f70",
-      "bytes": 1592
+      "sha256": "4b367dd74df4f8fb91807aa428ec70e882ed7dfda8cccdd7f180953618db2d88",
+      "bytes": 1824
     },
     {
       "path": "skills/short-drama-image-prompts/examples/minimal-image-prompt-specs.jsonl",
@@ -420,13 +516,13 @@
     },
     {
       "path": "skills/short-drama-novel-analyze/references/aggregation-and-entities.md",
-      "sha256": "1f47967b7d44d11435c104486f51fabb77ded47c6dbddf702b2a84eb869ffe77",
+      "sha256": "ffc622547a53070473e8293cc3bae35595c5d45eee18ddde3cafd4d88d0b8fe1",
       "bytes": 8511
     },
     {
       "path": "skills/short-drama-novel-analyze/references/chapter-extraction.md",
-      "sha256": "428e6c80b37f75706808d3f3d7048c4ca91e6c98d020c2e67c996e325b6aa0f1",
-      "bytes": 8139
+      "sha256": "72af59213d2a46d1670cdbc937d6a87a8b8086035acea5451be6970bac467802",
+      "bytes": 8518
     },
     {
       "path": "skills/short-drama-novel-analyze/references/stage-contract.md",
@@ -445,8 +541,8 @@
     },
     {
       "path": "skills/short-drama-produce/SKILL.md",
-      "sha256": "9eb35a905f94fea67852d8437e1f5640a5d4090d71ac645e4857958f04b2c08e",
-      "bytes": 12422
+      "sha256": "8e664f0a3a59c9f89426577c376880b15890b50dd09aa9905373e9b112426876",
+      "bytes": 14032
     },
     {
       "path": "skills/short-drama-produce/agents/openai.yaml",
@@ -455,8 +551,8 @@
     },
     {
       "path": "skills/short-drama-produce/references/adapter-contract.md",
-      "sha256": "a2825dd9dee723fbc0cf24486348df9fd0a7cb2fcb39b384179a8302677fe4b1",
-      "bytes": 9863
+      "sha256": "e64402f789bdc4046b9bd67226ee78da44a25930b04c42f17023f0961eafb968",
+      "bytes": 11507
     },
     {
       "path": "skills/short-drama-produce/references/providers/gpt-image-2.md",
@@ -465,8 +561,8 @@
     },
     {
       "path": "skills/short-drama-produce/references/providers/minimax-h3-video.md",
-      "sha256": "ed2ebb0234cf841442f54342196b52df65c6f42a74a5bdfe80bc774bf6911e54",
-      "bytes": 5531
+      "sha256": "39a827aaab23fe853d4b8bdc69dfa69f4cb5265a2782329408485b433477597e",
+      "bytes": 7300
     },
     {
       "path": "skills/short-drama-produce/references/providers/minimax-music.md",
@@ -475,23 +571,23 @@
     },
     {
       "path": "skills/short-drama-produce/references/providers/seedance.md",
-      "sha256": "0c5672a8c6a1d9e47f7b950773d4a12843df92aa5ec4b67b053cc8e17de84ada",
-      "bytes": 3380
+      "sha256": "76bfd27a1b1181c0e0079c49ba4ae926012e638794c9bec3c046aaa1846e1c8d",
+      "bytes": 3976
     },
     {
       "path": "skills/short-drama-produce/scripts/fixture_adapter.py",
-      "sha256": "6c80a50efe36499231804df5e202f74a12590d707114ed41322fddd069ac2d81",
-      "bytes": 1861
+      "sha256": "f3695da2aa5281b30991515d36863322f93f3d85de574cf30fe81664aec8a730",
+      "bytes": 2732
     },
     {
       "path": "skills/short-drama-produce/scripts/production_tool.py",
-      "sha256": "b39253946f17ff966ce661ca365cdda5b2ea25d1b43466399d839fbb3bebe745",
-      "bytes": 79461
+      "sha256": "560808219145a958723ff70841d8bac6280eed0ea4d55feb18646444f8661e3e",
+      "bytes": 87712
     },
     {
       "path": "skills/short-drama-produce/scripts/provider_adapters.py",
-      "sha256": "056f49984683bffd7f7c8e13faa3aee3b7d73bc0f22e33d8f06b054bceb9ce67",
-      "bytes": 62022
+      "sha256": "a4a0174592de2a13918807bbcb9bb793e881f659784c906db4255f0fd044b336",
+      "bytes": 64104
     },
     {
       "path": "skills/short-drama-produce/scripts/selftest.py",
@@ -500,8 +596,8 @@
     },
     {
       "path": "skills/short-drama-review/SKILL.md",
-      "sha256": "594a11ecb99cbd61ec7e1154a6ab026cf2568fd976871046fc2fca9716f23361",
-      "bytes": 4965
+      "sha256": "174bd5b6957640d4d5f4cf881e03f3af5a2b1a9b94556a18d7d9ff320b2e335b",
+      "bytes": 5273
     },
     {
       "path": "skills/short-drama-review/agents/openai.yaml",
@@ -540,8 +636,8 @@
     },
     {
       "path": "skills/short-drama-review/references/production-quality-gates.md",
-      "sha256": "fe98c67d1a0016dd550ba5449889e3d67e57886c6b6504c07437c7392980c1d3",
-      "bytes": 18647
+      "sha256": "06edf05c2a43a6cd8d6b774bdd8530a1044de32fc428c3c35e9ff24c560aa697",
+      "bytes": 20332
     },
     {
       "path": "skills/short-drama-review/references/project-calibration.md",
@@ -570,8 +666,8 @@
     },
     {
       "path": "skills/short-drama-review/references/rubric-visual-motion.md",
-      "sha256": "03b14c6b8d708b0f3b24a6f8693f5b43343b20c7197690e472f94376cf334cca",
-      "bytes": 9951
+      "sha256": "876247530e6cd8eca1d5a72921764f85fad1b0c35f95e94817513b51282e94e2",
+      "bytes": 12731
     },
     {
       "path": "skills/short-drama-review/references/stage-contract.md",
@@ -590,8 +686,8 @@
     },
     {
       "path": "skills/short-drama-storyboard/SKILL.md",
-      "sha256": "187b38c3f17742959403cee6d99d688361bc8d62ef720a4e4096fd1adb6e0f26",
-      "bytes": 16588
+      "sha256": "7a7ff4c83981e59de181946a0a814ef5c950e024036eed5cca4ff6fbb6118d48",
+      "bytes": 17488
     },
     {
       "path": "skills/short-drama-storyboard/agents/openai.yaml",
@@ -610,8 +706,8 @@
     },
     {
       "path": "skills/short-drama-storyboard/assets/keyframe-prompts.md",
-      "sha256": "7feb2959deba04d78ef42e5cb1d20a9b7674c9e4056dfef0bfe93629bd293106",
-      "bytes": 1500
+      "sha256": "da25a4f84f0ac80e487bc5a34f0131add83c161689d15f783c0324dc833fe20a",
+      "bytes": 1840
     },
     {
       "path": "skills/short-drama-storyboard/assets/keyframe-template.jsonl",
@@ -675,8 +771,8 @@
     },
     {
       "path": "skills/short-drama-storyboard/references/shot-craft.md",
-      "sha256": "ff794b3d83e2fe5f58c1f023eb245bf9fd801a7516901c85f1d33c2c333e3f33",
-      "bytes": 11127
+      "sha256": "7726bcbe0e364b03de7db5a7a12e46de321b4cac9bcb05bca800f675dad402d7",
+      "bytes": 14293
     },
     {
       "path": "skills/short-drama-storyboard/references/shot-revision-identity.md",
@@ -685,8 +781,8 @@
     },
     {
       "path": "skills/short-drama-storyboard/references/stage-contract.md",
-      "sha256": "8624622c16dc60ca56aeba67f7d68c10c3f972ff533d6fbc484694a07ab5ae0e",
-      "bytes": 9148
+      "sha256": "456ab66836a6375a4366e66cb791e263cf032a6f651257e26ab1c78f06573a8b",
+      "bytes": 10521
     },
     {
       "path": "skills/short-drama-storyboard/scripts/selftest.py",
@@ -700,8 +796,8 @@
     },
     {
       "path": "skills/short-drama-video-prompts/SKILL.md",
-      "sha256": "6af04f52c90b92120648cc703dd3f85f6225afa428a76d7b5c61471baea39250",
-      "bytes": 15419
+      "sha256": "fe4e682d358a586dd14923e5b71a6fe8d6c6514ce576cf898b12372d56ba1c09",
+      "bytes": 16452
     },
     {
       "path": "skills/short-drama-video-prompts/agents/openai.yaml",
@@ -765,23 +861,23 @@
     },
     {
       "path": "skills/short-drama-video-prompts/references/minimax-h3.md",
-      "sha256": "d83692c446175da092521ec11f4fbcbb0861b9ac96ce1bb426e73e9a3dfcdb02",
-      "bytes": 11266
+      "sha256": "9a1de7c5ea347714c0bdadfec2af51571925bbcce8135fcbe7cd9231245575cf",
+      "bytes": 19140
     },
     {
       "path": "skills/short-drama-video-prompts/references/motion-recipe.md",
-      "sha256": "60fecef7a573b364ddb3d13708a6d2adc432e939fefd09653d2749a23b91c87b",
-      "bytes": 20275
+      "sha256": "23e6b0ce936f0b050380799b9a340b5d2b7733502eee67e99ee0b61bcb666da7",
+      "bytes": 20896
     },
     {
       "path": "skills/short-drama-video-prompts/references/performance-action-timing.md",
-      "sha256": "4b986ab6a61eef2a16530ffaed82b9195d4cb33038c0e6a80c7e908680ad9b2a",
-      "bytes": 11060
+      "sha256": "41ad9c0dd7139449cfb8f8e170a035c03e616faddefb61646e410916c3a45b4a",
+      "bytes": 13665
     },
     {
       "path": "skills/short-drama-video-prompts/references/production-prompt-grammar.md",
-      "sha256": "774b3fc3949a92ee3d1fe4f1daa2f278d5ecf2e4d93b19fb282ae0123b179abc",
-      "bytes": 23136
+      "sha256": "fc915057f5d9088ab8fa3295ea8d4c8443d4771cb23ada560e72822f4fe96d94",
+      "bytes": 23428
     },
     {
       "path": "skills/short-drama-video-prompts/references/review-and-fixtures.md",
@@ -790,18 +886,18 @@
     },
     {
       "path": "skills/short-drama-video-prompts/references/seedance-2.0.md",
-      "sha256": "24a7a6f6b15088a015d7e646458de109017e1f52ba45f4171c46c5121f7f88f9",
-      "bytes": 2466
+      "sha256": "5f4d50c90366e3be35050aee9315052c7d1d0fcfeed44a1f2ca76166cb48283d",
+      "bytes": 3617
     },
     {
       "path": "skills/short-drama-video-prompts/references/seedance-2.5.md",
-      "sha256": "c0365b29478aa81f5eeea78f07c83f1a8caff3f5ac56b4372ea629207835fdd6",
-      "bytes": 4427
+      "sha256": "212f724dc05cd3ebc8cfc8c66b05108bbce7bb696d89e5091000405c5bae7656",
+      "bytes": 7235
     },
     {
       "path": "skills/short-drama-video-prompts/references/stage-contract.md",
-      "sha256": "9e24f8e5459dfc50c4fdb00dd0d37b14c2586f582caaa934df72031bb263111a",
-      "bytes": 11068
+      "sha256": "c8b0d09d002c1763296e17bd72e7d765c5c5f46d9028d49de15b9e7a319db94d",
+      "bytes": 11360
     },
     {
       "path": "skills/short-drama-video-prompts/references/target-model-profile.md",
@@ -830,8 +926,8 @@
     },
     {
       "path": "skills/short-drama-write/SKILL.md",
-      "sha256": "859d01337ed392be36393d444d0222ee4742bafac8cd6cf4e3e8bcdd659a90cf",
-      "bytes": 8719
+      "sha256": "8b76368dc799987f125db455942b4f175e004e5018d3718683ca8ec45527ae49",
+      "bytes": 9679
     },
     {
       "path": "skills/short-drama-write/agents/openai.yaml",
@@ -885,8 +981,8 @@
     },
     {
       "path": "skills/short-drama-write/references/screenplay-format.md",
-      "sha256": "19b19b370e0958a3c6f004bc05312bf9ca53c92f07d5d58274409730897c8f71",
-      "bytes": 9951
+      "sha256": "809b6033554899224c387d548aad096cfe469930fe0c0d713bfde732841a1dfa",
+      "bytes": 10614
     },
     {
       "path": "skills/short-drama-write/references/script-craft.md",
@@ -895,8 +991,8 @@
     },
     {
       "path": "skills/short-drama-write/references/stage-contract.md",
-      "sha256": "9b0f5bade21156a59dd16d2917739f57eb793fd90f9d7bf47f46b535cd90b756",
-      "bytes": 6744
+      "sha256": "c554b7dee6d7e57b25966c962465f7d2d0210594e4cb93fea8dcdf971a732c6a",
+      "bytes": 7238
     },
     {
       "path": "skills/short-drama-write/references/substitutable-realization.md",
@@ -925,8 +1021,8 @@
     },
     {
       "path": "skills/short-drama/SKILL.md",
-      "sha256": "0fe4e5630d93eea97108868f3806fb525661062d0636c12b8d7d2bd5d1e147ad",
-      "bytes": 9772
+      "sha256": "1245b5277dc4fb53ab81f7e5c92a6304e2d4a83985f6522ed05c2c291b5ec7b3",
+      "bytes": 10145
     },
     {
       "path": "skills/short-drama/agents/openai.yaml",
@@ -1035,13 +1131,13 @@
     },
     {
       "path": "skills/short-drama/scripts/creator_markdown_check.py",
-      "sha256": "f34e71b24bf725e105c4b943370064c6e7fa5d389e1835fb3c6a467ba2c05617",
-      "bytes": 55674
+      "sha256": "208afedeb1ef87feff3c5632ae93f17bc1b7396224abfe83091ac204f593e1e6",
+      "bytes": 61093
     },
     {
       "path": "skills/short-drama/scripts/project_tool.py",
-      "sha256": "5a195d69a256056940af74e89cae862ad7af12b350e2554376df445747a19f69",
-      "bytes": 95059
+      "sha256": "40c40a1160ad86b83a5ad322d67968e5b9f805ff13e68643b530785a1c6189aa",
+      "bytes": 95650
     },
     {
       "path": "skills/short-drama/scripts/selftest.py",

@@ -13,5 +13,5 @@
     "scripts/**/*.ts",
     "*.ts"
   ],
-  "exclude": ["**/dist/**", "**/lib/**", "**/node_modules/**", "packages/knowledge/oh-story/**", "docs/blueprint/**"]
+  "exclude": ["**/dist/**", "**/lib/**", "**/node_modules/**", "packages/knowledge/**", "docs/blueprint/**"]
 }

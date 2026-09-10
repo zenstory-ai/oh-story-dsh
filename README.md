@@ -22,7 +22,7 @@
 
 ![短剧工作台](docs/images/drama-workbench-demo.gif)
 
-每集按请求维护最多五份可读 Markdown：`剧本.md`、`视觉设定.md`、`分镜.md`、`图片提示词.md`、`视频提示词.md`。「生产」视图把这些文档投影为镜头板、素材板、任务/版本、成片顺序和关系画布，并就地提示重复 ID、悬空引用与格式错误。生产交付走 DSH 原生会话、当前 Preset 工具与权限确认。
+每集按请求维护最多五份可读 Markdown：`剧本.md`、`视觉设定.md`、`分镜.md`、`图片提示词.md`、`视频提示词.md`。「生产」视图把这些文档投影为镜头板、素材板、任务/版本、成片顺序和关系画布，并就地提示重复 ID、悬空引用与格式错误。成片装配交给 `/short-drama-edit`：它把排定的镜序写成《剪辑单.md》，再渲染到 `剧集/<EP>/制作成果/成片/`。生产交付走 DSH 原生会话、当前 Preset 工具与权限确认。
 
 ## 游戏工作台
 
@@ -58,10 +58,10 @@
 
 | 工作台 | 上游能力 | 主要入口 |
 | --- | --- | --- |
-| 小说 | [Oh Story 0.7.9](https://github.com/zenstory-ai/oh-story-claudecode/releases/tag/v0.7.9) · 13 Skills · 7 Roles | `/story`、`/story-long-write`、`/story-review` |
-| 短剧 | [Drama Skills 0.6.5](https://github.com/zenstory-ai/drama-skills/releases/tag/v0.6.5) · 10 Skills | `/short-drama`、`/short-drama-write`、`/short-drama-storyboard` |
-| 游戏 | [NovelToGame 0.3.0](https://github.com/zenstory-ai/novel-to-game) · 7 Skills · 《金瓶梅》可玩示例 | `/novel-to-game quick`、`/game-build`、`/game-qa` |
-| 视频 | [video-recap-skills 0.4.0](https://github.com/zenstory-ai/video-recap-skills) · 6 Skills | `/video-recap`、`/video-script` |
+| 小说 | [Oh Story 0.7.10](https://github.com/zenstory-ai/oh-story-claudecode/releases/tag/v0.7.10) · 13 Skills · 7 Roles | `/story`、`/story-long-write`、`/story-review` |
+| 短剧 | [Drama Skills 0.7.0](https://github.com/zenstory-ai/drama-skills/releases/tag/v0.7.0) · 11 Skills | `/short-drama`、`/short-drama-write`、`/short-drama-storyboard`、`/short-drama-edit` |
+| 游戏 | [NovelToGame 0.3.1](https://github.com/zenstory-ai/novel-to-game) · 7 Skills · 《金瓶梅》可玩示例 | `/novel-to-game quick`、`/game-build`、`/game-qa` |
+| 视频 | [video-recap-skills 0.5.0](https://github.com/zenstory-ai/video-recap-skills) · 6 Skills | `/video-recap`、`/video-script` |
 
 ## 安装
 
@@ -72,15 +72,15 @@
 **1. 安装插件并启动 DSH Web**
 
 ```bash
-npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.1.2-rc.1 dsh plugin --profile web add @oh-story/dsh@0.1.8 &&
-npx -y @deepseek-ai/dsh@0.1.2-rc.1 web
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.1.5-rc.1 dsh plugin --profile web add @oh-story/dsh@0.1.8 &&
+npx -y @deepseek-ai/dsh@0.1.5-rc.1 web
 ```
 
 也可以直接安装 GitHub Release 中经过同一套测试的预构建包：
 
 ```bash
-npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.1.2-rc.1 dsh plugin --profile web add https://github.com/zenstory-ai/oh-story-dsh/releases/download/v0.1.8/oh-story-dsh-0.1.8.tgz &&
-npx -y @deepseek-ai/dsh@0.1.2-rc.1 web
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.1.5-rc.1 dsh plugin --profile web add https://github.com/zenstory-ai/oh-story-dsh/releases/download/v0.1.8/oh-story-dsh-0.1.8.tgz &&
+npx -y @deepseek-ai/dsh@0.1.5-rc.1 web
 ```
 
 保持终端运行，浏览器默认自动打开。如果没有自动打开，请复制终端打印的完整 `http://127.0.0.1:3080/?token=...` 链接访问；首次认证需要链接里的 token。关闭终端会停止服务。
@@ -103,7 +103,7 @@ DeepSeek 只负责写剧本、分镜和提示词，本身不会生图、生视�
 ```bash
 export OPENAI_API_KEY=...            # 图片
 export ARK_API_KEY=... SEEDANCE_MODEL=...   # 视频，模型/Endpoint ID 以账号开通的为准
-npx -y @deepseek-ai/dsh@0.1.2-rc.1 web
+npx -y @deepseek-ai/dsh@0.1.5-rc.1 web
 ```
 
 只配置用得到的那几个即可：没有视频 Key 仍然可以写分镜、生成关键帧图片。短剧工作台的「生产」视图顶部会显示每个供应商是否已配置、缺哪个变量；插件只报告变量是否存在，从不读取或展示 Key 的值。插件启动时会把这四个内置 adapter 登记到一份不含凭据的配置文件（默认在系统临时目录下仅当前用户可读写的 `oh-story-dsh-<uid>/` 里，「生成环境」条会显示完整路径），Agent 运行 `production_tool.py run` 时直接引用它；自己写 adapter 或改超时，就把文件路径写进 `OH_STORY_DRAMA_ADAPTER_CONFIG`。每个供应商的参数、分辨率与时长约束见随包的 `short-drama-produce/references/providers/`。
@@ -130,7 +130,7 @@ npx -y @deepseek-ai/dsh@0.1.2-rc.1 web
 **1. 装进独立 profile**
 
 ```bash
-npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.1.2-rc.1 dsh plugin --profile story add @oh-story/dsh@0.1.8
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.1.5-rc.1 dsh plugin --profile story add @oh-story/dsh@0.1.8
 ```
 
 **2. 补上界面**
@@ -150,8 +150,8 @@ npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.1.2-rc.1 dsh plugin --
 **3. 按需启动**
 
 ```bash
-npx -y @deepseek-ai/dsh@0.1.2-rc.1 web                          # 原版 DSH
-npx -y @deepseek-ai/dsh@0.1.2-rc.1 --profile story --port 3081  # 创作工作台
+npx -y @deepseek-ai/dsh@0.1.5-rc.1 web                          # 原版 DSH
+npx -y @deepseek-ai/dsh@0.1.5-rc.1 --profile story --port 3081  # 创作工作台
 ```
 
 两个 profile 用不同端口可以同时运行。模型、凭据、workspace 与历史会话由 DSH 统一保存，切换 profile 不会丢。安装与启动请使用同一个 dsh 版本，混用会报 `unknown option '--no-open'` 一类的错。

@@ -27,15 +27,20 @@ const actualFiles = await currentDramaFiles();
 if (JSON.stringify(actualFiles) !== JSON.stringify(manifest.files)) {
   throw new Error("Bundled Drama Skills files differ from manifest; run pnpm assets:sync:drama.");
 }
-if (manifest.skills.length !== 10 || !manifest.skills.every((name) => name === "short-drama" || name.startsWith("short-drama-"))) {
-  throw new Error(`Expected 10 pinned Drama Skills, found ${String(manifest.skills.length)}.`);
+if (manifest.skills.length !== 11 || !manifest.skills.every((name) => name === "short-drama" || name.startsWith("short-drama-"))) {
+  throw new Error(`Expected 11 pinned Drama Skills, found ${String(manifest.skills.length)}.`);
+}
+if (!manifest.skills.includes("short-drama-edit")) {
+  throw new Error("Bundled Drama Skills are missing the v0.7 assembly stage short-drama-edit.");
 }
 const paths = new Set(manifest.files.map(({ path }) => path));
 for (const required of [
   "skills/short-drama/references/creator-documents.md",
-  "skills/short-drama-storyboard/references/comic-keyframe-lexicon.md"
+  "skills/short-drama-storyboard/references/comic-keyframe-lexicon.md",
+  "skills/short-drama-edit/scripts/edit_tool.py",
+  "skills/short-drama-edit/references/delivery-verify.md"
 ]) {
-  if (!paths.has(required)) throw new Error(`Bundled Drama Skills are missing the v0.6 contract asset ${required}.`);
+  if (!paths.has(required)) throw new Error(`Bundled Drama Skills are missing the contract asset ${required}.`);
 }
 for (const forbidden of [
   "skills/short-drama/references/lifecycle-commands.md",
@@ -48,8 +53,13 @@ if (manifest.files.some(({ path }) => path.includes("/__pycache__/") || path.end
 }
 const routeSkill = await readFile(join(dramaRoot, "skills/short-drama/SKILL.md"), "utf8");
 for (const document of ["剧本.md", "视觉设定.md", "分镜.md", "图片提示词.md", "视频提示词.md"]) {
-  if (!routeSkill.includes(document)) throw new Error(`Drama v0.6 route no longer declares ${document}.`);
+  if (!routeSkill.includes(document)) throw new Error(`Drama creator-first route no longer declares ${document}.`);
 }
+// v0.7 adds assembly downstream of production. 剪辑单.md records which frames of the
+// already generated footage reach the cut; it is not a sixth creative truth.
+if (!routeSkill.includes("剪辑单.md")) throw new Error("Drama v0.7 route no longer declares the 剪辑单.md assembly stage.");
+const editSkill = await readFile(join(dramaRoot, "skills/short-drama-edit/SKILL.md"), "utf8");
+if (!editSkill.includes("剧集/<EP>/剪辑单.md")) throw new Error("Drama v0.7 assembly document contract is missing.");
 const reviewSkill = await readFile(join(dramaRoot, "skills/short-drama-review/SKILL.md"), "utf8");
 if (!reviewSkill.includes("审查/EP001-审查.md")) throw new Error("Drama v0.6 review Markdown contract is missing.");
 const produceSkill = await readFile(join(dramaRoot, "skills/short-drama-produce/SKILL.md"), "utf8");

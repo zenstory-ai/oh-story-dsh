@@ -45,8 +45,11 @@ describe("DSH-native production prompts", () => {
 
     const composition = createPendingJob({ id: "compose-001", targetId: episodeDirectory, kind: "composition", prompt: "合成" });
     const compositionPrompt = nativeCompositionPrompt(production, composition, ["one.mp4", "two.mp4"]);
+    expect(compositionPrompt).toMatch(/^\/short-drama-edit/u);
     expect(compositionPrompt).toContain("1. one.mp4\n2. two.mp4");
-    expect(compositionPrompt).toContain("成片-compose-001.mp4");
+    expect(compositionPrompt).toContain("剧集/EP001/剪辑单.md");
+    expect(compositionPrompt).toContain("剧集/EP001/制作成果/成片/");
+    expect(compositionPrompt).toContain("先写剪辑单再渲染");
     expect(compositionPrompt).toContain("遵守 DSH 权限与审批");
   });
 

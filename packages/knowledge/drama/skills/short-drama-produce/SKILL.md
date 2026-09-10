@@ -75,11 +75,13 @@ python3 <本技能目录>/scripts/production_tool.py prepare <project> --job <jo
 python3 <本技能目录>/scripts/production_tool.py confirm <project> --job-id <id> --confirmation "CONFIRM <id> <code>"
 python3 <本技能目录>/scripts/production_tool.py run <project> --job-id <id> --adapter-config <outside-project-config.json>
 python3 <本技能目录>/scripts/production_tool.py status <project> --job-id <id>
+python3 <本技能目录>/scripts/production_tool.py collect <project> --job-id <id> --adapter-config <outside-project-config.json>
 python3 <本技能目录>/scripts/production_tool.py audit <project>
 ```
 
 `prepare` 只验证并预览，不生产。`confirm` 只保存与当前 job 指纹绑定的一次性确认。
-`run` 才启动 adapter。`audit` 只对账本地任务历史、失败后恢复、重复内容尝试和当前输出字节，
+`run` 才启动 adapter。`collect` 只取回**已经提交过、已经计费**的那次任务的结果，
+不重新提交、也不需要新的确认——见下面「中断不等于要重跑」。`audit` 只对账本地任务历史、失败后恢复、重复内容尝试和当前输出字节，
 不会调用供应商，也不把技术成功、文件存在或哈希一致写成媒体质量结论。同一 job 存在未决
 `running` attempt 时禁止重新 prepare、confirm 或 run；先等待完成或排查遗留 attempt。
 
@@ -97,8 +99,8 @@ python3 <本技能目录>/scripts/production_tool.py audit <project>
 - **tts**：从 `剧本.md` 读取原句与表演要求，声音参考由用户或现有媒体明确提供。不得在生产 job
   中改词，也不为 TTS 新建第六份创作文档。
 - **music**：读取 `视频提示词.md` 中创作者已确认的时间线音乐章节；主题曲使用已确认歌词，纯配乐
-  不携带歌词。供应商不能精确承诺时长时，生成源音轨后仍由剪辑按文档里的混音意图完成落点、循环、
-  淡入淡出和对白 ducking。
+  不携带歌词。供应商不能精确承诺时长时，生成源音轨后仍由 `$short-drama-edit` 按文档里的混音意图完成落点、
+  循环、淡入淡出和对白 ducking。
 
 一个 job 不混合 modality。大批量工作拆成创作者能看清数量和成本边界的小 job；不为方便把整季
 隐式塞进一次确认。
@@ -133,6 +135,23 @@ adapter 配置必须在项目外，只包含 argv 命令和超时；凭据由 ad
 
 仓库自带 `fixture_adapter.py` 只用于离线测试，不代表真实生成质量或默认生产 adapter。
 
+## 中断不等于要重跑
+
+视频任务在**提交那一刻**就已经计费，不是在拿到结果时。提交之后的一切——轮询几分钟、下载——
+都可能被进程被杀、断网、机器休眠打断。内置 adapter 因此在拿到供应商任务 ID 的第一时间就把它
+写进 `handle_path`（早于第一次轮询），这个路径不随本次尝试一起删除。
+
+于是中断之后有三条确定的动作，不必再花一次钱：
+
+1. `audit` 会把带着任务 ID 的未完成尝试报成 `orphaned_provider_job`，
+   `action` 是 `collect_before_retry`；
+2. `collect` 用那个 ID 取回结果并把这次尝试标成成功；
+3. 只有在 `collect` 也确认那边确实失败之后，才走重新确认与重投的老路。
+
+**不要在 `audit` 报出 `orphaned_provider_job` 时直接重投**——那是在为同一个镜头付第二次钱。
+`collect` 不走确认闸门是有意的：闸门防的是意外花钱，而 collect 不花钱；
+如果它也要求重新确认，那么中断之后最省事的路径就变成再付一次，正好是闸门要防的事。
+
 ## 结果与复核
 
 成功后回报实际输出路径、媒体类型和运行状态；不要把“adapter 返回成功”写成质量结论。
@@ -145,6 +164,8 @@ adapter 配置必须在项目外，只包含 argv 命令和超时；凭据由 ad
 构图与角色一致、画面本身合规的图；音频被拒重录那句台词。改动写进新的 job 重新 prepare，让创
 作者在预览里看到改的是哪一项再确认；原样重投的那次确认不产生修复，只产生一笔费用。重复内容
 缺陷回到对应 prompt/spec owner。
+生产结束后不自动进入剪辑。素材要装配成成片时由用户点名 `$short-drama-edit`；它只取舍已有帧，
+不回头改本阶段的 job，也不生成新素材。
 如需质量复核，报告可把已有结果另行交给 `$short-drama-review`；不要在生产调用中自动启动复核。
 Dashboard 只负责展示这些文件和运行摘要，不提供 adapter 设置或生产按钮。
 

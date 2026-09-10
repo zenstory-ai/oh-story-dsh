@@ -21,6 +21,13 @@ export interface ProductionJob {
   readonly output?: ProductionMediaVersion | undefined;
   readonly expectedOutputs: number;
   readonly completedOutputs: number;
+  /**
+   * Deliverable whose name the job cannot influence. Drama Skills 0.7 renders the
+   * assembled cut to a fixed path, so it carries no job id to correlate on.
+   */
+  readonly outputPath?: string | undefined;
+  /** Versions already at `outputPath` when the job was dispatched, so an earlier cut never completes it. */
+  readonly supersededOutputIds?: readonly string[] | undefined;
 }
 
 export interface ProductionSequenceItem {
@@ -44,6 +51,8 @@ export function createPendingJob(input: {
   readonly kind: ProductionJobKind;
   readonly prompt: string;
   readonly expectedOutputs?: number | undefined;
+  readonly outputPath?: string | undefined;
+  readonly supersededOutputIds?: readonly string[] | undefined;
 }): ProductionJob {
   return {
     id: input.id,
@@ -53,7 +62,9 @@ export function createPendingJob(input: {
     progress: 0,
     prompt: input.prompt,
     expectedOutputs: Math.max(1, Math.floor(input.expectedOutputs ?? 1)),
-    completedOutputs: 0
+    completedOutputs: 0,
+    outputPath: input.outputPath,
+    supersededOutputIds: input.supersededOutputIds
   };
 }
 
@@ -85,6 +96,12 @@ export function mediaVersionMatchesJob(version: ProductionMediaVersion, jobId: s
   const escaped = jobId.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
   const basename = version.path.split("/").at(-1) ?? "";
   return new RegExp(`(?:^|[-_.])${escaped}(?:[-_.]|$)`, "u").test(basename);
+}
+
+export function outputsForJob(job: ProductionJob, versions: readonly ProductionMediaVersion[]): ProductionMediaVersion[] {
+  if (job.outputPath === undefined) return versions.filter((version) => mediaVersionMatchesJob(version, job.id));
+  const superseded = new Set(job.supersededOutputIds ?? []);
+  return versions.filter((version) => version.path === job.outputPath && !superseded.has(version.id));
 }
 
 export function referencesForTarget(
@@ -142,7 +159,7 @@ export function reconcileProductionJobs(
 
   return jobs.map((job) => {
     const queued = queuedItemForJob(job.id, queue) !== undefined;
-    const outputs = versions.filter((version) => mediaVersionMatchesJob(version, job.id));
+    const outputs = outputsForJob(job, versions);
 
     if (outputs.length >= job.expectedOutputs) {
       return {

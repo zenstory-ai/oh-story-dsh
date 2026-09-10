@@ -1,6 +1,6 @@
 # Validation
 
-Target: DeepSeek Harness `0.1.2-rc.1` · validated 2026-09-04.
+Target: DeepSeek Harness `0.1.5-rc.1` · validated 2026-09-10.
 
 ## Test architecture
 
@@ -21,8 +21,8 @@ The deterministic packaged Role path is part of the correctness gate. The paid r
 
 | Area | Evidence |
 | --- | --- |
-| Capability catalog | Native DSH Session exposes 13 Oh Story Skills, 10 Drama Skills, 7 NovelToGame Skills and the 2 user-invocable video entries; provider tests retain all 6 upstream video Skills |
-| Upstream integrity | Four knowledge manifests verify pinned commits, catalogs, every bundled file hash, portable-source exclusions and the Drama 0.6 creator-first contract; all 10 bundled Drama selftests run without bytecode writes, the five demo documents verify recorded fixture hashes, NovelToGame parity covers the playable `jin-ping-mei` build, its six-check PASS record and authoring-material exclusions, and video-recap parity requires the complete six-Skill pipeline plus its orchestrator/inspect entry points |
+| Capability catalog | Native DSH Session exposes 13 Oh Story Skills, 11 Drama Skills, 7 NovelToGame Skills and the 2 user-invocable video entries; provider tests retain all 6 upstream video Skills |
+| Upstream integrity | Four knowledge manifests verify pinned commits, catalogs, every bundled file hash, portable-source exclusions, the Drama creator-first contract and its 0.7 assembly stage; all 11 bundled Drama selftests run without bytecode writes, the five demo documents verify recorded fixture hashes, NovelToGame parity covers the playable `jin-ping-mei` build, its six-check PASS record and authoring-material exclusions, and video-recap parity requires the complete six-Skill pipeline plus its orchestrator/inspect entry points |
 | Plugin boundary | Host bundle and source audit keep all DSH imports inside `@oh-story/dsh` |
 | Workspace safety | Unit tests cover Host/Origin/Fetch Metadata trust and creative media allowlists, while the packaged route rejects traversal and exercises session-scoped reads, media byte ranges and atomic writes; generated-game CSP is browser-probed to reject workspace API access outside the preview asset prefix; child-session, absolute-path and symbolic-link negative cases remain follow-up contracts |
 | Editor concurrency | Versioned GET/PUT rejects stale saves; Chrome edits, saves, rereads and restores a real workspace file |
@@ -55,9 +55,9 @@ The gate discovers all `*.test.ts` and `*.contract.test.ts` files. Coverage clai
 
 ## Native DSH Web audit
 
-`pnpm test:dsh` creates an isolated DSH installation and profile, packs `@oh-story/dsh`, installs the tarball through `dsh plugin --profile web add`, and starts the official Web UI. It copies the pinned public demo projects from Oh Story (`让你管账号，你高燃混剪炸全网`) and Drama Skills 0.6 (`让你管账号`) into temporary workspaces, creates a minimal workspace game, and loads the pinned NovelToGame Jin Ping Mei example. The Chrome pass verifies:
+`pnpm test:dsh` creates an isolated DSH installation and profile, packs `@oh-story/dsh`, installs the tarball through `dsh plugin --profile web add`, and starts the official Web UI. It copies the pinned public demo projects from Oh Story (`让你管账号，你高燃混剪炸全网`) and Drama Skills (`让你管账号`) into temporary workspaces, creates a minimal workspace game, and loads the pinned NovelToGame Jin Ping Mei example. The Chrome pass verifies:
 
-- 13 Oh Story Skills, 10 Drama Skills, 7 NovelToGame Skills and the 2 upstream user-invocable video entries in the Session catalog; provider tests cover all 6 bundled video Skills;
+- 13 Oh Story Skills, 11 Drama Skills, 7 NovelToGame Skills and the 2 upstream user-invocable video entries in the Session catalog; provider tests cover all 6 bundled video Skills;
 - Session-scoped workspace reads, a 20-writer atomic CAS race, stale-write rejection and path-traversal rejection;
 - allowlisted media discovery, read-only byte-range preview and media path-traversal rejection through the current Agent FileSystem, using two alternate 941×1672 generated keyframes and a real 704×1280 five-second seekable MP4 rather than one-pixel placeholders;
 - invalid project metadata isolation without taking down the workspace;

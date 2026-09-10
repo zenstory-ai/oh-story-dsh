@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import { chromium, type Locator, type Page } from "@playwright/test";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const dshVersion = "0.1.2-rc.1";
+const dshVersion = "0.1.5-rc.1";
 /** Exact WebSocket route carrying every Typert Remote stream. */
 const REMOTE_STREAM_MUX_PATH = "/api/remote.mux";
 const demoFramesDirectory = process.env.OH_STORY_DEMO_FRAMES_DIR;
@@ -640,7 +640,10 @@ async function main(): Promise<void> {
       if (!entries.has(required)) throw new Error(`Plugin tarball is missing ${required}.`);
     }
     for (const entry of entries) {
-      if (/\/(?:src|tests)\//u.test(entry)
+      // Only the plugin's own source and tests are forbidden. Bundled upstream knowledge
+      // legitimately carries a src/ tree — short-drama-edit ships the optional Remotion
+      // subtitle overlay that way.
+      if (/^package\/(?:src|tests)\//u.test(entry)
         || /(?:^|\/)__pycache__(?:\/|$)/u.test(entry)
         || /\.pyc$/u.test(entry)
         || /(?:^|\/)\.DS_Store$/u.test(entry)
@@ -723,7 +726,7 @@ async function main(): Promise<void> {
       "video-recap", "video-understanding", "video-script", "video-cut", "video-voiceover", "video-assemble"
     ].includes(skill.name));
     if (ohStorySkills.length !== 13) throw new Error(`Expected 13 Oh Story Skills, found ${String(ohStorySkills.length)}.`);
-    if (dramaSkills.length !== 10) throw new Error(`Expected 10 Drama Skills, found ${String(dramaSkills.length)}.`);
+    if (dramaSkills.length !== 11) throw new Error(`Expected 11 Drama Skills, found ${String(dramaSkills.length)}.`);
     if (gameSkills.length !== 7) throw new Error(`Expected 7 NovelToGame Skills, found ${String(gameSkills.length)}.`);
     if (JSON.stringify(videoSkills.map((skill) => skill.name).sort()) !== JSON.stringify(["video-recap", "video-script"])) {
       throw new Error(`Expected the two user-invocable video-recap entries, found ${videoSkills.map((skill) => skill.name).join(", ")}.`);
@@ -1008,11 +1011,15 @@ async function main(): Promise<void> {
       throw new Error("DSH did not publish the Oh Story Browser module.");
     }
     const bundle = await (await dshFetch(new URL(preloadPath, origin))).text();
-    const registration = 'window.__ModuleLoader__.load({id:"';
-    const start = bundle.indexOf(`${registration}@oh-story/dsh"`);
-    if (start < 0) throw new Error("DSH did not serve the Oh Story Browser module.");
-    const next = bundle.indexOf(registration, start + registration.length);
-    const client = next < 0 ? bundle.slice(start) : bundle.slice(start, next);
+    // Registrations appear both minified and pretty-printed in the combined bundle, so the
+    // module boundaries have to tolerate the whitespace. Anchoring on the minified form only
+    // silently ran the slice past the plugin and into whichever DSH module followed it.
+    const registration = /window\.__ModuleLoader__\.load\(\{\s*id:\s*"(?<id>[^"]+)"/gu;
+    const registrations = [...bundle.matchAll(registration)];
+    const startIndex = registrations.findIndex((match) => match.groups?.id === "@oh-story/dsh");
+    if (startIndex < 0) throw new Error("DSH did not serve the Oh Story Browser module.");
+    const start = registrations[startIndex]!.index;
+    const client = bundle.slice(start, registrations[startIndex + 1]?.index);
     for (const slot of ["shell.overlay", "tool.call.toolview"]) {
       if (!client.includes(slot)) throw new Error(`Browser module is missing official slot ${slot}.`);
     }
@@ -1980,7 +1987,9 @@ async function main(): Promise<void> {
           .waitFor({ state: "visible", timeout: 10_000 });
         const compositionJobId = await compositionTask.getAttribute("data-job-id");
         if (compositionJobId === null) throw new Error("Composition task did not expose its stable projection id.");
-        const compositionOutput = `剧集/EP001/制作成果/成片-${compositionJobId}.mp4`;
+        // short-drama-edit renders to this fixed path; the job correlates on the deliverable.
+        const compositionOutput = "剧集/EP001/制作成果/成片/成片.mp4";
+        await mkdir(dirname(join(dramaRoot, compositionOutput)), { recursive: true });
         await cp(videoMediaFixture, join(dramaRoot, compositionOutput));
         await page.getByRole("button", { name: "刷新", exact: true }).click();
         await compositionTask.getByText("已完成", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });

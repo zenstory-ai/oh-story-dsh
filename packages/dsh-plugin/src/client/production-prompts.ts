@@ -55,14 +55,15 @@ export function nativeCompositionPrompt(
   job: ProductionJob,
   orderedPaths: readonly string[]
 ): string {
-  return `/short-drama-produce
+  return `/short-drama-edit
 
-执行创作者已明确确认的成片合成任务。
+执行创作者已明确确认的成片装配任务。
 - 任务 ID：${job.id}
 - 剧集：${production.episodeDirectory}
-- 按以下顺序合成，不得自行换序：
+- 创作者在成片视图排定的镜序，不得自行换序：
 ${orderedPaths.map((path, index) => `${String(index + 1)}. ${path}`).join("\n")}
-- 输出：${production.episodeDirectory}/制作成果/成片-${job.id}.mp4
+- 剪辑单：${production.episodeDirectory}/剪辑单.md
+- 输出：${production.episodeDirectory}/制作成果/成片/
 
-先验证输入均存在且可读，再使用当前 DSH Preset 可见的媒体/命令工具执行；音视频参数不兼容时做明确、可审计的标准化。所有命令和写入继续遵守 DSH 权限与审批，不得伪造成功。`;
+先写剪辑单再渲染。逐段看完素材后写下真实的入出点、取舍理由、声音处理与字幕，不要按镜序凭空填时间；字幕逐字取自剧本.md。剪辑单落盘后依次运行 edit_tool.py 的 check 与 render，check 报出的问题先改文档再重跑。缺失或不可用的素材写进「未采用镜头」并说明属于哪一类，不要退回去生成新素材，也不要改动剧本、分镜或视频提示词的语义。字幕默认走零依赖的 ffmpeg 路线；改用 Remotion 需要先安装 Node 依赖并逐帧过无头浏览器，只有创作者明确同意这次安装时才走。ffmpeg 与 ffprobe 通过当前 DSH 执行环境调用，不可用时如实报出来，不要把「没测」写成「通过」。所有命令和写入继续遵守 DSH 权限与审批，不得伪造成功。`;
 }
