@@ -4,6 +4,8 @@
 
 # oh-story-dsh
 
+> Project page: <https://zenstory.ai/dsh> · All ZenStory AI projects: <https://zenstory.ai/projects>
+
 **A novel, short-drama, interactive-game and video-recap creation workbench for DeepSeek Harness**
 
 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) · [Oh Story](https://github.com/zenstory-ai/oh-story-claudecode) · [Drama Skills](https://github.com/zenstory-ai/drama-skills) · [NovelToGame](https://github.com/zenstory-ai/novel-to-game) · [video-recap-skills](https://github.com/zenstory-ai/video-recap-skills) · [MIT](LICENSE)
