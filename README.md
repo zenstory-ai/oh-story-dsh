@@ -4,6 +4,8 @@
 
 # oh-story-dsh
 
+> 项目页：<https://zenstory.ai/dsh> · ZenStory AI 全部项目：<https://zenstory.ai/projects>
+
 **小说、短剧、互动游戏与视频解说创作工作台**
 
 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) · [Oh Story](https://github.com/zenstory-ai/oh-story-claudecode) · [Drama Skills](https://github.com/zenstory-ai/drama-skills) · [NovelToGame](https://github.com/zenstory-ai/novel-to-game) · [video-recap-skills](https://github.com/zenstory-ai/video-recap-skills) · [MIT](LICENSE)
