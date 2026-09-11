@@ -1,3 +1,5 @@
+**中文** | [English](README_EN.md)
+
 <div align="center">
 
 # oh-story-dsh
