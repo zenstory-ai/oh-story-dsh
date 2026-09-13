@@ -16,6 +16,19 @@
 
 > This project is not affiliated with, partnered with, or endorsed by DeepSeek. The DeepSeek Harness name and brand assets belong to their rights holders.
 
+## Start with a writing task
+
+**Do you need a plugin to write fiction with DeepSeek?** Not for every task. For a synopsis discussion or a revision of supplied text, ordinary model chat may be enough; copy the result back into your own manuscript. Choose DSH plus this plugin when the work should continue around a local writing folder. Installing it does not add a workbench to ordinary DeepSeek chat. For a separate account-based browser project, use the [hosted ZenStory workbench](https://app.zenstory.ai); do not expect automatic file, session or model-configuration synchronization with DSH. See the [writing-environment comparison](https://zenstory.ai/compare/writing-workflows).
+
+| Your immediate creative question | What to read and decide first |
+| --- | --- |
+| How do I start a book locally? | [Writing fiction with DeepSeek](https://zenstory.ai/dsh/deepseek-novel-writing): choose the writing folder, configure the host's model, then specify genre, viewpoint and this turn's stopping point. Start with settings and chapter plans rather than an entire book at once. |
+| How do I continue existing chapters without overwriting them? | [Import and continue](https://zenstory.ai/oh-story/import-and-continue): distinguish finished chapters from unfinished fragments, identify settings to preserve, and bound the next passage. |
+| How do I adapt my novel into a short drama or game? | [Short-drama character consistency](https://zenstory.ai/drama-skills/character-consistency) separates identity, look and per-shot state; [meaningful game choices](https://zenstory.ai/novel-to-game/meaningful-choices) connects action costs, visible changes and later consequences. Decide the adaptation before moving into production. |
+| Which original audio should I keep from a local video? | [Original sound versus narration](https://zenstory.ai/video-recap/original-audio-and-narration): identify essential dialogue, picture evidence and gaps that need explanation before arranging voiceover and editing. |
+
+Except for the DSH-specific guide, these links explain creative methods in standalone projects, not how to install another host's plugin into DSH. This plugin bundles pinned capability versions: follow this README's catalogue, installation instructions and bundled Skills for commands, file conventions and available tools. A storyboard or game design is not yet a generated film or playable build.
+
 ## Novel workbench
 
 ![Novel workbench](docs/images/story-workbench-demo.gif)
@@ -121,6 +134,14 @@ The video-recap workbench uses `MIMO_API_KEY` (and `FISH_API_KEY` for Fish Audio
 On first entry you will see the DSH home page. Click **＋ (Add workspace)** next to Workspaces on the left, choose the folder that holds your work, then select that directory under **Choose workspace** below; DSH opens an empty session. You can also open an existing session from the left. When the directory already contains creation projects, four workbench tabs appear: Novel / Short drama / Game / Video.
 
 An empty directory keeps the native DSH Chat. Once a model is configured, type `/story`, `/short-drama`, `/novel-to-game quick` or `/video-recap` to start; the workbench appears automatically after the agent writes its first creation file. Browsing existing work does not require an API key. A collapsed workbench can be reopened with the "creation workbench" button in the session area.
+
+### Existing manuscript: discuss continuation before changing files
+
+After configuring a model and selecting the correct workspace, try a plain-language request before importing or editing the manuscript. Replace the bracketed details before sending it: agree on the creative direction first, then decide whether to turn it into project files.
+
+> Help me plan the next scene of this novel, which I own or am authorized to use. Read only the named [chapter files] and [settings files] in the current workspace. [Final fragment] is unfinished; do not count it as a complete chapter. First list facts relevant to the next scene, what the viewpoint character currently knows, and any missing or conflicting information. Then propose two directions, each explaining the character's want, the obstacle and the visible change caused by their action. Do not reveal [secret] yet; stop at [scene boundary]. Reply only in Chat this turn. Do not create, move or edit files, draft prose or call media services. List uncertainties as questions rather than inventing settled facts.
+
+This is a writing discussion, not a project import: a Chat-only answer does not create a novel folder or automatically open a new workbench. After choosing a direction, explicitly request an import or planning pass using the bundled workflow and specify whether to write files, whether to draft prose, and the chapter boundary. Keep a backup of the original manuscript.
 
 ## If you do not see the interface
 
