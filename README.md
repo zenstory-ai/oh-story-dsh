@@ -4,7 +4,7 @@
 
 # oh-story-dsh
 
-> 项目页：<https://zenstory.ai/dsh> · ZenStory AI 全部项目：<https://zenstory.ai/projects>
+> 项目页：<https://zenstory.ai/zh/dsh> · ZenStory AI 全部项目：<https://zenstory.ai/zh/projects>
 
 **小说、短剧、互动游戏与视频解说创作工作台**
 
@@ -18,14 +18,14 @@
 
 ## 从创作任务开始
 
-**用 DeepSeek 写小说，一定要装插件吗？** 不一定。只讨论一个梗概或修改一段自带文本，可以用普通模型聊天，自己把结果放回稿件；需要围绕本地作品目录持续创作时，再选 DSH 加本插件。安装本插件不会给普通 DeepSeek 聊天增加工作台。想用独立的账户化网页项目，可选 [ZenStory 托管工作台](https://app.zenstory.ai)，不要预期它与 DSH 自动同步文件、会话或模型配置。具体区别见[写作环境对比](https://zenstory.ai/compare/writing-workflows)。
+**用 DeepSeek 写小说，一定要装插件吗？** 不一定。只讨论一个梗概或修改一段自带文本，可以用普通模型聊天，自己把结果放回稿件；需要围绕本地作品目录持续创作时，再选 DSH 加本插件。安装本插件不会给普通 DeepSeek 聊天增加工作台。想用独立的账户化网页项目，可选 [ZenStory 托管工作台](https://app.zenstory.ai)，不要预期它与 DSH 自动同步文件、会话或模型配置。具体区别见[写作环境对比](https://zenstory.ai/zh/compare/writing-workflows)。
 
 | 眼前的创作问题 | 先读什么、先决定什么 |
 | --- | --- |
-| 想在本地开书，不知道从哪一步开始 | [DeepSeek 写小说指南](https://zenstory.ai/dsh/deepseek-novel-writing)：选择作品目录、配置宿主模型，再给出题材、视角与本轮停靠点；先做设定和细纲，不必一口气写整本书。 |
-| 已有章节，想接着写而不覆盖旧稿 | [导入与续写](https://zenstory.ai/oh-story/import-and-continue)：先分清已完成章节、未完成片段、必须保留的设定和下一段范围。 |
-| 把自己的小说改成短剧或游戏 | [短剧角色一致性](https://zenstory.ai/drama-skills/character-consistency)帮助分清身份、造型与逐镜状态；[有后果的游戏选择](https://zenstory.ai/novel-to-game/meaningful-choices)帮助明确行动代价、可见变化和后续承接。先决定改编内容，再进入制作。 |
-| 有本地视频，想决定哪些原声留下 | [原声与旁白分工](https://zenstory.ai/video-recap/original-audio-and-narration)：先列出关键台词、画面依据和需要解说的空隙，再安排配音与剪辑。 |
+| 想在本地开书，不知道从哪一步开始 | [DeepSeek 写小说指南](https://zenstory.ai/zh/dsh/deepseek-novel-writing)：选择作品目录、配置宿主模型，再给出题材、视角与本轮停靠点；先做设定和细纲，不必一口气写整本书。 |
+| 已有章节，想接着写而不覆盖旧稿 | [导入与续写](https://zenstory.ai/zh/oh-story/import-and-continue)：先分清已完成章节、未完成片段、必须保留的设定和下一段范围。 |
+| 把自己的小说改成短剧或游戏 | [短剧角色一致性](https://zenstory.ai/zh/drama-skills/character-consistency)帮助分清身份、造型与逐镜状态；[有后果的游戏选择](https://zenstory.ai/zh/novel-to-game/meaningful-choices)帮助明确行动代价、可见变化和后续承接。先决定改编内容，再进入制作。 |
+| 有本地视频，想决定哪些原声留下 | [原声与旁白分工](https://zenstory.ai/zh/video-recap/original-audio-and-narration)：先列出关键台词、画面依据和需要解说的空隙，再安排配音与剪辑。 |
 
 除了 DSH 专属指南，以上链接讲的是独立项目的创作方法，不是向 DSH 安装其他宿主插件的步骤。本插件随附固定版本的能力，命令、文件约定与实际可用工具请以本 README 的能力清单、安装说明和随包 Skills 为准；写出分镜或游戏设计不等于已经生成影片或可玩构建。
 
