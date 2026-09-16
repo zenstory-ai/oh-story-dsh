@@ -1,16 +1,33 @@
-**English** | [中文](README.md)
+<p align="center">
+  <img src="https://zenstory.ai/brand/zenstory-ai-mark.svg" alt="" width="76" height="76">
+</p>
 
-<div align="center">
+<h1 align="center">Oh Story DSH</h1>
 
-# oh-story-dsh
+<p align="center">
+  <b>A novel, short-drama, interactive-game and video-recap creation workbench for DeepSeek Harness.</b>
+</p>
 
-**A novel, short-drama, interactive-game and video-recap creation workbench for DeepSeek Harness**
+<p align="center">
+  <a href="https://zenstory.ai/dsh"><b>Project page</b></a>
+  &nbsp;·&nbsp;
+  <a href="#installation"><b>Install</b></a>
+  &nbsp;·&nbsp;
+  <a href="#start-creating"><b>Start creating</b></a>
+  &nbsp;·&nbsp;
+  <a href="README.md"><b>中文</b></a>
+</p>
 
-Project page: <https://zenstory.ai/dsh>
+<p align="center">
+  <a href="https://github.com/zenstory-ai/oh-story-dsh/stargazers"><img alt="Stars" src="https://img.shields.io/github/stars/zenstory-ai/oh-story-dsh?style=flat-square&color=22D3EE&logo=github&logoColor=white&label=Stars"></a>
+  <a href="https://github.com/zenstory-ai/oh-story-dsh/releases/latest"><img alt="Release" src="https://img.shields.io/github/v/release/zenstory-ai/oh-story-dsh?style=flat-square&color=081431&label=Release"></a>
+  <img alt="Workbenches 4" src="https://img.shields.io/badge/Workbenches-4-081431?style=flat-square">
+  <a href="./LICENSE"><img alt="License MIT" src="https://img.shields.io/badge/License-MIT-1F6FEB?style=flat-square"></a>
+</p>
 
-[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) · [Oh Story](https://github.com/zenstory-ai/oh-story-claudecode) · [Drama Skills](https://github.com/zenstory-ai/drama-skills) · [NovelToGame](https://github.com/zenstory-ai/novel-to-game) · [video-recap-skills](https://github.com/zenstory-ai/video-recap-skills) · [MIT](LICENSE)
-
-</div>
+<p align="center">
+  <a href="https://github.com/zenstory-ai/oh-story-dsh/issues"><img alt="GitHub Issues" src="https://img.shields.io/badge/GitHub%20Issues-181717?style=for-the-badge&logo=github&logoColor=white"></a>
+</p>
 
 ![Novel workbench](docs/images/story-workbench-demo.gif)
 

@@ -1,16 +1,33 @@
-**中文** | [English](README_EN.md)
+<p align="center">
+  <img src="https://zenstory.ai/brand/zenstory-ai-mark.svg" alt="" width="76" height="76">
+</p>
 
-<div align="center">
+<h1 align="center">Oh Story DSH</h1>
 
-# oh-story-dsh
+<p align="center">
+  <b>小说、短剧、互动游戏与视频解说创作工作台，装进 DeepSeek Harness。</b>
+</p>
 
-**小说、短剧、互动游戏与视频解说创作工作台**
+<p align="center">
+  <a href="https://zenstory.ai/zh/dsh"><b>项目主页</b></a>
+  &nbsp;·&nbsp;
+  <a href="#安装"><b>安装</b></a>
+  &nbsp;·&nbsp;
+  <a href="#开始创作"><b>开始创作</b></a>
+  &nbsp;·&nbsp;
+  <a href="README_EN.md"><b>English</b></a>
+</p>
 
-项目主页：<https://zenstory.ai/zh/dsh>
+<p align="center">
+  <a href="https://github.com/zenstory-ai/oh-story-dsh/stargazers"><img alt="Stars" src="https://img.shields.io/github/stars/zenstory-ai/oh-story-dsh?style=flat-square&color=22D3EE&logo=github&logoColor=white&label=Stars"></a>
+  <a href="https://github.com/zenstory-ai/oh-story-dsh/releases/latest"><img alt="Release" src="https://img.shields.io/github/v/release/zenstory-ai/oh-story-dsh?style=flat-square&color=081431&label=Release"></a>
+  <img alt="Workbenches 4" src="https://img.shields.io/badge/Workbenches-4-081431?style=flat-square">
+  <a href="./LICENSE"><img alt="License MIT" src="https://img.shields.io/badge/License-MIT-1F6FEB?style=flat-square"></a>
+</p>
 
-[DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) · [Oh Story](https://github.com/zenstory-ai/oh-story-claudecode) · [Drama Skills](https://github.com/zenstory-ai/drama-skills) · [NovelToGame](https://github.com/zenstory-ai/novel-to-game) · [video-recap-skills](https://github.com/zenstory-ai/video-recap-skills) · [MIT](LICENSE)
-
-</div>
+<p align="center">
+  <a href="https://github.com/zenstory-ai/oh-story-dsh/issues"><img alt="GitHub Issues" src="https://img.shields.io/badge/GitHub%20Issues-181717?style=for-the-badge&logo=github&logoColor=white"></a>
+</p>
 
 ![小说工作台](docs/images/story-workbench-demo.gif)
 
