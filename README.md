@@ -13,7 +13,7 @@
   &nbsp;·&nbsp;
   <a href="#安装"><b>安装</b></a>
   &nbsp;·&nbsp;
-  <a href="#开始创作"><b>开始创作</b></a>
+  <a href="#看看它的输出"><b>看看它的输出</b></a>
   &nbsp;·&nbsp;
   <a href="README_EN.md"><b>English</b></a>
 </p>
@@ -31,12 +31,19 @@
 
 ![小说工作台](docs/images/story-workbench-demo.gif)
 
-`oh-story-dsh` 是 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（DSH）的社区插件，与 DeepSeek 无隶属关系。它把小说、短剧、互动游戏与视频解说四条创作流水线装进 DSH：DSH 负责 Agent、会话、模型、权限和 Chat，插件负责创作 Skills、专业 Roles、项目协议和对应的工作台。
+上面是打包后的插件装进官方 DSH Web 后的真实画面，取自一次原生集成测试的录制：左边是随包示例工程《让你管账号，你高燃混剪炸全网》前 20 章的文件树，中间是正文编辑器，右边是 DSH 原生 Chat，模型、用量和耗时都由 DSH 自己显示。
 
-- **小说**：文件树、编辑器、Chat 三栏，13 个 Oh Story Skills 与 7 个专业 Roles 随插件交付。
-- **短剧**：每集维护剧本、视觉设定、分镜、图片与视频提示词，「生产」视图投影为镜头板与素材板，成片由 `/short-drama-edit` 装配。
-- **游戏**：`/novel-to-game quick` 生成可玩构建，左侧实时试玩、右侧 Chat。
-- **视频解说**：给本地视频做中文解说成片或配音翻译，原片、剪后片、成片就地预览。
+## 这是什么
+
+`oh-story-dsh` 是 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（DSH）的社区插件，与 DeepSeek 无隶属关系。它把小说、短剧、互动游戏与视频解说四条创作流水线装进你已经在跑的 DSH：
+
+- **DSH 管运行，插件管创作** — Agent、会话、模型、权限审批和 Chat 全部是 DSH 原生的；插件只添加创作 Skills、专业 Roles、项目文件协议和四个工作台，不带第二套 Agent 运行时、渲染队列或项目数据库。
+- **四条流水线来自四个开源仓库的固定版本** — Oh Story 0.7.10 的 13 个 Skills 与 7 个 Roles、Drama Skills 0.7.0 的 11 个 Skills、NovelToGame 0.3.1 的 7 个 Skills、video-recap-skills 0.5.0 的 6 个 Skills，随插件打包，每个文件的哈希都记在清单里。
+- **文件就是创作事实** — 小说的设定、大纲、正文、追踪各是一个目录；短剧每集最多五份 Markdown；游戏和视频各有自己的项目目录。工作台只把这些文件投影成镜头板、试玩窗或预览，改哪份文件就是改哪一层决定。
+- **花钱的事先确认** — 生图、生视频、生音乐的任务先在「生产」视图里看到准确内容，明确确认后才调用供应商 API；供应商的 Key 只放在宿主机环境变量里，插件只报告有没有配。
+- **不占别的场景** — 只有当前 workspace 里真的有小说、短剧、游戏或视频项目时，工作台才接管会话布局；随时可收起，收起后会话回到 DSH 原生形态。
+
+> 最新版本 **v0.1.9**（2026-09-10）。完整变更见 [CHANGELOG.md](CHANGELOG.md) 与 [Releases](https://github.com/zenstory-ai/oh-story-dsh/releases)；升级后要做什么，见常见问题[「升级到新版本后要做什么」](#升级到新版本后要做什么)。
 
 ## 安装
 
@@ -47,7 +54,7 @@ npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.1.5-rc.1 dsh plugin --
 npx -y @deepseek-ai/dsh@0.1.5-rc.1 web
 ```
 
-保持终端运行，浏览器默认自动打开。如果没有自动打开，请复制终端打印的完整 `http://127.0.0.1:3080/?token=...` 链接访问；首次认证需要链接里的 token。关闭终端会停止服务。
+保持终端运行，浏览器默认自动打开。如果没有自动打开，请复制终端打印的完整 `http://127.0.0.1:3080/?token=...` 链接访问；首次认证需要链接里的 token。关闭终端会停止服务。安装与启动请使用同一个 dsh 版本，混用会报 `unknown option '--no-open'` 一类的错。
 
 开始 AI 创作前，在 DSH 的「设置 → 模型」中添加 Provider 并填入 API Key，或在启动前设置环境变量 `DEEPSEEK_API_KEY`。只查看已有作品可在首次引导中选择「稍后配置 / Configure later」。
 
@@ -115,28 +122,158 @@ npx -y @deepseek-ai/dsh@0.1.5-rc.1 web
 
 选定方向后，再明确要求按随包流程导入或规划，并把“是否写文件、是否写正文、写到哪一章”说清楚；保留原稿备份。
 
-## 没看到界面时
+## 看看它的输出
 
-- **安装报 `pnpm not found on PATH`**：重新执行上面带 `--package pnpm@11.7.0` 的完整安装命令，确认安装成功后再启动。
-- **浏览器未打开或要求认证**：打开终端打印的完整带 `?token=...` 链接；端口被占用时用 `web --port 3081`，并访问新打印的链接。
-- **没有四个创作标签**：先添加作品目录并打开会话。空目录需要先在 Chat 中运行创作命令，生成创作文件后工作台才会出现；已收起的工作台可用会话区的「创作工作台」按钮恢复。已有作品仍不显示时，检查安装与启动是否使用同一个 profile，重启 DSH 并刷新页面。
-- **独立 `story` profile 没有网页服务**：按下方「按需加载」一节补上 `@deepseek-ai/dsh-web-app`，新 profile 需要单独添加 Web 界面。
+下面的节选都来自仓库里的文件或一次对这些文件的真实检查，省略处以「……」标出。小说与短剧样例是随包示例工程，分别同步自 [oh-story-claudecode 的 demo](https://github.com/zenstory-ai/oh-story-claudecode/tree/abe96630d115afbd528f2329e2d8d604d5d5673c/demo/%E9%95%BF%E7%AF%87)（项目作者自己的长篇，用 `/story-import` 把已发布的前 20 章反向重建成可续写工程）与 [drama-skills 的公开样例](https://github.com/zenstory-ai/drama-skills/tree/bc96c5eb9c91cccd1c613c2b34645c35f1989a28/examples/creator-first/EP001)。
+
+### 续写靠的是这份状态卡，不是对话记忆
+
+小说工作台里点开 `追踪/上下文.md`，看到的就是这本书写第 21 章之前的续写状态卡。`/story-long-write` 不靠对话记忆，它把连续性写进这一份固定七栏的文件，下一章只读它：
+
+```markdown
+## 当前位置
+- 当前章：第20章
+- 卷：第一卷·军宣整顿（候选）（始于第1章）
+- 故事时间：《如愿》点击破亿后的第二天
+- 场景：火箭军文工团，钟嘉嘉送来老兵书法礼后
+
+## 长期约束
+- 军宣爽点必须通过作品效果、传播数据和围观反应链兑现，不能只靠系统播报。
+……
+- 钟嘉嘉未公开的军方培养安排属于作者真相，正文揭示前不能当成读者已知。
+
+## 活跃伏笔
+- F016｜钟嘉嘉并非普通军报实习生，她的军方家庭背景仍未完全公开｜埋第7章｜回收章未定｜高
+……
+- F055｜《离别开出花》伴奏已经到手，下一首作品尚未启动｜埋第20章｜回收章未定｜高
+
+## 下一章承诺
+- 先补第21章细纲，再承接老兵邀请、新歌伴奏和钢琴能力。
+
+## 连贯性风险
+- 第一卷卷界仍是候选方案，未确认前不要擅自开新卷。
+- 第21章尚无细纲，不能直接写正文。
+```
+
+「第21章尚无细纲，不能直接写正文」不只是提醒：插件把长篇的细纲门禁挂在 DSH 的 `tools/pre-execute` 钩子上，Agent 在没有细纲时创建正文，写入会被拒绝，Chat 里看到的是这句：
+
+```text
+Oh Story 阻止写入第 21 章：未找到对应的 大纲/细纲_第XXX章*.md。请先完成细纲。
+```
+
+原文：[`追踪/上下文.md`](scripts/demo-fixtures/story/让你管账号，你高燃混剪炸全网/追踪/上下文.md) · [`追踪/伏笔.md`](scripts/demo-fixtures/story/让你管账号，你高燃混剪炸全网/追踪/伏笔.md)。
+
+### 一个镜头怎样穿过短剧的五份文档
+
+短剧每集只维护 `剧本.md`、`视觉设定.md`、`分镜.md`、`图片提示词.md`、`视频提示词.md`。同一个镜头在其中各管一层。剧本只写发生了什么：
+
+```markdown
+桌对面，周薄森把一摞材料推过厚玻璃桌面。纸角碰到江晨指尖。
+……
+周薄森端起缺口搪瓷茶缸，抿一口冷茶，眉头皱得更深。
+```
+
+`视觉设定.md` 给需要跨镜保持的造型上「连续性锁」，锁面是一条能原样贴进提示词的短语：
+
+```markdown
+- 连续性锁：LOCK-JIANGCHEN-DRESS《江晨橄榄绿立领常服》（镜头：SHOT-EP001-002、SHOT-EP001-003、SHOT-EP001-007；
+  图片提示词项：IMG-JIANGCHEN-SHEET）· 锁面：olive-green stand-collar service dress
+```
+
+`分镜.md` 写这一镜的起点、终点和它依据了哪些条目，冻结关键帧只画起点那一格：
+
+```markdown
+## SHOT-EP001-002 · 把空白交到他手里
+
+- 来源：EP001-SC001
+- 时长：8s
+- 起点：材料在周薄森手下，茶缸停在旧茶渍旁。
+- 终点：纸角抵住江晨指尖；周薄森说出“基本还是空白”。
+- 视觉依据：《视觉设定.md》·人物「江晨」（控制：身份、体态、本集造型）；人物「周薄森」……；道具「缺口搪瓷茶缸」（控制：右侧把手缺瓷、深灰铁胎）。
+
+### 冻结关键帧提示词
+> 9:16 vertical two-person medium shot inside an old regiment office, Zhoubosen, a broad square-faced middle-aged officer on frame right
+> rests one hand on a stack of papers ……, Jiangchen, a lean young man in olive-green stand-collar service dress, seen three-quarter
+> from behind on frame left ……; chipped white enamel mug beside an old tea ring, …… no text, no logo.
+```
+
+`视频提示词.md` 只写起点到终点之间模型要执行的动作：
+
+```markdown
+## MOTION-EP001-002 · 把空白交到他手里
+### 可复制提示词
+> …… The middle-aged officer pushes the paper stack about twenty centimeters across the glass desk while speaking calmly.
+> The young man does not reach for it until the paper touches his fingertip. The officer then lifts the chipped white enamel
+> mug for one small sip, frowns at the cold tea, and returns it exactly to the old tea ring. ……
+```
+
+短剧工作台的「生产」视图把这五份文档投影成镜头板、素材板、任务/版本、成片顺序和关系画布；点镜头卡上的图片或视频按钮，会向当前会话发送一条只做预检的 `/short-drama-produce` 请求，任务停在「等待确认」，你确认后 Agent 才执行。五份原文：[`剧本.md`](scripts/demo-fixtures/drama/让你管账号/剧集/EP001/剧本.md) · [`视觉设定.md`](scripts/demo-fixtures/drama/让你管账号/剧集/EP001/视觉设定.md) · [`分镜.md`](scripts/demo-fixtures/drama/让你管账号/剧集/EP001/分镜.md) · [`图片提示词.md`](scripts/demo-fixtures/drama/让你管账号/剧集/EP001/图片提示词.md) · [`视频提示词.md`](scripts/demo-fixtures/drama/让你管账号/剧集/EP001/视频提示词.md)。
+
+### 文档写错了，「生产」视图会指出来
+
+把上面这集的样例故意改坏三处（SHOT-EP001-002 的来源改成剧本里没有的 `EP001-SC009`、MOTION-EP001-003 指向不存在的 `SHOT-EP001-030`、周薄森角色板复用江晨的 `IMG-JIANGCHEN-SHEET`），再交给工作台的文档解析器，它报的是原因和位置，并定位到源文档的那一行：
+
+```text
+SHOT-EP001-002 的来源 EP001-SC009 在剧本中不存在。            分镜.md:21
+MOTION-EP001-003 指向不存在的 SHOT-EP001-030。                 视频提示词.md:29
+IMG-JIANGCHEN-SHEET 在当前集内重复，后出现的条目会遮蔽前一条。   图片提示词.md:3 · :11
+```
+
+改坏的副本只在临时目录，不入库；未改动的样例只得到六条提醒，说《视觉设定.md》里的人物、地点、道具还没声明稳定的 `- ID：VISUAL-*`，改标题会改变画布节点身份。花钱的任务也不会被静默重投：一个已确认的生产 Turn 结束后如果没有在工作区里发现对应成果，任务卡显示的是「DSH Turn 已结束，尚未发现关联成果。任务可能已派发，请先刷新成果，避免重复计费。」，而不是自动重试。
+
+### 随包游戏的 QA 记录写了什么、没写什么
+
+游戏工作台内置《金瓶梅 · 风月总账》的完整可玩构建，随包的 [`qa/verification.json`](packages/knowledge/novel-to-game/examples/jin-ping-mei/qa/verification.json) 是 NovelToGame 六项检查的记录：
+
+```json
+  "status": "PASS",
+  ……
+  "completeRun": {
+    "id": "jin-ping-mei-release-candidate-2026-08-22",
+    "cleanContext": true,
+    "terminal": "day-20-unstable-ending",
+    "restart": "day-1-opening",
+    ……
+  },
+  "checks": {
+    "launch": "PASS",
+    "render": "PASS",
+    "input": "PASS",
+    "coreLoop": "PASS",
+    "outcome": "PASS",
+    "restart": "PASS"
+  },
+  "limitations": [
+    ……
+    {
+      "scope": "浏览器与路径",
+      "reason": "当前候选在本机 Chromium 完成正常速度键盘主路径和六个目标视口；未穷举其他浏览器与所有结局。"
+    },
+    {
+      "scope": "体验判断",
+      "reason": "证据只证明可运行、可输入、可走完、可重开及布局约束，不把主观趣味或长期平衡宣称为确定结论。"
+    },
+    ……
+  ]
+```
+
+原记录有四条限制项，这里节选第二、三条。你自己用 `/novel-to-game quick` 改编的项目也会生成同样结构的记录，`build/app/index.html` 就绪后自动进入游戏工作台的项目列表。
 
 ## 小说工作台
 
-文件树、编辑器、Chat 三栏（见顶部演示）。覆盖长篇、短篇、选题、扫榜、拆文、导入、审稿、去 AI 味与封面流程，13 个 Oh Story Skills 与 7 个专业 Roles 按固定上游版本随插件交付。
+文件树、编辑器、Chat 三栏（见顶部动图）。覆盖长篇、短篇、选题、扫榜、拆文、导入、审稿、去 AI 味与封面流程，13 个 Oh Story Skills 与 7 个专业 Roles 按固定上游版本随插件交付；Roles 通过 DSH 的子 Agent 机制启动，只能使用调用方可见的工具。
 
 ## 短剧工作台
 
 ![短剧工作台](docs/images/drama-workbench-demo.gif)
 
-每集按请求维护最多五份可读 Markdown：`剧本.md`、`视觉设定.md`、`分镜.md`、`图片提示词.md`、`视频提示词.md`。「生产」视图把这些文档投影为镜头板、素材板、任务/版本、成片顺序和关系画布，并就地提示重复 ID、悬空引用与格式错误。成片装配交给 `/short-drama-edit`：它把排定的镜序写成《剪辑单.md》，再渲染到 `剧集/<EP>/制作成果/成片/`。生产交付走 DSH 原生会话、当前 Preset 工具与权限确认。
+每集按请求维护最多五份可读 Markdown。「生产」视图把这些文档投影为镜头板、素材板、任务/版本、成片顺序和关系画布，并就地提示重复 ID、悬空引用与格式错误。成片装配交给 `/short-drama-edit`：它把排定的镜序写成《剪辑单.md》，再渲染到 `剧集/<EP>/制作成果/成片/`。生产交付走 DSH 原生会话、当前 Preset 工具与权限确认。
 
 ## 游戏工作台
 
 ![游戏工作台](docs/images/game-workbench-demo.gif)
 
-左侧实时试玩、右侧 DSH Chat 的两列布局。`/novel-to-game quick` 的生成物写入 `game-adaptations/<project>/`，`build/app/index.html` 就绪后自动进入项目列表，可刷新、全屏、切换项目。内置《金瓶梅 · 风月总账》完整可玩构建，开箱即可验证输入、核心循环、结局与重开。
+左侧实时试玩、右侧 DSH Chat 的两列布局。`/novel-to-game quick` 的生成物写入 `game-adaptations/<project>/`，`build/app/index.html` 就绪后自动进入项目列表，可刷新、全屏、切换项目。生成的游戏在独立 origin 与 iframe sandbox 里运行。
 
 ## 视频工作台
 
@@ -151,9 +288,9 @@ npx -y @deepseek-ai/dsh@0.1.5-rc.1 web
 - **创作文档预览**：Markdown 支持标题、表格、任务列表、引用和代码块；JSONL 以带行号、类型和状态的结构化记录呈现。
 - **项目媒体库**：自动汇总当前 workspace 中各集和交付目录的真实图片/视频成果，支持搜索、类型筛选与跨集引用。
 - **真实生成契约**：可选内置 GPT Image 2、Seedance 与 MiniMax Music adapter；账号、模型、凭据与可用性由 DSH 运行环境和项目外配置决定。
-- **安全编辑**：支持源码编辑与快捷保存；人工未保存内容不会被并发 Agent 修改覆盖。
+- **安全编辑**：支持源码编辑与快捷保存；保存带文件版本前提，人工未保存内容不会被并发 Agent 修改覆盖。
 - **稳定长对话**：消息区独立滚动，官方 Composer 固定在 Chat 栏底部。
-- **不占用其他场景**：只有当前 workspace 存在小说、短剧、游戏或视频项目时，工作台才接管会话布局；随时可收起，收起后会话回到 DSH 原生形态，选择按 workspace 记住。
+- **不占用其他场景**：只有当前 workspace 存在小说、短剧、游戏或视频项目时，工作台才接管会话布局；随时可收起，选择按 workspace 记住。
 
 各工作台的能力边界与协议约束见[架构说明](docs/ARCHITECTURE.md)。
 
@@ -197,15 +334,61 @@ npx -y @deepseek-ai/dsh@0.1.5-rc.1 web                          # 原版 DSH
 npx -y @deepseek-ai/dsh@0.1.5-rc.1 --profile story --port 3081  # 创作工作台
 ```
 
-两个 profile 用不同端口可以同时运行。模型、凭据、workspace 与历史会话由 DSH 统一保存，切换 profile 不会丢。安装与启动请使用同一个 dsh 版本，混用会报 `unknown option '--no-open'` 一类的错。
+两个 profile 用不同端口可以同时运行。模型、凭据、workspace 与历史会话由 DSH 统一保存，切换 profile 不会丢。
 
 ## 常见问题
 
-**用 DeepSeek 写小说，一定要装插件吗？** 只讨论一个梗概或修改一段自带文本，用普通模型聊天就够，自己把结果放回稿件即可；要围绕本地作品目录持续创作、在工作台里看文件，再装 DSH 加本插件。想用账户化的网页项目，可选 [ZenStory 托管工作台](https://app.zenstory.ai)，具体区别见[写作环境对比](https://zenstory.ai/zh/compare/writing-workflows)。
+### 用 DeepSeek 写小说，一定要装插件吗？
 
-**查看已有作品需要 API Key 吗？** 不需要。首次引导选择「稍后配置」，打开作品目录就能浏览文件；开始 AI 创作时再配置模型。
+只讨论一个梗概或修改一段自带文本，用普通模型聊天就够，自己把结果放回稿件即可；要围绕本地作品目录持续创作、在工作台里看文件，再装 DSH 加本插件。想用账户化的网页项目，可选 [ZenStory 托管工作台](https://app.zenstory.ai)，具体区别见[写作环境对比](https://zenstory.ai/zh/compare/writing-workflows)。
 
-**分镜或游戏设计写好了，成片和可玩构建从哪来？** 短剧成片由 `/short-drama-edit` 按《剪辑单.md》渲染，需要先配置媒体生成 API；游戏构建由 `/game-build` 生成，就绪后自动进入游戏工作台的项目列表。
+### 我在用 Claude Code 或 Codex，也该装这个吗？
+
+不用。四条流水线各自是独立的 skill 仓库，直接装进你在用的编程 Agent：[oh-story-claudecode](https://github.com/zenstory-ai/oh-story-claudecode)、[drama-skills](https://github.com/zenstory-ai/drama-skills)、[novel-to-game](https://github.com/zenstory-ai/novel-to-game)、[video-recap-skills](https://github.com/zenstory-ai/video-recap-skills)。本插件是这四套 Skills 在 DeepSeek Harness 里的打包版，外加只有 DSH Web 才有的四个工作台。
+
+### Token 消耗如何？
+
+插件自己不调用模型，消耗全部发生在 DSH 的 Agent 里，DSH 在每条答复下方显示本轮用量和耗时，以那里为准。有三点会影响用量：Skills 文本随 profile 的每个 Session 加载，写代码的会话也会带上，想避免就按上面「按需加载」把插件装进独立 profile；`/story-long-write` 一类流程会通过 `oh_story_role` 启动专业 Roles，每个 Role 是一次独立的子 Agent 调用；写正文前的 Reference Gate 要求把当前阶段的参考资料读到末尾。本仓库没有公开的用量统计。
+
+### 装了插件之后，写代码的普通会话也变成三栏了？
+
+0.1.7 之前是这样（[#29](https://github.com/zenstory-ai/oh-story-dsh/issues/29)）。现在只有当前 workspace 真的有小说、短剧、游戏或视频项目时才接管布局，随包的《金瓶梅》示例不算；没有创作项目时插件在界面上完全不出现，`Ctrl/Cmd+S` 与 Chat 里的文件名点击也不被接管。四个工作台的标题栏都有「收起创作工作台」，收起后会话立刻回到 DSH 原生布局，选择按 workspace 记在浏览器本地。
+
+### 右侧 Chat 里的长答复被下面的输入框遮住了？
+
+[#3](https://github.com/zenstory-ai/oh-story-dsh/issues/3) 与 [#26](https://github.com/zenstory-ai/oh-story-dsh/issues/26) 报过，0.1.6 起窗口尺寸变化后正文会重新贴底，0.1.8 修掉最后一处触发条件。升级到 0.1.9 后仍能复现时，请带版本号和窗口宽度开 Issue。
+
+### 安装报 `pnpm not found on PATH`？
+
+DSH 的 `plugin add` 内部需要 pnpm，单独运行 `npx @deepseek-ai/dsh ... plugin add` 不会自动补上它。重新执行上面带 `--package pnpm@11.7.0` 的完整安装命令，确认安装成功后再启动。
+
+### 浏览器没打开，或者打开后要求认证？
+
+打开终端打印的完整带 `?token=...` 链接，首次认证需要链接里的 token；端口被占用时用 `web --port 3081`，并访问新打印的链接。
+
+### 没有看到「小说 / 短剧 / 游戏 / 视频」四个标签？
+
+先添加作品目录并打开会话。空目录需要先在 Chat 中运行创作命令，Agent 生成第一个创作文件后工作台才会出现；已收起的工作台可用会话区的「创作工作台」按钮恢复。已有作品仍不显示时，检查安装与启动是否使用同一个 profile，重启 DSH 并刷新页面。装进独立 `story` profile 却没有网页界面，是因为新 profile 需要按「按需加载」补上 `@deepseek-ai/dsh-web-app`。
+
+### DeepSeek 会自己生图、生视频吗？没有视频 Key 能做什么？
+
+不会。DeepSeek 只写剧本、分镜和提示词，媒体由 `short-drama-produce` 调用 GPT Image 2、Seedance、MiniMax H3 或 MiniMax Music 生成，Key 写在启动 DSH 之前的宿主机环境变量里，只配用得到的那几个。没有视频 Key 仍然可以写完五份文档、生成关键帧图片；「生产」视图顶部的「生成环境」条会逐个显示供应商是否已配置、缺哪个变量，插件只检查变量是否存在。
+
+### 查看已有作品需要 API Key 吗？
+
+不需要。首次引导选择「稍后配置」，打开作品目录就能浏览文件；开始 AI 创作时再配置模型。
+
+### 分镜或游戏设计写好了，成片和可玩构建从哪来？
+
+短剧成片由 `/short-drama-edit` 按《剪辑单.md》渲染到 `剧集/<EP>/制作成果/成片/`，需要先配置媒体生成 API 并生产出逐镜素材；游戏构建由 `/game-build` 生成，`build/app/index.html` 就绪后自动进入游戏工作台的项目列表。
+
+### Windows 能用吗？
+
+能。类型、资产、单测与构建这道门在 CI 里每次都在 macOS 和 Windows 上跑；打包后装进官方 DSH Web 的集成测试在 Linux 上跑。视频流水线在任何平台都需要 Python 3.10+ 与带 libass 的 ffmpeg。
+
+### 升级到新版本后要做什么？
+
+重新执行安装命令，把 `@oh-story/dsh@` 后的版本号换成新版本，再重启 DSH；安装与启动用同一个 dsh 版本。Skills 与 Roles 随插件打包，不需要在项目里重新部署。既有短剧项目要注意两次收紧：0.1.5 起《分镜.md》每镜必写「视觉依据」、`REF-*` 槽位必须声明 `用途`；0.1.7 起每镜「来源」必须以《剧本.md》真实存在的场景 ID 开头。逐版变更见 [CHANGELOG.md](CHANGELOG.md)。
 
 ## 延伸阅读
 
@@ -215,6 +398,13 @@ npx -y @deepseek-ai/dsh@0.1.5-rc.1 --profile story --port 3081  # 创作工作�
 - [有后果的游戏选择](https://zenstory.ai/zh/novel-to-game/meaningful-choices)：明确行动代价、可见变化和后续承接。
 - [原声与旁白分工](https://zenstory.ai/zh/video-recap/original-audio-and-narration)：先列出关键台词、画面依据和需要解说的空隙。
 - [写作环境对比](https://zenstory.ai/zh/compare/writing-workflows)：普通聊天、DSH 插件与托管工作台各适合什么。
+- [架构说明](docs/ARCHITECTURE.md)：DSH 与插件各自拥有什么，四个工作台的协议边界。
+- [验证说明](docs/VALIDATION.md)：每一层测试覆盖什么，哪些证据不进 Pull Request CI。
+
+## 贡献与交流
+
+- **GitHub Issues**：[Bug、输出质量 Case、功能请求](https://github.com/zenstory-ai/oh-story-dsh/issues/new/choose)，请带上插件版本、DSH 版本和复现步骤。
+- 改代码前先读 [CONTRIBUTING.md](CONTRIBUTING.md)：`pnpm verify` 是每个 Pull Request 的质量门，`pnpm test:dsh` 会打包并装进隔离的官方 DSH Web 跑一遍。
 
 ## 致谢
 
@@ -222,3 +412,16 @@ npx -y @deepseek-ai/dsh@0.1.5-rc.1 --profile story --port 3081  # 创作工作�
 - [LINUX DO](https://linux.do/)：感谢社区的交流、反馈与开源支持。
 
 [更新日志](CHANGELOG.md) · [贡献指南](CONTRIBUTING.md) · [架构说明](docs/ARCHITECTURE.md) · [安全策略](SECURITY.md)
+
+## ZenStory AI 项目
+
+Oh Story DSH 是 [ZenStory AI](https://zenstory.ai/zh) 的一部分——一组开源、面向 agent 的故事创作、改编与生产工具（GitHub 组织：[zenstory-ai](https://github.com/zenstory-ai)）。同组织项目：
+
+| 项目 | 用途 |
+| --- | --- |
+| [oh-story-claudecode](https://github.com/zenstory-ai/oh-story-claudecode) | 网文写作 skill 包：扫榜、拆文、写作、去AI味、封面图 |
+| [drama-skills](https://github.com/zenstory-ai/drama-skills) | AI 短剧 / 漫剧创作 skill 合集：剧本、资产、分镜、图片/视频提示词、独立审查 |
+| [novel-to-game](https://github.com/zenstory-ai/novel-to-game) | 面向原著改编、指定运行环境构建与运行证据 QA 的 agent skills |
+| [video-recap-skills](https://github.com/zenstory-ai/video-recap-skills) | 将支持的视频文件制作成中文解说，可选导出可编辑的剪映/CapCut 草稿 |
+| [oh-story-dsh](https://github.com/zenstory-ai/oh-story-dsh) | DeepSeek Harness 社区插件，提供小说、短剧、游戏和视频解说工作台（本仓库） |
+| [zenstory](https://github.com/zenstory-ai/zenstory) | 对话即创作的 AI 小说写作工作台（[app.zenstory.ai](https://app.zenstory.ai)） |
