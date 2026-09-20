@@ -128,144 +128,85 @@ After choosing a direction, explicitly request an import or planning pass using 
 
 ## See what it produces
 
-Every excerpt below comes from a file in this repository or from a real check run against those files; omissions are marked with "……". The novel and short-drama samples are the bundled example projects, synchronized from the [oh-story-claudecode demo](https://github.com/zenstory-ai/oh-story-claudecode/tree/abe96630d115afbd528f2329e2d8d604d5d5673c/demo/%E9%95%BF%E7%AF%87) (the project author's own serial, rebuilt from its 20 published chapters with `/story-import`) and the [drama-skills public sample](https://github.com/zenstory-ai/drama-skills/tree/bc96c5eb9c91cccd1c613c2b34645c35f1989a28/examples/creator-first/EP001).
+Excerpts from the bundled sample projects (synchronized from the [oh-story-claudecode demo](https://github.com/zenstory-ai/oh-story-claudecode/tree/abe96630d115afbd528f2329e2d8d604d5d5673c/demo/%E9%95%BF%E7%AF%87) and the [drama-skills public sample](https://github.com/zenstory-ai/drama-skills/tree/bc96c5eb9c91cccd1c613c2b34645c35f1989a28/examples/creator-first/EP001)); omissions are marked "……".
 
-### Continuation runs on this state card, not on chat memory
+### Continuation runs on a state card, not chat memory
 
-Open `追踪/上下文.md` (the tracking context) in the novel workbench and this is what you see for the sample novel before chapter 21 is written. `/story-long-write` does not rely on conversation memory: continuity lives in this single seven-section file, and the next chapter reads only it:
+Before chapter 21 is written, [`追踪/上下文.md`](scripts/demo-fixtures/story/让你管账号，你高燃混剪炸全网/追踪/上下文.md) (the tracking context) looks like this, and the next chapter reads only it:
 
 ```markdown
 ## 当前位置
 - 当前章：第20章
-- 卷：第一卷·军宣整顿（候选）（始于第1章）
-- 故事时间：《如愿》点击破亿后的第二天
 - 场景：火箭军文工团，钟嘉嘉送来老兵书法礼后
-
-## 长期约束
-- 军宣爽点必须通过作品效果、传播数据和围观反应链兑现，不能只靠系统播报。
 ……
-- 钟嘉嘉未公开的军方培养安排属于作者真相，正文揭示前不能当成读者已知。
-
 ## 活跃伏笔
 - F016｜钟嘉嘉并非普通军报实习生，她的军方家庭背景仍未完全公开｜埋第7章｜回收章未定｜高
 ……
-- F055｜《离别开出花》伴奏已经到手，下一首作品尚未启动｜埋第20章｜回收章未定｜高
-
-## 下一章承诺
-- 先补第21章细纲，再承接老兵邀请、新歌伴奏和钢琴能力。
-
 ## 连贯性风险
-- 第一卷卷界仍是候选方案，未确认前不要擅自开新卷。
 - 第21章尚无细纲，不能直接写正文。
 ```
 
-The sections shown are current position, long-term constraints, active foreshadowing, the promise for the next chapter, and continuity risks. The last line, "chapter 21 has no chapter outline yet; do not write prose directly", is more than a reminder: the plugin hooks the long-form outline gate into DSH's `tools/pre-execute`, so when the agent tries to create prose without an outline the write is denied and Chat shows this:
+(Current position: chapter 20 … Active foreshadowing: F016, Zhong Jiajia is no ordinary intern … Continuity risk: chapter 21 has no outline yet; do not write prose directly.) The last line is a hard gate. Prose written without an outline is refused by DSH's `tools/pre-execute` hook:
 
 ```text
 Oh Story 阻止写入第 21 章：未找到对应的 大纲/细纲_第XXX章*.md。请先完成细纲。
 ```
 
-(“Oh Story blocked writing chapter 21: no matching 大纲/细纲_第XXX章*.md found. Finish the chapter outline first.”) Sources: [`追踪/上下文.md`](scripts/demo-fixtures/story/让你管账号，你高燃混剪炸全网/追踪/上下文.md) · [`追踪/伏笔.md`](scripts/demo-fixtures/story/让你管账号，你高燃混剪炸全网/追踪/伏笔.md).
+(“Oh Story blocked writing chapter 21: no matching outline file found. Finish the chapter outline first.”)
 
-### How one shot travels through the five short-drama documents
+### One shot owns one layer in each of the five short-drama documents
 
-A short-drama episode keeps only `剧本.md` (screenplay), `视觉设定.md` (visual bible), `分镜.md` (storyboard), `图片提示词.md` (image prompts) and `视频提示词.md` (video prompts). The same shot owns one layer in each. The screenplay only says what happens:
-
-```markdown
-桌对面，周薄森把一摞材料推过厚玻璃桌面。纸角碰到江晨指尖。
-……
-周薄森端起缺口搪瓷茶缸，抿一口冷茶，眉头皱得更深。
-```
-
-(Across the desk, Zhou Bosen pushes a stack of papers over the thick glass top; a corner touches Jiang Chen's fingertip. … Zhou lifts the chipped enamel mug, sips cold tea, frowns harder.) The visual bible puts a "continuity lock" on any look that must survive across shots; the lock face is a phrase that can be pasted into a prompt verbatim:
+`视觉设定.md` (visual bible) locks a look that must survive across shots, with a lock face that pastes into a prompt verbatim; `分镜.md` (storyboard) writes only start, end and basis; `视频提示词.md` (video prompt) writes only the motion between them:
 
 ```markdown
-- 连续性锁：LOCK-JIANGCHEN-DRESS《江晨橄榄绿立领常服》（镜头：SHOT-EP001-002、SHOT-EP001-003、SHOT-EP001-007；
-  图片提示词项：IMG-JIANGCHEN-SHEET）· 锁面：olive-green stand-collar service dress
+- 连续性锁：LOCK-JIANGCHEN-DRESS《江晨橄榄绿立领常服》（镜头：SHOT-EP001-002、SHOT-EP001-003、SHOT-EP001-007）· 锁面：olive-green stand-collar service dress
 ```
-
-The storyboard writes the shot's start, end and the entries it relies on; the frozen keyframe draws only the starting frame:
 
 ```markdown
 ## SHOT-EP001-002 · 把空白交到他手里
-
 - 来源：EP001-SC001
 - 时长：8s
 - 起点：材料在周薄森手下，茶缸停在旧茶渍旁。
 - 终点：纸角抵住江晨指尖；周薄森说出“基本还是空白”。
-- 视觉依据：《视觉设定.md》·人物「江晨」（控制：身份、体态、本集造型）；人物「周薄森」……；道具「缺口搪瓷茶缸」（控制：右侧把手缺瓷、深灰铁胎）。
-
-### 冻结关键帧提示词
-> 9:16 vertical two-person medium shot inside an old regiment office, Zhoubosen, a broad square-faced middle-aged officer on frame right
-> rests one hand on a stack of papers ……, Jiangchen, a lean young man in olive-green stand-collar service dress, seen three-quarter
-> from behind on frame left ……; chipped white enamel mug beside an old tea ring, …… no text, no logo.
+- 视觉依据：《视觉设定.md》·人物「江晨」……；道具「缺口搪瓷茶缸」（控制：右侧把手缺瓷、深灰铁胎）。
 ```
-
-The video prompt writes only the motion the model must perform between start and end:
 
 ```markdown
 ## MOTION-EP001-002 · 把空白交到他手里
-### 可复制提示词
 > …… The middle-aged officer pushes the paper stack about twenty centimeters across the glass desk while speaking calmly.
-> The young man does not reach for it until the paper touches his fingertip. The officer then lifts the chipped white enamel
-> mug for one small sip, frowns at the cold tea, and returns it exactly to the old tea ring. ……
+> The young man does not reach for it until the paper touches his fingertip. ……
 ```
 
-The short-drama workbench's Production view projects these five documents into a shot board, an asset board, jobs/versions, final-cut order and a relationship canvas. Clicking the image or video button on a shot card sends a prepare-only `/short-drama-produce` request to the current session; the job stays at "awaiting confirmation" until you confirm, and only then does the agent execute it. The five sources: [`剧本.md`](scripts/demo-fixtures/drama/让你管账号/剧集/EP001/剧本.md) · [`视觉设定.md`](scripts/demo-fixtures/drama/让你管账号/剧集/EP001/视觉设定.md) · [`分镜.md`](scripts/demo-fixtures/drama/让你管账号/剧集/EP001/分镜.md) · [`图片提示词.md`](scripts/demo-fixtures/drama/让你管账号/剧集/EP001/图片提示词.md) · [`视频提示词.md`](scripts/demo-fixtures/drama/让你管账号/剧集/EP001/视频提示词.md).
+(Storyboard: source scene EP001-SC001, 8 s; start: papers under Zhou's hand, mug by the old tea ring; end: paper corner at Jiang's fingertip as Zhou says “basically still blank”; visual basis: the two characters and the chipped enamel mug from the bible.) Sources: [`剧本.md`](scripts/demo-fixtures/drama/让你管账号/剧集/EP001/剧本.md) · [`视觉设定.md`](scripts/demo-fixtures/drama/让你管账号/剧集/EP001/视觉设定.md) · [`分镜.md`](scripts/demo-fixtures/drama/让你管账号/剧集/EP001/分镜.md) · [`图片提示词.md`](scripts/demo-fixtures/drama/让你管账号/剧集/EP001/图片提示词.md) · [`视频提示词.md`](scripts/demo-fixtures/drama/让你管账号/剧集/EP001/视频提示词.md).
 
-### When a document is wrong, the Production view says so
+### Mistakes are pointed out
 
-Break the sample episode above in three places on purpose — point SHOT-EP001-002's source at `EP001-SC009`, a scene the screenplay does not have; point MOTION-EP001-003 at the non-existent `SHOT-EP001-030`; reuse Jiang Chen's `IMG-JIANGCHEN-SHEET` ID for Zhou Bosen's character sheet — and hand it to the workbench's document parser. It reports the cause and the location, down to the line in the source document:
+Break the sample episode in three places (a source pointing at a scene that does not exist, a video prompt pointing at a non-existent shot, a duplicated image-prompt ID) and the Production view reports the cause and the line:
 
 ```text
 SHOT-EP001-002 的来源 EP001-SC009 在剧本中不存在。            分镜.md:21
 MOTION-EP001-003 指向不存在的 SHOT-EP001-030。                 视频提示词.md:29
-IMG-JIANGCHEN-SHEET 在当前集内重复，后出现的条目会遮蔽前一条。   图片提示词.md:3 · :11
+IMG-JIANGCHEN-SHEET 在当前集内重复，后出现的条目会遮蔽前一条。   图片提示词.md:3
 ```
 
-(“SHOT-EP001-002's source EP001-SC009 does not exist in the screenplay.” / “MOTION-EP001-003 points at the non-existent SHOT-EP001-030.” / “IMG-JIANGCHEN-SHEET is duplicated within this episode; the later entry shadows the earlier one.”) The broken copy lived only in a temporary directory and is not committed. The untouched sample yields only six warnings, saying the characters, locations and props in `视觉设定.md` have not declared a stable `- ID：VISUAL-*`, so renaming a heading would change the canvas node's identity. Paid jobs are never silently resubmitted either: when a confirmed production turn ends without a matching result appearing in the workspace, the job card reads “DSH Turn 已结束，尚未发现关联成果。任务可能已派发，请先刷新成果，避免重复计费。” (“The DSH turn has ended and no related result was found. The job may have been dispatched; refresh results first to avoid double billing.”) instead of retrying.
+(“Source EP001-SC009 does not exist in the screenplay.” / “Points at the non-existent SHOT-EP001-030.” / “Duplicated within this episode; the later entry shadows the earlier one.”)
 
-### What the bundled game's QA record says, and what it does not
+### The bundled game's QA record
 
-The game workbench ships a complete playable build of 《金瓶梅 · 风月总账》 (Jin Ping Mei · Ledger of Desire). Its bundled [`qa/verification.json`](packages/knowledge/novel-to-game/examples/jin-ping-mei/qa/verification.json) is NovelToGame's record of the six checks:
+[`qa/verification.json`](packages/knowledge/novel-to-game/examples/jin-ping-mei/qa/verification.json) for 《金瓶梅 · 风月总账》 records the six checks and, beyond them, what it does not prove:
 
 ```json
-  "status": "PASS",
-  ……
-  "completeRun": {
-    "id": "jin-ping-mei-release-candidate-2026-08-22",
-    "cleanContext": true,
-    "terminal": "day-20-unstable-ending",
-    "restart": "day-1-opening",
-    ……
-  },
-  "checks": {
-    "launch": "PASS",
-    "render": "PASS",
-    "input": "PASS",
-    "coreLoop": "PASS",
-    "outcome": "PASS",
-    "restart": "PASS"
-  },
-  "limitations": [
-    ……
-    {
-      "scope": "浏览器与路径",
-      "reason": "当前候选在本机 Chromium 完成正常速度键盘主路径和六个目标视口；未穷举其他浏览器与所有结局。"
-    },
-    {
-      "scope": "体验判断",
-      "reason": "证据只证明可运行、可输入、可走完、可重开及布局约束，不把主观趣味或长期平衡宣称为确定结论。"
-    },
-    ……
-  ]
+"checks": { "launch": "PASS", "render": "PASS", "input": "PASS", "coreLoop": "PASS", "outcome": "PASS", "restart": "PASS" },
+"limitations": [ ……
+  { "scope": "体验判断", "reason": "证据只证明可运行、可输入、可走完、可重开及布局约束，不把主观趣味或长期平衡宣称为确定结论。" }
+]
 ```
 
-The record lists four limitations; the second and third are excerpted here. They say: the candidate completed the normal-speed keyboard main path and six target viewports in local Chromium, without exhausting other browsers or every ending; and the evidence proves only that the game launches, accepts input, can be played through, can be restarted and respects layout constraints, without claiming subjective fun or long-term balance as settled. A project you adapt yourself with `/novel-to-game quick` produces a record of the same shape, and appears in the game workbench's project list once `build/app/index.html` is ready.
+(Scope “experience judgement”: the evidence proves only that the game launches, accepts input, can be played through and restarted, and respects layout constraints; it does not claim subjective fun or long-term balance.)
 
 ## Novel workbench
 
-File tree, editor and Chat in three panes (see the animation at the top). Covers long-form and short-form writing, topic selection, chart scanning (扫榜), deconstruction (拆文), import, review, de-AI editing (去AI味) and covers. The 13 Oh Story Skills and 7 professional Roles ship with the plugin at a pinned upstream version; Roles start through DSH's sub-agent mechanism and can only use the tools visible to the caller.
+File tree, editor and Chat in three panes (see the animation at the top). Covers long-form and short-form writing, topic selection, chart scanning (扫榜), deconstruction (拆文), import, review, de-AI editing (去AI味) and covers. The 13 Oh Story Skills and 7 professional Roles ship with the plugin at a pinned upstream version.
 
 ## Short-drama workbench
 
@@ -352,11 +293,11 @@ No. The four pipelines are standalone skill repositories that install directly i
 
 ### How much does it cost in tokens?
 
-The plugin never calls a model itself; all usage happens in DSH's agent, and DSH shows the usage and timing of every reply right under it, so treat that as the source of truth. Three things affect usage: the Skill text loads into every Session of the profile, including coding sessions, which the "Load on demand" section above avoids by installing into a separate profile; flows such as `/story-long-write` start professional Roles through `oh_story_role`, each of which is a separate sub-agent call; and the Reference Gate before drafting requires the current stage's reference material to be read to the end. This repository publishes no usage statistics.
+The plugin never calls a model itself; DSH shows the usage under every reply, and this repository publishes no statistics. Two things add noticeably: the Skill text loads into every Session of the profile, including coding sessions, which "Load on demand" avoids with a separate profile; and flows such as `/story-long-write` start professional Roles, each a separate sub-agent call.
 
 ### After installing, did my ordinary coding sessions also turn into three panes?
 
-They did before 0.1.7 ([#29](https://github.com/zenstory-ai/oh-story-dsh/issues/29)). Now the layout is taken over only when the current workspace really contains a novel, short-drama, game or video project; the bundled 《金瓶梅》 sample does not count. Without a creative project the plugin does not appear in the UI at all, and neither `Ctrl/Cmd+S` nor file-name clicks in Chat are intercepted. Every workbench's title bar has a "collapse creation workbench" control; collapsing returns the session to native DSH immediately, and the choice is remembered per workspace in browser storage.
+They did before 0.1.7 ([#29](https://github.com/zenstory-ai/oh-story-dsh/issues/29)). Now the layout is taken over only when the current workspace really contains a creative project; otherwise the plugin does not appear in the UI at all. The "collapse creation workbench" control in the workbench title bar hides it at any time, and the choice is remembered per workspace.
 
 ### A long reply in the right-hand Chat is hidden behind the input box?
 
