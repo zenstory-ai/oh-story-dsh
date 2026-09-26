@@ -8,13 +8,16 @@ import {
   createOhStoryReferenceTool,
   OH_STORY_REFERENCE_TOOL_NAME
 } from "./reference-tool.js";
+import { markOhStoryRoleSession, ohStoryRoleLabel } from "./role-identity.js";
 import { OH_STORY_ROLE_NAMES, loadBundledRole, type OhStoryRoleName } from "./role-provider.js";
 
 export const OH_STORY_ROLE_TOOL_NAME = "oh_story_role";
 export type OhStoryRoleSubagents = Pick<SubagentRuntime, "start">;
 
 const roleTools: Readonly<Record<OhStoryRoleName, readonly string[]>> = {
-  "chapter-extractor": ["read", "glob", "grep"],
+  // Oh Story 0.8.0 lets the extractor write its own batch input file (never
+  // bash). native-hooks fences write/edit to {拆文目录}/_analysis_cache/输入-*.md.
+  "chapter-extractor": ["read", "glob", "grep", "write", "edit"],
   "character-designer": [OH_STORY_REFERENCE_TOOL_NAME, "read", "glob", "grep", "write", "edit"],
   "consistency-checker": [OH_STORY_REFERENCE_TOOL_NAME, "read", "glob", "grep"],
   "narrative-writer": [OH_STORY_REFERENCE_TOOL_NAME, "read", "glob", "grep", "write", "edit", "bash"],
@@ -74,7 +77,9 @@ export async function createOhStoryRoleTool(subagents?: OhStoryRoleSubagents): P
       const runtime = subagents ?? exec.agent.ctx.get("subagents");
       if (runtime === undefined) throw new Error("oh_story_role requires the DSH subagent runtime.");
       const run = await runtime.start("spawn", {
-        label: `oh-story:${args.role}`,
+        // DSH persists this label in the child's subagent/descriptor; the
+        // native hooks read the Role back from it before the child's first tool call.
+        label: ohStoryRoleLabel(args.role),
         prompt: [{ type: "text", text: args.prompt }],
         parent: exec.agent,
         persona,
@@ -82,6 +87,7 @@ export async function createOhStoryRoleTool(subagents?: OhStoryRoleSubagents): P
         maxDepth: 1,
         signal: exec.signal
       });
+      if (run.localAgent !== undefined) markOhStoryRoleSession(run.localAgent.session, args.role);
       try {
         const result = await run.result;
         if (result.stopReason !== "completed") {

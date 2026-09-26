@@ -27,14 +27,23 @@ describe("Oh Story bundled skill provider", () => {
     for (const platformPath of [".claude/agents", ".codex/agents", ".opencode/agents", ".agents/agents", "invoke_subagent"]) {
       expect(skill?.content).toContain(platformPath);
     }
+    expect(skill?.content).toContain("Oh Story Roles are reached only through oh_story_role");
+    for (const generic of ["DSH's subagent or subagent_fork tools", "subagent_type, agent_type, agent, or TypeName"]) {
+      expect(skill?.content).toContain(generic);
+    }
     expect(skill?.content).toContain("Keep the upstream writing, Tracking, lint, outline, revision, and quality workflows");
     const workflowSetup = await readFile(resolve(skillRoot, "story-long-write/references/workflow-setup.md"), "utf8");
-    expect(workflowSetup).toContain("| # | 情节点（谁做了什么） | 功能标签 | 分辨率 | 执行边界 |");
+    expect(workflowSetup).toContain("| # | 情节点（谁做了什么） | 功能标签 | 执行边界（禁＋放） |");
     expect(skill?.content.startsWith("---")).toBe(false);
     const setupCandidate = candidates.find((candidate) => candidate.name === "story-setup");
     const setup = await provider.get(setupCandidate!, {});
     expect(setup?.content).toContain("never deploy Claude/OpenCode/Codex/Antigravity/ZCode/OpenClaw/Reasonix files");
     expect(setup?.content).not.toContain("merge-codex-hooks.py");
+    expect(setup?.content).toContain("第一章正文落盘前必须有对应细纲");
+    expect(setup?.content).toContain("都不建 追踪/");
+    expect(setup?.content).toContain("scripts/tracking_commit.py init");
+    expect(setup?.content).not.toContain("并准备追踪/_tracking-state.json");
+    await expect(readFile(resolve(skillRoot, "story-long-write/scripts/tracking_commit.py"), "utf8")).resolves.toContain("\"init\"");
     expect(setup?.resourceBase).toEqual({ kind: "directory", path: resolve(skillRoot, "story-setup") });
     for (const reference of ["character-basics.md", "long-quality.md", "short-quality.md", "writing-craft.md", "outline-methods.md"]) {
       await expect(readFile(resolve(skillRoot, "story-setup/references/agent-references", reference), "utf8"))
@@ -48,7 +57,16 @@ describe("Oh Story bundled skill provider", () => {
     expect(route?.content).toContain("The 小说 workspace is an official DSH conversation view");
     expect(routeCandidate?.description).toContain("记住我的写作习惯");
     expect(route?.content).toContain("scripts/author_memory_commit.py");
-    await expect(readFile(resolve(skillRoot, "story/scripts/author_memory_commit.py"), "utf8")).resolves.toMatch(/\S/u);
+    expect(route?.content).toContain("Author Memory Receipt");
+    for (const memoryRule of [".story/作者记忆/书级/", "--book-root", "--kind", "migrate --workspace {工作区} --book-root {书目录}", "「本书：」"]) {
+      expect(route?.content).toContain(memoryRule);
+    }
+    const memoryScript = await readFile(resolve(skillRoot, "story/scripts/author_memory_commit.py"), "utf8");
+    for (const flag of ["\"--book-root\"", "\"--kind\"", "\"migrate\""]) expect(memoryScript).toContain(flag);
+    for (const phrase of ["灵感库", "跨书灵感聚合", "更新灵感库", "不写正文", "「开一本长篇或接着写」", "「更多（拆书、扫榜、导入旧稿、审稿、封面）」"]) {
+      expect(route?.content).toContain(phrase);
+    }
+    expect(route?.content).not.toContain("还没部署过");
     expect(route?.content).not.toContain("dashboard-server.mjs");
     const browserCandidate = candidates.find((candidate) => candidate.name === "browser-cdp");
     const browser = await provider.get(browserCandidate!, {});
@@ -60,7 +78,27 @@ describe("Oh Story bundled skill provider", () => {
       expect(scan?.content).not.toContain("rank-scraper.js");
       expect(scan?.content).not.toContain("WebFetch");
       expect(scan?.content).not.toContain("Bearer token");
+      expect(scan?.content).toContain("报告写给作者");
+      expect(scan?.content).toContain("结论不含它");
     }
+    const shortScan = await provider.get(candidates.find((value) => value.name === "story-short-scan")!, {});
+    expect(shortScan?.content).toContain("可信度：样本多少篇、来自哪几个榜");
+    for (const name of ["story-long-analyze", "story-import"]) {
+      const analysis = await provider.get(candidates.find((value) => value.name === name)!, {});
+      for (const rule of [
+        "role chapter-extractor",
+        "{拆文目录}/_analysis_cache/输入-{批次ID}.md",
+        "DSH denies any other write or edit by a chapter-extractor child",
+        "manage_analysis_run.py commit",
+        "needs Python 3",
+        "有限并行 tier: three batches per round",
+        "never promise more"
+      ]) expect(analysis?.content).toContain(rule);
+    }
+    const analyzeScripts = resolve(skillRoot, "story-long-analyze/scripts");
+    await expect(readFile(resolve(analyzeScripts, "manage_analysis_run.py"), "utf8")).resolves.toContain("\"commit\"");
+    const importSkill = await provider.get(candidates.find((value) => value.name === "story-import")!, {});
+    expect(importSkill?.content).toContain("拆文库/{导入书名}/ carries exactly the book directory's name");
   });
 
   it("rejects missing frontmatter", () => {

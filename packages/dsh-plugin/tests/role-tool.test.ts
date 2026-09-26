@@ -1,8 +1,10 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { Agent } from "@deepseek-ai/dsh-agent";
+import type { Session } from "@deepseek-ai/dsh-session";
 import type { ToolExecution, ToolRunContext, ToolRuntime } from "@deepseek-ai/dsh-tools";
 import { describe, expect, it, vi } from "vitest";
+import { ohStoryRoleLabel, ohStoryRoleOfSession } from "../src/role-identity.js";
 import { createOhStoryRoleTool, OH_STORY_ROLE_TOOL_NAME, roleToolFilter, type OhStoryRoleSubagents } from "../src/role-tool.js";
 import {
   bundledReferenceGuard,
@@ -28,6 +30,43 @@ describe("native Oh Story Role tool", () => {
     expect(roleToolFilter("story-researcher")).toEqual({
       allow: ["read", "glob", "grep", "bash", "write", "web_search", "web_fetch"]
     });
+  });
+
+  it("lets chapter-extractor write its batch file but never run shell commands", () => {
+    // Oh Story 0.8.0: tools [Read, Glob, Grep, Write, Edit], disallowedTools [Bash].
+    expect(roleToolFilter("chapter-extractor")).toEqual({ allow: ["read", "glob", "grep", "write", "edit"] });
+    expect(roleToolFilter("chapter-extractor").allow).not.toContain("bash");
+  });
+
+  it("labels each child with its Role and records it on the child Session", async () => {
+    const session = { header: { cwd: "/books/demo" } } as unknown as Session;
+    const start = vi.fn(async () => ({
+      id: "role-run-extractor",
+      localAgent: { session },
+      result: Promise.resolve({ output: [{ type: "text", text: "BATCH_WRITTEN" }], stopReason: "completed" as const }),
+      dispose: vi.fn(async () => {})
+    }));
+    const agent = { ctx: { tools: { get: vi.fn(() => ({})) } } } as unknown as Agent;
+    const callId = "call-extractor" as ToolRunContext["callId"];
+    const tool = await createOhStoryRoleTool(roleSubagents(start));
+    const execute = tool.execute as (args: { readonly role: "chapter-extractor"; readonly prompt: string }, exec: ToolRunContext) => Promise<unknown>;
+    expect(ohStoryRoleOfSession(session)).toBeUndefined();
+    await execute({ role: "chapter-extractor", prompt: "批次 RAW-4-6" }, {
+      agent,
+      signal: new AbortController().signal,
+      callId,
+      rootCallId: callId,
+      name: OH_STORY_ROLE_TOOL_NAME,
+      arguments: {},
+      token: Symbol("tool") as ToolRunContext["token"],
+      deferContext: vi.fn(),
+      concludeTurn: vi.fn()
+    });
+    expect(start).toHaveBeenCalledWith("spawn", expect.objectContaining({
+      label: ohStoryRoleLabel("chapter-extractor"),
+      toolFilter: { allow: ["read", "glob", "grep", "write", "edit"] }
+    }));
+    expect(ohStoryRoleOfSession(session)).toBe("chapter-extractor");
   });
 
   it("runs the selected exact persona with least-privilege tools and disposes it", async () => {
