@@ -74,6 +74,8 @@ describe("official DSH file activity", () => {
 
   it("uses the executing DSH call and previews targeted edits", () => {
     const running = [{
+      phase: "start",
+
       callId: "edit-1",
       name: "edit",
       argsRaw: '{"file_path":"正文/第002章.md","old_string":"旧句","new_string":"新句正在生成',
@@ -89,6 +91,7 @@ describe("official DSH file activity", () => {
 
   it("walks nested calls and preserves concurrent mutations", () => {
     const child = (callId: string, path: string): RunningToolCall => ({
+      phase: "start",
       callId,
       name: "write",
       argsRaw: JSON.stringify({ file_path: path, content: callId }),
@@ -98,6 +101,8 @@ describe("official DSH file activity", () => {
       subCalls: []
     });
     const running: RunningToolCall[] = [{
+      phase: "start",
+
       callId: "code-1",
       name: "run_code",
       argsRaw: "{}",
@@ -108,6 +113,12 @@ describe("official DSH file activity", () => {
     }];
     expect(fileMutations(running).map((value) => value.path)).toEqual(["正文/A.md", "正文/B.md"]);
     expect([...mutatingCallIds(running)]).toEqual(["code-1", "write-a", "write-b"]);
+  });
+
+  it("waits for a preparing DSH call to receive its arguments", () => {
+    const preparing: RunningToolCall[] = [{ phase: "preparing", callId: "write-next", name: "write", turn: 1, step: 1, time: 1, subCalls: [] }];
+    expect(fileMutations(preparing)).toEqual([]);
+    expect([...mutatingCallIds(preparing)]).toEqual(["write-next"]);
   });
 
   it("uses the latest durable DSH call when a fast call leaves the live window", () => {
@@ -133,6 +144,8 @@ describe("official DSH file activity", () => {
 
   it("supports replace-all and deletion", () => {
     const replaceAll = fileMutations([{
+      phase: "start",
+
       callId: "edit-all",
       name: "edit",
       argsRaw: '{"file_path":"正文/A.md","old_string":"旧","new_string":"新","replace_all":true}',
@@ -144,6 +157,8 @@ describe("official DSH file activity", () => {
     expect(previewMutation(replaceAll!, "旧/旧")).toBe("新/新");
 
     const deletion = fileMutations([{
+      phase: "start",
+
       callId: "delete-text",
       name: "str_replace_editor",
       argsRaw: '{"command":"str_replace","path":"正文/A.md","old_str":"删掉"}',

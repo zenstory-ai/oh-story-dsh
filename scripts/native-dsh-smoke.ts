@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import { chromium, type Locator, type Page } from "@playwright/test";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const dshVersion = "0.1.5-rc.1";
+const dshVersion = "0.1.7-rc.2";
 /** Exact WebSocket route carrying every Typert Remote stream. */
 const REMOTE_STREAM_MUX_PATH = "/api/remote.mux";
 const demoFramesDirectory = process.env.OH_STORY_DEMO_FRAMES_DIR;
@@ -130,13 +130,56 @@ interface MockDeepSeek {
   readonly server: HttpServer;
 }
 
+type MessagesEvent = { readonly type: string } & Readonly<Record<string, unknown>>;
+
+interface WireMessage {
+  readonly role?: string;
+  readonly content?: unknown;
+}
+
+/**
+ * DSH 0.1.7's DeepSeek provider speaks the Anthropic-compatible Messages API
+ * (`<base>/v1/messages`), so the fixture streams Messages events rather than
+ * chat-completion chunks. Every response is one block: text or a single tool call.
+ */
+function messagesStream(block: MessagesEvent, deltas: readonly MessagesEvent[], stopReason: "end_turn" | "tool_use"): MessagesEvent[] {
+  return [
+    { type: "message_start", message: { id: `msg_${crypto.randomUUID()}`, type: "message", role: "assistant", model: "deepseek-fixture", content: [], stop_reason: null, usage: { input_tokens: 12, output_tokens: 0 } } },
+    { type: "content_block_start", index: 0, content_block: block },
+    ...deltas.map((delta) => ({ type: "content_block_delta", index: 0, delta })),
+    { type: "content_block_stop", index: 0 },
+    { type: "message_delta", delta: { stop_reason: stopReason, stop_sequence: null }, usage: { output_tokens: 20 } },
+    { type: "message_stop" }
+  ];
+}
+
+function messagesText(chunks: readonly string[]): MessagesEvent[] {
+  return messagesStream({ type: "text", text: "" }, chunks.map((text) => ({ type: "text_delta", text })), "end_turn");
+}
+
+/** Arguments arrive as small JSON deltas so the workbench sees a call before it can run. */
+function messagesToolCall(id: string, name: string, args: unknown): MessagesEvent[] {
+  const argumentsJson = JSON.stringify(args);
+  const chunks = argumentsJson.match(/.{1,14}/gu) ?? [argumentsJson];
+  return messagesStream({ type: "tool_use", id, name, input: {} }, chunks.map((json) => ({ type: "input_json_delta", partial_json: json })), "tool_use");
+}
+
+function wireBlocks(message: WireMessage): readonly { readonly type?: string }[] {
+  return Array.isArray(message.content) ? message.content as readonly { readonly type?: string }[] : [];
+}
+
+/** Messages carries tool results as user messages; a prompt is a user message without one. */
+function isToolResult(message: WireMessage): boolean {
+  return message.role === "user" && wireBlocks(message).some((block) => block.type === "tool_result");
+}
+
 async function startMockDeepSeek(): Promise<MockDeepSeek> {
   const requests: string[] = [];
   const server = createHttpServer((request, response) => {
     let body = "";
     request.on("data", (chunk: Buffer) => { body += chunk.toString("utf8"); });
     request.on("end", async () => {
-      if (request.method !== "POST" || !request.url?.endsWith("/chat/completions")) {
+      if (request.method !== "POST" || !request.url?.endsWith("/v1/messages")) {
         response.writeHead(404).end("not found");
         return;
       }
@@ -147,8 +190,8 @@ async function startMockDeepSeek(): Promise<MockDeepSeek> {
         return;
       }
       const serialized = JSON.stringify(payload);
-      const messages = (payload as { readonly messages?: readonly { readonly role?: string }[] }).messages ?? [];
-      const lastUserIndex = messages.findLastIndex((message) => message.role === "user");
+      const messages = (payload as { readonly messages?: readonly WireMessage[] }).messages ?? [];
+      const lastUserIndex = messages.findLastIndex((message) => message.role === "user" && !isToolResult(message));
       const currentTurn = JSON.stringify(messages.slice(Math.max(lastUserIndex, 0)));
       const gameUpdateTurn = currentTurn.includes(gameUpdatePrompt);
       const plainWriteTurn = currentTurn.includes(plainWritePrompt);
@@ -162,22 +205,11 @@ async function startMockDeepSeek(): Promise<MockDeepSeek> {
       const roleParentTurn = currentTurn.includes(roleSmokePrompt);
       const productionIntentTurn = currentTurn.includes(productionIntentSmokePrompt);
       const roleChildTurn = serialized.includes(roleChildPrompt) && !serialized.includes(roleSmokePrompt);
-      const hasToolResult = messages.slice(lastUserIndex + 1).some((message) => message.role === "tool");
-      let events: string[];
+      const hasToolResult = messages.slice(lastUserIndex + 1).some(isToolResult);
+      let events: MessagesEvent[];
       if (roleChildTurn && !hasToolResult) {
         requests.push("role-child-reference-start");
-        const argumentsJson = JSON.stringify({ reference: roleReference });
-        const chunks = argumentsJson.match(/.{1,14}/gu) ?? [argumentsJson];
-        events = [
-          JSON.stringify({ choices: [{ delta: { role: "assistant", content: null, reasoning_content: "" } }] }),
-          ...chunks.map((argumentsDelta, index) => JSON.stringify({ choices: [{ delta: { tool_calls: [{
-            index: 0,
-            ...(index === 0 ? { id: "call_oh_story_reference_smoke", type: "function" } : {}),
-            function: { ...(index === 0 ? { name: "oh_story_bundled_reference" } : {}), arguments: argumentsDelta }
-          }] } }] })),
-          JSON.stringify({ choices: [{ delta: { content: "" }, finish_reason: "tool_calls" }], usage: { prompt_tokens: 12, completion_tokens: 20 } }),
-          "[DONE]"
-        ];
+        events = messagesToolCall("call_oh_story_reference_smoke", "oh_story_bundled_reference", { reference: roleReference });
       } else if (roleChildTurn) {
         if (!serialized.includes(roleReferenceExcerpt)) {
           requests.push("role-child-reference-missing-result");
@@ -185,12 +217,7 @@ async function startMockDeepSeek(): Promise<MockDeepSeek> {
           return;
         }
         requests.push("role-child-reference-resume");
-        events = [
-          JSON.stringify({ choices: [{ delta: { role: "assistant", content: null, reasoning_content: "" } }] }),
-          JSON.stringify({ choices: [{ delta: { content: roleChildReply } }] }),
-          JSON.stringify({ choices: [{ delta: { content: "" }, finish_reason: "stop" }], usage: { prompt_tokens: 12, completion_tokens: 20 } }),
-          "[DONE]"
-        ];
+        events = messagesText([roleChildReply]);
       } else if ((mutationTurn || todoLayoutTurn || roleParentTurn || productionIntentTurn) && !hasToolResult) {
         const tool = roleParentTurn
           ? { id: "call_oh_story_role_smoke", name: "oh_story_role", args: { role: "narrative-writer", prompt: roleChildPrompt } }
@@ -204,18 +231,7 @@ async function startMockDeepSeek(): Promise<MockDeepSeek> {
               ? { id: "call_plain_write_smoke", name: "write", args: { file_path: plainWritePath, content: plainWriteContent } }
               : { id: "call_oh_story_write_smoke", name: "write", args: { file_path: agentMutationPath, content: agentMutationContent } };
         requests.push(roleParentTurn ? "role-parent-start" : productionIntentTurn ? "production-intent" : todoLayoutTurn ? "todo" : gameUpdateTurn ? "game-write" : plainWriteTurn ? "plain-write" : "write");
-        const argumentsJson = JSON.stringify(tool.args);
-        const chunks = argumentsJson.match(/.{1,14}/gu) ?? [argumentsJson];
-        events = [
-          JSON.stringify({ choices: [{ delta: { role: "assistant", content: null, reasoning_content: "" } }] }),
-          ...chunks.map((argumentsDelta, index) => JSON.stringify({ choices: [{ delta: { tool_calls: [{
-            index: 0,
-            ...(index === 0 ? { id: tool.id, type: "function" } : {}),
-            function: { ...(index === 0 ? { name: tool.name } : {}), arguments: argumentsDelta }
-          }] } }] })),
-          JSON.stringify({ choices: [{ delta: { content: "" }, finish_reason: "tool_calls" }], usage: { prompt_tokens: 12, completion_tokens: 20 } }),
-          "[DONE]"
-        ];
+        events = messagesToolCall(tool.id, tool.name, tool.args);
       } else {
         if (roleParentTurn && !serialized.includes(roleChildReply)) {
           requests.push("role-parent-resume-missing-result");
@@ -240,13 +256,7 @@ async function startMockDeepSeek(): Promise<MockDeepSeek> {
               : serialized.includes(storyProjectName) ? storyReply : dramaReply;
         // A long answer arrives as many deltas, so the tail settles after the
         // reader is already parked at the bottom.
-        const contentChunks = content.match(/[\s\S]{1,64}/gu) ?? [content];
-        events = [
-          JSON.stringify({ choices: [{ delta: { role: "assistant", content: null, reasoning_content: "" } }] }),
-          ...contentChunks.map((chunk) => JSON.stringify({ choices: [{ delta: { content: chunk } }] })),
-          JSON.stringify({ choices: [{ delta: { content: "" }, finish_reason: "stop" }], usage: { prompt_tokens: 12, completion_tokens: 20 } }),
-          "[DONE]"
-        ];
+        events = messagesText(content.match(/[\s\S]{1,64}/gu) ?? [content]);
       }
       response.writeHead(200, {
         "cache-control": "no-cache",
@@ -256,7 +266,7 @@ async function startMockDeepSeek(): Promise<MockDeepSeek> {
       response.flushHeaders();
       response.socket?.setNoDelay(true);
       for (const event of events) {
-        response.write(`data: ${event}\n\n`);
+        response.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
         if (productionTurn || todoLayoutTurn || (mutationTurn && !hasToolResult)) {
           await new Promise((accept) => setTimeout(accept, productionTurn ? 750 : todoLayoutTurn ? 500 : 180));
         }
@@ -302,6 +312,16 @@ async function authorizeDsh(origin: string, logs: readonly string[]): Promise<st
     await new Promise((accept) => setTimeout(accept, 150));
   }
   throw new Error("Timed out waiting for official DSH Web.");
+}
+
+/**
+ * DSH 0.1.7 creates its first-use workspace under the account's Documents folder, outside
+ * DSH_HOME. Point it into the temporary root so a run never writes to the real home.
+ */
+async function isolateFirstUseWorkspace(dshHome: string, documents: string): Promise<void> {
+  await mkdir(documents, { recursive: true });
+  await writeFile(join(dshHome, "profiles", "web", "cordis.patch.yml"),
+    `- id: workspace-controller\n  config:\n    documentsDirectory: ${JSON.stringify(documents)}\n`);
 }
 
 /** Every request to DSH carries the session cookie obtained by {@link authorizeDsh}. */
@@ -485,8 +505,9 @@ async function selectSession(page: Page, workspaceTitle: string, sessionTitle: s
   await sessionRow.click();
   // The compact sidebar can close after navigation. Verify the destination in
   // the conversation header instead of requiring its sidebar row to stay visible.
+  // DSH 0.1.7 renders the current Session as plain text there, no longer as a button.
   await page.getByRole("navigation", { name: /^(?:Session hierarchy|会话层级)$/u })
-    .getByRole("button", { name: sessionTitle, exact: true })
+    .getByText(sessionTitle, { exact: true })
     .waitFor({ state: "visible", timeout: 10_000 });
 }
 
@@ -670,6 +691,7 @@ async function main(): Promise<void> {
       DEEPSEEK_BASE_URL: mockDeepSeek?.baseURL ?? "https://api.deepseek.com"
     };
     run(process.execPath, [dshBin, "plugin", "--profile", "web", "add", archivePath], env);
+    await isolateFirstUseWorkspace(dshHome, join(temporaryRoot, "documents"));
     const port = new URL(origin).port;
     child = spawn(process.execPath, [dshBin, "web", "--no-open", "--port", port], {
       cwd: repositoryRoot, env, stdio: ["ignore", "pipe", "pipe"]
@@ -705,6 +727,16 @@ async function main(): Promise<void> {
       throw new Error("First-launch guide overflowed the compact viewport.");
     }
     await compactFirstRunPage.close();
+
+    // DSH 0.1.7 opens a fresh home straight into a blank Session in its default workspace,
+    // so the guide belongs to that blank state and must retire once the conversation starts.
+    if (!useRealDeepSeek) {
+      const firstRunSessions = await rpc<{ readonly items: readonly { readonly sessionId: string; readonly blank: boolean }[] }>(origin, "session/list", { _request: {} });
+      const blankSession = firstRunSessions.items.find((item) => item.blank);
+      if (blankSession === undefined) throw new Error(`A fresh DSH did not open a blank Session: ${JSON.stringify(firstRunSessions.items)}`);
+      await prepareSession(origin, blankSession.sessionId, "你好", "通用 · 首次启动");
+      await welcome.waitFor({ state: "detached", timeout: 10_000 });
+    }
 
     const storyWorkspace = await rpc<{ readonly workspace: { readonly workspaceId: string; readonly title: string } }>(origin, "workspace/create", { request: { path: storyRoot } });
     const dramaWorkspace = await rpc<{ readonly workspace: { readonly workspaceId: string; readonly title: string } }>(origin, "workspace/create", { request: { path: dramaRoot } });

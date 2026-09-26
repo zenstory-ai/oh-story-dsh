@@ -45,6 +45,33 @@ export interface ProductionQueueEntry {
   readonly preview: string;
 }
 
+function record(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === "object" && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : undefined;
+}
+
+/**
+ * DSH Queue rows from the host `inbox` projection's `next-turn` list. DSH 0.1.7 removed
+ * `SessionSnapshot.queue`; reading it threw and blanked the whole workbench (#50). The
+ * projection is wire JSON and absent without agent-loop, so every row is checked rather than
+ * trusted. Like DSH's own QueueDock, a row whose prompt RPC already has a transcript echo is
+ * a turn being claimed, not a queued one. The preview is the row's full text: the job-id label
+ * is matched against it, and the old 200-character preview could cut that label off.
+ */
+export function productionQueueFromInbox(rows: unknown, claimedRequestIds: ReadonlySet<string> = new Set()): ProductionQueueEntry[] {
+  if (!Array.isArray(rows)) return [];
+  return rows.flatMap((row) => {
+    const item = record(row);
+    if (item === undefined || typeof item.id !== "string" || !Array.isArray(item.content)) return [];
+    const source = record(item.source);
+    if (source?.kind === "user" && typeof source.rpcId === "string" && claimedRequestIds.has(source.rpcId)) return [];
+    const preview = item.content.flatMap((block) => {
+      const value = record(block);
+      return value?.type === "text" && typeof value.text === "string" ? [value.text] : [];
+    }).join(" ");
+    return [{ id: item.id, preview }];
+  });
+}
+
 export function createPendingJob(input: {
   readonly id: string;
   readonly targetId: string;

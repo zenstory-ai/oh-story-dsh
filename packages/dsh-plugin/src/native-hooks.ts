@@ -1,7 +1,14 @@
 import type { Context } from "@deepseek-ai/cordis";
 import type { FileSystem, FsTarget } from "@deepseek-ai/dsh-fs";
-import { createUserMessage } from "@deepseek-ai/dsh-llm";
+import { boundContextSummary, createUserMessage, type ContextFormed } from "@deepseek-ai/dsh-llm";
 import type { PostToolDecision, PreToolDecision, ToolExecution } from "@deepseek-ai/dsh-tools";
+
+declare module "@deepseek-ai/dsh-llm" {
+  interface MessageSourceMap {
+    /** DSH 0.1.7 dropped the shared `plugin` kind: each producer declares its own. */
+    "oh-story-post-write": { kind: "oh-story-post-write" } & ContextFormed;
+  }
+}
 
 const MUTATION_TOOLS = new Set(["write", "edit", "str_replace_editor"]);
 
@@ -131,7 +138,7 @@ export function registerOhStoryHooks(context: Context): void {
     const mutation = fs === undefined ? undefined : await storyMutation(exec, fs);
     if (mutation === undefined) return downstream;
     const reminder = createUserMessage({
-      source: { kind: "plugin", plugin: "oh-story" },
+      source: { kind: "oh-story-post-write", form: "notice", summary: boundContextSummary(`正文 ${mutation.path} 已变更`) },
       content: [{
         type: "text",
         text: `<oh-story-post-write>正文 ${mutation.path} 已变更。继续当前步骤前核对并更新 _tracking-state.json 及对应派生 Tracking 视图；不要把这条提醒当作用户的新写作要求。</oh-story-post-write>`

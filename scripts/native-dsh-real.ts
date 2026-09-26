@@ -8,7 +8,7 @@ import { parseEnv } from "node:util";
 import { fileURLToPath } from "node:url";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const dshVersion = "0.1.5-rc.1";
+const dshVersion = "0.1.7-rc.2";
 /** Exact WebSocket route carrying every Typert Remote stream. */
 const REMOTE_STREAM_MUX_PATH = "/api/remote.mux";
 
@@ -241,6 +241,12 @@ async function main(): Promise<void> {
     if (tarball === undefined) throw new Error("Plugin pack did not create a tarball.");
     const env = { ...process.env, DEEPSEEK_API_KEY: apiKey, DSH_HOME: dshHome, DSH_TELEMETRY_DISABLED: "1" };
     run(process.execPath, [dshBin, "plugin", "--profile", "web", "add", join(packDirectory, tarball)], env);
+    // DSH 0.1.7 creates its first-use workspace under the account's Documents folder, outside
+    // DSH_HOME. Point it into the temporary root so a run never writes to the real home.
+    const documents = join(temporaryRoot, "documents");
+    await mkdir(documents, { recursive: true });
+    await writeFile(join(dshHome, "profiles", "web", "cordis.patch.yml"),
+      `- id: workspace-controller\n  config:\n    documentsDirectory: ${JSON.stringify(documents)}\n`);
     child = spawn(process.execPath, [dshBin, "web", "--no-open", "--port", new URL(origin).port], {
       cwd: repositoryRoot, env, stdio: ["ignore", "pipe", "pipe"]
     });

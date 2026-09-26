@@ -37,6 +37,7 @@ import { DramaProductionView } from "./drama-production-view.js";
 import { createPendingJob, type
   CanvasPoint,
   mediaTargetFromPath,
+  productionQueueFromInbox,
   type ProductionJob,
   type ProductionMediaVersion,
   type ProductionQueueEntry,
@@ -612,6 +613,7 @@ function CreativeWorkbench({
   reload,
   open,
   creativeProject,
+  welcome,
   useStore,
   actions
 }: {
@@ -628,6 +630,8 @@ function CreativeWorkbench({
   readonly reload: () => void;
   readonly open: boolean;
   readonly creativeProject: boolean;
+  /** A blank Session over a workspace without creative work: the first thing a fresh DSH shows. */
+  readonly welcome: boolean;
 } & Pick<WorkbenchSlotProps, "useStore" | "actions" | "sendProductionPrompt" | "cancelProduction" | "removeQueuedProduction">) {
   const activities = useMemo(
     () => fileMutations(runningCalls, partial),
@@ -1330,7 +1334,7 @@ function CreativeWorkbench({
     // Without creative work there is nothing to reveal, so the plugin leaves the
     // official conversation exactly as DSH renders it. A failed workspace request
     // still offers the way in, because that error is only readable inside the workbench.
-    if (!creativeProject && error === undefined) return null;
+    if (!creativeProject && error === undefined) return welcome ? <WelcomeGuide /> : null;
     return <div ref={surfaceRef} className="oh-story-split-surface" data-open="false">
       <style>{styles}</style>
       <button className="oh-story-launcher" type="button" title={error ?? "打开创作工作台"} aria-label="打开创作工作台" onClick={() => { applyWorkbenchPreference("open"); }}>
@@ -1550,8 +1554,17 @@ interface ProductionConversationFace {
 
 type WorkbenchSlotProps = PropsRuntime<"oh-story.workspace"> & PropsStore<ReturnType<typeof createWorkbenchStore>> & ProductionConversationFace;
 
+/**
+ * DSH 0.1.7's SessionProvider stopped keying its subtree by Session, so switching Sessions
+ * would carry one Session's selection, drafts and dedup guards into the next. Keep the
+ * one-mount-per-Session contract the workbench was written against.
+ */
+function CreativeSplitBridge(props: WorkbenchSlotProps) {
+  return <SessionWorkbenchBridge key={props.sessionId} {...props} />;
+}
+
 /** Mount beside the official conversation without replacing Chat or Composer. */
-function CreativeSplitBridge({ sessionId, useSession, useChat, useStore, actions, sendProductionPrompt, cancelProduction, removeQueuedProduction }: WorkbenchSlotProps) {
+function SessionWorkbenchBridge({ sessionId, useSession, useSessions, useProjection, useChat, useStore, actions, sendProductionPrompt, cancelProduction, removeQueuedProduction }: WorkbenchSlotProps) {
   const marker = useRef<HTMLSpanElement>(null);
   const [target, setTarget] = useState<HTMLElement>();
   const runningCalls = useChat((snapshot) => snapshot.legacy.runningCalls);
@@ -1561,12 +1574,21 @@ function CreativeSplitBridge({ sessionId, useSession, useChat, useStore, actions
   const gamePane = useStore((memory) => memory.gamePane);
   const videoPane = useStore((memory) => memory.videoPane);
   const sessionRunning = useSession((snapshot) => snapshot.running);
-  const productionQueue = useSession((snapshot) => snapshot.queue.map((item) => ({ id: item.id, preview: item.preview })));
+  const inboxRows = useProjection("inbox", (inbox) => inbox?.["next-turn"]);
+  const pendingSubmissions = useSession((snapshot) => snapshot.pendingSubmissions);
+  const productionQueue = useMemo(() => productionQueueFromInbox(
+    inboxRows,
+    new Set(pendingSubmissions.filter((item) => item.placement === "transcript").map((item) => item.requestId))
+  ), [inboxRows, pendingSubmissions]);
   const chat = useChat((snapshot) => snapshot);
   const productionIntents = useMemo(() => settledProductionIntents(chat), [chat]);
   const { workspace, error, loading: workspaceLoading, reload } = useWorkspace(sessionId);
   const chosenPreference = useStore((memory) => memory.workbenchPreference);
   const creativeProject = hasCreativeProject(workspace);
+  // DSH 0.1.7 opens a fresh home straight into a blank Session in its default workspace, so
+  // "no Session yet" no longer marks a first launch. A blank Session without creative work does.
+  const sessionBlank = useSessions((state) => state.byId[sessionId]?.blank === true);
+  const welcome = sessionBlank && workspace !== undefined && !workspaceLoading && !creativeProject;
   // The Session Store holds this Session's choice; localStorage carries the workspace's
   // last choice across restarts. Reading it here keeps the decision in the same render
   // that learns the workspace, so a collapsed workbench never flashes the layout open.
@@ -1711,6 +1733,7 @@ function CreativeSplitBridge({ sessionId, useSession, useChat, useStore, actions
       reload={reload}
       open={open}
       creativeProject={creativeProject}
+      welcome={welcome}
       sendProductionPrompt={sendProductionPrompt}
       cancelProduction={cancelProduction}
       removeQueuedProduction={removeQueuedProduction}
@@ -1722,7 +1745,22 @@ function CreativeSplitBridge({ sessionId, useSession, useChat, useStore, actions
 
 type WorkbenchSeatProps = PropsRuntime<"shell.overlay"> & PropsRenderSlots<"oh-story.workspace">;
 
-/** The session-scoped workbench cannot mount on a fresh DSH home page. */
+/** How to reach the workbench from a DSH that has no creative work open yet. */
+function WelcomeGuide() {
+  return <section className="oh-story-welcome" aria-label="Oh Story 使用引导">
+    <style>{styles}</style>
+    <h2>Oh Story 已加载</h2>
+    <p>作品目录中有创作文件时，小说、短剧、游戏、视频工作台会自动显示。</p>
+    <ol>
+      <li>点击左侧「工作区 / Workspaces」旁的「添加工作区 / Add workspace」，选择存放作品的文件夹。</li>
+      <li>在下方「选择工作区 / Choose workspace」中选中该目录，或打开已有会话。</li>
+      <li>空目录（包括 DSH 自动建立的「默认工作区 / Default workspace」）先在 Chat 中开始创作，生成第一个创作文件后，工作台会自动出现。</li>
+    </ol>
+    <p>查看已有作品无需 API Key。开始 AI 创作前，在「设置 → 模型」配置模型，再输入 <code>/story</code>、<code>/short-drama</code>、<code>/novel-to-game quick</code> 或 <code>/video-recap</code>。</p>
+  </section>;
+}
+
+/** Without any Session the session-scoped workbench cannot mount, so the guide mounts on its own. */
 function WorkbenchWelcome() {
   const marker = useRef<HTMLSpanElement>(null);
   const [target, setTarget] = useState<HTMLElement>();
@@ -1739,18 +1777,8 @@ function WorkbenchWelcome() {
     return () => { observer.disconnect(); };
   }, []);
   return <>
-    <style>{styles}</style>
     <span ref={marker} className="oh-story-bridge-marker" aria-hidden />
-    {target === undefined ? null : createPortal(<section className="oh-story-welcome" aria-label="Oh Story 使用引导">
-      <h2>Oh Story 已加载</h2>
-      <p>作品目录中有创作文件时，小说、短剧、游戏、视频工作台会自动显示。</p>
-      <ol>
-        <li>点击左侧「添加工作区 / Add workspace」的 ＋，选择存放作品的文件夹。</li>
-        <li>在下方「选择工作区 / Choose workspace」中选中该目录，或打开已有会话。</li>
-        <li>空目录先在 Chat 中开始创作，生成第一个创作文件后，工作台会自动出现。</li>
-      </ol>
-      <p>查看已有作品无需 API Key。开始 AI 创作前，在「设置 → 模型」配置模型，再输入 <code>/story</code>、<code>/short-drama</code>、<code>/novel-to-game quick</code> 或 <code>/video-recap</code>。</p>
-    </section>, target)}
+    {target === undefined ? null : createPortal(<WelcomeGuide />, target)}
   </>;
 }
 
@@ -1759,7 +1787,7 @@ function WorkbenchSeat({ SessionProvider, renderSlot }: WorkbenchSeatProps) {
 }
 
 function argsOf(block: ToolCallViewProps["block"]): Record<string, unknown> {
-  const raw = ("kind" in block ? block.call?.argsRaw : block.argsRaw) ?? "{}";
+  const raw = ("kind" in block ? block.call?.argsRaw : block.phase === "start" ? block.argsRaw : undefined) ?? "{}";
   try {
     const value = JSON.parse(raw) as unknown;
     return typeof value === "object" && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : {};

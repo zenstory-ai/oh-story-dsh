@@ -184,6 +184,8 @@ export function fileMutations(
 ): FileMutationActivity[] {
   const values: FileMutationActivity[] = [];
   visitRunning(runningCalls, (call) => {
+    // A preparing call is named before its arguments exist; its streamed arguments are read from `partial` below.
+    if (call.phase !== "start") return;
     const mutation = mutationFromArgs(call.name, call.callId, call.argsRaw, "running");
     if (mutation !== undefined) values.push(mutation);
   });

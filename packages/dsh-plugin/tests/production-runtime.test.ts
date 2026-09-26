@@ -5,6 +5,7 @@ import {
   createPendingJob,
   mediaTargetFromPath,
   mediaVersionMatchesJob,
+  productionQueueFromInbox,
   queuedItemForJob,
   reconcileProductionJobs,
   reconcileSequence,
@@ -29,6 +30,28 @@ describe("production runtime", () => {
     expect(queuedItemForJob(queued.id, queue)?.id).toBe("message-1");
     expect(activeProductionJobId([running, queued], queue, true)).toBe("job-running");
     expect(activeProductionJobId([running, queued], queue, false)).toBeUndefined();
+  });
+
+  it("reads DSH Queue rows from the inbox projection that replaced SessionSnapshot.queue (#50)", () => {
+    const longPrefix = "按顺序执行。".repeat(60);
+    const rows = [
+      { id: "message-1", content: [{ type: "text", text: `/short-drama-produce ${longPrefix}\n- 任务 ID：job-late` }], source: { kind: "user" } },
+      { id: "message-2", content: [{ type: "image", attachment: {} }, { type: "text", text: "任务 ID：job-claimed" }], source: { kind: "user", rpcId: "rpc-2" } },
+      { id: 7, content: [] },
+      null
+    ];
+
+    const queue = productionQueueFromInbox(rows, new Set(["rpc-2"]));
+    expect(queue.map((item) => item.id)).toEqual(["message-1"]);
+    // The label sits past the 200-character preview DSH 0.1.5 used to hand out.
+    expect(queuedItemForJob("job-late", queue)?.id).toBe("message-1");
+    expect(queuedItemForJob("job-claimed", queue)).toBeUndefined();
+    expect(queuedItemForJob("job-claimed", productionQueueFromInbox(rows))?.id).toBe("message-2");
+  });
+
+  it("treats an absent inbox projection as an empty DSH Queue", () => {
+    expect(productionQueueFromInbox(undefined)).toEqual([]);
+    expect(productionQueueFromInbox({ "next-turn": [] })).toEqual([]);
   });
 
   it("associates media through exact path tokens instead of substring guesses", () => {
