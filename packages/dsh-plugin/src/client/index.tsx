@@ -137,6 +137,10 @@ interface WorkbenchMemory {
   productionCanvas: Record<string, Record<string, CanvasPoint>>;
   productionZoom: Record<string, number>;
   productionIntentCalls: Record<string, boolean>;
+  /** Latest settled Agent write the workbench has already followed or taken as history. */
+  settledMutation: string | undefined;
+  /** False only in a Store instance the plugin has not restored this Session's memory into yet. */
+  hydrated: boolean;
 }
 
 type Update<T> = T | ((current: T) => T);
@@ -147,9 +151,10 @@ function applyUpdate<T>(current: T, update: Update<T>): T {
 
 /**
  * DSH 0.1.7 binds session-scoped Store instances to the Session binding's generation and drops
- * them when that generation is released, which a Session switch is enough to do. The workbench
- * keeps unsaved drafts, production jobs and layout in its Store, and those lived for the page
- * before, so the plugin holds its own page-lifetime copy and restores it into a fresh instance.
+ * them when that generation is released or rebound, which a Session switch is enough to do, and
+ * a mounted slot can be handed a fresh instance. The workbench keeps unsaved drafts, production
+ * jobs and layout in its Store, and those lived for the page before, so the plugin holds its own
+ * page-lifetime copy and restores it into every fresh instance.
  */
 const workbenchMemoryBySession = new Map<string, WorkbenchMemory>();
 
@@ -176,11 +181,17 @@ function createWorkbenchStore() {
       productionSequence: {},
       productionCanvas: {},
       productionZoom: {},
-      productionIntentCalls: {}
+      productionIntentCalls: {},
+      settledMutation: undefined,
+      hydrated: false
     }),
     actions: {
-      restore: (draft, memory: WorkbenchMemory) => {
-        Object.assign(draft, memory);
+      restore: (draft, memory: WorkbenchMemory | undefined) => {
+        if (memory !== undefined) Object.assign(draft, memory);
+        draft.hydrated = true;
+      },
+      setSettledMutation: (draft, value: string | undefined) => {
+        draft.settledMutation = value;
       },
       setBuffers: (draft, update: Update<Record<string, FileBuffer>>) => {
         draft.buffers = applyUpdate(draft.buffers, update);
@@ -705,7 +716,10 @@ function CreativeWorkbench({
   const navRef = useRef<HTMLElement>(null);
   const activityBases = useRef(new Map<string, { readonly path: string; readonly base: string }>());
   const previousSignals = useRef<ReadonlySet<string>>(new Set());
-  const previousSettledMutation = useRef(settledMutation);
+  // The consumed signal lives in the Store so it survives a remount: DSH 0.1.7 reloads a Session's
+  // Chat after a switch, and replaying its history must not look like a fresh Agent write.
+  const consumedSettledMutation = useStore((memory) => memory.settledMutation);
+  const settledAtMount = useRef(settledMutation);
   const saveLocks = useRef(new Set<string>());
   const buffer = selected === undefined ? undefined : buffers[selected];
   const selectedFile = workspace?.files.find((file) => file.path === selected);
@@ -979,6 +993,10 @@ function CreativeWorkbench({
       const next = { ...current };
       for (const [path, value] of Object.entries(current)) {
         if (paths.has(path) || activityPaths.has(path)) continue;
+        // DSH 0.1.7 can drop a call from every live view between its streamed step and its
+        // result (pre-execute hooks, approval). Keep the agent's preview until the Turn ends,
+        // so the file stays selected until the workspace lists it.
+        if (value.source === "agent" && sessionRunning) continue;
         if (value.source === "human" && value.content !== value.saved) {
           if (value.missing !== true) {
             next[path] = { ...value, missing: true, error: "文件已从 workspace 移除。本地草稿仍保留，可复制后放弃草稿。" };
@@ -991,7 +1009,7 @@ function CreativeWorkbench({
       }
       return changed ? next : current;
     });
-  }, [activityPaths, workspace, workspaceLoading]);
+  }, [activityPaths, sessionRunning, workspace, workspaceLoading]);
 
   useEffect(() => {
     if (selected === undefined || selectedMedia || activityPaths.has(selected)) return;
@@ -1125,17 +1143,22 @@ function CreativeWorkbench({
   }, [normalizedActivities, reload, runningCalls]);
 
   useEffect(() => {
-    if (settledMutation === undefined || settledMutation === previousSettledMutation.current) return;
+    if (settledMutation === undefined || settledMutation === consumedSettledMutation) return;
+    // A write the Chat already showed when this Session's workbench first mounted is history.
+    if (consumedSettledMutation === undefined && settledMutation === settledAtMount.current) {
+      actions.setSettledMutation(settledMutation);
+      return;
+    }
     // The signal carries an absolute path, so creativeRelativePath cannot resolve it until the
     // workspace (and its cwd) has loaded. Consuming the signal first would burn it: the effect
     // re-runs when cwd arrives, but the guard above then short-circuits and the agent's file is
     // never selected. Wait for cwd instead of dropping the follow.
     if (workspace?.cwd === undefined) return;
-    previousSettledMutation.current = settledMutation;
+    actions.setSettledMutation(settledMutation);
     const path = creativeRelativePath(settledMutation.slice(settledMutation.indexOf("\0") + 1), workspace.cwd);
     if (path !== undefined) followAgentPath(path);
     reload();
-  }, [followAgentPath, reload, settledMutation, workspace?.cwd]);
+  }, [actions, consumedSettledMutation, followAgentPath, reload, settledMutation, workspace?.cwd]);
 
   useEffect(() => {
     if (selected === undefined) return;
@@ -1582,19 +1605,25 @@ function CreativeSplitBridge(props: WorkbenchSlotProps) {
 /** Restore this Session's workbench memory into a fresh Store before anything reads it. */
 function SessionWorkbenchMemory(props: WorkbenchSlotProps) {
   const { sessionId, useStore, actions } = props;
-  const memory = useStore((state) => state);
-  const [restored, setRestored] = useState(() => !workbenchMemoryBySession.has(sessionId));
+  const hydrated = useStore((state) => state.hydrated);
+  // Nothing renders from a fresh instance: its initial state would be mirrored over the saved
+  // copy, and the workbench's own effects would act on an empty selection.
   useLayoutEffect(() => {
-    if (restored) return;
-    const saved = workbenchMemoryBySession.get(sessionId);
-    // A surviving instance already holds the saved state; only a fresh one needs it back.
-    if (saved !== undefined && saved !== memory) actions.restore(saved);
-    setRestored(true);
-  }, []);
+    if (!hydrated) actions.restore(workbenchMemoryBySession.get(sessionId));
+  }, [actions, hydrated, sessionId]);
+  return hydrated ? <>
+    <WorkbenchMemoryMirror sessionId={sessionId} useStore={useStore} />
+    <SessionWorkbenchBridge {...props} />
+  </> : null;
+}
+
+/** Keeps the page-lifetime copy current without re-rendering the workbench on every edit. */
+function WorkbenchMemoryMirror({ sessionId, useStore }: Pick<WorkbenchSlotProps, "sessionId" | "useStore">) {
+  const memory = useStore((state) => state);
   useEffect(() => {
-    if (restored) workbenchMemoryBySession.set(sessionId, memory);
-  }, [memory, restored, sessionId]);
-  return restored ? <SessionWorkbenchBridge {...props} /> : null;
+    workbenchMemoryBySession.set(sessionId, memory);
+  }, [memory, sessionId]);
+  return null;
 }
 
 /** Mount beside the official conversation without replacing Chat or Composer. */

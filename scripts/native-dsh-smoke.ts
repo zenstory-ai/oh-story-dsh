@@ -1790,12 +1790,23 @@ async function main(): Promise<void> {
         }
         await page.setViewportSize({ width: 1_440, height: 900 });
         await page.waitForTimeout(300);
+        // DSH 0.1.7 keeps a reader who scrolled up where they are when a new Turn starts (only a
+        // Composer submission returns to the tail), so come back down the way that reader would
+        // before checking what the streaming Todo covers.
+        await page.evaluate(() => {
+          const scroll = Array.from(document.querySelectorAll<HTMLElement>("[data-conversation-scroll]"))
+            .find((element) => element.dataset.ohStoryWorkbench === "drama" && element.getBoundingClientRect().width > 0);
+          if (scroll === undefined) return;
+          scroll.dispatchEvent(new WheelEvent("wheel", { deltaY: 100_000, bubbles: true }));
+          scroll.scrollTop = scroll.scrollHeight;
+        });
+        await page.waitForTimeout(200);
         await rpc(origin, "session/prompt", { request: { requestId: crypto.randomUUID(), sessionId: dramaSession.sessionId, mode: "queue", content: [{ type: "text", text: todoLayoutPrompt }] } });
         const todo = page.locator('[data-testid="todo-panel"]');
         await todo.waitFor({ state: "visible", timeout: 30_000 });
         await todo.getByRole("button").click();
         await todo.locator("li").last().waitFor({ state: "attached", timeout: 20_000 });
-        await page.waitForFunction(() => {
+        const measureTodoLayout = () => page.evaluate(() => {
           const scroller = Array.from(document.querySelectorAll<HTMLElement>("[data-conversation-scroll]"))
             .find((element) => element.dataset.ohStoryWorkbench === "drama" && element.getBoundingClientRect().width > 0);
           const flow = scroller?.querySelector<HTMLElement>("[data-chat-flow]:not([data-step-process-content])");
@@ -1803,12 +1814,28 @@ async function main(): Promise<void> {
             ? undefined
             : Array.from(scroller.children).find((element): element is HTMLElement => element instanceof HTMLElement && element.hasAttribute("data-composer-seat"));
           const tail = flow?.lastElementChild;
-          if (!(tail instanceof HTMLElement) || seat === undefined || flow === null) return false;
+          if (!(tail instanceof HTMLElement) || seat === undefined || flow === null || flow === undefined || scroller === undefined) {
+            return { ready: false, scroller: scroller !== undefined, flow: flow !== null && flow !== undefined, seat: seat !== undefined, tail: tail?.tagName };
+          }
           const tailBox = tail.getBoundingClientRect();
           const seatBox = seat.getBoundingClientRect();
           const clearance = Number.parseFloat(getComputedStyle(flow).paddingBottom);
-          return clearance >= seatBox.height + 15 && tailBox.bottom <= seatBox.top + 1;
-        }, undefined, { timeout: 10_000 });
+          return {
+            ready: clearance >= seatBox.height + 15 && tailBox.bottom <= seatBox.top + 1,
+            clearance,
+            seatHeight: Math.round(seatBox.height),
+            seatTop: Math.round(seatBox.top),
+            tailBottom: Math.round(tailBox.bottom),
+            tail: `${tail.tagName}.${tail.className}`,
+            fromBottom: Math.round(scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight)
+          };
+        });
+        let todoLayout = await measureTodoLayout();
+        for (const deadline = Date.now() + 10_000; !todoLayout.ready && Date.now() < deadline;) {
+          await page.waitForTimeout(100);
+          todoLayout = await measureTodoLayout();
+        }
+        if (!todoLayout.ready) throw new Error(`Streaming Todo left the Chat tail behind the Composer: ${JSON.stringify(todoLayout)}`);
         const flow = page.locator('[data-slot="conversation.session"] [data-chat-flow]:not([data-step-process-content])');
         const tail = flow.locator(":scope > *").last();
         // The seat grows by the Todo panel one layout pass before the workbench
@@ -1827,7 +1854,9 @@ async function main(): Promise<void> {
           tail.boundingBox(), page.locator("[data-composer-seat]").boundingBox(), scroller.boundingBox(),
           flow.evaluate((element) => Number.parseFloat(getComputedStyle(element).paddingBottom)), tail.getAttribute("data-chat-flow-key")
         ]);
-        if (tailBox === null || seatBox === null || scrollBox === null || tailFlowKey !== null
+        // DSH 0.1.7 ends the flow with the running Turn's step-process group, which carries a flow
+        // key; the geometry, not the kind of the last row, is what must hold.
+        if (tailBox === null || seatBox === null || scrollBox === null
           || tailBox.y < scrollBox.y - 1 || tailBox.y + tailBox.height > seatBox.y + 1 || clearance < seatBox.height + 15) {
           throw new Error(`Streaming Todo obscured Chat: ${JSON.stringify({ tailBox, seatBox, scrollBox, clearance, tailFlowKey })}`);
         }
