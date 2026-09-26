@@ -14,9 +14,9 @@ metadata: {"openclaw":{"source":"https://github.com/zenstory-ai/oh-story-claudec
 
 ---
 
-> Agent 兼容性：只检查当前运行时的 canonical 目录：Claude `.claude/agents/{agent}.md`、OpenCode `.opencode/agents/{agent}.md`、Codex `.codex/agents/{agent}.toml`、Antigravity `.agents/agents/agent-name/agent.md`（`agent-name` 为目标 agent 名），不得因其他端文件存在而误判。Codex 使用同名 `agent_type`；Antigravity 使用 `invoke_subagent` + `TypeName`。对应运行时未暴露 custom-agent registry / `invoke_subagent` 或返回未知 agent 时，必须降级 solo/direct。检测到 `.zcode/` 时同样直接 solo/direct，因为 ZCode 3.3.4 不执行项目 custom agents；报告 `Fallback: project custom agents unavailable -> solo`。Claude/OpenCode 兼容面保留 `subagent_type`。
+> Agent 兼容性：只检查当前运行时的 canonical 目录：Claude `.claude/agents/{agent}.md`、OpenCode `.opencode/agents/{agent}.md`、Codex `.codex/agents/{agent}.toml`、Antigravity `.agents/agents/agent-name/agent.md`（`agent-name` 为目标 agent 名），不得因其他端文件存在而误判。Codex 使用同名 `agent_type`；Antigravity 使用 `invoke_subagent` + `TypeName`。对应运行时未暴露 custom-agent registry / `invoke_subagent` 或返回未知 agent 时，必须降级 solo/direct。检测到 `.zcode/` 时同样直接 solo/direct，因为 ZCode 3.3.4 不执行项目 custom agents；报告 `Fallback: project custom agents unavailable -> solo`。Claude 用 `subagent_type`；OpenCode 用 `subagent` 工具的 `agent` 参数。
 >
-> Spawn 版本提示（不阻断 spawn）：先读取项目根 `.story-deployed` 的 `agents_version`。与本版 `agents_version: 30` 不一致时（标记缺失、字段缺失/非整数、小于或大于 30）**照常按文件存在性检查并 spawn**，同时报告 `Notice: agents bundle 版本不匹配（项目 {N}，本版 30）` 并提示重新运行 `/story-setup` 后新开会话；大于 30 时额外提示先更新 oh-story-claudecode，不要用本地旧版 setup 降级覆盖。只有 agent 文件缺失、或运行时不暴露 custom agent 时才降级 solo/direct，报告 `Fallback: ... -> solo`。
+> Spawn 版本提示（不阻断 spawn）：先读取项目根 `.story-deployed` 的 `agents_version`。与本版 `agents_version: 32` 不一致时（标记缺失、字段缺失/非整数、小于或大于 32）**照常按文件存在性检查并 spawn**，同时报告 `Notice: agents bundle 版本不匹配（项目 {N}，本版 32）` 并提示重新运行 `/story-setup` 后新开会话；大于 32 时额外提示先更新 oh-story-claudecode，不要用本地旧版 setup 降级覆盖。只有 agent 文件缺失、或运行时不暴露 custom agent 时才降级 solo/direct，报告 `Fallback: ... -> solo`。
 
 ## 核心哲学
 
@@ -50,7 +50,7 @@ AI味不按语法错误处理，也不需要"修正"。它属于风格问题：�
 
 ### 作者习惯
 
-若作者记忆 state 已存在，改写前用 `scripts/author_memory_commit.py query --kind prose_style` 获取匹配的 active 文风条目（总输出 ≤2KB），并交给 inline/spawn 执行者作为自然倾向，不逐条展示或最大化命中，不牺牲连贯、节奏和字数；当前请求、原文剧情功能和本 skill 保护规则优先。用户明确声明长期文风习惯时，改写后按 [references/author-memory.md](references/author-memory.md) 用 `record` 写入并回传回执；重复修正/推断先待确认，一次性要求、检测器 findings 和助手自己的结果不记录。
+若作者记忆 state 已存在，改写前用 `scripts/author_memory_commit.py query --kind prose_style --book-root {书目录}` 获取匹配的 active 文风条目（总输出 ≤2KB），并交给 inline/spawn 执行者作为自然倾向，不逐条展示或最大化命中，不牺牲连贯、节奏和字数；当前请求、原文剧情功能和本 skill 保护规则优先。用户明确声明长期文风习惯时，改写后按 [references/author-memory.md](references/author-memory.md) 用 `record` 写入并按其「回执怎么告诉作者」转告；只记作者明确说的，一次性要求、反复修改、检测器 findings 和助手自己的结果不记录。
 
 ---
 
@@ -85,31 +85,33 @@ AI味不按语法错误处理，也不需要"修正"。它属于风格问题：�
 
 ## 检测流程
 
+去 AI 味只有一条管线：确定性检测器 → 按分级选 Gate → 一次定点改写 → 复扫。长篇写作的章末检测与按需审查、story-review 的确定性预检用的是同一套检测器与 Gate，本 skill 是它的独立入口。
+
 ### Phase 1：AI味扫描
 
-对用户提交的文本做快速扫描，标记AI味浓重的位置：
+对用户提交的文本做快速扫描，标记AI味浓重的位置。报告写给作者：问题用白话说并附原文，脚本名、检测器类别名、Gate 字母不进报告。
 
-```
+<!-- author-report -->
+```md
 ## AI味检测报告
 
 ### 整体评估
 - AI味等级：{轻度/中度/重度}
-- 主要问题：{1-3 个关键词}
+- 主要问题：{1-3 个白话描述}
 
 ### 问题标记
-| 位置 | 类型 | Gate | 原文 | 问题 |
-|------|------|------|------|------|
-| 第X段 | 禁用词 | A | "眼中闪过一丝..." | 典型AI高频词 |
-| 第Y段 | 句式 | B | "...，带着..." | AI惯用句式 |
-| 第Z段 | 句式 | B | 连续3句排比 | 过于工整 |
-| ... | 心理描写 | C | "一丝悲伤涌上心头" | 空转的情绪总结句 |
-| 第M段 | 节奏 | D | 段段4-6句、长度均匀 | 整段同节奏 |
-| 第N段 | 重复描写 | C/D | 同一动作连续拆写 | 相邻段重复同一瞬间 |
-| 第P段 | 解释腔/上帝感 | G | "她不知道的是…" / "演得真好" / "之所以…是因为" | 叙述者跳出角色当下解释/剧透/定性/升华（模式 8） |
-| 第Q段 | 动作清单 | D/E | "伸手拿起…取过…放下…转身…" | 监控摄像头式步骤表，缺少视角温度/心理缓冲（模式 10） |
-
-> 类型 → Gate 速查：禁用词 = A，句式套路 = B，情绪空转 = C，节奏均匀 = D，对话腔调 = E，结尾升华 = F，解释腔/上帝感/安排感 = G，重复描写 = C/D。「诊断与分级」判定"7 Gate 中 4+ 个有问题"时按 Gate 列计数。
+| 位置 | 类型 | 原文 | 问题 |
+|------|------|------|------|
+| 第X段 | 套话 | "眼中闪过一丝..." | 典型AI高频词 |
+| 第Y段 | 句式 | "...，带着..." / 连续3句排比 | AI惯用句式，过于工整 |
+| 第Z段 | 情绪空转 | "一丝悲伤涌上心头" | 只总结情绪，没有落点 |
+| 第M段 | 节奏 | 段段4-6句、长度均匀 | 整段同节奏 |
+| 第N段 | 重复描写 | 同一动作连续拆写 | 相邻段重复同一瞬间 |
+| 第P段 | 解释腔 | "她不知道的是…" / "之所以…是因为" | 叙述者跳出角色解释、剧透或下结论 |
+| 第Q段 | 动作清单 | "伸手拿起…取过…放下…转身…" | 像监控录像，缺人物的感受 |
 ```
+
+> 类型 → Gate 速查（内部计数用，不写进表）：套话 = A，句式 = B，情绪空转 = C，节奏 = D，对话腔调 = E，结尾升华 = F，解释腔 = G，重复描写 = C/D，动作清单 = D/E。「诊断与分级」判定"7 Gate 中 4+ 个有问题"时按此换算计数。
 
 > 评价只输出 AI味等级（轻度/中度/重度）与问题标记；不做「上乘 / 新人投稿属上乘 / 性价比高」这类横向市场判断——skill 没有平台投稿分布数据，这类措辞是无依据的越权担保。
 
@@ -119,6 +121,7 @@ AI味不按语法错误处理，也不需要"修正"。它属于风格问题：�
 node scripts/check-ai-patterns.js --check --fail-on=blocking <正文文件...>
 ```
 
+- 检测器 blocking＝必须修，advisory＝建议看；轻/中/重分档另按「诊断与分级」定，用来选 Gate。
 - severity=blocking 的类别（`not-is-comparison` / `em-dash` / `voice-contrast` / `negation-parade` / `reverse-not-is` / `trailer-ending` / `trailer-summary`）并入 Gate B，属于写作/去 AI 味时优先处理的 blocking 类问题。
 - 其他 findings（碎句号、长段落、微动作、套式反应细节、动作清单、抽象总结、套词、比喻密度、解释链、公文腔、过度精炼、低连接密度、引号强调滥用、`formulaic-parallelism` 工整并列）只作读感提示；完整类别和修法见 `references/anti-ai-writing.md`。其中工整并列会扫描台词，必须读语境判断，不能因为 hook 对台词低误报豁免就跳过。
 - 处理方式：删掉否定铺垫，直接写后项；或改成角色动作、物件细节、身体反应来呈现。
@@ -157,11 +160,7 @@ node scripts/check-ai-patterns.js --check --fail-on=blocking <正文文件...>
 >
 > **综合判定规则**：取六项指标中的最高档位。任一指标达重度即按重度处理；无重度时，中度指标 ≥3 项按中度处理，否则按轻度处理。
 
-加载 [references/anti-ai-writing.md](references/anti-ai-writing.md) 的「系统性去AI三遍法」获取完整流程。三遍法与本 skill 的关系（覆盖关系，不是 1:1 映射）：
-- **Pass 1（去泛化）** 覆盖 Gate A 的禁用词、Gate C 的抽象情绪、Gate D 的工整对仗、Gate E 的同语气对话粗扫、Gate G 的解释腔/上帝视角剧透/软评判
-- **Pass 2（去书面化）** 覆盖 Gate A 中的书面腔词、Gate B 的句式套路深化
-- **Pass 3（回自然感）** 覆盖 Gate D 的长短节奏、Gate E 的对话差异化、Gate F 的结尾去升华、补具体感官细节
-- Gate 范围以用户指定为先，未指定时按上方处理策略表；三遍法仅安排所选 Gate 的执行顺序，不扩大改写范围。
+**改写顺序**（只排所选 Gate 的先后，不扩大范围）：先去泛化与套话（禁用词、抽象情绪、工整对仗、解释腔），再去书面腔，最后回自然节奏、对话差异与结尾落点；做法与范例见 [references/anti-ai-writing.md](references/anti-ai-writing.md)。
 
 ---
 
@@ -177,7 +176,7 @@ node scripts/check-ai-patterns.js --check --fail-on=blocking <正文文件...>
 
 #### Gate 规则入口
 
-实际执行者在逐项清除前读取 [references/deslop-gates.md](references/deslop-gates.md) 的删除保护与所选 Gate 细则；inline 与 agent 使用同源规则。三遍法仍按前文安排所选 Gate 的执行顺序，不另起一次全篇去味。
+实际执行者在逐项清除前读取 [references/deslop-gates.md](references/deslop-gates.md) 的删除保护与所选 Gate 细则；inline 与 agent 使用同源规则。按上文「改写顺序」排所选 Gate 的先后，不另起一次全篇去味。
 
 ### Phase 4：确定性收尾（文件模式）
 
@@ -202,35 +201,23 @@ node scripts/normalize-punctuation.js <正文文件...>
 
 ### Phase 5：输出润色结果
 
-```
-## 去AI味润色报告
+<!-- author-report -->
+```md
+## 去AI味结果
+- AI味：{轻度/中度/重度} → 改后 {轻度/已基本去除}；主要问题：{1-3 个白话描述}
+- 改了 {N} 处：{最多的 2-4 类，如「删掉"眼中闪过一丝"一类套话 6 处；拆开连续排比 3 处」}
+- 字数：{N0} → {N1}（{删/增}{百分比}）{；超过本档删减上限时写明已分段处理}
 
-### 字数协议
-- 原文字符数：{N0}
-- 修订后字符数：{N1}
-- 净变化：{N1 - N0}（{百分比}）
-- 是否在 tier 上限内：{是 / 否（超限 X%，已分段并标注 [需复核]）}
+### 改前改后
+{逐段展示，每处一句说明为什么改；超过 30 处时只展示前 10 处 + 末 5 处，其余按问题类型计数}
 
-### 修改统计
-- 总修改数：{N} 处
-- 禁用词替换：{N} 处
-- 句式调整：{N} 处（含否定翻转句式 {N}、"，带着..." {N}、声音描写 {N}）
-- 修饰词清扫：{N} 处
-- 情绪落地与重复说明清理：{N} 处
-- 重复描写合并：{N} 处
-- 监控动作清单合并：{N} 处
-- 重复语义去重：{N} 处（形容词重复 {N}、近义词重复 {N}、含义重复 {N}、主语重复 {N}）
-- 比喻处理：{N} 处（删除/保留/改回具体画面）
-- 节奏调整：{N} 处
-- 对话优化：{N} 处
-- 标点节奏调整：{N} 处（保留有功能 `？`/少量 `！`，将 `……`/`——` 改为动作、短句、逗号或句号，并清理无功能堆砌）
-- 结尾修正：{N} 处
-
-### 修改前后对比
-{逐段展示修改，标注改动类型；超过 30 处时仅展示前 10 处 + 末 5 处 + 其余按 Gate 分桶计数}
+### 需要你看一眼
+{标 [需复核] 的地方：原文 + 为什么没动或拿不准；没有就写"无"}
 
 ### 润色后全文
-{**文件模式（默认；章节/正文文件、批量与长篇去AI）**：通过 Edit/Write 直接改写落盘，本节只回 ≤200 字代表性片段，不向父会话返回全文。**文本模式（仅限交互式贴入、无文件路径的零散片段）**：完整输出润色后的文本。}
+{文件模式（默认；章节/正文文件、批量与长篇去AI）：直接改写落盘，写明改了哪个文件，本节只回 ≤200 字代表性片段，不向父会话返回全文。文本模式（仅限交互式贴入、无文件路径的零散片段）：完整输出润色后的文本。}
+
+下一步：{一句话，如「要我接着处理下一章吗？」}
 ```
 
 **字数硬约束**：删除比例不得超过「诊断与分级」对应上限（轻度 ≤15%、中度 ≤25%、重度 ≤35%）。超限时分段输出并在报告里标记，不得整段删除正文。
@@ -249,7 +236,7 @@ node scripts/normalize-punctuation.js <正文文件...>
 | 用户贴一段文字说"太AI了" | 执行完整检测 + 润色流程 |
 | 用户说"帮我润色" | 先检测AI味，再润色 |
 | 用户说"检查下有没有AI味" | 只做检测，不做修改 |
-| 用户写作中要求 `仅标注 / 只检测 / 不要改` | 嵌入式提醒模式：执行「AI味扫描」和「诊断与分级」，跳过「逐项清除」「确定性收尾」「输出润色结果」；输出问题标记表（含 Gate 列），不修改原文，不写文件 |
+| 用户写作中要求 `仅标注 / 只检测 / 不要改` | 嵌入式提醒模式：执行「AI味扫描」和「诊断与分级」，跳过「逐项清除」「确定性收尾」「输出润色结果」；输出问题标记表，不修改原文，不写文件 |
 
 ---
 
@@ -261,7 +248,7 @@ node scripts/normalize-punctuation.js <正文文件...>
 |------|----------|
 | [references/banned-words.md](references/banned-words.md) | 检测和替换禁用词时 |
 | [references/deslop-gates.md](references/deslop-gates.md) | 逐项清除前：删除保护与所选 Gate 的细则、示例 |
-| [references/anti-ai-writing.md](references/anti-ai-writing.md) | **去AI味完整指南**：预防+三遍法+范例 |
+| [references/anti-ai-writing.md](references/anti-ai-writing.md) | **去AI味完整指南**：预防+改写顺序+范例 |
 | [scripts/normalize-punctuation.js](scripts/normalize-punctuation.js) | 文件模式落盘后做确定性标点收尾；默认保留引号风格 |
 | [scripts/check-ai-patterns.js](scripts/check-ai-patterns.js) | 文件模式「AI味扫描」预检与「确定性收尾」复扫（只看引号外叙述），只报告不改写 |
 | [scripts/check-degeneration.js](scripts/check-degeneration.js) | 文件模式「确定性收尾」复扫，只报告不改写 |

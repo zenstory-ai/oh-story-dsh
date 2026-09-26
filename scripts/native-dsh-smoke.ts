@@ -1555,7 +1555,10 @@ async function main(): Promise<void> {
       await captureGameEvidence(page, "game-studio-title");
       await captureDemoFrame(page, "game", 2);
       await enterGame.click();
-      await gameFrame.getByText("第一日 · 正堂", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+      // The opening scene's heading. It is upstream copy (NovelToGame 0.4 rewrote it), so every
+      // wait on the opening goes through this one locator.
+      const gameOpening = gameFrame.getByRole("heading", { name: "账上空了五十两", exact: true });
+      await gameOpening.waitFor({ state: "visible", timeout: 10_000 });
       const gameIframe = page.locator('iframe[title="《金瓶梅 · 风月总账》可试玩预览"]');
       await gameIframe.evaluate((element) => { element.setAttribute("data-e2e-instance", "jin-ping-mei-preserved"); });
       await captureGameEvidence(page, "game-studio-playable");
@@ -1568,7 +1571,7 @@ async function main(): Promise<void> {
       if (await gameIframe.getAttribute("data-e2e-instance") !== "jin-ping-mei-preserved") {
         throw new Error("Preview/Design switching remounted the Jin Ping Mei iframe.");
       }
-      await gameFrame.getByText("第一日 · 正堂", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+      await gameOpening.waitFor({ state: "visible", timeout: 10_000 });
       const fullscreenButton = gameStudio.getByRole("button", { name: "全屏试玩", exact: true });
       await fullscreenButton.click();
       await page.waitForFunction(() => document.fullscreenElement?.classList.contains("oh-game-preview-shell") === true);
@@ -1613,7 +1616,7 @@ async function main(): Promise<void> {
       if (await gameIframe.getAttribute("data-e2e-instance") !== "jin-ping-mei-preserved") {
         throw new Error("Compact Studio/Chat switching remounted the game iframe.");
       }
-      await gameFrame.getByText("第一日 · 正堂", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+      await gameOpening.waitFor({ state: "visible", timeout: 10_000 });
       await captureGameEvidence(page, "game-studio-compact");
       await page.setViewportSize({ width: 1_440, height: 900 });
       await page.waitForFunction(() => document.querySelector("[data-conversation-scroll]")?.getAttribute("data-oh-story-layout") === "wide");
@@ -1624,7 +1627,7 @@ async function main(): Promise<void> {
       if (await gameIframe.getAttribute("data-e2e-instance") !== "jin-ping-mei-preserved") {
         throw new Error("Novel/Game switching remounted the active game iframe.");
       }
-      await gameFrame.getByText("第一日 · 正堂", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+      await gameOpening.waitFor({ state: "visible", timeout: 10_000 });
       if (!useRealDeepSeek) {
         await projectSelect.selectOption(`workspace:${generatedGameId}`);
         await generatedFrame.getByRole("button", { name: "试玩成功", exact: true }).waitFor({ state: "visible", timeout: 10_000 });

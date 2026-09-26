@@ -30,6 +30,9 @@ for _name in dir(core):
 
 CHAPTER_CHECK_SCHEMA = "story-chapter-check/v1"
 CHAPTER_ERROR_SCHEMA = "story-chapter-error/v1"
+# 书内工作目录：分组 segment、writer prompt 留档、逐章事务 JSON 的唯一落点。
+# 与 build_writer_prompt.py 同一口径；提交成功后整目录删除，失败时原样保留供重跑。
+WORK_ROOT = (".story", "work")
 
 
 class CliArgumentError(ValueError):
@@ -70,6 +73,32 @@ def _read_json_object(path: Path, label: str) -> dict[str, Any]:
         raise WordcountError(f"unable to read {label}: {exc}") from exc
     require(isinstance(value, dict), f"{label} must be an object")
     return value
+
+
+def chapter_work_dir(project: Path, chapter: int) -> Path:
+    width = max(3, len(str(chapter)))
+    return project.resolve().joinpath(*WORK_ROOT, f"第{chapter:0{width}d}章")
+
+
+def _remove_chapter_work_dir(project: Path, chapter: int) -> str | None:
+    """Delete this chapter's scratch directory after a successful commit.
+
+    Only the per-chapter directory is removed; `.story/work` and `.story` are
+    pruned only when empty, so book-level author memory under `.story/` stays.
+    """
+    path = chapter_work_dir(project, chapter)
+    if path.is_symlink():
+        path.unlink()
+    elif path.is_dir():
+        shutil.rmtree(path)
+    else:
+        return None
+    for parent in (path.parent, path.parent.parent):
+        try:
+            parent.rmdir()
+        except OSError:
+            break
+    return "/".join((*WORK_ROOT, path.name))
 
 
 def _project_files(project: Path, chapter: int) -> tuple[Path, Path, int]:
@@ -200,6 +229,23 @@ def chapter_check(project: Path, chapter: int) -> dict[str, Any]:
     }
 
 
+def fix_punctuation(project: Path, chapter: int) -> bool:
+    """Run the deterministic punctuation normalizer on the chapter body in place.
+
+    Folding it into `chapter check --fix-punctuation` lets the parent flow close a
+    chapter with one call instead of running each cleanup script separately.
+    """
+    _, body, _ = _project_files(project, chapter)
+    node = shutil.which("node")
+    script = Path(__file__).with_name("normalize-punctuation.js")
+    if node is None or not script.is_file():
+        return False  # chapter check reports TOOL_UNAVAILABLE as a blocking finding
+    before = body.read_bytes()
+    subprocess.run([node, str(script), str(body)], text=True, encoding="utf-8",
+                   capture_output=True, check=False)
+    return body.read_bytes() != before
+
+
 def chapter_commit(project: Path, chapter: int, input_path: Path, *, accept_current_length: bool) -> dict[str, Any]:
     checked = chapter_check(project, chapter)
     require(checked["quality"]["status"] == "pass", "blocking quality findings must be fixed before commit")
@@ -220,6 +266,12 @@ def chapter_commit(project: Path, chapter: int, input_path: Path, *, accept_curr
     checked["tracking_committed"] = state["last_committed_chapter"] >= chapter
     checked["next_chapter_started"] = state["last_committed_chapter"] > chapter
     checked["wordcount"] = state["wordcount_records"].get(str(chapter))
+    # The commit is already durable; a cleanup failure is reported, never turned into a failed commit.
+    try:
+        checked["work_dir_removed"] = _remove_chapter_work_dir(project, chapter)
+    except OSError as exc:
+        checked["work_dir_removed"] = None
+        checked["work_dir_cleanup_error"] = str(exc)
     return checked
 
 
@@ -243,6 +295,9 @@ def _build_parser() -> StructuredArgumentParser:
         subparser.add_argument("--chapter", type=int, required=True)
         if command != "check":
             subparser.add_argument("--input", type=Path, required=True)
+        else:
+            subparser.add_argument("--fix-punctuation", action="store_true",
+                                   help="先就地整理正文标点，再做检查")
     return parser
 
 
@@ -286,7 +341,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _wordcount_command(args)
     try:
         if args.chapter_command == "check":
+            fixed = fix_punctuation(args.project, args.chapter) if args.fix_punctuation else None
             result = chapter_check(args.project, args.chapter)
+            if fixed is not None:
+                result["punctuation_fixed"] = fixed
         else:
             result = chapter_commit(
                 args.project, args.chapter, args.input,

@@ -72,6 +72,8 @@ const exampleAuthoringOnly = [
   "design/",
   "screenshots/",
   "qa/evidence/",
+  // Upstream's own deploy excludes it (.vercelignore); verification.json names it only as provenance.
+  "build/app/test/",
   "_progress.md",
   "PRODUCT_BRIEF.md"
 ] as const;
@@ -82,7 +84,10 @@ function isPortableExampleAsset(bundledPath: string): boolean {
 
 function isPortableSourceAsset(path: string): boolean {
   const normalized = path.split(sep).join("/");
-  return !normalized.includes("/__pycache__/")
+  // A local checkout can hold ignored agent state (.omc/) next to tracked files; never ship it.
+  return !normalized.includes("/.omc/")
+    && !normalized.endsWith("/.omc")
+    && !normalized.includes("/__pycache__/")
     && !normalized.endsWith("/__pycache__")
     && !normalized.endsWith(".pyc")
     && !normalized.endsWith("/.DS_Store");

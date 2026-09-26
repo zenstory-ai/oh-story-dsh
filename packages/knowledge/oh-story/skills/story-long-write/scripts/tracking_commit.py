@@ -117,11 +117,26 @@ def require_known_keys(mapping: dict[str, Any], allowed: set[str], label: str) -
     require(not unknown, f"{label} contains unsupported fields: {', '.join(sorted(unknown))}")
 
 
+# 事务校验期间收集全部超长字段，一次报完；None 表示逐条立即报错（初始化、状态读取等路径）。
+_LENGTH_ISSUES: list[str] | None = None
+
+
+def length_hint(label: str, text: str, max_bytes: int) -> str:
+    """把字节上限换算成字数：模型写的是中文，只看得懂「要删几个字」。"""
+    size = len(text.encode("utf-8"))
+    allowed = max(1, max_bytes * len(text) // size)
+    return (f"{label} exceeds {max_bytes} bytes（现 {len(text)} 字，上限约 {allowed} 字，"
+            f"至少删 {len(text) - allowed} 字）")
+
+
 def clean_text(value: object, label: str, *, allow_empty: bool = False, max_bytes: int = 768) -> str:
     require(isinstance(value, str), f"{label} must be a string")
     cleaned = " ".join(value.replace("|", "｜").split())
     require(allow_empty or bool(cleaned), f"{label} must not be empty")
-    require(len(cleaned.encode("utf-8")) <= max_bytes, f"{label} exceeds {max_bytes} bytes")
+    if len(cleaned.encode("utf-8")) > max_bytes:
+        if _LENGTH_ISSUES is None:
+            raise TrackingError(length_hint(label, cleaned, max_bytes))
+        _LENGTH_ISSUES.append(length_hint(label, cleaned, max_bytes))
     return cleaned
 
 
@@ -277,9 +292,15 @@ def archive_retired_tracking_paths(tracking: Path) -> list[str]:
     return retired
 
 
+def _both_blank(position: dict[str, Any]) -> bool:
+    return all(isinstance(position.get(key), str) and not position[key].strip() for key in ("story_time", "scene"))
+
+
 def validate_position(value: object, label: str = "context.position") -> dict[str, Any]:
     position = as_mapping(value, label)
     require_known_keys(position, {"volume", "volume_start_chapter", "story_time", "scene"}, label)
+    require(not _both_blank(position),
+            f"{label}.story_time and {label}.scene must not be empty: fill where this chapter ends")
     return {
         "volume": safe_file_component(position.get("volume"), f"{label}.volume"),
         "volume_start_chapter": as_int(
@@ -781,7 +802,13 @@ def render_delta(chapter: int, title: str, delta: dict[str, Any], core_names: se
         lines.extend(f"- {item}" for item in retired)
     payload = "\n".join(lines) + "\n"
     size = byte_size(payload)
-    require(size <= DELTA_MAX_BYTES, f"chapter delta is {size} bytes; hard cap is {DELTA_MAX_BYTES}")
+    if size > DELTA_MAX_BYTES:
+        longest = sorted((line for line in lines if line.startswith("- ")), key=len, reverse=True)[:3]
+        allowed = DELTA_MAX_BYTES * len(payload) // size
+        raise TrackingError(
+            f"chapter delta is {size} bytes; hard cap is {DELTA_MAX_BYTES}（逐章记录现 {len(payload)} 字，"
+            f"上限约 {allowed} 字，至少压缩 {len(payload) - allowed} 字；最长几项："
+            + "；".join(f"{line[2:18]}…（{len(line) - 2} 字）" for line in longest) + "）")
     return payload
 
 
@@ -901,6 +928,17 @@ def normalize_initial_document(document: object) -> dict[str, Any]:
 
 
 def normalize_transaction(project: Path, state: dict[str, Any], document: object) -> dict[str, Any]:
+    global _LENGTH_ISSUES
+    _LENGTH_ISSUES = []
+    try:
+        transaction = _normalize_transaction(project, state, document)
+    finally:
+        issues, _LENGTH_ISSUES = _LENGTH_ISSUES, None
+    require(not issues, f"{len(issues)} 个字段超长，一次改完再提交：" + "；".join(issues))
+    return transaction
+
+
+def _normalize_transaction(project: Path, state: dict[str, Any], document: object) -> dict[str, Any]:
     root = as_mapping(document, "transaction")
     require_known_keys(
         root,
@@ -998,6 +1036,13 @@ def merge_transaction(state: dict[str, Any], transaction: dict[str, Any]) -> dic
         not (is_revision and dropped),
         "a revision must resubmit every current context item; retire them in an append transaction instead: "
         + "；".join(sorted(dropped)),
+    )
+    kept = set(next_context["long_term_constraints"]) | set(next_context["continuity_risks"])
+    still_listed = sorted(set(transaction["delta"]["retired_context_items"]) & kept)
+    require(
+        not still_listed,
+        "delta.retired_context_items lists items that are still in context; remove them from context: "
+        + "；".join(still_listed),
     )
     undeclared = sorted(dropped - set(transaction["delta"]["retired_context_items"]))
     require(
@@ -1188,6 +1233,126 @@ def check_project(project: Path) -> dict[str, Any]:
     return state
 
 
+# 事务草稿里各文本字段的字数上限（按全中文估：UTF-8 每字 3 字节），写进提示，免得模型反复试错。
+DRAFT_LIMITS = {
+    "delta.result": 160, "character_changes[].change": 120, "foreshadow_changes[].summary": 120,
+    "timeline_events[].objective_fact / reader_knowledge": 160, "context.position.story_time / scene": 80,
+    "character_snapshots.*.goal / state": 100, "逐章记录总量": 1024,
+}
+
+
+def draft_transaction(project: Path, chapter: int) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+    """按当前 state 预填一份逐章事务：修订号、模式、章名和整份提交的上下文当前值都填好，
+    调用方只写本章变化。另返回在场核心角色的当前快照，供有变化时整份改写后放进事务。
+    新章（append）的故事时间与场景留空：它们必须是本章结束时的位置，沿用上一章的值能静默提交，
+    所以不预填，上一章的值另行返回作参考。"""
+    state = load_state(project)
+    last = state["last_committed_chapter"]
+    require(1 <= chapter <= last + 1, f"draft chapter must be between 1 and {last + 1}")
+    mode = "append" if chapter == last + 1 else "revision"
+    title = ""
+    for outline in sorted((project / "大纲").glob(f"细纲_第{chapter:03d}章*.md")):
+        match = re.search(rf"^#{{1,4}}\s*第\s*0*{chapter}\s*章\s*[：:]\s*(.+?)\s*$",
+                          outline.read_text(encoding="utf-8"), re.M)
+        if match:
+            title = match.group(1).strip()
+            break
+    context = json.loads(json.dumps(state["context"], ensure_ascii=False))
+    previous_position = {key: context["position"][key] for key in ("story_time", "scene")}
+    delta: dict[str, Any] = {
+        "result": "", "character_changes": [], "foreshadow_changes": [], "timeline_events": [],
+        "constraints": [], "next_chapter_commitments": [],
+    }
+    if mode == "append":
+        delta.update({"retired_context_items": [], "retired_characters": []})
+        context["position"].update({"story_time": "", "scene": ""})
+    document = {
+        "schema_version": INPUT_SCHEMA_VERSION,
+        "mode": mode,
+        "chapter": chapter,
+        "chapter_title": title,
+        "expected_state_revision": state["state_revision"],
+        "delta": delta,
+        "context": {key: context[key] for key in
+                    ("position", "long_term_constraints", "active_character_names", "continuity_risks")},
+        "character_snapshots": {},
+    }
+    snapshots = {name: state["characters"][name] for name in context["active_character_names"]
+                 if name in state["characters"]}
+    return document, snapshots, previous_position if mode == "append" else {}
+
+
+def rebuild_stale_draft(document: dict[str, Any], existing: dict[str, Any], append: bool,
+                        current_characters: Any = ()) -> str:
+    """修订号变了：中间提交过别的事务。以当前状态为底，只自动合并确定安全的部分，其余列给调用方核对。
+
+    新章草稿之间只可能插进修订事务，修订不能删约束与风险条目，所以当前约束与风险覆盖旧底稿：
+    旧草稿多出来的就是本章新增，delta 里声明退役的就是本章删除，可以精确合并。
+    修订草稿之间可能插进新章（新章能退役条目），在场角色名修订也能删，都无法判断谁新：
+    取当前状态，差异列出来；只有本章带了快照的新角色名自动加回。"""
+    def items(value: object) -> list[str]:
+        return [item for item in value if isinstance(item, str)] if isinstance(value, list) else []
+
+    def norm(item: str) -> str:
+        return " ".join(item.replace("|", "｜").split())
+
+    notes = ["修订号已变：context 按当前状态重建，本章已填的 delta" + ("、新增与退役的约束、结尾位置" if append else "")
+             + "已合并"]
+    for key in ("delta", "character_snapshots"):
+        if isinstance(existing.get(key), dict):
+            document[key] = existing[key]
+    if existing.get("chapter_title"):
+        document["chapter_title"] = existing["chapter_title"]
+    old_context = existing.get("context") if isinstance(existing.get("context"), dict) else {}
+    delta = document["delta"] if isinstance(document["delta"], dict) else {}
+    context = document["context"]
+    retired = {norm(item) for item in items(delta.get("retired_context_items"))}
+    left_out: list[str] = []
+    for key in ("long_term_constraints", "continuity_risks"):
+        current = {norm(item) for item in context[key]}
+        extra = []
+        for item in items(old_context.get(key)):
+            if norm(item) not in current:
+                current.add(norm(item))
+                extra.append(item)
+        if append:
+            context[key] = [item for item in context[key] if norm(item) not in retired] + extra
+        else:
+            left_out += extra
+    snapshots = document["character_snapshots"] if isinstance(document["character_snapshots"], dict) else {}
+    names = context["active_character_names"]
+    for name in items(old_context.get("active_character_names")):
+        if name in names:
+            continue
+        if append and name in snapshots:
+            names.append(name)
+        else:
+            left_out.append(f"在场角色 {name}")
+    names[:] = [name for name in names if name not in set(items(delta.get("retired_characters")))]
+    known = set(current_characters)
+    for name in list(snapshots):
+        if name not in known and name not in names:
+            snapshots.pop(name)
+            left_out.append(f"角色快照 {name}")
+    if left_out:
+        notes.append("草稿里有、当前状态没有的条目没有自动带回（可能已被别的提交退役），本章确实需要就加回："
+                     + "；".join(left_out))
+    old_position = old_context.get("position") if isinstance(old_context.get("position"), dict) else {}
+    position = context["position"]
+    if append:
+        for key in ("story_time", "scene"):
+            if isinstance(old_position.get(key), str) and old_position[key].strip():
+                position[key] = old_position[key]
+    differs = [f"{key}：草稿写的是「{old_position[key]}」，当前状态是「{position[key]}」"
+               for key in ("volume", "volume_start_chapter")
+               if key in old_position and old_position[key] != position[key]]
+    if differs:
+        notes.append("卷信息与当前状态不同，已取当前状态，本章确实换卷就改回（" + "；".join(differs) + "）")
+    if snapshots:
+        notes.append("带过来的角色快照（" + "、".join(snapshots) + "）可能被中间的提交改过，逐个对照 current_snapshots 重核")
+    return "；".join(notes)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -1197,12 +1362,55 @@ def build_parser() -> argparse.ArgumentParser:
         subparser.add_argument("--input", type=Path, required=True, help="UTF-8 JSON input document")
     check_parser = subparsers.add_parser("check")
     check_parser.add_argument("--project", type=Path, required=True, help="book project root containing 追踪/")
+    draft_parser = subparsers.add_parser("draft", help="write a pre-filled chapter transaction to fill in")
+    draft_parser.add_argument("--project", type=Path, required=True, help="book project root containing 追踪/")
+    draft_parser.add_argument("--chapter", type=int, required=True)
+    draft_parser.add_argument("--out", type=Path, help="default: <project>/.story/work/第NNN章/tracking.json")
+    draft_parser.add_argument("--force", action="store_true",
+                              help="discard an existing draft instead of only refreshing its revision")
     return parser
 
 
 def main() -> int:
     args = build_parser().parse_args()
     try:
+        if args.command == "draft":
+            document, snapshots, previous_position = draft_transaction(args.project, args.chapter)
+            out = args.out or args.project / ".story" / "work" / f"第{args.chapter:03d}章" / "tracking.json"
+            out.parent.mkdir(parents=True, exist_ok=True)
+            refreshed = ""
+            if out.exists() and not args.force:
+                # 重跑 draft 不冲掉已经填好的变化。修订号变了说明中间提交过别的事务：context 按当前
+                # 状态重建（沿用旧 context 会把那次变更整份覆盖回去），只带过本章自己填的部分。
+                existing = read_json(out)
+                require(isinstance(existing, dict) and existing.get("chapter") == document["chapter"]
+                        and existing.get("mode") == document["mode"],
+                        f"{out} already holds a draft for a different chapter or mode; pass --force to replace it")
+                if existing.get("expected_state_revision") == document["expected_state_revision"]:
+                    document, refreshed = existing, "已有草稿且修订号未变，原样保留"
+                else:
+                    refreshed = rebuild_stale_draft(document, existing, bool(previous_position),
+                                                    load_state(args.project)["characters"])
+            out.write_text(json.dumps(document, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+            fill = ("只填 delta 里本章的变化；context 其余字段已是当前值，要撤下的长期约束或连贯性风险从 context 删掉并把原文放进 "
+                    "delta.retired_context_items（仅 append）；本章有变化的核心角色把下面的当前快照整份改好放进 character_snapshots，"
+                    "并在 character_changes 写一句变化。不要从脚本源码或 state 文件里另找格式。")
+            blank = not (document["context"]["position"].get("story_time") or document["context"]["position"].get("scene"))
+            if previous_position and blank:
+                fill = ("context.position 的 story_time 与 scene 留空，填本章结束时的故事时间与场景（上一章结束时见 "
+                        "previous_position；换卷时连同 volume 与 volume_start_chapter 一起改）。") + fill
+            payload = {
+                "draft": str(out),
+                "mode": document["mode"],
+                "expected_state_revision": document["expected_state_revision"],
+                "fill": (f"{refreshed}；要从头生成加 --force。" if refreshed else "") + fill,
+                "limits_chars": DRAFT_LIMITS,
+                "current_snapshots": snapshots,
+            }
+            if previous_position:
+                payload["previous_position"] = previous_position
+            emit(json.dumps(payload, ensure_ascii=False))
+            return 0
         if args.command == "init":
             result = initialize(args.project, read_json(args.input))
         elif args.command == "commit":
