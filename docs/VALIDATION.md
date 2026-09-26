@@ -1,6 +1,6 @@
 # Validation
 
-Target: DeepSeek Harness `0.1.5-rc.1` · validated 2026-09-10.
+Target: DeepSeek Harness `0.1.7-rc.2` · validated 2026-09-25.
 
 ## Test architecture
 
@@ -26,7 +26,7 @@ The deterministic packaged Role path is part of the correctness gate. The paid r
 | Plugin boundary | Host bundle and source audit keep all DSH imports inside `@oh-story/dsh` |
 | Workspace safety | Unit tests cover Host/Origin/Fetch Metadata trust and creative media allowlists, while the packaged route rejects traversal and exercises session-scoped reads, media byte ranges and atomic writes; generated-game CSP is browser-probed to reject workspace API access outside the preview asset prefix; child-session, absolute-path and symbolic-link negative cases remain follow-up contracts |
 | Editor concurrency | Versioned GET/PUT rejects stale saves; Chrome edits, saves, rereads and restores a real workspace file |
-| File following | Tests cover DSH Step location data, nested running calls, streamed write/edit previews, creative path classification and workbench switching |
+| File following | Tests cover DSH Step location data, nested running calls, streamed write/edit previews, calls DSH holds between their finished step and dispatch, creative path classification and workbench switching |
 | Markdown rendering | Component tests cover tables, task lists, fenced code, inline formatting, safe links and inert raw HTML |
 | JSONL rendering | Component tests cover typed record summaries, source line numbers, scalar records and per-line parse failures |
 | Three-column layout | Native DSH Chrome smoke checks ordered tree/editor/Chat geometry and minimum usable widths |
@@ -55,27 +55,27 @@ The gate discovers all `*.test.ts` and `*.contract.test.ts` files. Coverage clai
 
 ## Native DSH Web audit
 
-`pnpm test:dsh` creates an isolated DSH installation and profile, packs `@oh-story/dsh`, installs the tarball through `dsh plugin --profile web add`, and starts the official Web UI. It copies the pinned public demo projects from Oh Story (`让你管账号，你高燃混剪炸全网`) and Drama Skills (`让你管账号`) into temporary workspaces, creates a minimal workspace game, and loads the pinned NovelToGame Jin Ping Mei example. The Chrome pass verifies:
+`pnpm test:dsh` creates an isolated DSH installation and profile, packs `@oh-story/dsh`, installs the tarball through `dsh plugin --profile web add`, and starts the official Web UI. Its deterministic fixture model answers the Anthropic-compatible Messages API that DSH 0.1.7's DeepSeek provider speaks, and DSH's first-use Documents folder is redirected into the temporary root so a run never writes to the real home. It copies the pinned public demo projects from Oh Story (`让你管账号，你高燃混剪炸全网`) and Drama Skills (`让你管账号`) into temporary workspaces, creates a minimal workspace game, and loads the pinned NovelToGame Jin Ping Mei example. The Chrome pass verifies:
 
 - 13 Oh Story Skills, 11 Drama Skills, 7 NovelToGame Skills and the 2 upstream user-invocable video entries in the Session catalog; provider tests cover all 6 bundled video Skills;
 - Session-scoped workspace reads, a 20-writer atomic CAS race, stale-write rejection and path-traversal rejection;
 - allowlisted media discovery, read-only byte-range preview and media path-traversal rejection through the current Agent FileSystem, using two alternate 941×1672 generated keyframes and a real 704×1280 five-second seekable MP4 rather than one-pixel placeholders;
 - invalid project metadata isolation without taking down the workspace;
 - published Browser module and official UI slot registrations;
-- a real DSH Agent `write` tool call, incremental editor content, authoritative disk reconciliation and official tool-file navigation;
+- a real DSH Agent `write` tool call, incremental editor content, the tree following the new file through DSH's pre-dispatch window, authoritative disk reconciliation and official tool-file navigation;
 - a deterministic `oh_story_role` call that starts a packaged `story-explorer` child, returns its result to the parent and completes the parent turn;
 - 小说/短剧 navigation, recursive project directories, creator-first five-document exclusivity and Markdown rendering;
-- 游戏 defaults to real-time Preview, keeps the playable iframe left of the wider official Chat, executes workspace-game input, preserves the same runtime across Preview/project-file switching, switches projects, enters the Jin Ping Mei first day, and restores focus after fullscreen;
+- 游戏 defaults to real-time Preview, keeps the playable iframe left of the wider official Chat, executes workspace-game input, preserves the same runtime across Preview/project-file switching, switches projects, reaches the Jin Ping Mei opening scene, and restores focus after fullscreen;
 - Game Studio exposes no QA tab, scorecard, badge or QA screenshot; the six-check artifact contract remains covered by parity, Host API assertions and packaged automation;
 - at 500×900 the game-specific `制作 / 对话` switch preserves both iframe state and Composer usability without horizontal clipping;
 - two isolated creator-first episodes, including production projection rebuilds, EP-local tasks, versions, selections, sequence and canvas coordinates when switching EP001 ↔ EP002;
 - direct `oh_story_production` execution by the fixture Agent, durable semantic-focus replay and navigation isolation; cosmetic canvas coordinates remain creator-controlled Session state;
 - a searchable project media library and explicit EP001 → EP002 image-reference reuse without duplicating prompt editing inside production cards;
-- running + queued submissions, exact Queue removal, current-Turn cancellation with the remaining Queue preserved but not auto-executed, and a late real MP4 that upgrades a completed batch from 0/8 to an explicit 1/8 partial result without a render loop;
+- running + queued submissions read from the host `inbox` projection, exact Queue removal, current-Turn cancellation with the remaining Queue preserved but not auto-executed, and a late real MP4 that upgrades a completed batch from 0/8 to an explicit 1/8 partial result without a render loop;
 - a fully populated eight-video sequence that enables composition, dispatches the ordered native assembly request to `/short-drama-edit`, refuses a second composition while the first is still unsettled, and becomes completed only after the fixed upstream deliverable `制作成果/成片/成片.mp4` appears in the Agent FileSystem;
 - the short-drama production shot board, two-version selection and restoration, image-only reference resolution, video-only sequence resolution, asset board, missing-video sequence reorder/blockers, relationship canvas, keyboard layout movement, native `/short-drama-produce` Conversation dispatch, realistic image/video version backfill and cross-document source navigation;
-- first-launch guidance before any workspace / Session exists, its containment at 500 px, and removal when entering a Session;
-- blank-session mounting, Session-switch draft recovery, source editing, conflict isolation and saved-state behavior;
+- first-launch guidance in the blank default-workspace Session a fresh DSH opens (its first-use Documents folder redirected into the temporary root), its containment at 500 px, its retirement after that Session's first prompt, and removal when entering a creative Session;
+- blank-session mounting, Session-switch draft recovery after DSH releases the Session's Store, source editing, conflict isolation and saved-state behavior;
 - ordered tree/editor/Chat geometry at desktop and 500 px widths, a Composer that remains fixed during long-message scrolling, and anchor clearance in wide, medium and compact layouts.
 
 When `OH_STORY_GAME_E2E_DIR` is set, the same pass emits game evidence screenshots. The checked-in evidence is `docs/images/game-studio-jin-ping-mei.png` and the 500×900 `docs/images/game-studio-compact.png`.
@@ -84,10 +84,10 @@ The same audited surface generates all four README demos. One pass captures ever
 
 ## Real DeepSeek observation
 
-The 2026-08-25 release observation used `deepseek-official/deepseek-v4-flash` against the packed plugin:
+The 2026-09-25 release observation used `deepseek-official/deepseek-flash` (DSH 0.1.7 renamed `deepseek-v4-flash`) against the packed plugin on DSH `0.1.7-rc.2`, with `~/.agents` isolated so both review Skills resolved to the packed plugin:
 
-- `story-review` completed with 2 required `oh_story_role` calls and 17,384 durable Session events;
-- `short-drama-review` completed with 8,606 durable Session events;
+- `story-review` completed with 2 required `oh_story_role` calls and 109 durable Session events;
+- `short-drama-review` completed with 49 durable Session events;
 - both sessions produced durable assistant output;
 - the combined fiction/short-drama project digest remained unchanged;
 - the API credential did not appear in captured DSH logs.
