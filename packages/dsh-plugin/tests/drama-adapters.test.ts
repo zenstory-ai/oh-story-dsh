@@ -32,6 +32,22 @@ describe("bundled Drama media adapters", () => {
     }
   });
 
+  it("requires exactly the environment each pinned upstream provider reference lists as required", async () => {
+    const envName = /`([A-Z][A-Z0-9]*_[A-Z0-9_]+)`/gu;
+    for (const adapter of DRAMA_ADAPTERS) {
+      const lines = (await readFile(join(dramaRoot, adapter.reference), "utf8")).split(/\r?\n/u);
+      const start = lines.findIndex((line) => line.startsWith("Required environment:"));
+      expect(start, adapter.name).toBeGreaterThanOrEqual(0);
+      const inline = lines[start]!.slice("Required environment:".length).trim();
+      // Either one sentence on the heading line, or a list that ends at "Optional environment:".
+      const text = inline !== ""
+        ? inline.split(". ", 1)[0]!
+        : lines.slice(start + 1, lines.findIndex((line, index) => index > start && line.startsWith("Optional environment:"))).join("\n");
+      const required = [...new Set([...text.matchAll(envName)].map((match) => match[1]!))];
+      expect(required.sort(), adapter.name).toEqual([...adapter.requiredEnv].sort());
+    }
+  });
+
   it("takes each adapter's timeout and job modality from its pinned upstream provider reference", async () => {
     for (const adapter of DRAMA_ADAPTERS) {
       const reference = await readFile(join(dramaRoot, adapter.reference), "utf8");
@@ -80,7 +96,7 @@ describe("bundled Drama media adapters", () => {
     expect(statuses.map((status) => [status.name, status.configured, status.missing])).toEqual([
       ["gpt-image-2", true, []],
       ["seedance", false, ["SEEDANCE_MODEL"]],
-      ["minimax-h3", false, ["MINIMAX_VIDEO_MODEL", "MINIMAX_VIDEO_RESOLUTIONS"]],
+      ["minimax-h3", false, ["MINIMAX_VIDEO_MODEL", "MINIMAX_VIDEO_RESOLUTIONS", "MINIMAX_VIDEO_MIN_DURATION", "MINIMAX_VIDEO_MAX_DURATION"]],
       ["minimax-music", true, []],
       ["minimax-speech", true, []]
     ]);

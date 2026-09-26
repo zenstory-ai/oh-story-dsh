@@ -221,7 +221,13 @@ export function reconcileProductionJobs(
     job.status === "pending" && queuedItemForJob(job.id, queue) === undefined
   ));
 
-  return jobs.map((job) => {
+  // Retire an unfinished composition only once a newer one actually runs, and before outputs are
+  // matched, so the newer cut cannot complete it. A dispatch that fails or is withdrawn from the
+  // Queue leaves the older one to be finished in Chat.
+  const settleCompositions = (list: readonly ProductionJob[]): ProductionJob[] => list
+    .filter((job) => job.kind === "composition" && job.status === "running")
+    .reduce((current, running) => settleSupersededCompositions(current, running), [...list]);
+  const reconciled = settleCompositions(jobs).map((job): ProductionJob => {
     const queued = queuedItemForJob(job.id, queue) !== undefined;
     // A terminal job is never revived by a result that arrived later. This matters most for
     // `outputPath`: a shared deliverable name carries no job identity, so without this guard
@@ -272,6 +278,7 @@ export function reconcileProductionJobs(
     }
     return job;
   });
+  return settleCompositions(reconciled);
 }
 
 export function reconcileSequence(

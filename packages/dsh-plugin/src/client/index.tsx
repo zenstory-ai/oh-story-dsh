@@ -14,7 +14,9 @@ import {
   creativeRelativePath,
   fileMutations,
   latestSettledMutation,
+  latestSettledMutationTurn,
   mutatingCallIds,
+  openTurn,
   preferredWorkbenchFile,
   previewMutation,
   sameUndispatchedCalls,
@@ -158,6 +160,8 @@ function applyUpdate<T>(current: T, update: Update<T>): T {
  */
 const workbenchMemoryBySession = new Map<string, WorkbenchMemory>();
 
+const NO_UNDISPATCHED_CALLS: readonly UndispatchedCall[] = [];
+
 function createWorkbenchStore() {
   return defineStore({
     init: (): WorkbenchMemory => ({
@@ -187,7 +191,11 @@ function createWorkbenchStore() {
     }),
     actions: {
       restore: (draft, memory: WorkbenchMemory | undefined) => {
-        if (memory !== undefined) Object.assign(draft, memory);
+        if (memory !== undefined) {
+          Object.assign(draft, memory);
+          // A save in flight belonged to the dropped instance; its completion never lands here.
+          draft.buffers = Object.fromEntries(Object.entries(memory.buffers).map(([path, buffer]) => [path, { ...buffer, saving: undefined }]));
+        }
         draft.hydrated = true;
       },
       setSettledMutation: (draft, value: string | undefined) => {
@@ -627,6 +635,8 @@ function CreativeWorkbench({
   partial,
   undispatched,
   settledMutation,
+  settledMutationTurn,
+  liveTurn,
   sessionRunning,
   productionQueue,
   productionIntents,
@@ -648,6 +658,10 @@ function CreativeWorkbench({
   readonly partial: PartialAssistant | null;
   readonly undispatched: readonly UndispatchedCall[];
   readonly settledMutation: string | undefined;
+  /** Turn of {@link settledMutation}; only a write from a Turn this mount saw open is followed. */
+  readonly settledMutationTurn: number | undefined;
+  /** The Session's last Turn while it is open. */
+  readonly liveTurn: number | undefined;
   readonly sessionRunning: boolean;
   readonly productionQueue: readonly ProductionQueueEntry[];
   readonly productionIntents: readonly SettledProductionIntent[];
@@ -670,6 +684,9 @@ function CreativeWorkbench({
   }), [activities, workspace?.cwd]);
   const primaryActivity = normalizedActivities.at(-1);
   const activityPaths = useMemo(() => new Set(normalizedActivities.map((value) => value.path)), [normalizedActivities]);
+  const settledPath = settledMutation === undefined
+    ? undefined
+    : creativeRelativePath(settledMutation.slice(settledMutation.indexOf("\0") + 1), workspace?.cwd);
   const activity = primaryActivity?.activity;
   const activityPath = primaryActivity?.path;
   const workbench = useStore((memory) => memory.workbench);
@@ -719,7 +736,9 @@ function CreativeWorkbench({
   // The consumed signal lives in the Store so it survives a remount: DSH 0.1.7 reloads a Session's
   // Chat after a switch, and replaying its history must not look like a fresh Agent write.
   const consumedSettledMutation = useStore((memory) => memory.settledMutation);
-  const settledAtMount = useRef(settledMutation);
+  // A reloaded Session shows its history as closed Turns; only a Turn seen open is live work.
+  const liveTurns = useRef(new Set<number>());
+  if (liveTurn !== undefined) liveTurns.current.add(liveTurn);
   const saveLocks = useRef(new Set<string>());
   const buffer = selected === undefined ? undefined : buffers[selected];
   const selectedFile = workspace?.files.find((file) => file.path === selected);
@@ -993,10 +1012,9 @@ function CreativeWorkbench({
       const next = { ...current };
       for (const [path, value] of Object.entries(current)) {
         if (paths.has(path) || activityPaths.has(path)) continue;
-        // DSH 0.1.7 can drop a call from every live view between its streamed step and its
-        // result (pre-execute hooks, approval). Keep the agent's preview until the Turn ends,
-        // so the file stays selected until the workspace lists it.
-        if (value.source === "agent" && sessionRunning) continue;
+        // A write that just settled is on disk before the workspace reload lists it; keep its
+        // preview (and so the selection) until then. A denied write never settles and is pruned.
+        if (value.source === "agent" && sessionRunning && path === settledPath) continue;
         if (value.source === "human" && value.content !== value.saved) {
           if (value.missing !== true) {
             next[path] = { ...value, missing: true, error: "文件已从 workspace 移除。本地草稿仍保留，可复制后放弃草稿。" };
@@ -1009,7 +1027,7 @@ function CreativeWorkbench({
       }
       return changed ? next : current;
     });
-  }, [activityPaths, sessionRunning, workspace, workspaceLoading]);
+  }, [activityPaths, sessionRunning, settledPath, workspace, workspaceLoading]);
 
   useEffect(() => {
     if (selected === undefined || selectedMedia || activityPaths.has(selected)) return;
@@ -1144,8 +1162,8 @@ function CreativeWorkbench({
 
   useEffect(() => {
     if (settledMutation === undefined || settledMutation === consumedSettledMutation) return;
-    // A write the Chat already showed when this Session's workbench first mounted is history.
-    if (consumedSettledMutation === undefined && settledMutation === settledAtMount.current) {
+    // History replayed after a reload or a Session switch is not a fresh Agent write.
+    if (settledMutationTurn === undefined || !liveTurns.current.has(settledMutationTurn)) {
       actions.setSettledMutation(settledMutation);
       return;
     }
@@ -1158,7 +1176,7 @@ function CreativeWorkbench({
     const path = creativeRelativePath(settledMutation.slice(settledMutation.indexOf("\0") + 1), workspace.cwd);
     if (path !== undefined) followAgentPath(path);
     reload();
-  }, [actions, consumedSettledMutation, followAgentPath, reload, settledMutation, workspace?.cwd]);
+  }, [actions, consumedSettledMutation, followAgentPath, reload, settledMutation, settledMutationTurn, workspace?.cwd]);
 
   useEffect(() => {
     if (selected === undefined) return;
@@ -1634,6 +1652,8 @@ function SessionWorkbenchBridge({ sessionId, useSession, useSessions, useProject
   const partial = useChat((snapshot) => streamingAssistant(snapshot.timeline));
   const undispatched = useChat((snapshot) => undispatchedCalls(snapshot), sameUndispatchedCalls);
   const settledMutation = useChat((snapshot) => latestSettledMutation(snapshot));
+  const settledMutationTurn = useChat((snapshot) => latestSettledMutationTurn(snapshot));
+  const liveTurn = useChat((snapshot) => openTurn(snapshot));
   const workbench = useStore((memory) => memory.workbench);
   const gamePane = useStore((memory) => memory.gamePane);
   const videoPane = useStore((memory) => memory.videoPane);
@@ -1791,8 +1811,10 @@ function SessionWorkbenchBridge({ sessionId, useSession, useSessions, useProject
       sessionId={sessionId}
       runningCalls={runningCalls}
       partial={partial}
-      undispatched={undispatched}
+      undispatched={sessionRunning ? undispatched : NO_UNDISPATCHED_CALLS}
       settledMutation={settledMutation}
+      settledMutationTurn={settledMutationTurn}
+      liveTurn={liveTurn}
       sessionRunning={sessionRunning}
       productionQueue={productionQueue}
       productionIntents={productionIntents}

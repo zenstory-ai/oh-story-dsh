@@ -192,7 +192,7 @@ describe("production runtime", () => {
     expect(reconcileProductionJobs([ended], [], false, [rendered])[0]).toMatchObject({ status: "succeeded", completedOutputs: 1, error: undefined });
   });
 
-  it("fails an assembly that ended without a cut once the creator composes again, so the new cut completes only the new job", () => {
+  it("fails an assembly that ended without a cut once a newer composition runs, so the new cut completes only the new job", () => {
     const cutPath = "剧集/EP001/制作成果/成片/成片.mp4";
     const stale: ProductionMediaVersion = { id: `workspace:${cutPath}:1`, targetId: "剧集/EP001", kind: "video", url: "/media/old", path: cutPath };
     const assembly = (id: string) => createPendingJob({
@@ -200,12 +200,20 @@ describe("production runtime", () => {
     });
     const first = reconcileProductionJobs([{ ...assembly("compose-1"), status: "running" }], [], false, [stale])[0]!;
     expect(first.status).toBe("dispatched_unknown");
-    // No cut has landed since, so the second composition supersedes the same stale version.
     const second = assembly("compose-2");
     const rendered: ProductionMediaVersion = { ...stale, id: `workspace:${cutPath}:2`, url: "/media/new" };
-    // Left alone, the second cut would complete both jobs.
-    expect(reconcileProductionJobs([first, { ...second, status: "running" }], [], true, [rendered]).map((job) => job.status))
-      .toEqual(["succeeded", "succeeded"]);
+
+    // Still waiting in the DSH Queue (or withdrawn from it): the older job can still be finished in Chat.
+    const queue = [{ id: "q-2", preview: "/short-drama-edit 任务 ID：compose-2" }];
+    expect(reconcileProductionJobs([first, second], queue, true, [stale])[0]).toBe(first);
+    expect(reconcileProductionJobs([first, { ...second, status: "canceled" }], [], false, [rendered])[0]?.status).toBe("succeeded");
+
+    // Once the newer composition runs, its cut completes only itself — even when the cut lands in the same pass.
+    const [earlier, later] = reconcileProductionJobs([first, { ...second, status: "running" }], [], true, [rendered]);
+    expect(earlier).toMatchObject({ id: "compose-1", status: "failed", error: first.error, completedOutputs: 0 });
+    expect(earlier?.output).toBeUndefined();
+    expect(later).toMatchObject({ id: "compose-2", status: "succeeded", completedOutputs: 1 });
+    expect(later?.output?.id).toBe(rendered.id);
 
     const paid = { ...createPendingJob({ id: "paid-1", targetId: "SHOT-EP001-001", kind: "video", prompt: "p" }), status: "dispatched_unknown" as const, error: "避免重复计费" };
     const otherEpisode = {
@@ -216,12 +224,6 @@ describe("production runtime", () => {
     expect(settled[0]).toEqual({ ...first, status: "failed" });
     expect(settled[1]).toBe(paid);
     expect(settled[2]).toBe(otherEpisode);
-
-    const [earlier, , , later] = reconcileProductionJobs([...settled, { ...second, status: "running" }], [], true, [rendered]);
-    expect(earlier).toMatchObject({ id: "compose-1", status: "failed", error: first.error, completedOutputs: 0 });
-    expect(earlier?.output).toBeUndefined();
-    expect(later).toMatchObject({ id: "compose-2", status: "succeeded", completedOutputs: 1 });
-    expect(later?.output?.id).toBe(rendered.id);
   });
 
   it("keeps a prepared job awaiting explicit confirmation until the Agent tracks its dispatch", () => {

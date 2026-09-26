@@ -86,7 +86,7 @@ const allow = async (): Promise<PreToolDecision> => ({ kind: "allow" });
 
 function outlineDenial(chapter: number, outline: string): string {
   return `Oh Story 阻止写入第 ${String(chapter)} 章：未找到对应的 ${outline}/细纲_第${String(chapter).padStart(3, "0")}章*.md。`
-    + "先按 story-long-write 单章流程补建细纲再写正文；story-import 复制既有书稿时，先按它的 DSH 说明建好导入标记。";
+    + "先按 story-long-write 单章流程补建细纲再写正文。";
 }
 
 async function importMarker(book: string): Promise<void> {

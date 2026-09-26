@@ -193,7 +193,9 @@ export interface UndispatchedCall {
 export function undispatchedCalls(chat: ChatSnapshot): UndispatchedCall[] {
   const turnNumber = chat.timeline.turnOrder.at(-1);
   const turn = turnNumber === undefined ? undefined : chat.timeline.turns.get(turnNumber);
-  if (turn?.status !== "open") return [];
+  // Only a closed Turn is finished: a Turn whose start fell outside the loaded history window
+  // reports `unknown` while it still runs. Callers pass the result only while the Session runs.
+  if (turn === undefined || turn.status === "closed") return [];
   const calls: UndispatchedCall[] = [];
   for (const step of turn.steps) {
     const assistant: AssistantChatData | undefined = step.data.get("assistant-step");
@@ -258,16 +260,34 @@ function settledMutationSignals(block: ToolCallBlock): string[] {
   return mutation?.path === undefined ? nested : [`${block.callId}\0${mutation.path}`, ...nested];
 }
 
-/** Latest durable successful mutation, used when a fast call skips the live render window. */
-export function latestSettledMutation(chat: ChatSnapshot): string | undefined {
+function latestSettledWrite(chat: ChatSnapshot): { readonly signal: string; readonly turn: number | undefined } | undefined {
   for (const key of chat.order.toReversed()) {
     const node = chat.nodes.get(key);
     if (node?.kind !== "tool-call") continue;
     const root = (node.data as { readonly root?: ToolCallBlock }).root;
     const signal = root === undefined ? undefined : settledMutationSignals(root).at(-1);
-    if (signal !== undefined) return signal;
+    if (signal === undefined) continue;
+    const location = node.location;
+    return { signal, turn: location.kind === "turn" || location.kind === "step" ? location.turn.turn : undefined };
   }
   return undefined;
+}
+
+/** Latest durable successful mutation, used when a fast call skips the live render window. */
+export function latestSettledMutation(chat: ChatSnapshot): string | undefined {
+  return latestSettledWrite(chat)?.signal;
+}
+
+/** The Turn that produced {@link latestSettledMutation}, when the Chat still locates it. */
+export function latestSettledMutationTurn(chat: ChatSnapshot): number | undefined {
+  return latestSettledWrite(chat)?.turn;
+}
+
+/** The last Turn while it is open. A reloaded Session shows history Turns as closed. */
+export function openTurn(chat: ChatSnapshot): number | undefined {
+  const turnNumber = chat.timeline.turnOrder.at(-1);
+  if (turnNumber === undefined) return undefined;
+  return chat.timeline.turns.get(turnNumber)?.status === "open" ? turnNumber : undefined;
 }
 
 /** Convert a DSH tool path to the creative-relative path accepted by the narrow route. */

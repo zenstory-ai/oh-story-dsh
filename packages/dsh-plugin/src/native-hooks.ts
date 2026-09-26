@@ -187,7 +187,7 @@ export async function validateStoryMutation(
   if (await hasChapterOutline(fs, mutation.root, book, mutation.chapter, signal)) return undefined;
   const padded = String(mutation.chapter).padStart(3, "0");
   return `Oh Story 阻止写入第 ${String(mutation.chapter)} 章：未找到对应的 ${inBook(book, "大纲")}/细纲_第${padded}章*.md。`
-    + "先按 story-long-write 单章流程补建细纲再写正文；story-import 复制既有书稿时，先按它的 DSH 说明建好导入标记。";
+    + "先按 story-long-write 单章流程补建细纲再写正文。";
 }
 
 export async function decideStoryMutation(

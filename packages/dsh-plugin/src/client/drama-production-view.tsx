@@ -5,7 +5,7 @@ import type { DramaAdapterModality, DramaAdapterStatus } from "../drama-adapters
 import { productionCompleteness, type DramaDocumentTarget, type DramaEpisodeProduction, type DramaProductionSection } from "./drama-production.js";
 import { endpoint } from "./workbench-ui.js";
 import { nativeBatchPrompt, nativeCompositionPrompt, nativeProductionPrompt } from "./production-prompts.js";
-import { activeProductionJobId, compositionInFlight, createPendingJob, queuedItemForJob, reconcileProductionJobs, reconcileSequence, referencesForTarget, reorderSequence, sequenceIssues, selectedVersionForTarget, settleSupersededCompositions, type CanvasPoint, type ProductionJob, type ProductionMediaVersion, type ProductionQueueEntry, type ProductionSequenceItem } from "./production-runtime.js";
+import { activeProductionJobId, compositionInFlight, createPendingJob, queuedItemForJob, reconcileProductionJobs, reconcileSequence, referencesForTarget, reorderSequence, sequenceIssues, selectedVersionForTarget, type CanvasPoint, type ProductionJob, type ProductionMediaVersion, type ProductionQueueEntry, type ProductionSequenceItem } from "./production-runtime.js";
 
 interface Props {
   readonly sessionId: string;
@@ -153,7 +153,7 @@ export function DramaProductionView(props: Props) {
   const dispatchComposition = async (job: ProductionJob) => {
     const versionById = new Map(props.versions.map((version) => [version.id, version]));
     const ordered = props.sequence.flatMap((item) => { const version = item.versionId === undefined ? undefined : versionById.get(item.versionId); return version === undefined ? [] : [version.path ?? version.url]; });
-    commitJobs([...settleSupersededCompositions(jobsRef.current, job), job]); props.onSectionChange("tasks");
+    commitJobs([...jobsRef.current, job]); props.onSectionChange("tasks");
     try { await props.onDispatchPrompt(nativeCompositionPrompt(props.production, job, ordered)); setNotice("成片任务已进入 DSH 原生队列；文件、FFmpeg 和写入继续受 DSH 权限与审批控制。"); }
     catch (error) { commitJobs(jobsRef.current.map((item) => item.id === job.id ? { ...item, status: "failed", error: error instanceof Error ? error.message : String(error) } : item)); }
   };

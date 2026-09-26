@@ -71,8 +71,9 @@ export const DRAMA_ADAPTERS: readonly DramaAdapterSpec[] = [
     name: "minimax-h3",
     label: "MiniMax H3",
     modality: "video",
-    requiredEnv: ["MINIMAX_API_KEY", "MINIMAX_VIDEO_MODEL", "MINIMAX_VIDEO_RESOLUTIONS"],
-    optionalEnv: ["MINIMAX_VIDEO_BASE_URL", "MINIMAX_VIDEO_RATIOS", "MINIMAX_VIDEO_MIN_DURATION", "MINIMAX_VIDEO_MAX_DURATION"],
+    // Every H3 job carries an integer duration, and the adapter refuses it without this range.
+    requiredEnv: ["MINIMAX_API_KEY", "MINIMAX_VIDEO_MODEL", "MINIMAX_VIDEO_RESOLUTIONS", "MINIMAX_VIDEO_MIN_DURATION", "MINIMAX_VIDEO_MAX_DURATION"],
+    optionalEnv: ["MINIMAX_VIDEO_BASE_URL", "MINIMAX_VIDEO_RATIOS"],
     timeoutSeconds: 3_600,
     reference: "short-drama-produce/references/providers/minimax-h3-video.md"
   },

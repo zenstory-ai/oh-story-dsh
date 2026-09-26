@@ -211,7 +211,9 @@ async function startMockDeepSeek(): Promise<MockDeepSeek> {
         requests.push("role-child-reference-start");
         events = messagesToolCall("call_oh_story_reference_smoke", "oh_story_bundled_reference", { reference: roleReference });
       } else if (roleChildTurn) {
-        if (!serialized.includes(roleReferenceExcerpt)) {
+        // The child's own prompt quotes the excerpt, so only a successful tool result proves the read.
+        const toolResults = JSON.stringify(messages.filter(isToolResult));
+        if (!toolResults.includes(roleReferenceExcerpt) || /"is_error":true/u.test(toolResults)) {
           requests.push("role-child-reference-missing-result");
           response.writeHead(422, { "content-type": "application/json" }).end('{"error":"bundled reference result was not returned to the child"}');
           return;
@@ -696,6 +698,9 @@ async function main(): Promise<void> {
       ...process.env,
       COREPACK_ENABLE_PROJECT_SPEC: "0",
       DSH_HOME: dshHome,
+      // DSH also loads Skills from ~/.agents/skills and prefers them over a plugin's. An author who
+      // installed Oh Story for another agent would otherwise satisfy (or break) the catalog checks.
+      DSH_AGENTS_HOME: join(temporaryRoot, "agents"),
       DSH_TELEMETRY_DISABLED: "1",
       DEEPSEEK_API_KEY: realApiKey ?? "oh-story-local-fixture",
       // DSH 0.1.7 talks to DeepSeek's Anthropic-compatible Messages root, not the API root.
@@ -739,15 +744,6 @@ async function main(): Promise<void> {
     }
     await compactFirstRunPage.close();
 
-    // DSH 0.1.7 opens a fresh home straight into a blank Session in its default workspace,
-    // so the guide belongs to that blank state and must retire once the conversation starts.
-    if (!useRealDeepSeek) {
-      const firstRunSessions = await rpc<{ readonly items: readonly { readonly sessionId: string; readonly blank: boolean }[] }>(origin, "session/list", { _request: {} });
-      const blankSession = firstRunSessions.items.find((item) => item.blank);
-      if (blankSession === undefined) throw new Error(`A fresh DSH did not open a blank Session: ${JSON.stringify(firstRunSessions.items)}`);
-      await prepareSession(origin, blankSession.sessionId, "你好", "通用 · 首次启动");
-      await welcome.waitFor({ state: "detached", timeout: 10_000 });
-    }
 
     const storyWorkspace = await rpc<{ readonly workspace: { readonly workspaceId: string; readonly title: string } }>(origin, "workspace/create", { request: { path: storyRoot } });
     const dramaWorkspace = await rpc<{ readonly workspace: { readonly workspaceId: string; readonly title: string } }>(origin, "workspace/create", { request: { path: dramaRoot } });
@@ -762,7 +758,7 @@ async function main(): Promise<void> {
       : await rpc<{ readonly sessionId: string }>(origin, "session/create", { request: { workspaceId: storyWorkspace.workspace.workspaceId } });
     const dramaSession = await rpc<{ readonly sessionId: string }>(origin, "session/create", { request: { workspaceId: dramaWorkspace.workspace.workspaceId } });
     const plainSession = await rpc<{ readonly sessionId: string }>(origin, "session/create", { request: { workspaceId: plainWorkspace.workspace.workspaceId } });
-    const catalog = await rpc<{ readonly skills: readonly { readonly name: string }[] }>(origin, "skills/list", { request: { sessionId: storySession.sessionId } });
+    const catalog = await rpc<{ readonly skills: readonly { readonly name: string; readonly path?: string }[] }>(origin, "skills/list", { request: { sessionId: storySession.sessionId } });
     const ohStorySkills = catalog.skills.filter((skill) => skill.name === "story" || skill.name.startsWith("story-") || skill.name === "browser-cdp");
     const dramaSkills = catalog.skills.filter((skill) => skill.name === "short-drama" || skill.name.startsWith("short-drama-"));
     const gameSkills = catalog.skills.filter((skill) => [
@@ -776,6 +772,12 @@ async function main(): Promise<void> {
     if (gameSkills.length !== 7) throw new Error(`Expected 7 NovelToGame Skills, found ${String(gameSkills.length)}.`);
     if (JSON.stringify(videoSkills.map((skill) => skill.name).sort()) !== JSON.stringify(["video-recap", "video-script"])) {
       throw new Error(`Expected the two user-invocable video-recap entries, found ${videoSkills.map((skill) => skill.name).join(", ")}.`);
+    }
+    // Names alone cannot tell the plugin's bridged Skills from same-named copies found elsewhere.
+    const foreignSkills = [...ohStorySkills, ...dramaSkills, ...gameSkills, ...videoSkills]
+      .filter((skill) => !(skill.path ?? "").replaceAll("\\", "/").includes("/@oh-story/dsh/lib/"));
+    if (foreignSkills.length > 0) {
+      throw new Error(`Skills did not come from the installed plugin: ${JSON.stringify(foreignSkills.map((skill) => ({ name: skill.name, path: skill.path })))}`);
     }
     const storySessionTitle = `小说 · ${storyProjectName}`;
     const gameSessionTitle = "游戏 · Live Game Lab";
@@ -797,6 +799,20 @@ async function main(): Promise<void> {
     }
     await firstRunPage.getByRole("tablist", { name: "创作工作台" }).waitFor({ state: "visible", timeout: 20_000 });
     await welcome.waitFor({ state: "detached", timeout: 10_000 });
+    // DSH 0.1.7 opens a fresh home straight into a blank Session in its default workspace, so the
+    // guide belongs to that blank state: it returns with that Session and retires once it starts.
+    if (!useRealDeepSeek) {
+      // DSH lists a blank Session only while it is selected; its workspace's New Session action
+      // reuses that blank Session.
+      await firstRunPage.getByRole("treeitem").filter({ hasText: /^(?:Default workspace|默认工作区)/u }).first().hover();
+      await firstRunPage.getByRole("button", { name: /^(?:New session in Default workspace|在“默认工作区”中新建会话)$/u }).click();
+      await welcome.waitFor({ state: "visible", timeout: 10_000 });
+      const firstRunSessions = await rpc<{ readonly items: readonly { readonly sessionId: string; readonly blank: boolean }[] }>(origin, "session/list", { _request: {} });
+      const blankSessions = firstRunSessions.items.filter((item) => item.blank);
+      if (blankSessions.length !== 1) throw new Error(`Expected the default workspace's one blank Session: ${JSON.stringify(firstRunSessions.items)}`);
+      await prepareSession(origin, blankSessions[0]!.sessionId, "你好", "通用 · 首次启动");
+      await welcome.waitFor({ state: "detached", timeout: 10_000 });
+    }
     if (firstRunErrors.length > 0) throw new Error(`First-launch browser errors: ${JSON.stringify(firstRunErrors)}`);
     await firstRunBrowser.close();
     firstRunBrowser = undefined;
