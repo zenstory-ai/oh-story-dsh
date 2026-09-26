@@ -32,6 +32,24 @@ describe("Oh Story bundled skill provider", () => {
       expect(skill?.content).toContain(generic);
     }
     expect(skill?.content).toContain("Keep the upstream writing, Tracking, lint, outline, revision, and quality workflows");
+    for (const shellRule of [
+      "Create and assemble 正文/ chapter files only with the write and edit tools",
+      "never through shell redirection, cp, mv, tee, or a script",
+      "so that DSH's outline guard, its Tracking reminder, and the 小说 view observe the write",
+      "storyctl.py chapter check --fix-punctuation"
+    ]) expect(skill?.content).toContain(shellRule);
+    await expect(readFile(resolve(skillRoot, "story-long-write/scripts/storyctl.py"), "utf8")).resolves.toContain("\"--fix-punctuation\"");
+    for (const candidate of candidates) {
+      const bridged = await provider.get(candidate, {});
+      for (const authorRule of [
+        "reply and report in the author's writing terms (book, chapter, outline, settings), never in script, field, or state names",
+        "attach a raw error only when something failed",
+        "A template block marked <!-- author-report --> is only a format reference: output its text directly, without that marker and without a code fence.",
+        "only through the story Skill's author memory, whose scripts/author_memory_commit.py writes .story/作者记忆/; never keep it in a host or DSH memory",
+        "Never edit the bundled Skill files (SKILL.md, references/, scripts/).",
+        "When a Skill script fails, stop and show the author the command you ran and its error"
+      ]) expect(bridged?.content, candidate.name).toContain(authorRule);
+    }
     const workflowSetup = await readFile(resolve(skillRoot, "story-long-write/references/workflow-setup.md"), "utf8");
     expect(workflowSetup).toContain("| # | 情节点（谁做了什么） | 功能标签 | 执行边界（禁＋放） |");
     expect(skill?.content.startsWith("---")).toBe(false);
@@ -43,6 +61,11 @@ describe("Oh Story bundled skill provider", () => {
     expect(setup?.content).toContain("都不建 追踪/");
     expect(setup?.content).toContain("scripts/tracking_commit.py init");
     expect(setup?.content).not.toContain("并准备追踪/_tracking-state.json");
+    // Upstream story-setup's install report order: 现在可以做什么 → 你还需要做的事 → 明细.
+    const reportOrder = ["「现在可以做什么」", "「你还需要做的事」", "「无需其他操作」", "最后才简短列出创建和保留了哪些文件"]
+      .map((phrase) => setup?.content.indexOf(phrase) ?? -1);
+    expect(reportOrder.every((index, position) => index >= 0 && (position === 0 || index > reportOrder[position - 1]!))).toBe(true);
+    expect(setup?.content).not.toContain("复述创建、保留和待用户确认的文件");
     await expect(readFile(resolve(skillRoot, "story-long-write/scripts/tracking_commit.py"), "utf8")).resolves.toContain("\"init\"");
     expect(setup?.resourceBase).toEqual({ kind: "directory", path: resolve(skillRoot, "story-setup") });
     for (const reference of ["character-basics.md", "long-quality.md", "short-quality.md", "writing-craft.md", "outline-methods.md"]) {
@@ -98,7 +121,26 @@ describe("Oh Story bundled skill provider", () => {
     const analyzeScripts = resolve(skillRoot, "story-long-analyze/scripts");
     await expect(readFile(resolve(analyzeScripts, "manage_analysis_run.py"), "utf8")).resolves.toContain("\"commit\"");
     const importSkill = await provider.get(candidates.find((value) => value.name === "story-import")!, {});
-    expect(importSkill?.content).toContain("拆文库/{导入书名}/ carries exactly the book directory's name");
+    for (const importRule of [
+      "Keep upstream's Phase 3-L order: Step 2 copies the manuscript into 正文/, Step 6 writes the 细纲, Step 7 initialises Tracking.",
+      "mirrors the outline gate of upstream proseBlockReason for books with 大纲/ or 追踪/",
+      "open an import window before Step 2 copies any chapter: create .story/work/导入中.md in the book directory",
+      "delete it right after Step 7's tracking_commit.py init and check both succeed",
+      "only holds while 追踪/_tracking-state.json is absent"
+    ]) expect(importSkill?.content).toContain(importRule);
+    expect(importSkill?.content).not.toContain("before copying that chapter");
+    for (const step of ["#### Step 2：正文标准化", "#### Step 6：大纲生成", "#### Step 7：追踪文件生成", "tracking_commit.py init --project", "tracking_commit.py check --project"]) {
+      expect(importSkill?.content).toContain(step);
+    }
+    const review = await provider.get(candidates.find((value) => value.name === "story-review")!, {});
+    for (const reviewRule of [
+      "When a review falls back to solo in DSH, the reason is that oh_story_role or DSH's spawn runtime is unavailable in this Session",
+      "agent tool unavailable -> solo",
+      "spawn failed -> solo",
+      "Never tell the author that the reviewers are not installed, missing, or outdated, and never tell them to run /story-setup."
+    ]) expect(review?.content).toContain(reviewRule);
+    // Upstream's solo template suggests /story-setup, which the override above corrects.
+    expect(review?.content).toContain("运行 /story-setup 后可以四个视角审");
   });
 
   it("rejects missing frontmatter", () => {

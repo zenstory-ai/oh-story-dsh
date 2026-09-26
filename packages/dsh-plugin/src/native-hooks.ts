@@ -126,25 +126,50 @@ async function hasChapterOutline(fs: StoryFileSystem, root: string, book: string
     && Number(/^细纲_第0*(\d+)章.*\.md$/u.exec(entry.name)?.[1]) === chapter);
 }
 
+const TRACKING_STATE = "追踪/_tracking-state.json";
+
 /**
- * Upstream's only bypass: story-import copies an existing manuscript into
- * 正文/ before it runs `tracking_commit.py init`, while `拆文库/{书名}/` holds
- * the import analysis. Once the book's Tracking state exists the bypass ends,
- * even though the analysis directory is kept.
+ * DSH's explicit import-window marker, relative to the book directory (the
+ * workspace root in DSH's single-book layout). The story-import overlay has
+ * the model create it before copying chapters and delete it once
+ * `tracking_commit.py init` and `check` succeed.
  */
-async function isImportBootstrap(fs: StoryFileSystem, root: string, book: string, signal?: AbortSignal): Promise<boolean> {
-  const bookName = book === "" ? lastSegment(root) : lastSegment(book);
-  return bookName !== ""
-    && await exists(fs, root, `拆文库/${bookName}`, signal)
-    && !(await exists(fs, root, inBook(book, "追踪/_tracking-state.json"), signal));
+export const IMPORT_MARKER = ".story/work/导入中.md";
+
+async function hasTrackingState(fs: StoryFileSystem, root: string, book: string, signal?: AbortSignal): Promise<boolean> {
+  return exists(fs, root, inBook(book, TRACKING_STATE), signal);
 }
 
 /**
- * Mirror of upstream Oh Story's prose guard (`proseBlockReason`): creating a
- * new chapter file in a long-form book requires its `大纲/细纲_第N章*.md`,
- * whether or not Tracking exists yet — since 0.7.11 Tracking is initialised
- * only right before the first chapter, so its absence no longer means
- * "bootstrap". Rewriting an existing chapter is not gated on its outline.
+ * Upstream story-import Phase 3-L creates 大纲/ and 追踪/ (Step 1) and copies
+ * the manuscript into 正文/ (Step 2) long before it writes 细纲 (Step 6) and
+ * runs `tracking_commit.py init` (Step 7). Upstream recognises that window by
+ * `拆文库/{basename(书目录)}`; in DSH's single-book layout the book is the
+ * workspace root, so that key must equal the workspace folder name and rarely
+ * does. DSH therefore also accepts its own marker, {@link IMPORT_MARKER}.
+ * Any other `拆文库/*` entry — an analysed 对标 book — is never a signal.
+ */
+async function hasImportSignal(fs: StoryFileSystem, root: string, book: string, signal?: AbortSignal): Promise<boolean> {
+  if (await exists(fs, root, inBook(book, IMPORT_MARKER), signal)) return true;
+  const bookName = book === "" ? lastSegment(root) : lastSegment(book);
+  return bookName !== "" && await exists(fs, root, `拆文库/${bookName}`, signal);
+}
+
+/**
+ * Mirrors the outline gate of upstream Oh Story's prose guard
+ * (`proseBlockReason`) for books with 大纲/ or 追踪/: creating a new
+ * `正文/第N章*.md` requires its `大纲/细纲_第N章*.md`, whether or not Tracking
+ * exists yet. The one bypass is an import window — an import signal while the
+ * book has no `追踪/_tracking-state.json`. Rewriting an existing chapter is not
+ * gated on its outline.
+ *
+ * It leaves out the rest of proseBlockReason: the Tracking checkpoint (state
+ * present and at schema_version 4, 上下文.md at the same state revision, the
+ * previous chapter committed), the previous chapter's toxic-phrase debt, the
+ * short-story gate that wants 小节大纲.md before 正文.md, and shell-write
+ * targets (redirection, cp, tee, scripts), which DSH hooks do not see as file
+ * mutations — the story-long-write overlay asks for write/edit instead. It also
+ * leaves a workspace with 正文/ but neither 大纲/ nor 追踪/ unguarded.
  */
 export async function validateStoryMutation(
   fs: StoryFileSystem,
@@ -156,10 +181,13 @@ export async function validateStoryMutation(
   const { book } = location;
   if (!(await isLongFormBook(fs, mutation.root, book, signal))) return undefined;
   if (await exists(fs, mutation.root, mutation.path, signal)) return undefined;
-  if (await isImportBootstrap(fs, mutation.root, book, signal)) return undefined;
+  if (!(await hasTrackingState(fs, mutation.root, book, signal)) && await hasImportSignal(fs, mutation.root, book, signal)) {
+    return undefined;
+  }
   if (await hasChapterOutline(fs, mutation.root, book, mutation.chapter, signal)) return undefined;
   const padded = String(mutation.chapter).padStart(3, "0");
-  return `Oh Story 阻止写入第 ${String(mutation.chapter)} 章：未找到对应的 ${inBook(book, "大纲")}/细纲_第${padded}章*.md。请先完成细纲。`;
+  return `Oh Story 阻止写入第 ${String(mutation.chapter)} 章：未找到对应的 ${inBook(book, "大纲")}/细纲_第${padded}章*.md。`
+    + "先按 story-long-write 单章流程补建细纲再写正文；story-import 复制既有书稿时，先按它的 DSH 说明建好导入标记。";
 }
 
 export async function decideStoryMutation(
@@ -255,10 +283,21 @@ export async function decideChapterExtractorWrite(
   return reason === undefined ? next() : { kind: "deny", reason };
 }
 
-export function postWriteReminderText(path: string): string {
+export interface PostWriteReminderOptions {
+  /** The book has no 追踪/_tracking-state.json and no import signal. */
+  readonly trackingUninitialized?: boolean;
+}
+
+export function postWriteReminderText(path: string, options: PostWriteReminderOptions = {}): string {
   return [
     `<oh-story-post-write>正文 ${path} 已变更。`,
     "每次写入正文都会出现这条提醒，一章写到一半时也会；它不表示本章已经完成，也不是作者的新写作要求，继续当前步骤即可。",
+    ...options.trackingUninitialized === true
+      ? [
+          "本书还没有 追踪/_tracking-state.json。新书写第一章时，draft 之前先按 story-long-write workflow-daily 的「首次初始化」完整读取 references/tracking-initialization.md，构造 last_chapter=0 的初始化事务存书目录 .story/work/init.json，运行 scripts/tracking_commit.py init，再运行 tracking_commit.py check，通过后删掉 init.json；",
+          "书里在本章之前已有正文时不要初始化，停下来改走 story-import 的「旧追踪项目迁移」。"
+        ]
+      : [],
     "等本章写完收尾时再提交追踪：新章先用 story-long-write 的 scripts/tracking_commit.py draft 生成本章草稿，填好后执行 scripts/storyctl.py chapter commit（作者接受当前长度时用 chapter accept-current-length）；",
     "修改已提交的章节按 workflow-revision 提交一次 mode=revision 事务；导入既有正文时由 story-import 在迁移后用 tracking_commit.py init 统一初始化。",
     "追踪/_tracking-state.json 以及 上下文.md、角色状态/、伏笔.md、时间线/、逐章记录/ 等派生 Tracking 视图只由这些脚本写入，绝不手改。</oh-story-post-write>"
@@ -277,14 +316,21 @@ export function registerOhStoryHooks(context: Context): void {
   context.on("tools/post-execute", async (exec, result, next): Promise<PostToolDecision> => {
     const downstream = await next();
     if (result.isError || downstream.kind !== "accept") return downstream;
+    // Tracking is committed by the main session. oh_story_role children never
+    // get the reminder: narrative-writer's Role body forbids writing Tracking.
+    if (ohStoryRoleOfSession(exec.agent?.session) !== undefined) return downstream;
     const fs = exec.agent?.ctx.get("fs");
     const mutation = fs === undefined ? undefined : await storyMutation(exec, fs);
     const location = mutation === undefined ? undefined : proseLocation(mutation.path);
     if (fs === undefined || mutation === undefined || location === undefined) return downstream;
-    if (!(await isLongFormBook(fs, mutation.root, location.book, exec.signal))) return downstream;
+    const { root } = mutation;
+    const { book } = location;
+    if (!(await isLongFormBook(fs, root, book, exec.signal))) return downstream;
+    const trackingUninitialized = !(await hasTrackingState(fs, root, book, exec.signal))
+      && !(await hasImportSignal(fs, root, book, exec.signal));
     const reminder = createUserMessage({
       source: { kind: "oh-story-post-write", form: "notice", summary: boundContextSummary(`正文 ${mutation.path} 已变更`) },
-      content: [{ type: "text", text: postWriteReminderText(mutation.path) }]
+      content: [{ type: "text", text: postWriteReminderText(mutation.path, { trackingUninitialized }) }]
     });
     return {
       ...downstream,

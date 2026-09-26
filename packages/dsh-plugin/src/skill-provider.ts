@@ -22,6 +22,11 @@ const DSH_SKILL_BRIDGE = [
   "Never inspect .claude/agents, .codex/agents, .opencode/agents, .agents/agents, .zcode, or .story-deployed to decide whether a Role is available.",
   "Oh Story Roles are reached only through oh_story_role. Never start one through a generic subagent or Task tool — not DSH's subagent or subagent_fork tools and not invoke_subagent — and never pass a Role name as subagent_type, agent_type, agent, or TypeName, even where the upstream text below describes that for another host.",
   "Use only DSH-visible tools. DSH sandbox and permission policy remain authoritative.",
+  // Upstream deploys these 「与作者协作」 rules only in its CLAUDE.md/AGENTS.md
+  // templates, which DSH does not install.
+  "Working with the author: reply and report in the author's writing terms (book, chapter, outline, settings), never in script, field, or state names; attach a raw error only when something failed. A template block marked <!-- author-report --> is only a format reference: output its text directly, without that marker and without a code fence.",
+  "Record a writing habit or preference the author asks to remember, forget, or confirm only through the story Skill's author memory, whose scripts/author_memory_commit.py writes .story/作者记忆/; never keep it in a host or DSH memory. Simply follow a one-off request without recording it.",
+  "Never edit the bundled Skill files (SKILL.md, references/, scripts/). When a Skill script fails, stop and show the author the command you ran and its error instead of patching or working around it.",
   "</oh-story-dsh-integration>"
 ].join("\n");
 /** Oh Story 0.8.0 long-form analysis Stage 2, shared by story-long-analyze and story-import. */
@@ -36,9 +41,9 @@ const DSH_SKILL_OVERRIDES: Readonly<Partial<Record<string, string>>> = {
   story: "The 小说 workspace is an official DSH conversation view. Never start or open a second web application.",
   "story-setup": "Initialize or validate novel project data only. DSH already supplies Skills, Roles, hooks, tools, permissions, sessions, and UI; never deploy Claude/OpenCode/Codex/Antigravity/ZCode/OpenClaw/Reasonix files or a .story-deployed marker.",
   "story-long-analyze": `Use oh_story_role for chapter extraction or specialist analysis. Never inspect platform agent directories or require a deployed external Agent definition. ${DSH_ANALYSIS_BATCHES}`,
-  "story-long-write": "All named Roles are provided through oh_story_role. Do not check platform agent files. Keep the upstream writing, Tracking, lint, outline, revision, and quality workflows.",
-  "story-review": "All named reviewer Roles are provided through oh_story_role. Do not check platform agent files; full/lean review may use the bundled Roles directly.",
-  "story-import": `All named Roles are provided through oh_story_role. Do not require story-setup to deploy them, and never inspect platform agent directories. Phase 2 runs the story-long-analyze pipeline the DSH way below; an import counts as automatic continuation, so it uses the limited-parallel tier without asking. ${DSH_ANALYSIS_BATCHES} Run the Python 3 scripts this Skill needs (storyctl.py wordcount measure, tracking_commit.py init and check) the same way. DSH's prose guard lets an import copy existing chapters into 正文/ before their 细纲 exist only while 追踪/_tracking-state.json is absent and 拆文库/{导入书名}/ carries exactly the book directory's name (the workspace folder when the book is the workspace root); otherwise write each 大纲/细纲_第NNN章.md before copying that chapter.`,
+  "story-long-write": "All named Roles are provided through oh_story_role. Do not check platform agent files. Keep the upstream writing, Tracking, lint, outline, revision, and quality workflows. Create and assemble 正文/ chapter files only with the write and edit tools, never through shell redirection, cp, mv, tee, or a script, so that DSH's outline guard, its Tracking reminder, and the 小说 view observe the write; upstream's own in-place chapter fixes such as storyctl.py chapter check --fix-punctuation stay as upstream describes.",
+  "story-review": "All named reviewer Roles are provided through oh_story_role. Do not check platform agent files; full/lean review may use the bundled Roles directly. When a review falls back to solo in DSH, the reason is that oh_story_role or DSH's spawn runtime is unavailable in this Session (Fallback agent tool unavailable -> solo) or a Role run failed (Fallback spawn failed -> solo); say that in one plain sentence. Never tell the author that the reviewers are not installed, missing, or outdated, and never tell them to run /story-setup.",
+  "story-import": `All named Roles are provided through oh_story_role. Do not require story-setup to deploy them, and never inspect platform agent directories. Phase 2 runs the story-long-analyze pipeline the DSH way below; an import counts as automatic continuation, so it uses the limited-parallel tier without asking. ${DSH_ANALYSIS_BATCHES} Run the Python 3 scripts this Skill needs (storyctl.py wordcount measure, tracking_commit.py init and check) the same way. Keep upstream's Phase 3-L order: Step 2 copies the manuscript into 正文/, Step 6 writes the 细纲, Step 7 initialises Tracking. DSH's prose guard mirrors the outline gate of upstream proseBlockReason for books with 大纲/ or 追踪/, so open an import window before Step 2 copies any chapter: create .story/work/导入中.md in the book directory (the workspace root in DSH's usual single-book layout) with one line naming the book being imported, and delete it right after Step 7's tracking_commit.py init and check both succeed. The window only holds while 追踪/_tracking-state.json is absent.`,
   "story-deslop": "Use the bundled narrative-writer Role through oh_story_role when specialist review is useful. Never inspect platform agent directories.",
   "story-short-analyze": "Use oh_story_role for specialist analysis. Never inspect platform agent directories or require external Agent deployment.",
   "story-short-write": "All named Roles are provided through oh_story_role. Do not inspect platform agent files; preserve the upstream short-fiction workflow and quality gates.",
@@ -151,7 +156,10 @@ Agent 过程通过右侧动态栏或官方 Chat 查看。禁止启动独立 Dash
    建议用 story-import 导入。
 5. 需要架构、角色或研究工作时，通过 oh_story_role 调用已打包 Role；不要检查或
    生成 .claude、.codex、.opencode、.agents、.zcode、AGENTS.md 或 .story-deployed。
-6. 用写书的话复述：现在可以做什么、创建和保留了哪些文件、还需要作者确认什么。
+6. 给作者的报告按这个顺序写：先写「现在可以做什么」，用写书的话列真正可用的事
+   （如「可以开新书、续写：说 /story-long-write」）；再写「你还需要做的事」，逐条
+   可照做（含需要作者确认的长篇/短篇判断），没有就写「无需其他操作」。这两段不出现
+   脚本名、字段名、状态名或文件路径；最后才简短列出创建和保留了哪些文件。
    不要配置模型、权限、Hooks 或 Session。
 
 题材、角色、节奏、冲突、开篇和写作方法资料位于 references/agent-references/；
