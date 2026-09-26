@@ -135,7 +135,10 @@ describe("Drama Skills bundled provider", () => {
     // oh_story_production's jobKind is image | video | composition: speech and music keep the gate but never reach the task board.
     expect(production?.content).toContain("from this Skill it registers image and video jobs only");
     expect(production?.content).toContain("speech (tts) and music jobs pass through the same prepare → explicit creator confirmation → run gate but are never registered with track_job");
-    expect(production?.content).toContain("without ever becoming a reference of a video job");
+    expect(production?.content).toContain("In this DSH integration audio is never bound as a video job's reference: upstream's creator-first path has no audio binding (输入参考图 takes png/jpg/webp images only) and documents audio only as an external step, the edit stage's mix.");
+    // The claim above rests on prepare's creator-first declaration grammar.
+    const productionTool = await readFile(resolve(dramaRoot, "short-drama-produce/scripts/production_tool.py"), "utf8");
+    expect(productionTool).toContain('REFERENCE_SUFFIX_RE = r"(?:png|jpe?g|webp)"');
     expect(production?.content).toContain("every image, video, speech, or music result comes from a provider adapter");
     const editCandidate = listed.find((candidate) => candidate.name === "short-drama-edit");
     const edit = await provider.get(editCandidate!, {});
@@ -145,10 +148,12 @@ describe("Drama Skills bundled provider", () => {
     expect(edit?.content).toContain("`- 未采用镜头：MOTION-…（理由：…）；MOTION-…（理由：…）`");
     expect(edit?.content).toContain("names 文件缺失, 质量不可用 or 叙事取舍");
     expect(edit?.content).toContain("Every cut must share one width, height and frame rate");
-    expect(edit?.content).toContain("writing new files beside the originals");
+    expect(edit?.content).toContain("Write them under 剧集/<EP>/制作成果/成片/规格统一/, an edit-owned intermediate, never beside the produce-stage originals and never over produced footage, and name them without the original's job-id token");
+    expect(edit?.content).not.toContain("beside the originals");
     expect(edit?.content).toContain("point 来源 at the new file");
     expect(edit?.content).toContain("The 声音 line in 剪辑单.md is a record, not an instruction the built-in render executes");
-    expect(edit?.content).toContain("replaces 剧集/<EP>/制作成果/成片/成片.mp4");
+    expect(edit?.content).toContain("ends as render does with whole-film two-pass loudnorm to the declared 交付响度");
+    expect(edit?.content).toContain("and only then replaces 剧集/<EP>/制作成果/成片/成片.mp4");
     expect(edit?.content).toContain("Run edit_tool.py verify last, on that delivered file, and report every 未测 item as untested");
     expect(edit?.content).toContain("This stage never generates footage");
   });

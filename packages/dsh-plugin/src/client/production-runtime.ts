@@ -105,7 +105,15 @@ export function selectedVersionForTarget(
   return candidates.find((version) => version.id === selections[targetId]) ?? candidates.at(-1);
 }
 
+/**
+ * Upstream's edit stage owns what it writes under 制作成果/成片/ — the cut, its segments, and clips
+ * normalised into 成片/规格统一/ — so none of it is a new version of a shot or asset, even when a
+ * filename carries that shot's or MOTION's ID.
+ */
+const EDIT_OUTPUT_DIRECTORY = /(?:^|\/)制作成果\/成片\//u;
+
 export function mediaTargetFromPath(path: string, knownTargets: readonly string[]): string | undefined {
+  if (EDIT_OUTPUT_DIRECTORY.test(path)) return undefined;
   const upper = path.toLocaleUpperCase();
   const segments = upper.split("/");
   const filename = segments.at(-1) ?? "";
@@ -140,6 +148,24 @@ export function outputsForJob(job: ProductionJob, versions: readonly ProductionM
 export function compositionInFlight(jobs: readonly ProductionJob[]): boolean {
   return jobs.some((job) => job.kind === "composition"
     && (job.status === "awaiting_confirmation" || job.status === "pending" || job.status === "running"));
+}
+
+/**
+ * A composition whose Turn ended without a cut stays dispatched_unknown so a late cut can still
+ * complete it, and compositionInFlight lets the creator compose again. Both render to the same
+ * upstream path, so once a new composition is dispatched its cut would complete the old job too.
+ * Fail the old one instead, keeping the check findings its error already reports.
+ */
+export function settleSupersededCompositions(jobs: readonly ProductionJob[], next: ProductionJob): ProductionJob[] {
+  if (next.kind !== "composition") return [...jobs];
+  return jobs.map((job) => (
+    job.id !== next.id
+    && job.kind === "composition"
+    && job.status === "dispatched_unknown"
+    && (job.targetId === next.targetId || (job.outputPath !== undefined && job.outputPath === next.outputPath))
+      ? { ...job, status: "failed" }
+      : job
+  ));
 }
 
 export function referencesForTarget(

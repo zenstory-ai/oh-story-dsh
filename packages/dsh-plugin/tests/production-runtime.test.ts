@@ -11,6 +11,7 @@ import {
   reconcileSequence,
   reorderSequence,
   sequenceIssues,
+  settleSupersededCompositions,
   type ProductionJob,
   type ProductionMediaVersion
 } from "../src/client/production-runtime.js";
@@ -60,6 +61,16 @@ describe("production runtime", () => {
     const version = { id: "opaque", targetId: "SHOT-001", kind: "video" as const, url: "/media", path: "剧集/EP001/SHOT-001-job-10.mp4" };
     expect(mediaVersionMatchesJob(version, "job-10")).toBe(true);
     expect(mediaVersionMatchesJob(version, "job-1")).toBe(false);
+  });
+
+  it("never reads edit-stage files under 制作成果/成片/ as a new shot version", () => {
+    const targets = ["SHOT-EP001-001", "MOTION-EP001-001"];
+    // Clips the edit stage normalised to the delivery spec may carry the MOTION or shot ID.
+    expect(mediaTargetFromPath("剧集/EP001/制作成果/成片/规格统一/MOTION-EP001-001.mp4", targets)).toBeUndefined();
+    expect(mediaTargetFromPath("剧集/EP001/制作成果/成片/规格统一/SHOT-EP001-001.mp4", targets)).toBeUndefined();
+    expect(mediaTargetFromPath("剧集/EP001/制作成果/成片/分段/CUT-EP001-01.mp4", targets)).toBeUndefined();
+    // The produce-stage original stays a version of its shot.
+    expect(mediaTargetFromPath("剧集/EP001/制作成果/SHOT-EP001-001/SHOT-EP001-001-job-1.mp4", targets)).toBe("SHOT-EP001-001");
   });
 
   it("completes an assembly job on the newly rendered cut rather than a stale one", () => {
@@ -179,6 +190,38 @@ describe("production runtime", () => {
     expect(compositionInFlight([ended])).toBe(false);
     const rendered: ProductionMediaVersion = { ...stale, id: `workspace:${cutPath}:2`, url: "/media/new" };
     expect(reconcileProductionJobs([ended], [], false, [rendered])[0]).toMatchObject({ status: "succeeded", completedOutputs: 1, error: undefined });
+  });
+
+  it("fails an assembly that ended without a cut once the creator composes again, so the new cut completes only the new job", () => {
+    const cutPath = "剧集/EP001/制作成果/成片/成片.mp4";
+    const stale: ProductionMediaVersion = { id: `workspace:${cutPath}:1`, targetId: "剧集/EP001", kind: "video", url: "/media/old", path: cutPath };
+    const assembly = (id: string) => createPendingJob({
+      id, targetId: "剧集/EP001", kind: "composition", prompt: "合成", outputPath: cutPath, supersededOutputIds: [stale.id]
+    });
+    const first = reconcileProductionJobs([{ ...assembly("compose-1"), status: "running" }], [], false, [stale])[0]!;
+    expect(first.status).toBe("dispatched_unknown");
+    // No cut has landed since, so the second composition supersedes the same stale version.
+    const second = assembly("compose-2");
+    const rendered: ProductionMediaVersion = { ...stale, id: `workspace:${cutPath}:2`, url: "/media/new" };
+    // Left alone, the second cut would complete both jobs.
+    expect(reconcileProductionJobs([first, { ...second, status: "running" }], [], true, [rendered]).map((job) => job.status))
+      .toEqual(["succeeded", "succeeded"]);
+
+    const paid = { ...createPendingJob({ id: "paid-1", targetId: "SHOT-EP001-001", kind: "video", prompt: "p" }), status: "dispatched_unknown" as const, error: "避免重复计费" };
+    const otherEpisode = {
+      ...createPendingJob({ id: "compose-ep2", targetId: "剧集/EP002", kind: "composition", prompt: "合成", outputPath: "剧集/EP002/制作成果/成片/成片.mp4" }),
+      status: "dispatched_unknown" as const
+    };
+    const settled = settleSupersededCompositions([first, paid, otherEpisode], second);
+    expect(settled[0]).toEqual({ ...first, status: "failed" });
+    expect(settled[1]).toBe(paid);
+    expect(settled[2]).toBe(otherEpisode);
+
+    const [earlier, , , later] = reconcileProductionJobs([...settled, { ...second, status: "running" }], [], true, [rendered]);
+    expect(earlier).toMatchObject({ id: "compose-1", status: "failed", error: first.error, completedOutputs: 0 });
+    expect(earlier?.output).toBeUndefined();
+    expect(later).toMatchObject({ id: "compose-2", status: "succeeded", completedOutputs: 1 });
+    expect(later?.output?.id).toBe(rendered.id);
   });
 
   it("keeps a prepared job awaiting explicit confirmation until the Agent tracks its dispatch", () => {

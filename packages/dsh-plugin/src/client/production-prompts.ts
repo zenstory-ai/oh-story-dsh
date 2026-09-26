@@ -6,8 +6,20 @@ const authorityBoundary = "只使用当前 DSH Preset 可见的工具；所有�
 /**
  * The listed references are what the workbench can see, not what the job sends: upstream
  * `prepare` requires `reference_bindings` to equal the source entry's own declaration slot for
- * slot, and a frame's role comes from the 用途 that 分镜.md 输入参考图 records, never from this list.
+ * slot, and a frame's role comes from the 用途 that entry's 输入参考图 records (分镜.md for SHOT-*,
+ * 视频提示词.md for MOTION-*), never from this list. How a 结束帧 travels depends on the dialect:
+ * frame positions keep it in last_frame, but MiniMax H3 cannot mix frame and reference inputs, so a
+ * mixed group goes out whole as full-reference reference_image (upstream minimax-h3.md, and
+ * target-model-profile.md 参考条件方式).
  */
+const referenceRules = "参考图以来源条目自己的声明为准（IMG-* 的「参考」，SHOT-*／MOTION-* 的「输入参考图」）：reference_bindings 必须与该条目逐槽一致，工作台列出的补充参考只作核对，条目里没有声明的不要直接加进 job，确需使用时先请拥有该条目的阶段修订文档。起始帧与结束帧的角色只取自来源条目自己「输入参考图」各槽位记录的用途（起始帧／结束帧）：SHOT-* 看《分镜.md》，MOTION-* 看《视频提示词.md》；再由目标模型方言翻成 adapter 的 role，不按文件名或工作台清单推断。目标方言用 first_frame／last_frame 位置承接这组输入时，结束帧只进 last_frame，绝不降级成普通参考图；方言要求整组走多槽参考时（如 MiniMax H3 的 full-reference：首尾帧输入与参考输入互斥，起始帧、结束帧都随整组以 reference_image 送入），按方言翻译，并在预览里写明结束帧将作为参考图送入，或先请分镜 owner 取舍。";
+/** Upstream's SHOT-* selector extracts only the start frame, so the note belongs to image jobs alone. */
+const shotStartFrameNote = "分镜.md 的 SHOT-* 只产出起始帧；要产出结束帧，先由图片提示词阶段建立独立的 IMG-* 条目再投产。";
+
+function referenceParagraph(kind: ProductionJob["kind"]): string {
+  return kind === "image" ? `${referenceRules}${shotStartFrameNote}` : referenceRules;
+}
+
 export function nativeProductionPrompt(
   production: DramaEpisodeProduction,
   job: ProductionJob,
@@ -32,7 +44,7 @@ ${referenceText}
 待预检提示词：
 ${job.prompt}
 
-参考图以来源条目自己的声明为准（IMG-* 的「参考」，SHOT-*／MOTION-* 的「输入参考图」）：reference_bindings 必须与该条目逐槽一致，上面列出的文件只作补充核对，条目里没有声明的不要直接加进 job，确需使用时先请拥有该条目的阶段修订文档。起始帧与结束帧的角色只取自《分镜.md》「输入参考图」各槽位记录的用途（起始帧／结束帧），再由目标模型方言翻成 adapter 的 role，不按文件名或上面的清单推断；尾帧（用途：结束帧）绝不能当普通参考图提交。${job.kind === "image" ? "分镜.md 的 SHOT-* 只产出起始帧；要产出结束帧，先由图片提示词阶段建立独立的 IMG-* 条目再投产。" : ""}
+${referenceParagraph(job.kind)}
 
 按 short-drama-produce 的硬闸门建立临时 job 并执行 prepare，在 Chat 中完整展示 adapter、模型/profile、数量、参数、references、outputs 与 overwrite。此按钮只表达“准备预览”，不构成看到预览后的生产确认；不得 confirm 或 run。用户在后续消息明确确认这份预览后，才可调用 oh_story_production track_job 登记同一个任务 ID，并运行 Provider。${authorityBoundary}`;
 }
@@ -54,9 +66,18 @@ export function nativeBatchPrompt(
 
 ${candidates.map((item) => `## ${item.id}\n${item.prompt}`).join("\n\n")}
 
+${referenceParagraph(job.kind)}
+
 把数量、逐项输出和成本边界完整展示给创作者。此按钮只表达“准备预览”，不构成看到预览后的生产确认；不得 confirm 或 run。用户在后续消息明确确认这份预览后，才可调用 oh_story_production track_job 登记同一个批次任务 ID，并运行 Provider。${authorityBoundary}`;
 }
 
+/**
+ * Upstream's edit stage owns only the 剪辑单 CUT items, the delivery spec, and what it writes under
+ * 制作成果/成片/ (short-drama-edit stage-contract.md). Normalised clips therefore go to 成片/规格统一/,
+ * which mediaTargetFromPath keeps out of the shot versions, and carry no job id that could correlate
+ * them with a production job. An external mix ends with the loudnorm pass render itself runs
+ * (edit_tool.py `_loudnorm_filter`, then AAC 192k at 48 kHz).
+ */
 export function nativeCompositionPrompt(
   production: DramaEpisodeProduction,
   job: ProductionJob,
@@ -72,13 +93,13 @@ ${orderedPaths.map((path, index) => `${String(index + 1)}. ${path}`).join("\n")}
 - 剪辑单：${production.episodeDirectory}/剪辑单.md
 - 输出：${production.episodeDirectory}/制作成果/成片/
 
-先写剪辑单再渲染。逐段看完素材后写下真实的入出点、取舍理由、声音处理与字幕，不要按镜序凭空填时间；字幕逐字取自剧本.md。剪辑单只做取舍，不要退回去生成新素材，也不要改动剧本、分镜或视频提示词的语义。
+先写剪辑单再渲染。逐段看完素材后写下真实的入出点、取舍理由、声音处理与字幕，不要按镜序凭空填时间；字幕逐字取自剧本.md。剪辑单记录素材取舍、入出点、后期处理与交付规格，不改写剧本、分镜或视频提示词的语义；不要退回去生成新素材。
 
 视频提示词.md 里的每个「## MOTION-*」都必须作为某个 CUT 的「来源」，否则写进剪辑单开头（交付规格所在处、第一个「## CUT-」之前）的一行：「- 未采用镜头：MOTION-…（理由：文件缺失——…）；MOTION-…（理由：质量不可用——…）」。多项用全角「；」连接，理由不能为空、自身不含「；」，并写明属于文件缺失、质量不可用还是叙事取舍；漏掉任何一个，check 都会阻断。
 
-剪辑单落盘后依次运行 edit_tool.py 的 check 与 render，check 报出的问题先改文档再重跑。所有 CUT 的素材必须同宽、同高、同帧率：render 只硬拼接，不缩放也不改帧率。check 报出画幅或帧率不一致时，在当前 DSH 执行环境里经审批用 ffmpeg 按交付规格统一、保留构图，输出到原文件旁边的新文件，不覆盖已生产的素材；在该 CUT 下记录裁切或留边（不要写进「画面」行，它只认亮度、饱和、色温），把「来源」改指新文件，入出点随转换变化时同步修改，再重跑 check。
+剪辑单落盘后依次运行 edit_tool.py 的 check 与 render，check 报出的问题先改文档再重跑。所有 CUT 的素材必须同宽、同高、同帧率：render 只硬拼接，不缩放也不改帧率。check 报出画幅或帧率不一致时，在当前 DSH 执行环境里经审批用 ffmpeg 按交付规格统一、保留构图，新文件写到 ${production.episodeDirectory}/制作成果/成片/规格统一/——这是剪辑阶段自己的中间文件，不放在生产阶段的原素材旁边、不覆盖已生产的素材，文件名也不沿用原文件里的任务 ID（可直接用 MOTION ID）；在该 CUT 下记录裁切或留边（不要写进「画面」行，它只认亮度、饱和、色温），把「来源」改指新文件，入出点随转换变化时同步修改，再重跑 check。
 
-默认的硬字幕路线需要带 libass 的 ffmpeg，缺 libass 时如实报出，不要悄悄去掉字幕；改用 Remotion 需要先安装 Node 依赖并逐帧过无头浏览器，只有创作者明确同意这次安装时才走。剪辑单的「声音」行只是记录，render 不执行它：render 只切段、硬拼接、烧字幕、做「画面」校正与可选颗粒、统一响度。混音、交叉淡入、配乐、转场或格式转换都是另一步经审批的外部 ffmpeg 处理，先写到临时文件，再替换 ${production.episodeDirectory}/制作成果/成片/成片.mp4，并把命令记进剪辑单；重新 render 会覆盖成片，这些步骤要重做。最后对交付的这份成片.mp4 运行 edit_tool.py verify 并报告实测数字，「未测」项照实写未测。
+默认的硬字幕路线需要带 libass 的 ffmpeg，缺 libass 时如实报出，不要悄悄去掉字幕；改用 Remotion 需要先安装 Node 依赖并逐帧过无头浏览器，只有创作者明确同意这次安装时才走。剪辑单的「声音」行只是记录，render 不执行它：render 只切段、硬拼接、烧字幕、做「画面」校正与可选颗粒、统一响度。混音、交叉淡入、配乐、转场或格式转换都是另一步经审批的外部 ffmpeg 处理，先写到临时文件；这一步最后要像 render 一样按剪辑单的「交付响度」对整片做两遍 loudnorm（I=交付响度、TP=-1.5、LRA=11，第二遍代入第一遍的实测值并用 linear=true），音频编码为 AAC 192k、48 kHz，然后才替换 ${production.episodeDirectory}/制作成果/成片/成片.mp4，并把命令记进剪辑单；重新 render 会覆盖成片，这些步骤要重做。最后对交付的这份成片.mp4 运行 edit_tool.py verify 并报告实测数字，「未测」项照实写未测。
 
 ffmpeg 与 ffprobe 通过当前 DSH 执行环境调用，不可用时如实报出来，不要把「没测」写成「通过」。所有命令和写入继续遵守 DSH 权限与审批，不得伪造成功。`;
 }
