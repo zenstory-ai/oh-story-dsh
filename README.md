@@ -35,12 +35,12 @@
 
 | 工作台 | 上游能力（固定版本，随插件打包） | 主要入口 |
 | --- | --- | --- |
-| 小说 | [Oh Story 0.7.10](https://github.com/zenstory-ai/oh-story-claudecode/releases/tag/v0.7.10) · 13 Skills · 7 Roles | `/story`、`/story-long-write`、`/story-review` |
-| 短剧 | [Drama Skills 0.7.0](https://github.com/zenstory-ai/drama-skills/releases/tag/v0.7.0) · 11 Skills | `/short-drama`、`/short-drama-write`、`/short-drama-storyboard`、`/short-drama-edit` |
-| 游戏 | [NovelToGame 0.3.1](https://github.com/zenstory-ai/novel-to-game) · 7 Skills · 《金瓶梅》可玩示例 | `/novel-to-game quick`、`/game-build`、`/game-qa` |
+| 小说 | [Oh Story 0.8.0](https://github.com/zenstory-ai/oh-story-claudecode/releases/tag/v0.8.0) · 13 Skills · 7 Roles | `/story`、`/story-long-write`、`/story-review` |
+| 短剧 | [Drama Skills 0.7.1](https://github.com/zenstory-ai/drama-skills/releases/tag/v0.7.1) · 11 Skills | `/short-drama`、`/short-drama-write`、`/short-drama-storyboard`、`/short-drama-edit` |
+| 游戏 | [NovelToGame 0.4.0](https://github.com/zenstory-ai/novel-to-game) · 7 Skills · 《金瓶梅》可玩示例 | `/novel-to-game quick`、`/game-build`、`/game-qa` |
 | 视频 | [video-recap-skills 0.5.0](https://github.com/zenstory-ai/video-recap-skills) · 6 Skills | `/video-recap`、`/video-script` |
 
-> 最新版本 **v0.1.9**（2026-09-10）。变更见 [CHANGELOG.md](CHANGELOG.md) 与 [Releases](https://github.com/zenstory-ai/oh-story-dsh/releases)；升级步骤见常见问题[「升级到新版本后要做什么」](#升级到新版本后要做什么)。
+> 最新版本 **v0.1.10**（2026-09-25），需要 DeepSeek Harness `0.1.7-rc.2`。变更见 [CHANGELOG.md](CHANGELOG.md) 与 [Releases](https://github.com/zenstory-ai/oh-story-dsh/releases)；升级步骤见常见问题[「升级到新版本后要做什么」](#升级到新版本后要做什么)。
 
 ## 四个工作台
 
@@ -56,7 +56,7 @@
 
 ![短剧工作台](docs/images/drama-workbench-demo.gif)
 
-每集最多五份 Markdown：`剧本.md`、`视觉设定.md`、`分镜.md`、`图片提示词.md`、`视频提示词.md`。「生产」视图把它们投影成镜头板、素材板、任务/版本、成片顺序和关系画布，并就地指出重复 ID、悬空引用与格式错误。生图、生视频、生音乐的任务先预览、你确认后才调用供应商 API；成片由 `/short-drama-edit` 按《剪辑单.md》渲染到 `剧集/<EP>/制作成果/成片/`。
+每集最多五份 Markdown：`剧本.md`、`视觉设定.md`、`分镜.md`、`图片提示词.md`、`视频提示词.md`。「生产」视图把它们投影成镜头板、素材板、任务/版本、成片顺序和关系画布，并就地指出重复 ID、悬空引用与格式错误。生图、生视频、配音、生音乐的任务先预览、你确认后才调用供应商 API；成片由 `/short-drama-edit` 按《剪辑单.md》渲染到 `剧集/<EP>/制作成果/成片/`。
 
 ### 游戏
 
@@ -83,11 +83,11 @@
 需要 Node.js 24+。安装命令会临时提供 pnpm，只装了 Node.js 的机器也能执行：
 
 ```bash
-npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.1.5-rc.1 dsh plugin --profile web add @oh-story/dsh@0.1.9 &&
-npx -y @deepseek-ai/dsh@0.1.5-rc.1 web
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.1.7-rc.2 dsh plugin --profile web add @oh-story/dsh@0.1.10 &&
+npx -y @deepseek-ai/dsh@0.1.7-rc.2 web
 ```
 
-保持终端运行，浏览器默认自动打开；没有自动打开就复制终端打印的完整 `http://127.0.0.1:3080/?token=...` 链接访问，首次认证需要链接里的 token。关闭终端会停止服务。安装与启动请使用同一个 dsh 版本。
+保持终端运行，浏览器默认自动打开；没有自动打开就复制终端打印的完整 `http://127.0.0.1:3080/?token=...` 链接访问，首次认证需要链接里的 token。关闭终端会停止服务。安装与启动请使用同一个 dsh 版本：插件声明只兼容 DSH `0.1.7` 这一条补丁线。DSH 0.1.7 起会在安装与加载时检查，版本不符时给出不兼容提示而不是加载（`dsh plugin allow-version` 可自担风险放行）；更早的 DSH 不做这项检查，照样加载。不带版本号的 `npx @deepseek-ai/dsh` 目前解析到 npm `latest`（`0.1.5-rc.3`），与本版不兼容，两条命令都要写明 `@deepseek-ai/dsh@0.1.7-rc.2`。
 
 开始 AI 创作前，在 DSH 的「设置 → 模型」中添加 Provider 并填入 API Key，或在启动前设置环境变量 `DEEPSEEK_API_KEY`。只查看已有作品可在首次引导中选择「稍后配置 / Configure later」。
 
@@ -97,8 +97,8 @@ npx -y @deepseek-ai/dsh@0.1.5-rc.1 web
 GitHub Release 中的预构建包经过同一套测试：
 
 ```bash
-npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.1.5-rc.1 dsh plugin --profile web add https://github.com/zenstory-ai/oh-story-dsh/releases/download/v0.1.9/oh-story-dsh-0.1.9.tgz &&
-npx -y @deepseek-ai/dsh@0.1.5-rc.1 web
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.1.7-rc.2 dsh plugin --profile web add https://github.com/zenstory-ai/oh-story-dsh/releases/download/v0.1.10/oh-story-dsh-0.1.10.tgz &&
+npx -y @deepseek-ai/dsh@0.1.7-rc.2 web
 ```
 
 </details>
@@ -113,22 +113,23 @@ npx -y @deepseek-ai/dsh@0.1.5-rc.1 web
 <details>
 <summary>配置媒体生成 API（短剧生产需要）</summary>
 
-DeepSeek 负责写剧本、分镜和提示词；生图、生视频、生音乐由短剧「生产」交给 `short-drama-produce` Skill，再调用下面的供应商 API 完成。Key 在启动 DSH 之前写入宿主机环境变量：
+DeepSeek 负责写剧本、分镜和提示词；生图、生视频、配音、生音乐由短剧「生产」交给 `short-drama-produce` Skill，再调用下面的供应商 API 完成。Key 在启动 DSH 之前写入宿主机环境变量：
 
 | 能力 | 供应商 | 必需环境变量 | 可选 |
 | --- | --- | --- | --- |
 | 图片 | GPT Image 2 | `OPENAI_API_KEY` | `OPENAI_BASE_URL` |
 | 视频 | Seedance（火山方舟） | `ARK_API_KEY`、`SEEDANCE_MODEL` | `SEEDANCE_BASE_URL`、`SEEDANCE_ALLOWED_RATIOS`、`SEEDANCE_MIN_DURATION`/`SEEDANCE_MAX_DURATION` |
-| 视频 | MiniMax H3 | `MINIMAX_API_KEY`、`MINIMAX_VIDEO_MODEL`、`MINIMAX_VIDEO_RESOLUTIONS` | `MINIMAX_VIDEO_BASE_URL`、`MINIMAX_VIDEO_RATIOS`、`MINIMAX_VIDEO_MIN_DURATION`/`MINIMAX_VIDEO_MAX_DURATION` |
+| 视频 | MiniMax H3 | `MINIMAX_API_KEY`、`MINIMAX_VIDEO_MODEL`、`MINIMAX_VIDEO_RESOLUTIONS`、`MINIMAX_VIDEO_MIN_DURATION`/`MINIMAX_VIDEO_MAX_DURATION` | `MINIMAX_VIDEO_BASE_URL`、`MINIMAX_VIDEO_RATIOS` |
+| 语音 | MiniMax Speech | `MINIMAX_API_KEY` | `MINIMAX_BASE_URL` |
 | 音乐 | MiniMax Music | `MINIMAX_API_KEY` | `MINIMAX_BASE_URL` |
 
 ```bash
 export OPENAI_API_KEY=...            # 图片
 export ARK_API_KEY=... SEEDANCE_MODEL=...   # 视频，模型/Endpoint ID 以账号开通的为准
-npx -y @deepseek-ai/dsh@0.1.5-rc.1 web
+npx -y @deepseek-ai/dsh@0.1.7-rc.2 web
 ```
 
-只配置用得到的那几个即可：没有视频 Key 仍然可以写分镜、生成关键帧图片。「生产」视图顶部会显示每个供应商是否已配置、缺哪个变量。插件启动时会把这四个内置 adapter 登记到一份不含凭据的配置文件（默认在系统临时目录下仅当前用户可读写的 `oh-story-dsh-<uid>/` 里，「生成环境」条会显示完整路径），Agent 运行 `production_tool.py run` 时直接引用它；自己写 adapter 或改超时，就把文件路径写进 `OH_STORY_DRAMA_ADAPTER_CONFIG`。每个供应商的参数、分辨率与时长约束见随包的 `short-drama-produce/references/providers/`。小说封面使用当前 Preset 里可见的图片生成工具。
+只配置用得到的那几个即可：没有视频 Key 仍然可以写分镜、生成关键帧图片。「生产」视图顶部会显示每个供应商是否已配置、缺哪个变量。插件启动时会把这五个内置 adapter 登记到一份不含凭据的配置文件（默认在系统临时目录下仅当前用户可读写的 `oh-story-dsh-<uid>/` 里，「生成环境」条会显示完整路径），Agent 运行 `production_tool.py run` 时直接引用它；自己写 adapter 或改超时，就把文件路径写进 `OH_STORY_DRAMA_ADAPTER_CONFIG`。每个供应商的参数、分辨率与时长约束见随包的 `short-drama-produce/references/providers/`。小说封面使用当前 Preset 里可见的图片生成工具。
 
 </details>
 
@@ -138,7 +139,7 @@ npx -y @deepseek-ai/dsh@0.1.5-rc.1 web
 插件装进哪个 profile，那个 profile 的每个 Session 就都会加载创作 Skills。想让原版 `web` 保持干净，就把插件装进独立 profile：
 
 ```bash
-npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.1.5-rc.1 dsh plugin --profile story add @oh-story/dsh@0.1.9
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.1.7-rc.2 dsh plugin --profile story add @oh-story/dsh@0.1.10
 ```
 
 新 profile 默认没有界面。编辑 `~/.dsh/profiles/story/package.json`，把 `dsh.profile.bundles` 改成：
@@ -154,15 +155,15 @@ npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.1.5-rc.1 dsh plugin --
 `@deepseek-ai/dsh-web-app` 是 DSH 自带的 Web 界面包，需要在创作插件之前加载。之后两个 profile 用不同端口可以同时运行，模型、凭据、workspace 与历史会话由 DSH 统一保存：
 
 ```bash
-npx -y @deepseek-ai/dsh@0.1.5-rc.1 web                          # 原版 DSH
-npx -y @deepseek-ai/dsh@0.1.5-rc.1 --profile story --port 3081  # 创作工作台
+npx -y @deepseek-ai/dsh@0.1.7-rc.2 web                          # 原版 DSH
+npx -y @deepseek-ai/dsh@0.1.7-rc.2 --profile story --port 3081  # 创作工作台
 ```
 
 </details>
 
 ## 开始创作
 
-首次进入会先看到 DSH 首页。点击左侧 Workspaces 旁的 **＋（添加工作区 / Add workspace）**，选择存放作品的文件夹，再在下方 **选择工作区 / Choose workspace** 中选中该目录，DSH 会打开一个空白会话。目录里已有创作项目时，会显示「小说 / 短剧 / 游戏 / 视频」四个工作台标签；空目录保留 DSH 原生 Chat，输入 `/story`、`/short-drama`、`/novel-to-game quick` 或 `/video-recap` 开始，Agent 写出第一个创作文件后工作台自动出现。
+首次启动时，DSH 会在「文稿」目录下自动建一个 **默认工作区 / Default workspace**（`deepseek-harness/default-workspace`），并直接打开其中的空白会话，Oh Story 的使用引导显示在会话首页。要在自己的作品目录里创作，点击左侧 Workspaces 旁的 **添加工作区 / Add workspace**，选择存放作品的文件夹，再在下方 **选择工作区 / Choose workspace** 中选中该目录；创作文件会写进当前会话所属的工作区。目录里已有创作项目时，会显示「小说 / 短剧 / 游戏 / 视频」四个工作台标签；空目录保留 DSH 原生 Chat，输入 `/story`、`/short-drama`、`/novel-to-game quick` 或 `/video-recap` 开始，Agent 写出第一个创作文件后工作台自动出现。
 
 下面的请求复制改一改就能用，替换方括号内容后发送。
 
@@ -205,7 +206,7 @@ npx -y @deepseek-ai/dsh@0.1.5-rc.1 --profile story --port 3081  # 创作工作�
 最后一行是硬门禁。没有细纲就写正文，写入会被 DSH 的 `tools/pre-execute` 钩子拒绝：
 
 ```text
-Oh Story 阻止写入第 21 章：未找到对应的 大纲/细纲_第XXX章*.md。请先完成细纲。
+Oh Story 阻止写入第 21 章：未找到对应的 大纲/细纲_第021章*.md。先按 story-long-write 单章流程补建细纲再写正文。
 ```
 
 ### 一个镜头在短剧五份文档里各管一层
@@ -250,7 +251,7 @@ IMG-JIANGCHEN-SHEET 在当前集内重复，后出现的条目会遮蔽前一条
 ```json
 "checks": { "launch": "PASS", "render": "PASS", "input": "PASS", "coreLoop": "PASS", "outcome": "PASS", "restart": "PASS" },
 "limitations": [ ……
-  { "scope": "体验判断", "reason": "证据只证明可运行、可输入、可走完、可重开及布局约束，不把主观趣味或长期平衡宣称为确定结论。" }
+  { "scope": "体验判断", "reason": "自动化只证明当前候选可启动、渲染、输入、走到结果并重开，不判断主观吸引力、长期平衡或其他浏览器。" }
 ]
 ```
 
@@ -274,7 +275,7 @@ IMG-JIANGCHEN-SHEET 在当前集内重复，后出现的条目会遮蔽前一条
 
 ### DeepSeek 会自己生图、生视频吗？没有视频 Key 能做什么？
 
-不会。DeepSeek 只写剧本、分镜和提示词，媒体由 `short-drama-produce` 调用 GPT Image 2、Seedance、MiniMax H3 或 MiniMax Music 生成，Key 写在启动 DSH 之前的宿主机环境变量里，只配用得到的那几个。没有视频 Key 仍然可以写完五份文档、生成关键帧图片。
+不会。DeepSeek 只写剧本、分镜和提示词，媒体由 `short-drama-produce` 调用 GPT Image 2、Seedance、MiniMax H3、MiniMax Speech 或 MiniMax Music 生成，Key 写在启动 DSH 之前的宿主机环境变量里，只配用得到的那几个。没有视频 Key 仍然可以写完五份文档、生成关键帧图片。
 
 ### 分镜或游戏设计写好了，成片和可玩构建从哪来？
 
@@ -286,7 +287,15 @@ IMG-JIANGCHEN-SHEET 在当前集内重复，后出现的条目会遮蔽前一条
 
 ### 右侧 Chat 里的长答复被下面的输入框遮住了？
 
-[#3](https://github.com/zenstory-ai/oh-story-dsh/issues/3) 与 [#26](https://github.com/zenstory-ai/oh-story-dsh/issues/26) 报过，0.1.6 起窗口尺寸变化后正文会重新贴底，0.1.8 修掉最后一处触发条件。升级到 0.1.9 后仍能复现时，请带版本号和窗口宽度开 Issue。
+[#3](https://github.com/zenstory-ai/oh-story-dsh/issues/3) 与 [#26](https://github.com/zenstory-ai/oh-story-dsh/issues/26) 报过，0.1.6 起窗口尺寸变化后正文会重新贴底，0.1.8 修掉最后一处触发条件。升级到 0.1.10 后仍能复现时，请带版本号和窗口宽度开 Issue。
+
+### 装好后工作台一片空白，面板和「创作工作台」按钮都不出现？
+
+这是 [#50](https://github.com/zenstory-ai/oh-story-dsh/issues/50)：0.1.9 及更早的插件装在 DSH 0.1.7 上，会读已被 DSH 删除的 Queue 字段而崩溃，整个工作台被错误边界收走；换成 DSH `0.1.7-rc.2` 也一样。升级到 0.1.10，并按上面的安装命令使用 DSH `0.1.7-rc.2`。0.1.10 起插件只声明兼容 DSH 0.1.7 这一条补丁线，DSH 0.1.7 及以后的版本遇到不匹配会直接给出不兼容提示。
+
+### 我另外给 Codex 或 OpenCode 装过 Oh Story，DSH 里用的是哪一份？
+
+DSH 也会读取 `~/.agents/skills`，同名时优先用那里的副本，而不是本插件随包、为 DSH 适配过的版本；两份版本不同时，行为以 `~/.agents` 里的为准。想让 DSH 只用插件自带的 Skills，启动前把 `DSH_AGENTS_HOME` 指向另一个目录（例如 `DSH_AGENTS_HOME=~/.dsh-agents npx -y @deepseek-ai/dsh@0.1.7-rc.2 web`），或移走 `~/.agents/skills` 里的同名目录。
 
 ### 安装报 `pnpm not found on PATH`？
 
@@ -302,11 +311,13 @@ DSH 的 `plugin add` 内部需要 pnpm，单独运行 `npx @deepseek-ai/dsh ... 
 
 ### Windows 能用吗？
 
-能。类型、资产、单测与构建这道门在 CI 里每次都在 macOS 和 Windows 上跑；打包后装进官方 DSH Web 的集成测试在 Linux 上跑。视频流水线在任何平台都需要 Python 3.10+ 与带 libass 的 ffmpeg。
+能。类型、资产、单测与构建这道门在 CI 里每次都在 macOS 和 Windows 上跑；打包后装进官方 DSH Web 的集成测试在 Linux 上跑。视频流水线在任何平台都需要 Python 3.10+ 与带 libass 的 ffmpeg；长篇拆文、导入与长篇追踪同样需要宿主机上的 Python 3，短剧成片需要 ffmpeg/ffprobe，默认的烧录字幕还要求 ffmpeg 带 libass。
 
 ### 升级到新版本后要做什么？
 
-重新执行安装命令，把 `@oh-story/dsh@` 后的版本号换成新版本，再重启 DSH；安装与启动用同一个 dsh 版本。Skills 与 Roles 随插件打包，不需要在项目里重新部署。既有短剧项目要注意两次收紧：0.1.5 起《分镜.md》每镜必写「视觉依据」、`REF-*` 槽位必须声明 `用途`；0.1.7 起每镜「来源」必须以《剧本.md》真实存在的场景 ID 开头。逐版变更见 [CHANGELOG.md](CHANGELOG.md)。
+重新执行安装命令，把 `@oh-story/dsh@` 后的版本号换成新版本，再重启 DSH；安装与启动用同一个 dsh 版本。Skills 与 Roles 随插件打包，不需要在项目里重新部署。既有短剧项目要注意两次收紧：0.1.5 起《分镜.md》每镜必写「视觉依据」、`REF-*` 槽位必须声明 `用途`；0.1.7 起每镜「来源」必须以《剧本.md》真实存在的场景 ID 开头。
+
+0.1.10 另有三点：DSH 要一起升到 `0.1.7-rc.2`，它会把会话记录升级到新格式，之后不能再用同一个 DSH 目录退回 0.1.5；Oh Story 0.8.0 把作者记忆分成工作区与书两级，升级前写在工作区的「本书：」条目要对每本书运行一次 `author_memory_commit.py migrate --workspace {工作区} --book-root {书目录}` 才会重新参与查询（本插件的单书布局下两个参数都是工作区本身；也可以直接对 Agent 说「整理作者记忆」）；Drama Skills 0.7.1 起《剪辑单.md》要在第一个 `## CUT-` 之前用一行 `- 未采用镜头：` 交代没有用上的 `MOTION-*`，否则成片检查会拦下。逐版变更见 [CHANGELOG.md](CHANGELOG.md)。
 
 ## 延伸阅读
 

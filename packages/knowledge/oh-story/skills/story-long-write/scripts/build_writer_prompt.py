@@ -2,7 +2,12 @@
 """build_writer_prompt.py — 确定性组装 narrative-writer 的 spawn prompt 骨架。
 
 用法:
-    python build_writer_prompt.py --project <书目录> --chapter N [--out <文件>]
+    python build_writer_prompt.py --project <书目录> --chapter N [--out [<文件>]]
+
+`--out` 不带路径时留档到本章工作目录 `<书目录>/.story/work/第NNN章/writer_prompt.md`。
+分组 segment、prompt 留档和逐章事务 JSON 都只放这个书内工作目录——不写系统 /tmp
+（多本书/多会话同章号会互相覆盖，Windows 也没有 /tmp），也不写进 正文/（会被当成章节）。
+`storyctl.py chapter commit` 成功后自动删除该章工作目录。
 
 跑在「写前准备」第一步。stdout 分两区，`===` 分隔线以上是 prompt 正文
 （主会话照抄，空槽以外一字不改），以下是核对报告（不进 prompt）。
@@ -10,8 +15,9 @@
 职责边界:
 - 脚本做确定性部分：固定首行、定位、标题行字面量、细纲指针、文风全文路径与裁决、
   上一章结尾、降档判定与情绪/节奏槽、固定块指针。
+- 脚本代查作者记忆（prose_style + story_design）并填好 author_preferences。
 - 主会话填八槽：执行安排 / 本章意图 / 参考技法 / 本节速记 / 涉及角色 / genre_prose_card /
-  必读设定 / author_preferences。降档不成立时情绪与节奏槽也归主会话。
+  必读设定 / style_resolution。降档不成立时情绪与节奏槽也归主会话。
   材料槽对应原流程步骤 3「写前准备」的四项输出（本节速记 / 情绪目标 / 涉及角色 /
   参考技法）加上题材卡、设定补漏与作者偏好——都是判断，脚本做不了。
 - 续写状态卡校验后由主会话筛选，在「本节速记」槽内写入本章需要的状态。
@@ -23,7 +29,9 @@ Exit: 0 = 骨架已输出；2 = 输入缺失或无效。
 
 import argparse
 import io
+import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 from outline_view import parse as parse_volume
@@ -31,6 +39,13 @@ from outline_view import parse as parse_volume
 TAIL_CHARS = 400          # 上一章结尾注入的目标字符数（按整行回退，不切半句）
 STATE_SECTIONS = ("当前位置", "长期约束", "核心角色状态", "活跃伏笔", "近三章速记", "下一章承诺", "连贯性风险")
 SLOT_MARK = "［主会话填］"
+WORK_ROOT = (".story", "work")
+
+
+def chapter_work_dir(project: Path, chapter: int) -> Path:
+    """本章临时文件的唯一落点；与 storyctl.py 提交后清理的目录同一口径。"""
+    width = max(3, len(str(chapter)))
+    return project.joinpath(*WORK_ROOT, f"第{chapter:0{width}d}章")
 
 
 def read_text(path: Path):
@@ -58,7 +73,7 @@ def find_chapter_file(directory: Path, chapter: int, prefix: str):
         return None
     pattern = re.compile(rf"^{prefix}第0*{chapter}章.*\.md$")
     for entry in sorted(directory.iterdir()):
-        if entry.is_file() and pattern.match(entry.name):
+        if entry.is_file() and pattern.match(entry.name) and "_原稿_" not in entry.name:
             return entry
     return None
 
@@ -123,6 +138,83 @@ def previous_chapter_tail(project: Path, chapter: int):
         if total >= TAIL_CHARS:
             break
     return prev, "\n".join(reversed(picked))
+
+
+MEMORY_KINDS = ("prose_style", "story_design")
+# 限定「流程」的作者记忆里，这些取值指的就是长篇写正文。
+LONG_WRITE_WORKFLOWS = {"长篇", "长篇写作", "写长篇", "长篇连载", "长篇网文", "长篇正文", "story-long-write"}
+
+
+def scoped_memory_values(workspace: Path):
+    """项目级 store 里限定题材／流程的 active 条目取值：{"genre": {...}, "workflow": {...}}。"""
+    values = {"genre": set(), "workflow": set()}
+    state = read_text(workspace / ".story" / "作者记忆" / "_author-memory-state.json")
+    try:
+        items = (json.loads(state) if state else {}).get("items") or {}
+        items = list(items.values())
+    except (ValueError, AttributeError, TypeError):
+        return values
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        scope = item.get("scope") if isinstance(item.get("scope"), dict) else {}
+        if (item.get("status") == "active" and item.get("kind") in MEMORY_KINDS
+                and scope.get("level") in values and scope.get("value")):
+            values[scope["level"]].add(scope["value"])
+    return values
+
+
+def book_genres(project: Path):
+    """「题材类型」行按分隔符切成词；未填的模板占位（{…}）不算。"""
+    text = read_text(project / "设定" / "题材定位.md") or ""
+    match = re.search(r"^[ \t]*[-*+]?[ \t]*\**题材(?:类型)?\**[ \t]*[：:](.*)$", text, re.M)
+    if not match or "{" in match.group(1):
+        return set()
+    return {word.casefold() for word in re.split(r"[\W_丨×]+", match.group(1)) if word}
+
+
+def query_author_memory(project: Path):
+    """代主会话做写正文那一次作者记忆查询（prose_style + story_design，每次 ≤2KB）。
+
+    工作区取书目录及其祖先里第一个带 `.story-deployed` 的目录；找不到就把书目录当工作区。
+    限定题材的条目只在取值出现在本书「题材类型」里时代查，限定流程的只认长篇写作的取值；
+    其余限定条目不猜，报给主会话自己判断。
+    返回 (条目列表, 超编 ID 列表, 未代查的限定取值, 错误)；错误时由主会话按 author-memory.md 手动查询。
+    """
+    workspace = next((d for d in (project, *project.parents) if (d / ".story-deployed").is_file()), project)
+    script = Path(__file__).with_name("author_memory_commit.py")
+    if not script.is_file():
+        return None, [], {}, "author_memory_commit.py 缺失"
+    scoped = scoped_memory_values(workspace)
+    book = book_genres(project)
+    genres = sorted(v for v in scoped["genre"] if v.casefold() in book) or [None]
+    workflows = sorted(v for v in scoped["workflow"] if v.casefold() in {w.casefold() for w in LONG_WRITE_WORKFLOWS})
+    skipped = {"genre": sorted(v for v in scoped["genre"] if v not in genres),
+               "workflow": sorted(v for v in scoped["workflow"] if v not in workflows)}
+    items, omitted, seen = [], [], set()
+    for genre in genres:
+        for workflow in workflows or [None]:
+            command = [sys.executable, str(script), "query", "--workspace", str(workspace), "--book-root", str(project)]
+            for kind in MEMORY_KINDS:
+                command += ["--kind", kind]
+            if genre:
+                command += ["--genre", genre]
+            if workflow:
+                command += ["--workflow", workflow]
+            completed = subprocess.run(command, capture_output=True, text=True, encoding="utf-8", check=False)
+            try:
+                result = json.loads(completed.stdout or "{}")
+            except ValueError:
+                result = {}
+            if not result.get("ok"):
+                return None, [], {}, result.get("error") or completed.stderr.strip() or "query 失败"
+            for item in result.get("items") or []:
+                if item.get("id") not in seen:
+                    seen.add(item.get("id"))
+                    items.append(item)
+            omitted += [i for i in result.get("omitted_ids") or [] if i not in omitted and i not in seen]
+    omitted = [i for i in omitted if i not in seen]
+    return items, omitted, {k: v for k, v in skipped.items() if v}, None
 
 
 def learn_heading_form(project: Path, chapter: int, title: str):
@@ -233,7 +325,7 @@ def build(project: Path, chapter: int, report: list):
         parts.append(
             "——— 文风 ———\n"
             "（本书无可用的 设定/文风.md，未进入自定义文风模式；"
-            "按 workflow-chapter 3(d) 走对标文风召回，由主会话补路径与召回指令）")
+            "按 benchmark-recall.md 走对标文风召回，由主会话补路径与召回指令）")
         report.append("文风：custom_style=false，文风召回归主会话（未跳过，留标题）")
 
     # ---- 上一章结尾（不给路径，避免写手回头读整章）----
@@ -296,15 +388,18 @@ def build(project: Path, chapter: int, report: list):
     else:
         slot_recall = ("——— 情绪与节奏召回 ———\n"
                        f"{SLOT_MARK} 降档不成立（" + "、".join(why) +
-                       "），按 workflow-chapter 3(a)(b)(e)(f) 走全量召回后填此槽")
+                       "），按 benchmark-recall.md 走全量召回后填此槽")
         report.append("召回降档：不成立（" + "、".join(why) + "）—— 全量召回归主会话")
 
     # ---- 需要主会话判断的槽位 ----
+    work_dir = chapter_work_dir(project, chapter)
     parts.append(
         "——— 执行安排 ———\n"
         f"{SLOT_MARK} 全章细纲用于整体编排。默认按自然转场或因果停顿分前后两组，"
-        "填写当前组的情节点/片段及临时输出路径；先只写前组，父流程测一次 checkpoint 后"
-        "再给后组和机器剩余区间。只有用户明确要求一次成文时才填「全章，直接写最终路径」。")
+        "填写当前组的情节点/片段；先只写前组，父流程测一次 checkpoint 后"
+        "再给后组和机器剩余区间。只有用户明确要求一次成文时才填「全章，直接写最终路径」。\n"
+        f"分组临时文件：前组 {work_dir / '前组.md'}，后组 {work_dir / '后组.md'}"
+        "（只写这里，不写 /tmp 或 正文/）。")
     parts.append(f"——— 本章意图（一句话）———\n{SLOT_MARK}")
     parts.append(slot_recall)
     # 伏笔与卷级禁忌走「主会话筛选后写进速记」这条原设计路线（步骤 3 状态筛选），
@@ -312,7 +407,7 @@ def build(project: Path, chapter: int, report: list):
     # 代价是它依赖主会话逐章想起来，所以这里把提示语写成写死的三问清单。
     parts.append(
         "——— 参考技法 ———\n"
-        f"{SLOT_MARK} 步骤 3 三问的第 ②③ 问：借鉴哪个参考文件的哪个技法、用在哪些段落。"
+        f"{SLOT_MARK} 借鉴哪个参考文件的哪个技法、用在哪些段落；没有就写「无」。"
         "按 reference 表的任务条件读取；本书文风只覆盖冲突表达条款，不停读整份文件。")
     parts.append(
         "——— 本节速记 ———\n"
@@ -328,15 +423,33 @@ def build(project: Path, chapter: int, report: list):
     parts.append("——— 题材正文提示卡（genre_prose_card，只含本章相关条目）———\n"
                  f"{SLOT_MARK} 主题材抽 3-5 条、辅题材 1-2 条；只作内部校准，不进正文")
     parts.append(slot_setting)
-    parts.append("——— style_resolution / author_preferences ———\n"
-                 f"{SLOT_MARK} author_memory query 命中本章的 prose_style/story_design 项；"
-                 "query 显式传本书/题材/流程；偏好是低优先级倾向，无则写「无」。附 style_resolution：生效要求及来源、被覆盖的默认条款和事实边界；同一裁决传去味与审稿，不逐条追求命中。")
+    items, omitted, skipped, memory_error = query_author_memory(project)
+    if memory_error:
+        memory_block = (f"{SLOT_MARK} 组装脚本查询作者记忆失败（{memory_error}），"
+                        "按 author-memory.md 手动 query prose_style + story_design 后填入；无则写「无」")
+        report.append(f"作者记忆：脚本查询失败——{memory_error}，归主会话手动查询")
+    elif items:
+        memory_block = "\n".join(f"- {item.get('assertion', '').strip()}（{item.get('id', '')}）" for item in items)
+        report.append(f"作者记忆：已注入 {len(items)} 条" + (
+            f"；超编未装下 {len(omitted)} 条（{'、'.join(omitted)}），转告作者建议「整理作者记忆」" if omitted else ""))
+    else:
+        memory_block = "无"
+        report.append("作者记忆：无相关 active 条目")
+    if skipped and not memory_error:
+        named = "；".join(f"{'题材' if k == 'genre' else '流程'}：{'、'.join(v)}" for k, v in skipped.items())
+        memory_block += (f"\n{SLOT_MARK} 另有限定范围的作者记忆未代查（{named}）：本书适用的，"
+                         "按 author-memory.md 带 --genre／--workflow 查询后补进本块")
+        report.append(f"作者记忆：限定范围未代查（{named}），归主会话判断是否适用")
+    parts.append("——— author_preferences（作者记忆，低优先级倾向，不逐条追求命中）———\n" + memory_block)
+    parts.append("——— style_resolution ———\n"
+                 f"{SLOT_MARK} 本轮请求里作者对表达的明确要求及其覆盖的默认条款（没有写「无」）；"
+                 "本书文风与作者记忆的裁决见上方各块，同一裁决传去味与审稿。")
 
-    parts.append("检查分工：写手负责编排、内容覆盖和格式自检；父流程质量阶段负责语义去味及最终文件扫描。写手不提前重复整轮去味或相同检查链，保留时空表、新增申报与原定交付。")
+    parts.append("检查分工：写手负责编排、内容覆盖和格式自检；父流程质量阶段负责语义去味及最终文件扫描。写手不提前重复整轮去味或相同检查链，保留情节点落点、新增申报与原定交付。")
 
     # ---- 固定块：压成指针，不重述 agent 定义 ----
     parts.append(
-        "本次照你的铁律 1-8 与被调用协议执行（细纲优先边界、正文形状、新增物三档、"
+        "本次照你的铁律 1-8 与被调用协议执行（细纲优先边界、正文形状、新增物三级、"
         "阅读体验字段、交付三附件均以你的定义为准，此处不重述）。")
     parts.append(
         "字数目标按细纲执行，字数口径 visible_chars_v1；按执行安排交付，"
@@ -360,7 +473,8 @@ def main(argv=None):
     parser = argparse.ArgumentParser()
     parser.add_argument("--project", required=True)
     parser.add_argument("--chapter", required=True, type=int)
-    parser.add_argument("--out", default=None)
+    parser.add_argument("--out", nargs="?", const="", default=None,
+                        help="prompt 留档路径；不带值时留档到本章工作目录 writer_prompt.md")
     args = parser.parse_args(argv)
 
     project = Path(args.project).resolve()
@@ -391,9 +505,16 @@ def main(argv=None):
             f"标题预检：《{title}》" + ("与既有章重名 → " + "、".join(clashes)
                                        if clashes else "无重名"))
 
-    if args.out:
-        io.open(args.out, "w", encoding="utf-8", newline="\n").write(prompt)
-        report.append(f"留档：{args.out}")
+    if args.out is not None:
+        out = Path(args.out) if args.out else chapter_work_dir(project, args.chapter) / "writer_prompt.md"
+        try:
+            out.parent.mkdir(parents=True, exist_ok=True)
+            with io.open(out, "w", encoding="utf-8", newline="\n") as handle:
+                handle.write(prompt)
+        except OSError as exc:
+            sys.stderr.write(f"留档写入失败：{out}（{exc}）\n")
+            return 2
+        report.append(f"留档：{out}")
 
     sys.stdout.write(prompt)
     sys.stdout.write("\n" + "=" * 60 + "\n")

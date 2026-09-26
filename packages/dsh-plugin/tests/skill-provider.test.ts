@@ -27,14 +27,46 @@ describe("Oh Story bundled skill provider", () => {
     for (const platformPath of [".claude/agents", ".codex/agents", ".opencode/agents", ".agents/agents", "invoke_subagent"]) {
       expect(skill?.content).toContain(platformPath);
     }
+    expect(skill?.content).toContain("Oh Story Roles are reached only through oh_story_role");
+    for (const generic of ["DSH's subagent or subagent_fork tools", "subagent_type, agent_type, agent, or TypeName"]) {
+      expect(skill?.content).toContain(generic);
+    }
     expect(skill?.content).toContain("Keep the upstream writing, Tracking, lint, outline, revision, and quality workflows");
+    for (const shellRule of [
+      "Create and assemble 正文/ chapter files only with the write and edit tools",
+      "never through shell redirection, cp, mv, tee, or a script",
+      "so that DSH's outline guard, its Tracking reminder, and the 小说 view observe the write",
+      "storyctl.py chapter check --fix-punctuation"
+    ]) expect(skill?.content).toContain(shellRule);
+    await expect(readFile(resolve(skillRoot, "story-long-write/scripts/storyctl.py"), "utf8")).resolves.toContain("\"--fix-punctuation\"");
+    for (const candidate of candidates) {
+      const bridged = await provider.get(candidate, {});
+      for (const authorRule of [
+        "reply and report in the author's writing terms (book, chapter, outline, settings), never in script, field, or state names",
+        "attach a raw error only when something failed",
+        "A template block marked <!-- author-report --> is only a format reference: output its text directly, without that marker and without a code fence.",
+        "only through the story Skill's author memory, whose scripts/author_memory_commit.py writes .story/作者记忆/; never keep it in a host or DSH memory",
+        "Never edit the bundled Skill files (SKILL.md, references/, scripts/).",
+        "When a Skill script fails, stop and show the author the command you ran and its error"
+      ]) expect(bridged?.content, candidate.name).toContain(authorRule);
+    }
     const workflowSetup = await readFile(resolve(skillRoot, "story-long-write/references/workflow-setup.md"), "utf8");
-    expect(workflowSetup).toContain("| # | 情节点（谁做了什么） | 功能标签 | 分辨率 | 执行边界 |");
+    expect(workflowSetup).toContain("| # | 情节点（谁做了什么） | 功能标签 | 执行边界（禁＋放） |");
     expect(skill?.content.startsWith("---")).toBe(false);
     const setupCandidate = candidates.find((candidate) => candidate.name === "story-setup");
     const setup = await provider.get(setupCandidate!, {});
     expect(setup?.content).toContain("never deploy Claude/OpenCode/Codex/Antigravity/ZCode/OpenClaw/Reasonix files");
     expect(setup?.content).not.toContain("merge-codex-hooks.py");
+    expect(setup?.content).toContain("第一章正文落盘前必须有对应细纲");
+    expect(setup?.content).toContain("都不建 追踪/");
+    expect(setup?.content).toContain("scripts/tracking_commit.py init");
+    expect(setup?.content).not.toContain("并准备追踪/_tracking-state.json");
+    // Upstream story-setup's install report order: 现在可以做什么 → 你还需要做的事 → 明细.
+    const reportOrder = ["「现在可以做什么」", "「你还需要做的事」", "「无需其他操作」", "最后才简短列出创建和保留了哪些文件"]
+      .map((phrase) => setup?.content.indexOf(phrase) ?? -1);
+    expect(reportOrder.every((index, position) => index >= 0 && (position === 0 || index > reportOrder[position - 1]!))).toBe(true);
+    expect(setup?.content).not.toContain("复述创建、保留和待用户确认的文件");
+    await expect(readFile(resolve(skillRoot, "story-long-write/scripts/tracking_commit.py"), "utf8")).resolves.toContain("\"init\"");
     expect(setup?.resourceBase).toEqual({ kind: "directory", path: resolve(skillRoot, "story-setup") });
     for (const reference of ["character-basics.md", "long-quality.md", "short-quality.md", "writing-craft.md", "outline-methods.md"]) {
       await expect(readFile(resolve(skillRoot, "story-setup/references/agent-references", reference), "utf8"))
@@ -48,7 +80,16 @@ describe("Oh Story bundled skill provider", () => {
     expect(route?.content).toContain("The 小说 workspace is an official DSH conversation view");
     expect(routeCandidate?.description).toContain("记住我的写作习惯");
     expect(route?.content).toContain("scripts/author_memory_commit.py");
-    await expect(readFile(resolve(skillRoot, "story/scripts/author_memory_commit.py"), "utf8")).resolves.toMatch(/\S/u);
+    expect(route?.content).toContain("Author Memory Receipt");
+    for (const memoryRule of [".story/作者记忆/书级/", "--book-root", "--kind", "migrate --workspace {工作区} --book-root {书目录}", "「本书：」"]) {
+      expect(route?.content).toContain(memoryRule);
+    }
+    const memoryScript = await readFile(resolve(skillRoot, "story/scripts/author_memory_commit.py"), "utf8");
+    for (const flag of ["\"--book-root\"", "\"--kind\"", "\"migrate\""]) expect(memoryScript).toContain(flag);
+    for (const phrase of ["灵感库", "跨书灵感聚合", "更新灵感库", "不写正文", "「开一本长篇或接着写」", "「更多（拆书、扫榜、导入旧稿、审稿、封面）」"]) {
+      expect(route?.content).toContain(phrase);
+    }
+    expect(route?.content).not.toContain("还没部署过");
     expect(route?.content).not.toContain("dashboard-server.mjs");
     const browserCandidate = candidates.find((candidate) => candidate.name === "browser-cdp");
     const browser = await provider.get(browserCandidate!, {});
@@ -60,7 +101,46 @@ describe("Oh Story bundled skill provider", () => {
       expect(scan?.content).not.toContain("rank-scraper.js");
       expect(scan?.content).not.toContain("WebFetch");
       expect(scan?.content).not.toContain("Bearer token");
+      expect(scan?.content).toContain("报告写给作者");
+      expect(scan?.content).toContain("结论不含它");
     }
+    const shortScan = await provider.get(candidates.find((value) => value.name === "story-short-scan")!, {});
+    expect(shortScan?.content).toContain("可信度：样本多少篇、来自哪几个榜");
+    for (const name of ["story-long-analyze", "story-import"]) {
+      const analysis = await provider.get(candidates.find((value) => value.name === name)!, {});
+      for (const rule of [
+        "role chapter-extractor",
+        "{拆文目录}/_analysis_cache/输入-{批次ID}.md",
+        "DSH denies any other write or edit by a chapter-extractor child",
+        "manage_analysis_run.py commit",
+        "needs Python 3",
+        "有限并行 tier: three batches per round",
+        "never promise more"
+      ]) expect(analysis?.content).toContain(rule);
+    }
+    const analyzeScripts = resolve(skillRoot, "story-long-analyze/scripts");
+    await expect(readFile(resolve(analyzeScripts, "manage_analysis_run.py"), "utf8")).resolves.toContain("\"commit\"");
+    const importSkill = await provider.get(candidates.find((value) => value.name === "story-import")!, {});
+    for (const importRule of [
+      "Keep upstream's Phase 3-L order: Step 2 copies the manuscript into 正文/, Step 6 writes the 细纲, Step 7 initialises Tracking.",
+      "mirrors the outline gate of upstream proseBlockReason for books with 大纲/ or 追踪/",
+      "open an import window before Step 2 copies any chapter: create .story/work/导入中.md in the book directory",
+      "delete it right after Step 7's tracking_commit.py init and check both succeed",
+      "only holds while 追踪/_tracking-state.json is absent"
+    ]) expect(importSkill?.content).toContain(importRule);
+    expect(importSkill?.content).not.toContain("before copying that chapter");
+    for (const step of ["#### Step 2：正文标准化", "#### Step 6：大纲生成", "#### Step 7：追踪文件生成", "tracking_commit.py init --project", "tracking_commit.py check --project"]) {
+      expect(importSkill?.content).toContain(step);
+    }
+    const review = await provider.get(candidates.find((value) => value.name === "story-review")!, {});
+    for (const reviewRule of [
+      "When a review falls back to solo in DSH, the reason is that oh_story_role or DSH's spawn runtime is unavailable in this Session",
+      "agent tool unavailable -> solo",
+      "spawn failed -> solo",
+      "Never tell the author that the reviewers are not installed, missing, or outdated, and never tell them to run /story-setup."
+    ]) expect(review?.content).toContain(reviewRule);
+    // Upstream's solo template suggests /story-setup, which the override above corrects.
+    expect(review?.content).toContain("运行 /story-setup 后可以四个视角审");
   });
 
   it("rejects missing frontmatter", () => {
@@ -106,6 +186,11 @@ describe("Drama Skills bundled provider", () => {
       expect(skill?.content).toContain("never create a parallel JSON/JSONL lifecycle truth");
       expect(skill?.content).toContain("Never upgrade a v0.5 structured project in place");
       expect(skill?.content).toContain("剧集/<EP>/剪辑单.md is the v0.7 assembly record, not a sixth creative truth");
+      // Drama 0.7.1 widened what the cut list records; the creative-truth boundary did not move.
+      expect(skill?.content).toContain("records what reaches the cut");
+      expect(skill?.content).toContain("the delivery spec including optional 颗粒 grain");
+      expect(skill?.content).toContain("It never changes a line, a shot's job, or a declared duration");
+      expect(skill?.content).not.toContain("records only which frames");
     }
     const routeCandidate = listed.find((candidate) => candidate.name === "short-drama");
     const route = await provider.get(routeCandidate!, {});
@@ -127,10 +212,29 @@ describe("Drama Skills bundled provider", () => {
     expect(production?.content).toContain("剧集/<EP>/制作成果/");
     expect(production?.content).toContain("orphaned_provider_job");
     expect(production?.content).toContain("collect spends nothing and does not need the confirmation gate");
+    // oh_story_production's jobKind is image | video | composition: speech and music keep the gate but never reach the task board.
+    expect(production?.content).toContain("from this Skill it registers image and video jobs only");
+    expect(production?.content).toContain("speech (tts) and music jobs pass through the same prepare → explicit creator confirmation → run gate but are never registered with track_job");
+    expect(production?.content).toContain("In this DSH integration audio is never bound as a video job's reference: upstream's creator-first path has no audio binding (输入参考图 takes png/jpg/webp images only) and documents audio only as an external step, the edit stage's mix.");
+    // The claim above rests on prepare's creator-first declaration grammar.
+    const productionTool = await readFile(resolve(dramaRoot, "short-drama-produce/scripts/production_tool.py"), "utf8");
+    expect(productionTool).toContain('REFERENCE_SUFFIX_RE = r"(?:png|jpe?g|webp)"');
+    expect(production?.content).toContain("every image, video, speech, or music result comes from a provider adapter");
     const editCandidate = listed.find((candidate) => candidate.name === "short-drama-edit");
     const edit = await provider.get(editCandidate!, {});
     expect(edit?.content).toContain("剧集/<EP>/制作成果/成片/");
-    expect(edit?.content).toContain("Keep the zero-dependency ffmpeg subtitle route by default");
+    expect(edit?.content).toContain("The default burned-subtitle route needs an ffmpeg built with libass");
+    expect(edit?.content).not.toContain("zero-dependency");
+    expect(edit?.content).toContain("`- 未采用镜头：MOTION-…（理由：…）；MOTION-…（理由：…）`");
+    expect(edit?.content).toContain("names 文件缺失, 质量不可用 or 叙事取舍");
+    expect(edit?.content).toContain("Every cut must share one width, height and frame rate");
+    expect(edit?.content).toContain("Write them under 剧集/<EP>/制作成果/成片/规格统一/, an edit-owned intermediate, never beside the produce-stage originals and never over produced footage, and name them without the original's job-id token");
+    expect(edit?.content).not.toContain("beside the originals");
+    expect(edit?.content).toContain("point 来源 at the new file");
+    expect(edit?.content).toContain("The 声音 line in 剪辑单.md is a record, not an instruction the built-in render executes");
+    expect(edit?.content).toContain("ends as render does with whole-film two-pass loudnorm to the declared 交付响度");
+    expect(edit?.content).toContain("and only then replaces 剧集/<EP>/制作成果/成片/成片.mp4");
+    expect(edit?.content).toContain("Run edit_tool.py verify last, on that delivered file, and report every 未测 item as untested");
     expect(edit?.content).toContain("This stage never generates footage");
   });
 });

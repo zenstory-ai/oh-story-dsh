@@ -73,8 +73,9 @@
   border-left: 1px solid var(--os-border);
 }
 
+/* DSH 0.1.7 nests a data-chat-flow inside every step-process group; only the top-level flow needs room. */
 [data-conversation-scroll]:has(> [data-slot="conversation.session"] > .oh-story-split-surface[data-open="true"])
-  [data-chat-flow] {
+  [data-chat-flow]:not([data-step-process-content]) {
   padding-bottom: calc(max(var(--dsh-composer-height, 152px), var(--oh-story-composer-height, 0px)) + 16px);
 }
 

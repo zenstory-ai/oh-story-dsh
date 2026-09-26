@@ -55,8 +55,9 @@ const routeSkill = await readFile(join(dramaRoot, "skills/short-drama/SKILL.md")
 for (const document of ["剧本.md", "视觉设定.md", "分镜.md", "图片提示词.md", "视频提示词.md"]) {
   if (!routeSkill.includes(document)) throw new Error(`Drama creator-first route no longer declares ${document}.`);
 }
-// v0.7 adds assembly downstream of production. 剪辑单.md records which frames of the
-// already generated footage reach the cut; it is not a sixth creative truth.
+// v0.7 adds assembly downstream of production. 剪辑单.md records what reaches the cut —
+// kept footage, timing, post-processing and the delivery spec — and is not a sixth
+// creative truth: lines, shot purpose and declared durations stay in the five documents.
 if (!routeSkill.includes("剪辑单.md")) throw new Error("Drama v0.7 route no longer declares the 剪辑单.md assembly stage.");
 const editSkill = await readFile(join(dramaRoot, "skills/short-drama-edit/SKILL.md"), "utf8");
 if (!editSkill.includes("剧集/<EP>/剪辑单.md")) throw new Error("Drama v0.7 assembly document contract is missing.");
@@ -100,10 +101,16 @@ if (selftests.length !== manifest.skills.length) {
 }
 const python = await dramaPython();
 for (const selftest of selftests) {
-  await execFileAsync(python, ["-B", join(dramaRoot, selftest)], {
+  // A selftest must never wait on a prompt (ffmpeg asks before overwriting); close its stdin and
+  // bound it, so a stuck one fails with its name instead of holding CI until the job times out.
+  const run = execFileAsync(python, ["-B", join(dramaRoot, selftest)], {
     encoding: "utf8",
+    timeout: 300_000,
     env: { ...process.env, PYTHONDONTWRITEBYTECODE: "1" }
   });
+  run.child.stdin?.end();
+  try { await run; }
+  catch (error) { throw new Error(`Drama selftest ${selftest} failed: ${String(error)}`, { cause: error }); }
 }
 const source = dramaUpstreamRoot();
 if (process.env.DRAMA_SKILLS_UPSTREAM_DIR !== undefined && (await stat(source).catch(() => undefined))?.isDirectory()) {

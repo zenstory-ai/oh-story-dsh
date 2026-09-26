@@ -1,8 +1,11 @@
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import type { Agent } from "@deepseek-ai/dsh-agent";
+import type { Session } from "@deepseek-ai/dsh-session";
 import type { ToolExecution, ToolRunContext, ToolRuntime } from "@deepseek-ai/dsh-tools";
 import { describe, expect, it, vi } from "vitest";
+import { ohStoryRoleLabel, ohStoryRoleOfSession } from "../src/role-identity.js";
+import { OH_STORY_ROLE_NAMES } from "../src/role-provider.js";
 import { createOhStoryRoleTool, OH_STORY_ROLE_TOOL_NAME, roleToolFilter, type OhStoryRoleSubagents } from "../src/role-tool.js";
 import {
   bundledReferenceGuard,
@@ -12,6 +15,49 @@ import {
 
 function roleSubagents(start: unknown): OhStoryRoleSubagents {
   return { start } as unknown as OhStoryRoleSubagents;
+}
+
+const roleRoot = resolve(import.meta.dirname, "../../knowledge/oh-story/roles");
+
+/** Upstream Claude Code tool names in Role frontmatter, and the DSH tool each maps to. */
+const UPSTREAM_TOOLS: Readonly<Record<string, string>> = {
+  Read: "read",
+  Glob: "glob",
+  Grep: "grep",
+  Write: "write",
+  Edit: "edit",
+  Bash: "bash"
+};
+
+/**
+ * Tools the plugin grants beyond a Role's upstream `tools:` list:
+ * - oh_story_bundled_reference for every Role whose body cites
+ *   story-setup/references/agent-references, which upstream reads with Read
+ *   from the deployed skill directory and DSH serves as pinned plugin resources;
+ * - web_search and web_fetch for story-researcher, whose body falls back to
+ *   WebSearch/webReader when CDP is unavailable.
+ */
+function pluginExtras(role: string, body: string): readonly string[] {
+  return [
+    ...body.includes("agent-references") ? [OH_STORY_REFERENCE_TOOL_NAME] : [],
+    ...role === "story-researcher" ? ["web_search", "web_fetch"] : []
+  ];
+}
+
+function frontmatterList(frontmatter: string, key: string): readonly string[] {
+  const line = frontmatter.split(/\r?\n/u).find((value) => value.startsWith(`${key}:`));
+  if (line === undefined) return [];
+  const list = /^[^:]+:\s*\[([^\]]*)\]\s*$/u.exec(line)?.[1];
+  if (list === undefined) throw new Error(`Unsupported ${key} frontmatter: ${line}`);
+  return list.split(",").map((value) => value.trim()).filter((value) => value !== "");
+}
+
+function dshTools(role: string, upstream: readonly string[]): readonly string[] {
+  return upstream.map((tool) => {
+    const mapped = UPSTREAM_TOOLS[tool];
+    if (mapped === undefined) throw new Error(`${role} uses upstream tool ${tool}, which has no DSH mapping yet.`);
+    return mapped;
+  });
 }
 
 describe("native Oh Story Role tool", () => {
@@ -28,6 +74,61 @@ describe("native Oh Story Role tool", () => {
     expect(roleToolFilter("story-researcher")).toEqual({
       allow: ["read", "glob", "grep", "bash", "write", "web_search", "web_fetch"]
     });
+  });
+
+  it("mirrors every bundled Role's upstream tools: and disallowedTools: frontmatter", async () => {
+    const files = (await readdir(roleRoot)).filter((name) => name.endsWith(".md")).sort();
+    expect(files).toEqual(OH_STORY_ROLE_NAMES.map((role) => `${role}.md`));
+    for (const role of OH_STORY_ROLE_NAMES) {
+      const source = await readFile(resolve(roleRoot, `${role}.md`), "utf8");
+      const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n/u.exec(source);
+      expect(match?.[1], role).toBeDefined();
+      const frontmatter = match![1]!;
+      const tools = dshTools(role, frontmatterList(frontmatter, "tools"));
+      const disallowed = dshTools(role, frontmatterList(frontmatter, "disallowedTools"));
+      expect(tools.length, role).toBeGreaterThan(0);
+      const allow = roleToolFilter(role).allow;
+      expect(new Set(allow).size, role).toBe(allow.length);
+      expect([...allow].sort(), role).toEqual([...tools, ...pluginExtras(role, source.slice(match![0].length))].sort());
+      for (const tool of disallowed) expect(allow, `${role} must not get ${tool}`).not.toContain(tool);
+    }
+  });
+
+  it("lets chapter-extractor write its batch file but never run shell commands", () => {
+    // Oh Story 0.8.0: tools [Read, Glob, Grep, Write, Edit], disallowedTools [Bash].
+    expect(roleToolFilter("chapter-extractor")).toEqual({ allow: ["read", "glob", "grep", "write", "edit"] });
+    expect(roleToolFilter("chapter-extractor").allow).not.toContain("bash");
+  });
+
+  it("labels each child with its Role and records it on the child Session", async () => {
+    const session = { header: { cwd: "/books/demo" } } as unknown as Session;
+    const start = vi.fn(async () => ({
+      id: "role-run-extractor",
+      localAgent: { session },
+      result: Promise.resolve({ output: [{ type: "text", text: "BATCH_WRITTEN" }], stopReason: "completed" as const }),
+      dispose: vi.fn(async () => {})
+    }));
+    const agent = { ctx: { tools: { get: vi.fn(() => ({})) } } } as unknown as Agent;
+    const callId = "call-extractor" as ToolRunContext["callId"];
+    const tool = await createOhStoryRoleTool(roleSubagents(start));
+    const execute = tool.execute as (args: { readonly role: "chapter-extractor"; readonly prompt: string }, exec: ToolRunContext) => Promise<unknown>;
+    expect(ohStoryRoleOfSession(session)).toBeUndefined();
+    await execute({ role: "chapter-extractor", prompt: "批次 RAW-4-6" }, {
+      agent,
+      signal: new AbortController().signal,
+      callId,
+      rootCallId: callId,
+      name: OH_STORY_ROLE_TOOL_NAME,
+      arguments: {},
+      token: Symbol("tool") as ToolRunContext["token"],
+      deferContext: vi.fn(),
+      concludeTurn: vi.fn()
+    });
+    expect(start).toHaveBeenCalledWith("spawn", expect.objectContaining({
+      label: ohStoryRoleLabel("chapter-extractor"),
+      toolFilter: { allow: ["read", "glob", "grep", "write", "edit"] }
+    }));
+    expect(ohStoryRoleOfSession(session)).toBe("chapter-extractor");
   });
 
   it("runs the selected exact persona with least-privilege tools and disposes it", async () => {

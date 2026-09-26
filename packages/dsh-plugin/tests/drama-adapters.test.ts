@@ -32,6 +32,42 @@ describe("bundled Drama media adapters", () => {
     }
   });
 
+  it("requires exactly the environment each pinned upstream provider reference lists as required", async () => {
+    const envName = /`([A-Z][A-Z0-9]*_[A-Z0-9_]+)`/gu;
+    for (const adapter of DRAMA_ADAPTERS) {
+      const lines = (await readFile(join(dramaRoot, adapter.reference), "utf8")).split(/\r?\n/u);
+      const start = lines.findIndex((line) => line.startsWith("Required environment:"));
+      expect(start, adapter.name).toBeGreaterThanOrEqual(0);
+      const inline = lines[start]!.slice("Required environment:".length).trim();
+      // Either one sentence on the heading line, or a list that ends at "Optional environment:".
+      const text = inline !== ""
+        ? inline.split(". ", 1)[0]!
+        : lines.slice(start + 1, lines.findIndex((line, index) => index > start && line.startsWith("Optional environment:"))).join("\n");
+      const required = [...new Set([...text.matchAll(envName)].map((match) => match[1]!))];
+      expect(required.sort(), adapter.name).toEqual([...adapter.requiredEnv].sort());
+    }
+  });
+
+  it("takes each adapter's timeout and job modality from its pinned upstream provider reference", async () => {
+    for (const adapter of DRAMA_ADAPTERS) {
+      const reference = await readFile(join(dramaRoot, adapter.reference), "utf8");
+      // Every provider reference opens with the adapter-config entry upstream expects.
+      const command = /\{"command": \[[^\]]*"([^"]+)"\], "timeout_seconds": (\d+)\}/u.exec(reference);
+      expect(command?.slice(1), adapter.name).toEqual([adapter.name, String(adapter.timeoutSeconds)]);
+      const modality = /modality `([a-z]+)`|`([a-z]+)` modality/u.exec(reference);
+      expect(modality?.[1] ?? modality?.[2], adapter.name).toBe(adapter.modality);
+    }
+  });
+
+  it("registers MiniMax Speech as the tts adapter in the generated config and the Skill summary", () => {
+    expect(DRAMA_ADAPTERS.find((adapter) => adapter.name === "minimax-speech")).toMatchObject({ label: "MiniMax Speech", modality: "tts" });
+    expect(dramaAdapterConfigDocument(dramaRoot, "python").adapters["minimax-speech"]).toEqual({
+      command: ["python", resolve(dramaRoot, "short-drama-produce/scripts/provider_adapters.py"), "minimax-speech"],
+      timeout_seconds: 600
+    });
+    expect(dramaAdapterSummary()).toContain("minimax-speech (tts: MINIMAX_API_KEY)");
+  });
+
   it("writes an upstream-shaped adapter config that points at the bundled script and carries no credentials", async () => {
     const root = await mkdtemp(join(tmpdir(), "oh-story-adapters-"));
     temporary.push(root);
@@ -60,8 +96,9 @@ describe("bundled Drama media adapters", () => {
     expect(statuses.map((status) => [status.name, status.configured, status.missing])).toEqual([
       ["gpt-image-2", true, []],
       ["seedance", false, ["SEEDANCE_MODEL"]],
-      ["minimax-h3", false, ["MINIMAX_VIDEO_MODEL", "MINIMAX_VIDEO_RESOLUTIONS"]],
-      ["minimax-music", true, []]
+      ["minimax-h3", false, ["MINIMAX_VIDEO_MODEL", "MINIMAX_VIDEO_RESOLUTIONS", "MINIMAX_VIDEO_MIN_DURATION", "MINIMAX_VIDEO_MAX_DURATION"]],
+      ["minimax-music", true, []],
+      ["minimax-speech", true, []]
     ]);
     expect(JSON.stringify(statuses)).not.toContain("sk-secret");
   });
@@ -73,6 +110,7 @@ describe("bundled Drama media adapters", () => {
     const skill = await provider.get(listed.find((candidate) => candidate.name === "short-drama-produce")!, {});
     expect(skill?.content).toContain(dramaAdapterConfigPath(dramaRoot).path);
     expect(skill?.content).toContain(dramaAdapterSummary());
+    expect(skill?.content).toContain("minimax-speech (tts: MINIMAX_API_KEY)");
     expect(skill?.content).toContain("DeepSeek generates no media");
     expect(skill?.content).toContain("Never read, print, or write credential values");
   });

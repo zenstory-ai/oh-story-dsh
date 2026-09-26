@@ -13,9 +13,9 @@ metadata: {"openclaw":{"source":"https://github.com/zenstory-ai/oh-story-claudec
 
 | 用户意图 | 关键词示例 | 路由到 |
 |---|---|---|
-| 写长篇 | 开书、写大纲、长篇、连载 | `/story-long-write` |
+| 长篇规划/写作 | 讨论长篇结构、规划剧情、开书、写大纲、补细纲、长篇、连载 | `/story-long-write` |
 | 写短篇 | 短篇、盐言、一万字 | `/story-short-write` |
-| 长篇拆文 | 拆文、分析这本书、黄金三章 | `/story-long-analyze` |
+| 长篇拆文 | 拆文、分析这本书、黄金三章、灵感库、跨书灵感聚合 | `/story-long-analyze` |
 | 短篇拆文 | 拆短篇、分析这个故事 | `/story-short-analyze` |
 | 长篇扫榜 | 长篇排行、什么火、起点/番茄/晋江 | `/story-long-scan` |
 | 选题决策 | 写什么能爆、帮我选题、选题方向 | `/story-long-scan` |
@@ -33,15 +33,19 @@ metadata: {"openclaw":{"source":"https://github.com/zenstory-ai/oh-story-claudec
 | 查故事资料 | 查角色、查伏笔、查进度、查设定、什么状态、写到哪了 | spawn `story-explorer` agent（结构化 prompt：`项目目录：{dir}\n查询类型：{根据意图选择}\n查询参数：{用户查询}`）；agent 不可用时见下方「查询降级」 |
 | 查资料 | 查资料、帮我查资料、调研、搜索一下、搜一下 | spawn `story-researcher` agent；agent 不可用时见下方「查询降级」 |
 
+### 裸调用与新手
+
+只说 `/story`、看不出意图时，不贴路由表，给四个白话选项：「开一本长篇或接着写」→ `/story-long-write`；「写一篇短篇」→ `/story-short-write`；「把一章改得不那么 AI」→ `/story-deslop`；「更多（拆书、扫榜、导入旧稿、审稿、封面）」→ 再列进阶项。还没部署过（项目根没有 `.story-deployed`）时先建议 `/story-setup`。
+
 ### 导入续写顺序
 
 用户问"导入续写先 setup 还是 import"时，直接回答：**推荐先 `/story-setup`，新开/刷新会话后 `/story-import`，最后 `/story-long-write 日更` 或 `/story-long-write 写第N章`**。如果用户已经直接触发 `/story-import`，按 story-import 自带环境检测继续：未 setup 时让用户选择先去 setup 或继续串行导入。
 
 ## 作者记忆
 
-用户要求记住、查看、确认、替换或忘掉作者习惯时，加载 [references/author-memory.md](references/author-memory.md)，并只用本 skill 的 `scripts/author_memory_commit.py` 管理工作区级 `.story/作者记忆/`。常用变更走单事件 `record`；工具未返回 `ok: true` 和 `Author Memory Receipt` 前，不得声称已记住。显示画像或待确认项是只读操作；不存在时直接说明尚未建立。
+用户要求记住、查看、确认、替换或忘掉作者习惯时，加载 [references/author-memory.md](references/author-memory.md)，并只用本 skill 的 `scripts/author_memory_commit.py` 管理两级 `.story/作者记忆/`：全局、题材、流程条目在工作区（`AP`），本书条目在书目录（`BP`，传 `--book-root`）。常用变更走单事件 `record`；工具未返回 `ok: true` 和 `Author Memory Receipt` 前，不得声称已记住。告诉作者时先用一句人话说记住了什么（如「记住了：这本书的对话一律用「」」），回执放最后一行，写法见协议「回执怎么告诉作者」。显示画像或待确认项是只读操作；不存在时直接说明尚未建立。
 
-新增习惯必须保留用户原话和适用范围。一次性要求只执行不记录；小说事实写入本书设定/追踪；推断和重复修正先进入待确认；与已生效习惯冲突时显式 replace，不原地改写历史。用户没有指定工作区时，按协议定位已有作者记忆的最近祖先或当前创作工作区，禁止默认写到用户主目录。
+新增习惯必须保留用户原话和适用范围。一次性要求只执行不记录；小说事实写入本书设定/追踪；不从反复修改或成稿推断偏好，只记作者明确说的，原话范围含糊才进待确认；与已生效习惯冲突时显式 replace，不原地改写历史。项目级画像里还有「本书：」条目时，建议对该书运行 `migrate --book-root`。用户没有指定工作区时，按协议定位已有作者记忆的最近祖先或当前创作工作区，禁止默认写到用户主目录。
 
 ## Dashboard 工作台
 
@@ -84,12 +88,14 @@ metadata: {"openclaw":{"source":"https://github.com/zenstory-ai/oh-story-claudec
 
 ## 查询降级
 
-> Spawn 版本提示（不阻断 spawn）：先读取项目根 `.story-deployed` 的 `agents_version`。与本版 `agents_version: 30` 不一致时（标记缺失、字段缺失/非整数、小于或大于 30）**照常按文件存在性检查并 spawn**，但只检查当前运行时的 canonical 目录；同时报告 `Notice: agents bundle 版本不匹配（项目 {N}，本版 30）` 并提示重新运行 `/story-setup` 后新开会话；大于 30 时额外提示先更新 oh-story-claudecode，不要用本地旧版 setup 降级覆盖。只有 agent 文件缺失、或运行时不暴露 custom agent 时才降级 solo/direct，报告 `Fallback: ... -> solo`。
+> Spawn 版本提示（不阻断 spawn）：先读取项目根 `.story-deployed` 的 `agents_version`。与本版 `agents_version: 32` 不一致时（标记缺失、字段缺失/非整数、小于或大于 32）**照常按文件存在性检查并 spawn**，但只检查当前运行时的 canonical 目录；同时报告 `Notice: agents bundle 版本不匹配（项目 {N}，本版 32）` 并提示重新运行 `/story-setup` 后新开会话；大于 32 时额外提示先更新 oh-story-claudecode，不要用本地旧版 setup 降级覆盖。只有 agent 文件缺失、或运行时不暴露 custom agent 时才降级 solo/direct，报告 `Fallback: ... -> solo`。
 
 「查故事资料」「查资料」走 agent 前先做轻量可用性检查（路由只做这一层，不承担全局部署策略）：当前不在子代理上下文、当前运行时的 Agent/Task 或 `invoke_subagent` 工具可用，且对应部署文件存在（Claude `.claude/agents/*.md`、OpenCode `.opencode/agents/*.md`、Codex `.codex/agents/*.toml`、Antigravity `.agents/agents/agent-name/agent.md`，其中 `agent-name` 为目标 agent 名）→ 可尝试 spawn。Antigravity 用 `invoke_subagent` + 同名 `TypeName`，不得因其他端文件存在而误判。任一不满足，或运行时返回 unknown agent / 未暴露 custom-agent registry，则降级，不硬失败：
 
-- `story-explorer` 不可用 → 主线程直接用 Read/Grep 从项目文件检索（角色状态/伏笔/进度/设定），回答前标注 `Fallback: agent unavailable -> direct lookup`；项目尚未部署时提示先 `/story-setup`（Codex 中用 `$story-setup`）。
-- `story-researcher` 不可用 → 主线程用现有检索/回答能力完成，或提示用户改用 `/browser-cdp` 采集，同样标注 `Fallback: agent unavailable -> direct lookup`。
+- `story-explorer` 不可用 → 主线程直接用 Read/Grep 从项目文件检索（角色状态/伏笔/进度/设定），回答前说一句「查资料助手没启用，这次我直接翻项目文件」；项目尚未部署时提示先 `/story-setup`（Codex 中用 `$story-setup`）。
+- `story-researcher` 不可用 → 主线程用现有检索/回答能力完成，或提示用户改用 `/browser-cdp` 采集，同样用一句白话说明。
+
+回答作者时讲故事里的事（谁、在哪章、发生了什么）；文件字段名、伏笔/事件编号不单独出现，编号必须跟着故事描述。
 
 ## 项目状态感知
 

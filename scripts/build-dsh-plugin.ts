@@ -82,47 +82,42 @@ await build({
   footer: { js: ";return module.exports;}});" }
 });
 
+/**
+ * Bytecode, Finder metadata and local agent state (`.omc/`, `.omx/`, gitignored) that a checkout
+ * accumulates next to the pinned assets. The copies below take whole directories, so ignored files
+ * would otherwise reach the tarball.
+ */
+function isLocalArtifact(source: string): boolean {
+  const normalized = source.replaceAll("\\", "/");
+  return normalized.includes("/__pycache__/")
+    || normalized.endsWith("/__pycache__")
+    || normalized.endsWith(".pyc")
+    || normalized.endsWith("/.DS_Store")
+    || /\/\.om[cx](?:\/|$)/u.test(normalized);
+}
+
 await cp(ohStoryRoot, resolve(outputRoot, "oh-story"), {
   recursive: true,
   filter: (source) => {
-    const normalized = source.replaceAll("\\", "/");
     const bundledPath = relative(ohStoryRoot, source).replaceAll("\\", "/");
-    return !normalized.includes("/__pycache__/")
-      && !normalized.endsWith("/__pycache__")
-      && !normalized.endsWith(".pyc")
-      && !normalized.endsWith("/.DS_Store")
+    return !isLocalArtifact(source)
       && !platformGlue.some((entry) => bundledPath === entry.replace(/\/$/u, "") || bundledPath.startsWith(entry));
   }
 });
 
 await cp(dramaRoot, resolve(outputRoot, "drama"), {
   recursive: true,
-  filter: (source) => {
-    return !source.includes("/__pycache__/")
-      && !source.endsWith("/__pycache__")
-      && !source.endsWith(".pyc")
-      && !source.endsWith("/.DS_Store");
-  }
+  filter: (source) => !isLocalArtifact(source)
 });
 
 await cp(novelToGameRoot, resolve(outputRoot, "novel-to-game"), {
   recursive: true,
-  filter: (source) => {
-    return !source.includes("/__pycache__/")
-      && !source.endsWith("/__pycache__")
-      && !source.endsWith(".pyc")
-      && !source.endsWith("/.DS_Store");
-  }
+  filter: (source) => !isLocalArtifact(source)
 });
 
 await cp(videoRecapRoot, resolve(outputRoot, "video-recap"), {
   recursive: true,
-  filter: (source) => {
-    return !source.includes("/__pycache__/")
-      && !source.endsWith("/__pycache__")
-      && !source.endsWith(".pyc")
-      && !source.endsWith("/.DS_Store");
-  }
+  filter: (source) => !isLocalArtifact(source)
 });
 
 for (const excluded of [

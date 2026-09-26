@@ -6,10 +6,14 @@ import {
   fileMutations,
   jsonStringPrefix,
   latestSettledMutation,
+  latestSettledMutationTurn,
   mutatingCallIds,
+  openTurn,
   preferredWorkbenchFile,
   previewMutation,
+  sameUndispatchedCalls,
   streamingAssistant,
+  undispatchedCalls,
   workbenchModeForPath
 } from "../src/client/file-activity.js";
 
@@ -74,6 +78,8 @@ describe("official DSH file activity", () => {
 
   it("uses the executing DSH call and previews targeted edits", () => {
     const running = [{
+      phase: "start",
+
       callId: "edit-1",
       name: "edit",
       argsRaw: '{"file_path":"正文/第002章.md","old_string":"旧句","new_string":"新句正在生成',
@@ -89,6 +95,7 @@ describe("official DSH file activity", () => {
 
   it("walks nested calls and preserves concurrent mutations", () => {
     const child = (callId: string, path: string): RunningToolCall => ({
+      phase: "start",
       callId,
       name: "write",
       argsRaw: JSON.stringify({ file_path: path, content: callId }),
@@ -98,6 +105,8 @@ describe("official DSH file activity", () => {
       subCalls: []
     });
     const running: RunningToolCall[] = [{
+      phase: "start",
+
       callId: "code-1",
       name: "run_code",
       argsRaw: "{}",
@@ -110,10 +119,49 @@ describe("official DSH file activity", () => {
     expect([...mutatingCallIds(running)]).toEqual(["code-1", "write-a", "write-b"]);
   });
 
+  it("waits for a preparing DSH call to receive its arguments", () => {
+    const preparing: RunningToolCall[] = [{ phase: "preparing", callId: "write-next", name: "write", turn: 1, step: 1, time: 1, subCalls: [] }];
+    expect(fileMutations(preparing)).toEqual([]);
+    expect([...mutatingCallIds(preparing)]).toEqual(["write-next"]);
+  });
+
+  it("keeps a streamed write visible while DSH holds it before dispatch", () => {
+    // DSH 0.1.7 hides a call between its finished step and the durable tool/call event
+    // (pre-execute hooks, approval). Losing the activity there dropped the live preview and let
+    // the workbench reset the selection before the file existed.
+    const write = { kind: "tool-call" as const, callId: "write-held", name: "write", argsRaw: '{"file_path":"设定/角色/新人物.md","content":"完整内容"}' };
+    const chat = (status: "running" | "settled", turnStatus: "open" | "closed" | "unknown", results: readonly string[] = []) => ({
+      timeline: {
+        turnOrder: [3],
+        turns: new Map([[3, {
+          turn: 3,
+          status: turnStatus,
+          steps: [{ turn: 3, step: 2, data: { get: () => ({ status, turn: 3, step: 2, time: 1, blocks: [write, { kind: "text", text: "写入" }] }) } }]
+        }]])
+      },
+      legacy: { nodes: results.map((callId) => ({ kind: "tool-result", callId })) }
+    }) as unknown as ChatSnapshot;
+
+    const held = undispatchedCalls(chat("settled", "open"));
+    expect(held).toEqual([{ callId: "write-held", name: "write", argsRaw: write.argsRaw }]);
+    expect(fileMutations([], null, held).at(-1)).toMatchObject({ callId: "write-held", stage: "running", path: "设定/角色/新人物.md", newText: "完整内容" });
+    // A preparing row DSH still lists adds nothing on its own and does not duplicate the held call.
+    const preparing: RunningToolCall[] = [{ phase: "preparing", callId: "write-held", name: "write", turn: 3, step: 2, time: 1, subCalls: [] }];
+    expect(fileMutations(preparing, null, held)).toHaveLength(1);
+    // Streaming steps belong to `partial`; settled calls and closed Turns are no longer pending.
+    expect(undispatchedCalls(chat("running", "open"))).toEqual([]);
+    expect(undispatchedCalls(chat("settled", "open", ["write-held"]))).toEqual([]);
+    expect(undispatchedCalls(chat("settled", "closed"))).toEqual([]);
+    // A running Turn whose start fell outside the loaded history window reports `unknown`.
+    expect(undispatchedCalls(chat("settled", "unknown")).map((call) => call.callId)).toEqual(["write-held"]);
+    expect(sameUndispatchedCalls(held, undispatchedCalls(chat("settled", "open")))).toBe(true);
+  });
+
   it("uses the latest durable DSH call when a fast call leaves the live window", () => {
     const node = {
       key: "tool:write-1",
       kind: "tool-call",
+      location: { kind: "step", turn: { turn: 1 }, step: { step: 1 } },
       data: {
         root: {
           kind: "tool-result",
@@ -131,8 +179,28 @@ describe("official DSH file activity", () => {
     expect(latestSettledMutation(chat)).toBe("write-1\0正文/新章.md");
   });
 
+  it("locates the Turn of the latest settled write and reports only an open last Turn", () => {
+    const node = {
+      key: "tool:write-9",
+      kind: "tool-call",
+      location: { kind: "step", turn: { turn: 4 }, step: { step: 1 } },
+      data: { root: { kind: "tool-result", callId: "write-9", isError: false, call: { name: "write", argsRaw: '{"file_path":"正文/第009章.md","content":"x"}' }, subCalls: [] } }
+    };
+    const chat = (status: "open" | "closed") => ({
+      order: [node.key],
+      nodes: { get: (key: string) => key === node.key ? node : undefined },
+      timeline: { turnOrder: [3, 4], turns: new Map([[4, { turn: 4, status }]]) }
+    }) as unknown as ChatSnapshot;
+    expect(latestSettledMutationTurn(chat("open"))).toBe(4);
+    expect(openTurn(chat("open"))).toBe(4);
+    // A reloaded Session shows the same write inside a closed Turn: history, not live work.
+    expect(openTurn(chat("closed"))).toBeUndefined();
+  });
+
   it("supports replace-all and deletion", () => {
     const replaceAll = fileMutations([{
+      phase: "start",
+
       callId: "edit-all",
       name: "edit",
       argsRaw: '{"file_path":"正文/A.md","old_string":"旧","new_string":"新","replace_all":true}',
@@ -144,6 +212,8 @@ describe("official DSH file activity", () => {
     expect(previewMutation(replaceAll!, "旧/旧")).toBe("新/新");
 
     const deletion = fileMutations([{
+      phase: "start",
+
       callId: "delete-text",
       name: "str_replace_editor",
       argsRaw: '{"command":"str_replace","path":"正文/A.md","old_str":"删掉"}',

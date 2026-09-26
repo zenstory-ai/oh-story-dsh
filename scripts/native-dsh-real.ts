@@ -8,7 +8,7 @@ import { parseEnv } from "node:util";
 import { fileURLToPath } from "node:url";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const dshVersion = "0.1.5-rc.1";
+const dshVersion = "0.1.7-rc.2";
 /** Exact WebSocket route carrying every Typert Remote stream. */
 const REMOTE_STREAM_MUX_PATH = "/api/remote.mux";
 
@@ -239,8 +239,15 @@ async function main(): Promise<void> {
     const dshBin = join(installation, "node_modules", "@deepseek-ai", "dsh", "lib", "bin.js");
     const tarball = (await readdir(packDirectory)).find((entry) => entry.endsWith(".tgz"));
     if (tarball === undefined) throw new Error("Plugin pack did not create a tarball.");
-    const env = { ...process.env, DEEPSEEK_API_KEY: apiKey, DSH_HOME: dshHome, DSH_TELEMETRY_DISABLED: "1" };
+    // DSH also loads Skills from ~/.agents/skills and prefers them over a plugin's; keep the run on the packed plugin.
+    const env = { ...process.env, DEEPSEEK_API_KEY: apiKey, DSH_HOME: dshHome, DSH_AGENTS_HOME: join(temporaryRoot, "agents"), DSH_TELEMETRY_DISABLED: "1" };
     run(process.execPath, [dshBin, "plugin", "--profile", "web", "add", join(packDirectory, tarball)], env);
+    // DSH 0.1.7 creates its first-use workspace under the account's Documents folder, outside
+    // DSH_HOME. Point it into the temporary root so a run never writes to the real home.
+    const documents = join(temporaryRoot, "documents");
+    await mkdir(documents, { recursive: true });
+    await writeFile(join(dshHome, "profiles", "web", "cordis.patch.yml"),
+      `- id: workspace-controller\n  config:\n    documentsDirectory: ${JSON.stringify(documents)}\n`);
     child = spawn(process.execPath, [dshBin, "web", "--no-open", "--port", new URL(origin).port], {
       cwd: repositoryRoot, env, stdio: ["ignore", "pipe", "pipe"]
     });
@@ -255,12 +262,16 @@ async function main(): Promise<void> {
       readonly groups: readonly { readonly id: string; readonly models: readonly { readonly id: string }[] }[];
     }>(origin, "session/modelCatalog", {});
     const deepseek = models.groups.find((group) => group.id === "deepseek-official");
-    const selectedModel = deepseek?.models.find((candidate) => candidate.id === "deepseek-v4-flash")?.id ?? deepseek?.models[0]?.id;
-    if (deepseek === undefined || selectedModel === undefined) throw new Error("DSH did not expose a DeepSeek official model.");
+    // DSH 0.1.7 renamed deepseek-v4-flash to deepseek-flash; a missing id fails instead of testing another model.
+    const selectedModel = deepseek?.models.find((candidate) => candidate.id === "deepseek-flash")?.id;
+    if (deepseek === undefined || selectedModel === undefined) {
+      throw new Error(`DSH did not expose deepseek-official/deepseek-flash: ${JSON.stringify(models.groups.map((group) => ({ id: group.id, models: group.models.map((candidate) => candidate.id) })))}`);
+    }
     await rpc(origin, "session/selectModel", { request: { sessionId: session.sessionId, provider: deepseek.id, model: selectedModel } });
 
-    const skills = await rpc<{ readonly skills: readonly { readonly name: string }[] }>(origin, "skills/list", { request: { sessionId: session.sessionId } });
-    if (!skills.skills.some((skill) => skill.name === "story-review")) throw new Error("story-review was not registered in the DSH Session.");
+    const fromPlugin = (skill: { readonly path?: string } | undefined): boolean => (skill?.path ?? "").replaceAll("\\", "/").includes("/@oh-story/dsh/lib/");
+    const skills = await rpc<{ readonly skills: readonly { readonly name: string; readonly path?: string }[] }>(origin, "skills/list", { request: { sessionId: session.sessionId } });
+    if (!fromPlugin(skills.skills.find((skill) => skill.name === "story-review"))) throw new Error("story-review was not registered by the packed plugin in the DSH Session.");
     await rpc(origin, "session/prompt", {
       request: {
         requestId: crypto.randomUUID(),
@@ -286,8 +297,8 @@ async function main(): Promise<void> {
 
     const dramaSession = await rpc<{ readonly sessionId: string }>(origin, "session/create", { request: { workspaceId: workspace.workspace.workspaceId } });
     await rpc(origin, "session/selectModel", { request: { sessionId: dramaSession.sessionId, provider: deepseek.id, model: selectedModel } });
-    const dramaSkills = await rpc<{ readonly skills: readonly { readonly name: string }[] }>(origin, "skills/list", { request: { sessionId: dramaSession.sessionId } });
-    if (!dramaSkills.skills.some((skill) => skill.name === "short-drama-review")) throw new Error("short-drama-review was not registered in the DSH Session.");
+    const dramaSkills = await rpc<{ readonly skills: readonly { readonly name: string; readonly path?: string }[] }>(origin, "skills/list", { request: { sessionId: dramaSession.sessionId } });
+    if (!fromPlugin(dramaSkills.skills.find((skill) => skill.name === "short-drama-review"))) throw new Error("short-drama-review was not registered by the packed plugin in the DSH Session.");
     await rpc(origin, "session/prompt", {
       request: {
         requestId: crypto.randomUUID(),

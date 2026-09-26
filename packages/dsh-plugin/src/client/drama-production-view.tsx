@@ -1,4 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
+// Type-only: erased from the browser bundle, but a modality added to the host registry
+// without a label below becomes a type error instead of an unlabelled chip.
+import type { DramaAdapterModality, DramaAdapterStatus } from "../drama-adapters.js";
 import { productionCompleteness, type DramaDocumentTarget, type DramaEpisodeProduction, type DramaProductionSection } from "./drama-production.js";
 import { endpoint } from "./workbench-ui.js";
 import { nativeBatchPrompt, nativeCompositionPrompt, nativeProductionPrompt } from "./production-prompts.js";
@@ -47,15 +50,15 @@ const ASSEMBLED_CUT_PATH = "制作成果/成片/成片.mp4";
 interface DramaPreflight {
   readonly python: { readonly ok: boolean; readonly version?: string };
   readonly adapterConfig: { readonly path: string; readonly generated: boolean; readonly ok: boolean };
-  readonly adapters: readonly { readonly name: string; readonly label: string; readonly modality: "image" | "video" | "music"; readonly configured: boolean; readonly missing: readonly string[] }[];
+  readonly adapters: readonly DramaAdapterStatus[];
 }
 
-const MODALITY_LABEL = { image: "图片", video: "视频", music: "音乐" } as const;
+const MODALITY_LABEL: Readonly<Record<DramaAdapterModality, string>> = { image: "图片", video: "视频", tts: "语音", music: "音乐" };
 
 /**
- * DeepSeek writes the prompts; the pictures, videos and music come from provider
- * APIs that the produce Skill calls. Nothing in the conversation says so, and the
- * keys live in the host environment, so the 生产 view states it up front.
+ * DeepSeek writes the prompts; the pictures, videos, speech and music come from
+ * provider APIs that the produce Skill calls. Nothing in the conversation says so,
+ * and the keys live in the host environment, so the 生产 view states it up front.
  */
 function ProductionEnvironment({ sessionId }: { readonly sessionId: string }) {
   const [preflight, setPreflight] = useState<DramaPreflight | "failed">();
@@ -81,7 +84,7 @@ function ProductionEnvironment({ sessionId }: { readonly sessionId: string }) {
     {typeof preflight === "object" && <>
       <span data-ready={preflight.python.ok || undefined}>Python {preflight.python.version ?? "未找到"}</span>
       {preflight.adapters.map((adapter) => <span key={adapter.name} data-ready={adapter.configured || undefined} title={adapter.configured ? `${adapter.name} 已配置` : `缺少环境变量 ${adapter.missing.join("、")}`}>{MODALITY_LABEL[adapter.modality]} {adapter.label}{adapter.configured ? "" : ` · 缺 ${adapter.missing.join("、")}`}</span>)}
-      <em>DeepSeek 只负责写提示词；图片、视频、音乐由上面的供应商 API 生成，Key 在启动 DSH 前写入宿主机环境变量。
+      <em>DeepSeek 只负责写提示词；图片、视频、语音、音乐由上面的供应商 API 生成，Key 在启动 DSH 前写入宿主机环境变量。
         {unconfigured.length === preflight.adapters.length && " 当前一个都没配置，生产任务会停在 adapter 之前。"}
         {" "}Adapter 配置{preflight.adapterConfig.generated ? "已自动登记" : "使用自定义文件"}{preflight.adapterConfig.ok ? "" : "（写入失败）"}：<code>{preflight.adapterConfig.path}</code>。详见 README「媒体生成 API」。</em>
     </>}
@@ -221,7 +224,7 @@ function AssetBoard(props: Props & { readonly onCreateJob: (targetId: string, ki
     props.onManualReferencesChange({ ...mutable, [referenceTarget]: next });
   };
   if (assets.length === 0 && props.libraryVersions.length === 0) return <section className="oh-story-assets"><MissingDocument document={`${props.production.episodeDirectory}/图片提示词.md`} documentPaths={props.production.documentPaths} what="素材" skill="/short-drama-image-prompts" onNavigate={props.onNavigate} /></section>;
-  return <section className="oh-story-assets"><div className="oh-story-asset-grid">{assets.map((asset) => { const prompt = "prompt" in asset ? asset.prompt : asset.description; const versions = props.versions.filter((version) => version.targetId === asset.id); const selected = selectedVersionForTarget(asset.id, props.versions, props.selections, "image"); return <article className="oh-story-asset-card" ref={props.selectedId === asset.id ? selectedRef : undefined} data-selected={props.selectedId === asset.id || undefined} key={asset.id}>{selected === undefined ? <div className="oh-story-asset-placeholder">{asset.kind === "character" ? "人" : asset.kind === "scene" ? "景" : asset.kind === "prop" ? "物" : "设"}</div> : <MediaPreview version={selected} />}<div><small>{ASSET_KIND_LABEL[asset.kind]}</small><h3>{asset.title}</h3><button type="button" onClick={() => { props.onNavigate({ path: asset.path, offset: asset.offset, id: asset.id }); }}>{asset.id}</button></div>{prompt !== undefined && <p className="oh-story-asset-description">{prompt}</p>}<div className="oh-story-card-actions">{prompt !== undefined && <button type="button" onClick={() => { void props.onCreateJob(asset.id, "image", prompt); }}>准备素材</button>}</div>{versions.length > 0 && <VersionStrip targetId={asset.id} versions={versions} selections={props.selections} onSelectionsChange={props.onSelectionsChange} />}</article>; })}</div><div className="oh-story-media-library"><header><div><strong>项目媒体库</strong><span>{library.length}/{props.libraryVersions.length} 项 · 可跨集复用</span></div><div><input aria-label="搜索项目媒体" value={query} placeholder="搜索 ID 或路径" onChange={(event) => { setQuery(event.target.value); }} /><select aria-label="筛选媒体类型" value={kind} onChange={(event) => { setKind(event.target.value as typeof kind); }}><option value="all">全部</option><option value="image">图片</option><option value="video">视频</option></select></div></header>{referenceTarget === undefined && <p className="oh-story-projection-note">先在镜头页选中一个镜头，再回到这里把已有图片设为该镜头的额外参考。</p>}<div className="oh-story-media-library-grid">{library.map((version) => { const selected = referenceTarget !== undefined && (props.manualReferences[referenceTarget] ?? []).includes(version.id); return <article key={version.id}><MediaPreview version={version} /><strong>{version.targetId}</strong><span title={version.path}>{version.path}</span><footer>{version.path !== undefined && <button type="button" onClick={() => { props.onOpenMedia(version.path!); }}>打开文件</button>}{referenceTarget !== undefined && version.kind === "image" && <button type="button" aria-pressed={selected} aria-label={`${selected ? "取消" : "设为"} ${referenceTarget} 参考 ${version.targetId}`} onClick={() => { toggleReference(version.id); }}>{selected ? "已引用" : "作为参考"}</button>}</footer></article>; })}</div></div></section>;
+  return <section className="oh-story-assets"><div className="oh-story-asset-grid">{assets.map((asset) => { const prompt = "prompt" in asset ? asset.prompt : asset.description; const versions = props.versions.filter((version) => version.targetId === asset.id); const selected = selectedVersionForTarget(asset.id, props.versions, props.selections, "image"); return <article className="oh-story-asset-card" ref={props.selectedId === asset.id ? selectedRef : undefined} data-selected={props.selectedId === asset.id || undefined} key={asset.id}>{selected === undefined ? <div className="oh-story-asset-placeholder">{asset.kind === "character" ? "人" : asset.kind === "scene" ? "景" : asset.kind === "prop" ? "物" : "设"}</div> : <MediaPreview version={selected} />}<div><small>{ASSET_KIND_LABEL[asset.kind]}</small><h3>{asset.title}</h3><button type="button" onClick={() => { props.onNavigate({ path: asset.path, offset: asset.offset, id: asset.id }); }}>{asset.id}</button></div>{prompt !== undefined && <p className="oh-story-asset-description">{prompt}</p>}<div className="oh-story-card-actions">{prompt !== undefined && <button type="button" onClick={() => { void props.onCreateJob(asset.id, "image", prompt); }}>准备素材</button>}</div>{versions.length > 0 && <VersionStrip targetId={asset.id} versions={versions} selections={props.selections} onSelectionsChange={props.onSelectionsChange} />}</article>; })}</div><div className="oh-story-media-library"><header><div><strong>项目媒体库</strong><span>{library.length}/{props.libraryVersions.length} 项 · 可跨集复用</span></div><div><input aria-label="搜索项目媒体" value={query} placeholder="搜索 ID 或路径" onChange={(event) => { setQuery(event.target.value); }} /><select aria-label="筛选媒体类型" value={kind} onChange={(event) => { setKind(event.target.value as typeof kind); }}><option value="all">全部</option><option value="image">图片</option><option value="video">视频</option></select></div></header><p className="oh-story-projection-note">{referenceTarget === undefined ? "先在镜头页选中一个镜头，再回到这里把已有图片设为该镜头的补充参考。" : `可把下面的图片设为 ${referenceTarget} 的补充参考。`}补充参考只提示 Agent 核对；写进来源条目的「输入参考图」后才会送进生产。</p><div className="oh-story-media-library-grid">{library.map((version) => { const selected = referenceTarget !== undefined && (props.manualReferences[referenceTarget] ?? []).includes(version.id); return <article key={version.id}><MediaPreview version={version} /><strong>{version.targetId}</strong><span title={version.path}>{version.path}</span><footer>{version.path !== undefined && <button type="button" onClick={() => { props.onOpenMedia(version.path!); }}>打开文件</button>}{referenceTarget !== undefined && version.kind === "image" && <button type="button" aria-pressed={selected} aria-label={`${selected ? "取消" : "设为"} ${referenceTarget} 参考 ${version.targetId}`} title="提示 Agent 核对；写进「输入参考图」后才会送进生产" onClick={() => { toggleReference(version.id); }}>{selected ? "已设补充参考" : "设为补充参考"}</button>}</footer></article>; })}</div></div></section>;
 }
 
 function TaskBoard({ jobs, queue, sessionRunning, onCancel, onRemoveQueued }: {
@@ -233,7 +236,7 @@ function TaskBoard({ jobs, queue, sessionRunning, onCancel, onRemoveQueued }: {
 }) {
   const activeJobId = activeProductionJobId(jobs, queue, sessionRunning);
   return <section className="oh-story-task-board">
-    <div className="oh-story-projection-note">图片与视频先预检、后确认。内置契约支持 GPT Image 2 / Seedance；实际账号、模型与可用性由当前 DSH 运行环境决定。</div>
+    <div className="oh-story-projection-note">图片、视频、语音、音乐都先预检、后确认。这里跟踪图片、视频与成片任务；语音和音乐在 Chat 里完成，结果直接落在制作成果目录。供应商见上方「生成环境」，实际账号、模型与可用性由当前 DSH 运行环境决定。</div>
     {jobs.length === 0 ? <div className="oh-story-production-empty">还没有生产任务。可从镜头或素材页提交单个或批量任务。</div> : [...jobs].reverse().map((job) => {
       const queued = queuedItemForJob(job.id, queue);
       const displayStatus = queued === undefined ? STATUS_LABELS[job.status] : "DSH Queue";

@@ -37,12 +37,12 @@
 
 | Workbench | Upstream capability (pinned, bundled with the plugin) | Main entry points |
 | --- | --- | --- |
-| Novel | [Oh Story 0.7.10](https://github.com/zenstory-ai/oh-story-claudecode/releases/tag/v0.7.10) · 13 Skills · 7 Roles | `/story`, `/story-long-write`, `/story-review` |
-| Short drama | [Drama Skills 0.7.0](https://github.com/zenstory-ai/drama-skills/releases/tag/v0.7.0) · 11 Skills | `/short-drama`, `/short-drama-write`, `/short-drama-storyboard`, `/short-drama-edit` |
-| Game | [NovelToGame 0.3.1](https://github.com/zenstory-ai/novel-to-game) · 7 Skills · playable 《金瓶梅》 sample | `/novel-to-game quick`, `/game-build`, `/game-qa` |
+| Novel | [Oh Story 0.8.0](https://github.com/zenstory-ai/oh-story-claudecode/releases/tag/v0.8.0) · 13 Skills · 7 Roles | `/story`, `/story-long-write`, `/story-review` |
+| Short drama | [Drama Skills 0.7.1](https://github.com/zenstory-ai/drama-skills/releases/tag/v0.7.1) · 11 Skills | `/short-drama`, `/short-drama-write`, `/short-drama-storyboard`, `/short-drama-edit` |
+| Game | [NovelToGame 0.4.0](https://github.com/zenstory-ai/novel-to-game) · 7 Skills · playable 《金瓶梅》 sample | `/novel-to-game quick`, `/game-build`, `/game-qa` |
 | Video | [video-recap-skills 0.5.0](https://github.com/zenstory-ai/video-recap-skills) · 6 Skills | `/video-recap`, `/video-script` |
 
-> Latest release **v0.1.9** (2026-09-10). See [CHANGELOG.md](CHANGELOG.md) and [Releases](https://github.com/zenstory-ai/oh-story-dsh/releases); upgrade steps are in the FAQ entry [“What do I do after upgrading?”](#what-do-i-do-after-upgrading).
+> Latest release **v0.1.10** (2026-09-25), which requires DeepSeek Harness `0.1.7-rc.2`. See [CHANGELOG.md](CHANGELOG.md) and [Releases](https://github.com/zenstory-ai/oh-story-dsh/releases); upgrade steps are in the FAQ entry [“What do I do after upgrading?”](#what-do-i-do-after-upgrading).
 
 ## The four workbenches
 
@@ -85,11 +85,11 @@ Boundaries and protocols for each workbench are in the [architecture notes](docs
 Requires Node.js 24+. The install command provides pnpm temporarily, so a machine with only Node.js can run it:
 
 ```bash
-npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.1.5-rc.1 dsh plugin --profile web add @oh-story/dsh@0.1.9 &&
-npx -y @deepseek-ai/dsh@0.1.5-rc.1 web
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.1.7-rc.2 dsh plugin --profile web add @oh-story/dsh@0.1.10 &&
+npx -y @deepseek-ai/dsh@0.1.7-rc.2 web
 ```
 
-Keep the terminal running; the browser opens automatically by default. If it does not, copy the full `http://127.0.0.1:3080/?token=...` link printed in the terminal — first-time authentication needs the token in the link. Closing the terminal stops the service. Use the same dsh version for install and start.
+Keep the terminal running; the browser opens automatically by default. If it does not, copy the full `http://127.0.0.1:3080/?token=...` link printed in the terminal — first-time authentication needs the token in the link. Closing the terminal stops the service. Use the same dsh version for install and start: the plugin declares compatibility with the DSH `0.1.7` patch line only. DSH 0.1.7 and later check this when adding or loading a plugin and refuse a mismatch with a message (`dsh plugin allow-version` overrides it at your own risk); older DSH does not check and loads the plugin anyway. An unversioned `npx @deepseek-ai/dsh` currently resolves to the npm `latest` tag (`0.1.5-rc.3`), which this release does not support, so pin `@deepseek-ai/dsh@0.1.7-rc.2` in both commands.
 
 Before creating with AI, add a Provider and API key under DSH's Settings → Models, or set the `DEEPSEEK_API_KEY` environment variable before starting. To only browse existing work, choose "Configure later" in the first-run guide.
 
@@ -99,8 +99,8 @@ Before creating with AI, add a Provider and API key under DSH's Settings → Mod
 The prebuilt package in the GitHub Release passes the same test suite:
 
 ```bash
-npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.1.5-rc.1 dsh plugin --profile web add https://github.com/zenstory-ai/oh-story-dsh/releases/download/v0.1.9/oh-story-dsh-0.1.9.tgz &&
-npx -y @deepseek-ai/dsh@0.1.5-rc.1 web
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.1.7-rc.2 dsh plugin --profile web add https://github.com/zenstory-ai/oh-story-dsh/releases/download/v0.1.10/oh-story-dsh-0.1.10.tgz &&
+npx -y @deepseek-ai/dsh@0.1.7-rc.2 web
 ```
 
 </details>
@@ -115,22 +115,23 @@ The video pipeline additionally needs Python 3.10+ and ffmpeg/ffprobe built with
 <details>
 <summary>Configure media-generation APIs (needed for short-drama production)</summary>
 
-DeepSeek writes the screenplay, storyboard and prompts; image, video and music generation is handed by short-drama Production to the `short-drama-produce` Skill, which calls the vendor APIs below. Set the keys as host environment variables before starting DSH:
+DeepSeek writes the screenplay, storyboard and prompts; image, video, speech and music generation is handed by short-drama Production to the `short-drama-produce` Skill, which calls the vendor APIs below. Set the keys as host environment variables before starting DSH:
 
 | Capability | Vendor | Required variables | Optional |
 | --- | --- | --- | --- |
 | Images | GPT Image 2 | `OPENAI_API_KEY` | `OPENAI_BASE_URL` |
 | Video | Seedance (Volcengine Ark) | `ARK_API_KEY`, `SEEDANCE_MODEL` | `SEEDANCE_BASE_URL`, `SEEDANCE_ALLOWED_RATIOS`, `SEEDANCE_MIN_DURATION`/`SEEDANCE_MAX_DURATION` |
-| Video | MiniMax H3 | `MINIMAX_API_KEY`, `MINIMAX_VIDEO_MODEL`, `MINIMAX_VIDEO_RESOLUTIONS` | `MINIMAX_VIDEO_BASE_URL`, `MINIMAX_VIDEO_RATIOS`, `MINIMAX_VIDEO_MIN_DURATION`/`MINIMAX_VIDEO_MAX_DURATION` |
+| Video | MiniMax H3 | `MINIMAX_API_KEY`, `MINIMAX_VIDEO_MODEL`, `MINIMAX_VIDEO_RESOLUTIONS`, `MINIMAX_VIDEO_MIN_DURATION`/`MINIMAX_VIDEO_MAX_DURATION` | `MINIMAX_VIDEO_BASE_URL`, `MINIMAX_VIDEO_RATIOS` |
+| Speech | MiniMax Speech | `MINIMAX_API_KEY` | `MINIMAX_BASE_URL` |
 | Music | MiniMax Music | `MINIMAX_API_KEY` | `MINIMAX_BASE_URL` |
 
 ```bash
 export OPENAI_API_KEY=...            # images
 export ARK_API_KEY=... SEEDANCE_MODEL=...   # video; use the model / endpoint ID enabled on your account
-npx -y @deepseek-ai/dsh@0.1.5-rc.1 web
+npx -y @deepseek-ai/dsh@0.1.7-rc.2 web
 ```
 
-Configure only what you use: without a video key you can still write storyboards and generate keyframe images. The top of the Production view shows whether each vendor is configured and which variable is missing. At startup the plugin registers the four built-in adapters in a credential-free config file (by default under `oh-story-dsh-<uid>/` in the system temp directory, readable and writable only by the current user; the "generation environment" bar shows the full path), and the agent references it directly when running `production_tool.py run`. To use your own adapter or change timeouts, point `OH_STORY_DRAMA_ADAPTER_CONFIG` at your own file. Each vendor's parameters, resolutions and duration limits are documented in the bundled `short-drama-produce/references/providers/`. Novel covers use whichever image-generation tool is visible in the current Preset.
+Configure only what you use: without a video key you can still write storyboards and generate keyframe images. The top of the Production view shows whether each vendor is configured and which variable is missing. At startup the plugin registers the five built-in adapters in a credential-free config file (by default under `oh-story-dsh-<uid>/` in the system temp directory, readable and writable only by the current user; the "generation environment" bar shows the full path), and the agent references it directly when running `production_tool.py run`. To use your own adapter or change timeouts, point `OH_STORY_DRAMA_ADAPTER_CONFIG` at your own file. Each vendor's parameters, resolutions and duration limits are documented in the bundled `short-drama-produce/references/providers/`. Novel covers use whichever image-generation tool is visible in the current Preset.
 
 </details>
 
@@ -140,7 +141,7 @@ Configure only what you use: without a video key you can still write storyboards
 Whichever profile the plugin is installed into, every Session of that profile loads the creation Skills. To keep the stock `web` profile clean, install into a separate profile:
 
 ```bash
-npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.1.5-rc.1 dsh plugin --profile story add @oh-story/dsh@0.1.9
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.1.7-rc.2 dsh plugin --profile story add @oh-story/dsh@0.1.10
 ```
 
 A new profile has no UI by default. Edit `~/.dsh/profiles/story/package.json` and set `dsh.profile.bundles` to:
@@ -156,15 +157,15 @@ A new profile has no UI by default. Edit `~/.dsh/profiles/story/package.json` an
 `@deepseek-ai/dsh-web-app` is DSH's own Web UI package and must load before the creation plugin. The two profiles can then run at the same time on different ports; models, credentials, workspaces and session history are stored centrally by DSH:
 
 ```bash
-npx -y @deepseek-ai/dsh@0.1.5-rc.1 web                          # stock DSH
-npx -y @deepseek-ai/dsh@0.1.5-rc.1 --profile story --port 3081  # creation workbench
+npx -y @deepseek-ai/dsh@0.1.7-rc.2 web                          # stock DSH
+npx -y @deepseek-ai/dsh@0.1.7-rc.2 --profile story --port 3081  # creation workbench
 ```
 
 </details>
 
 ## Start creating
 
-On first entry you see the DSH home page. Click **＋ (Add workspace)** next to Workspaces on the left, pick the folder that holds your work, then select it under **Choose workspace**; DSH opens a blank session. If the folder already contains creative projects, the four workbench tabs "小说 / 短剧 / 游戏 / 视频" (novel / short drama / game / video) appear. An empty folder keeps DSH's native Chat: type `/story`, `/short-drama`, `/novel-to-game quick` or `/video-recap` to begin, and the workbench appears once the agent writes the first creative file.
+On first start DSH creates a **Default workspace** under your Documents folder (`deepseek-harness/default-workspace`) and opens a blank session in it, with the Oh Story guide on the session page. To work in your own folder, click **Add workspace** next to Workspaces on the left, pick the folder that holds your work, then select it under **Choose workspace**; creative files are written into the workspace the current session belongs to. If the folder already contains creative projects, the four workbench tabs "小说 / 短剧 / 游戏 / 视频" (novel / short drama / game / video) appear. An empty folder keeps DSH's native Chat: type `/story`, `/short-drama`, `/novel-to-game quick` or `/video-recap` to begin, and the workbench appears once the agent writes the first creative file.
 
 The requests below can be copied and adapted; replace the bracketed parts before sending.
 
@@ -209,10 +210,10 @@ Before chapter 21 is written, [`追踪/上下文.md`](scripts/demo-fixtures/stor
 (Current position: chapter 20 … Active foreshadowing: F016, Zhong Jiajia is no ordinary intern … Continuity risk: chapter 21 has no outline yet; do not write prose directly.) The last line is a hard gate. Prose written without an outline is refused by DSH's `tools/pre-execute` hook:
 
 ```text
-Oh Story 阻止写入第 21 章：未找到对应的 大纲/细纲_第XXX章*.md。请先完成细纲。
+Oh Story 阻止写入第 21 章：未找到对应的 大纲/细纲_第021章*.md。先按 story-long-write 单章流程补建细纲再写正文。
 ```
 
-(“Oh Story blocked writing chapter 21: no matching outline file found. Finish the chapter outline first.”)
+(“Oh Story blocked writing chapter 21: no matching outline file 大纲/细纲_第021章*.md was found. Write the outline through the story-long-write chapter flow first.”)
 
 ### One shot owns one layer in each of the five short-drama documents
 
@@ -258,11 +259,11 @@ IMG-JIANGCHEN-SHEET 在当前集内重复，后出现的条目会遮蔽前一条
 ```json
 "checks": { "launch": "PASS", "render": "PASS", "input": "PASS", "coreLoop": "PASS", "outcome": "PASS", "restart": "PASS" },
 "limitations": [ ……
-  { "scope": "体验判断", "reason": "证据只证明可运行、可输入、可走完、可重开及布局约束，不把主观趣味或长期平衡宣称为确定结论。" }
+  { "scope": "体验判断", "reason": "自动化只证明当前候选可启动、渲染、输入、走到结果并重开，不判断主观吸引力、长期平衡或其他浏览器。" }
 ]
 ```
 
-(Scope “experience judgement”: the evidence proves only that the game launches, accepts input, can be played through and restarted, and respects layout constraints; it does not claim subjective fun or long-term balance.)
+(Scope “experience judgement”: the automation proves only that the current candidate launches, renders, accepts input, reaches an outcome and restarts; it does not judge subjective appeal, long-term balance or other browsers.)
 
 ## FAQ
 
@@ -284,7 +285,7 @@ The plugin never calls a model itself; DSH shows the usage under every reply, an
 
 ### Does DeepSeek generate images and video itself? What can I do without a video key?
 
-No. DeepSeek only writes the screenplay, storyboard and prompts; media is generated by `short-drama-produce` through GPT Image 2, Seedance, MiniMax H3 or MiniMax Music, with keys set as host environment variables before DSH starts, and only for the vendors you use. Without a video key you can still finish all five documents and generate keyframe images.
+No. DeepSeek only writes the screenplay, storyboard and prompts; media is generated by `short-drama-produce` through GPT Image 2, Seedance, MiniMax H3, MiniMax Speech or MiniMax Music, with keys set as host environment variables before DSH starts, and only for the vendors you use. Without a video key you can still finish all five documents and generate keyframe images.
 
 ### The storyboard or game design is written — where do the film and the playable build come from?
 
@@ -296,7 +297,15 @@ They did before 0.1.7 ([#29](https://github.com/zenstory-ai/oh-story-dsh/issues/
 
 ### A long reply in the right-hand Chat is hidden behind the input box?
 
-Reported in [#3](https://github.com/zenstory-ai/oh-story-dsh/issues/3) and [#26](https://github.com/zenstory-ai/oh-story-dsh/issues/26). Since 0.1.6 the body re-pins to the bottom after the window is resized, and 0.1.8 removed the last trigger. If it still reproduces on 0.1.9, open an issue with the version and window width.
+Reported in [#3](https://github.com/zenstory-ai/oh-story-dsh/issues/3) and [#26](https://github.com/zenstory-ai/oh-story-dsh/issues/26). Since 0.1.6 the body re-pins to the bottom after the window is resized, and 0.1.8 removed the last trigger. If it still reproduces on 0.1.10, open an issue with the version and window width.
+
+### The workbench is blank after installing — no panel and no "创作工作台" button?
+
+That is [#50](https://github.com/zenstory-ai/oh-story-dsh/issues/50): plugin 0.1.9 and earlier crash on DSH 0.1.7 because they read a Queue field DSH removed, and the error boundary then retires the whole workbench; DSH `0.1.7-rc.2` behaves the same. Upgrade to 0.1.10 and run DSH `0.1.7-rc.2` with the install commands above. From 0.1.10 the plugin declares compatibility with the DSH 0.1.7 patch line only, so DSH 0.1.7 and later report a mismatch instead of loading it.
+
+### I also installed Oh Story for Codex or OpenCode — which copy does DSH use?
+
+DSH also reads `~/.agents/skills` and prefers a same-named copy there over the plugin's bundled, DSH-adapted version, so when the two differ, the `~/.agents` copy wins. To make DSH use only the plugin's Skills, point `DSH_AGENTS_HOME` at another directory before starting (for example `DSH_AGENTS_HOME=~/.dsh-agents npx -y @deepseek-ai/dsh@0.1.7-rc.2 web`), or move the same-named folders out of `~/.agents/skills`.
 
 ### Install reports `pnpm not found on PATH`?
 
@@ -312,11 +321,13 @@ Add a work directory and open a session first. In an empty directory, run a crea
 
 ### Does it work on Windows?
 
-Yes. The type, asset, unit-test and build gate runs on both macOS and Windows in CI on every change; the integration test that packages the plugin into the official DSH Web runs on Linux. The video pipeline needs Python 3.10+ and ffmpeg with libass on every platform.
+Yes. The type, asset, unit-test and build gate runs on both macOS and Windows in CI on every change; the integration test that packages the plugin into the official DSH Web runs on Linux. The video pipeline needs Python 3.10+ and ffmpeg with libass on every platform; long-form analysis, import and long-form tracking also need Python 3 on the host, and short-drama assembly needs ffmpeg/ffprobe, with libass for the default burned-in subtitles.
 
 ### What do I do after upgrading?
 
-Rerun the install command with the new version after `@oh-story/dsh@`, then restart DSH; use the same dsh version for install and start. Skills and Roles ship inside the plugin, so nothing needs to be redeployed into your project. Existing short-drama projects should note two tightenings: since 0.1.5 every storyboard shot must state its "视觉依据" (visual basis) and every `REF-*` slot must declare a `用途` (purpose); since 0.1.7 every shot's "来源" (source) must begin with a scene ID that really exists in `剧本.md`. See [CHANGELOG.md](CHANGELOG.md) for each release.
+Rerun the install command with the new version after `@oh-story/dsh@`, then restart DSH; use the same dsh version for install and start. Skills and Roles ship inside the plugin, so nothing needs to be redeployed into your project. Existing short-drama projects should note two tightenings: since 0.1.5 every storyboard shot must state its "视觉依据" (visual basis) and every `REF-*` slot must declare a `用途` (purpose); since 0.1.7 every shot's "来源" (source) must begin with a scene ID that really exists in `剧本.md`.
+
+0.1.10 adds three more: upgrade DSH to `0.1.7-rc.2` together with the plugin — it moves session logs to a new format, after which the same DSH home cannot go back to 0.1.5; Oh Story 0.8.0 splits author memory into a workspace store and a per-book store, so "本书：" entries written before the upgrade only take part in queries again after running `author_memory_commit.py migrate --workspace {workspace} --book-root {book dir}` once per book (in this plugin's single-book layout both are the workspace itself; or just ask the agent to "整理作者记忆"); and since Drama Skills 0.7.1, `剪辑单.md` must account for every unused `MOTION-*` on one `- 未采用镜头：` line before the first `## CUT-`, or the cut check blocks. See [CHANGELOG.md](CHANGELOG.md) for each release.
 
 ## Further reading
 

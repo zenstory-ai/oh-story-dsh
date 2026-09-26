@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import { chromium, type Locator, type Page } from "@playwright/test";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const dshVersion = "0.1.5-rc.1";
+const dshVersion = "0.1.7-rc.2";
 /** Exact WebSocket route carrying every Typert Remote stream. */
 const REMOTE_STREAM_MUX_PATH = "/api/remote.mux";
 const demoFramesDirectory = process.env.OH_STORY_DEMO_FRAMES_DIR;
@@ -130,13 +130,56 @@ interface MockDeepSeek {
   readonly server: HttpServer;
 }
 
+type MessagesEvent = { readonly type: string } & Readonly<Record<string, unknown>>;
+
+interface WireMessage {
+  readonly role?: string;
+  readonly content?: unknown;
+}
+
+/**
+ * DSH 0.1.7's DeepSeek provider speaks the Anthropic-compatible Messages API
+ * (`<base>/v1/messages`), so the fixture streams Messages events rather than
+ * chat-completion chunks. Every response is one block: text or a single tool call.
+ */
+function messagesStream(block: MessagesEvent, deltas: readonly MessagesEvent[], stopReason: "end_turn" | "tool_use"): MessagesEvent[] {
+  return [
+    { type: "message_start", message: { id: `msg_${crypto.randomUUID()}`, type: "message", role: "assistant", model: "deepseek-fixture", content: [], stop_reason: null, usage: { input_tokens: 12, output_tokens: 0 } } },
+    { type: "content_block_start", index: 0, content_block: block },
+    ...deltas.map((delta) => ({ type: "content_block_delta", index: 0, delta })),
+    { type: "content_block_stop", index: 0 },
+    { type: "message_delta", delta: { stop_reason: stopReason, stop_sequence: null }, usage: { output_tokens: 20 } },
+    { type: "message_stop" }
+  ];
+}
+
+function messagesText(chunks: readonly string[]): MessagesEvent[] {
+  return messagesStream({ type: "text", text: "" }, chunks.map((text) => ({ type: "text_delta", text })), "end_turn");
+}
+
+/** Arguments arrive as small JSON deltas so the workbench sees a call before it can run. */
+function messagesToolCall(id: string, name: string, args: unknown): MessagesEvent[] {
+  const argumentsJson = JSON.stringify(args);
+  const chunks = argumentsJson.match(/.{1,14}/gu) ?? [argumentsJson];
+  return messagesStream({ type: "tool_use", id, name, input: {} }, chunks.map((json) => ({ type: "input_json_delta", partial_json: json })), "tool_use");
+}
+
+function wireBlocks(message: WireMessage): readonly { readonly type?: string }[] {
+  return Array.isArray(message.content) ? message.content as readonly { readonly type?: string }[] : [];
+}
+
+/** Messages carries tool results as user messages; a prompt is a user message without one. */
+function isToolResult(message: WireMessage): boolean {
+  return message.role === "user" && wireBlocks(message).some((block) => block.type === "tool_result");
+}
+
 async function startMockDeepSeek(): Promise<MockDeepSeek> {
   const requests: string[] = [];
   const server = createHttpServer((request, response) => {
     let body = "";
     request.on("data", (chunk: Buffer) => { body += chunk.toString("utf8"); });
     request.on("end", async () => {
-      if (request.method !== "POST" || !request.url?.endsWith("/chat/completions")) {
+      if (request.method !== "POST" || !request.url?.endsWith("/v1/messages")) {
         response.writeHead(404).end("not found");
         return;
       }
@@ -147,8 +190,8 @@ async function startMockDeepSeek(): Promise<MockDeepSeek> {
         return;
       }
       const serialized = JSON.stringify(payload);
-      const messages = (payload as { readonly messages?: readonly { readonly role?: string }[] }).messages ?? [];
-      const lastUserIndex = messages.findLastIndex((message) => message.role === "user");
+      const messages = (payload as { readonly messages?: readonly WireMessage[] }).messages ?? [];
+      const lastUserIndex = messages.findLastIndex((message) => message.role === "user" && !isToolResult(message));
       const currentTurn = JSON.stringify(messages.slice(Math.max(lastUserIndex, 0)));
       const gameUpdateTurn = currentTurn.includes(gameUpdatePrompt);
       const plainWriteTurn = currentTurn.includes(plainWritePrompt);
@@ -162,35 +205,21 @@ async function startMockDeepSeek(): Promise<MockDeepSeek> {
       const roleParentTurn = currentTurn.includes(roleSmokePrompt);
       const productionIntentTurn = currentTurn.includes(productionIntentSmokePrompt);
       const roleChildTurn = serialized.includes(roleChildPrompt) && !serialized.includes(roleSmokePrompt);
-      const hasToolResult = messages.slice(lastUserIndex + 1).some((message) => message.role === "tool");
-      let events: string[];
+      const hasToolResult = messages.slice(lastUserIndex + 1).some(isToolResult);
+      let events: MessagesEvent[];
       if (roleChildTurn && !hasToolResult) {
         requests.push("role-child-reference-start");
-        const argumentsJson = JSON.stringify({ reference: roleReference });
-        const chunks = argumentsJson.match(/.{1,14}/gu) ?? [argumentsJson];
-        events = [
-          JSON.stringify({ choices: [{ delta: { role: "assistant", content: null, reasoning_content: "" } }] }),
-          ...chunks.map((argumentsDelta, index) => JSON.stringify({ choices: [{ delta: { tool_calls: [{
-            index: 0,
-            ...(index === 0 ? { id: "call_oh_story_reference_smoke", type: "function" } : {}),
-            function: { ...(index === 0 ? { name: "oh_story_bundled_reference" } : {}), arguments: argumentsDelta }
-          }] } }] })),
-          JSON.stringify({ choices: [{ delta: { content: "" }, finish_reason: "tool_calls" }], usage: { prompt_tokens: 12, completion_tokens: 20 } }),
-          "[DONE]"
-        ];
+        events = messagesToolCall("call_oh_story_reference_smoke", "oh_story_bundled_reference", { reference: roleReference });
       } else if (roleChildTurn) {
-        if (!serialized.includes(roleReferenceExcerpt)) {
+        // The child's own prompt quotes the excerpt, so only a successful tool result proves the read.
+        const toolResults = JSON.stringify(messages.filter(isToolResult));
+        if (!toolResults.includes(roleReferenceExcerpt) || /"is_error":true/u.test(toolResults)) {
           requests.push("role-child-reference-missing-result");
           response.writeHead(422, { "content-type": "application/json" }).end('{"error":"bundled reference result was not returned to the child"}');
           return;
         }
         requests.push("role-child-reference-resume");
-        events = [
-          JSON.stringify({ choices: [{ delta: { role: "assistant", content: null, reasoning_content: "" } }] }),
-          JSON.stringify({ choices: [{ delta: { content: roleChildReply } }] }),
-          JSON.stringify({ choices: [{ delta: { content: "" }, finish_reason: "stop" }], usage: { prompt_tokens: 12, completion_tokens: 20 } }),
-          "[DONE]"
-        ];
+        events = messagesText([roleChildReply]);
       } else if ((mutationTurn || todoLayoutTurn || roleParentTurn || productionIntentTurn) && !hasToolResult) {
         const tool = roleParentTurn
           ? { id: "call_oh_story_role_smoke", name: "oh_story_role", args: { role: "narrative-writer", prompt: roleChildPrompt } }
@@ -204,18 +233,7 @@ async function startMockDeepSeek(): Promise<MockDeepSeek> {
               ? { id: "call_plain_write_smoke", name: "write", args: { file_path: plainWritePath, content: plainWriteContent } }
               : { id: "call_oh_story_write_smoke", name: "write", args: { file_path: agentMutationPath, content: agentMutationContent } };
         requests.push(roleParentTurn ? "role-parent-start" : productionIntentTurn ? "production-intent" : todoLayoutTurn ? "todo" : gameUpdateTurn ? "game-write" : plainWriteTurn ? "plain-write" : "write");
-        const argumentsJson = JSON.stringify(tool.args);
-        const chunks = argumentsJson.match(/.{1,14}/gu) ?? [argumentsJson];
-        events = [
-          JSON.stringify({ choices: [{ delta: { role: "assistant", content: null, reasoning_content: "" } }] }),
-          ...chunks.map((argumentsDelta, index) => JSON.stringify({ choices: [{ delta: { tool_calls: [{
-            index: 0,
-            ...(index === 0 ? { id: tool.id, type: "function" } : {}),
-            function: { ...(index === 0 ? { name: tool.name } : {}), arguments: argumentsDelta }
-          }] } }] })),
-          JSON.stringify({ choices: [{ delta: { content: "" }, finish_reason: "tool_calls" }], usage: { prompt_tokens: 12, completion_tokens: 20 } }),
-          "[DONE]"
-        ];
+        events = messagesToolCall(tool.id, tool.name, tool.args);
       } else {
         if (roleParentTurn && !serialized.includes(roleChildReply)) {
           requests.push("role-parent-resume-missing-result");
@@ -240,13 +258,7 @@ async function startMockDeepSeek(): Promise<MockDeepSeek> {
               : serialized.includes(storyProjectName) ? storyReply : dramaReply;
         // A long answer arrives as many deltas, so the tail settles after the
         // reader is already parked at the bottom.
-        const contentChunks = content.match(/[\s\S]{1,64}/gu) ?? [content];
-        events = [
-          JSON.stringify({ choices: [{ delta: { role: "assistant", content: null, reasoning_content: "" } }] }),
-          ...contentChunks.map((chunk) => JSON.stringify({ choices: [{ delta: { content: chunk } }] })),
-          JSON.stringify({ choices: [{ delta: { content: "" }, finish_reason: "stop" }], usage: { prompt_tokens: 12, completion_tokens: 20 } }),
-          "[DONE]"
-        ];
+        events = messagesText(content.match(/[\s\S]{1,64}/gu) ?? [content]);
       }
       response.writeHead(200, {
         "cache-control": "no-cache",
@@ -256,7 +268,7 @@ async function startMockDeepSeek(): Promise<MockDeepSeek> {
       response.flushHeaders();
       response.socket?.setNoDelay(true);
       for (const event of events) {
-        response.write(`data: ${event}\n\n`);
+        response.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
         if (productionTurn || todoLayoutTurn || (mutationTurn && !hasToolResult)) {
           await new Promise((accept) => setTimeout(accept, productionTurn ? 750 : todoLayoutTurn ? 500 : 180));
         }
@@ -302,6 +314,16 @@ async function authorizeDsh(origin: string, logs: readonly string[]): Promise<st
     await new Promise((accept) => setTimeout(accept, 150));
   }
   throw new Error("Timed out waiting for official DSH Web.");
+}
+
+/**
+ * DSH 0.1.7 creates its first-use workspace under the account's Documents folder, outside
+ * DSH_HOME. Point it into the temporary root so a run never writes to the real home.
+ */
+async function isolateFirstUseWorkspace(dshHome: string, documents: string): Promise<void> {
+  await mkdir(documents, { recursive: true });
+  await writeFile(join(dshHome, "profiles", "web", "cordis.patch.yml"),
+    `- id: workspace-controller\n  config:\n    documentsDirectory: ${JSON.stringify(documents)}\n`);
 }
 
 /** Every request to DSH carries the session cookie obtained by {@link authorizeDsh}. */
@@ -407,8 +429,12 @@ async function prepareSession(origin: string, sessionId: string, prompt: string,
     readonly groups: readonly { readonly id: string; readonly models: readonly { readonly id: string }[] }[];
   }>(origin, "session/modelCatalog", {});
   const deepseek = models.groups.find((group) => group.id === "deepseek-official");
-  const model = deepseek?.models.find((candidate) => candidate.id === "deepseek-v4-flash")?.id ?? deepseek?.models[0]?.id;
-  if (deepseek === undefined || model === undefined) throw new Error("DSH did not expose a DeepSeek official model.");
+  // DSH 0.1.7 renamed deepseek-v4-flash to deepseek-flash. Fail on a missing id instead of falling
+  // back to whatever the catalog lists first, so a catalog change cannot swap the tested model.
+  const model = deepseek?.models.find((candidate) => candidate.id === "deepseek-flash")?.id;
+  if (deepseek === undefined || model === undefined) {
+    throw new Error(`DSH did not expose deepseek-official/deepseek-flash: ${JSON.stringify(models.groups.map((group) => ({ id: group.id, models: group.models.map((candidate) => candidate.id) })))}`);
+  }
   await rpc(origin, "session/selectModel", { request: { sessionId, provider: deepseek.id, model } });
   await rpc(origin, "session/prompt", {
     request: {
@@ -461,7 +487,12 @@ async function openFolder(page: Page, label: string): Promise<void> {
 
 /** DSH 0.1.2 folds a completed Turn's tool calls behind a turn-process disclosure. */
 async function expandTurnProcesses(page: Page): Promise<void> {
-  const collapsed = page.locator('button[data-turn-process][aria-expanded="false"]');
+  // DSH 0.1.7 also folds a Turn's tool rows into step-process groups whose header sits in a
+  // wrapper that is hidden while the group is not grouped.
+  const collapsed = page.locator([
+    'button[data-turn-process][aria-expanded="false"]',
+    '[data-step-process] > div:not([hidden]) > button[aria-controls][aria-expanded="false"]'
+  ].join(", "));
   // Each click re-renders the flow, so re-resolve the first collapsed toggle every round.
   for (let round = 0; round < 32 && await collapsed.count() > 0; round += 1) {
     await collapsed.first().click();
@@ -485,8 +516,9 @@ async function selectSession(page: Page, workspaceTitle: string, sessionTitle: s
   await sessionRow.click();
   // The compact sidebar can close after navigation. Verify the destination in
   // the conversation header instead of requiring its sidebar row to stay visible.
+  // DSH 0.1.7 renders the current Session as plain text there, no longer as a button.
   await page.getByRole("navigation", { name: /^(?:Session hierarchy|会话层级)$/u })
-    .getByRole("button", { name: sessionTitle, exact: true })
+    .getByText(sessionTitle, { exact: true })
     .waitFor({ state: "visible", timeout: 10_000 });
 }
 
@@ -500,7 +532,7 @@ async function assertChatAnchorContract(
   await page.waitForFunction((layout) => (
     document.querySelector("[data-conversation-scroll]")?.getAttribute("data-oh-story-layout") === layout
   ), expectedLayout);
-  const anchor = page.locator("[data-chat-flow-key]").last();
+  const anchor = page.locator("[data-chat-flow]:not([data-step-process-content]) > [data-chat-flow-key]:not([hidden])").last();
   let measurement: {
     readonly anchorBox: Awaited<ReturnType<Locator["boundingBox"]>>;
     readonly composerBox: Awaited<ReturnType<Locator["boundingBox"]>>;
@@ -650,6 +682,7 @@ async function main(): Promise<void> {
         || /(?:^|\/)__pycache__(?:\/|$)/u.test(entry)
         || /\.pyc$/u.test(entry)
         || /(?:^|\/)\.DS_Store$/u.test(entry)
+        || /(?:^|\/)\.omc(?:\/|$)/u.test(entry)
         || /copy-path-safety\.py$/u.test(entry)
         || /dashboard_server\.py$/u.test(entry)
         || /drama\/skills\/short-drama\/references\/lifecycle-commands\.md$/u.test(entry)) {
@@ -665,11 +698,16 @@ async function main(): Promise<void> {
       ...process.env,
       COREPACK_ENABLE_PROJECT_SPEC: "0",
       DSH_HOME: dshHome,
+      // DSH also loads Skills from ~/.agents/skills and prefers them over a plugin's. An author who
+      // installed Oh Story for another agent would otherwise satisfy (or break) the catalog checks.
+      DSH_AGENTS_HOME: join(temporaryRoot, "agents"),
       DSH_TELEMETRY_DISABLED: "1",
       DEEPSEEK_API_KEY: realApiKey ?? "oh-story-local-fixture",
-      DEEPSEEK_BASE_URL: mockDeepSeek?.baseURL ?? "https://api.deepseek.com"
+      // DSH 0.1.7 talks to DeepSeek's Anthropic-compatible Messages root, not the API root.
+      DEEPSEEK_BASE_URL: mockDeepSeek?.baseURL ?? "https://api.deepseek.com/anthropic"
     };
     run(process.execPath, [dshBin, "plugin", "--profile", "web", "add", archivePath], env);
+    await isolateFirstUseWorkspace(dshHome, join(temporaryRoot, "documents"));
     const port = new URL(origin).port;
     child = spawn(process.execPath, [dshBin, "web", "--no-open", "--port", port], {
       cwd: repositoryRoot, env, stdio: ["ignore", "pipe", "pipe"]
@@ -706,6 +744,7 @@ async function main(): Promise<void> {
     }
     await compactFirstRunPage.close();
 
+
     const storyWorkspace = await rpc<{ readonly workspace: { readonly workspaceId: string; readonly title: string } }>(origin, "workspace/create", { request: { path: storyRoot } });
     const dramaWorkspace = await rpc<{ readonly workspace: { readonly workspaceId: string; readonly title: string } }>(origin, "workspace/create", { request: { path: dramaRoot } });
     const plainWorkspace = await rpc<{ readonly workspace: { readonly workspaceId: string; readonly title: string } }>(origin, "workspace/create", { request: { path: plainRoot } });
@@ -719,7 +758,7 @@ async function main(): Promise<void> {
       : await rpc<{ readonly sessionId: string }>(origin, "session/create", { request: { workspaceId: storyWorkspace.workspace.workspaceId } });
     const dramaSession = await rpc<{ readonly sessionId: string }>(origin, "session/create", { request: { workspaceId: dramaWorkspace.workspace.workspaceId } });
     const plainSession = await rpc<{ readonly sessionId: string }>(origin, "session/create", { request: { workspaceId: plainWorkspace.workspace.workspaceId } });
-    const catalog = await rpc<{ readonly skills: readonly { readonly name: string }[] }>(origin, "skills/list", { request: { sessionId: storySession.sessionId } });
+    const catalog = await rpc<{ readonly skills: readonly { readonly name: string; readonly path?: string }[] }>(origin, "skills/list", { request: { sessionId: storySession.sessionId } });
     const ohStorySkills = catalog.skills.filter((skill) => skill.name === "story" || skill.name.startsWith("story-") || skill.name === "browser-cdp");
     const dramaSkills = catalog.skills.filter((skill) => skill.name === "short-drama" || skill.name.startsWith("short-drama-"));
     const gameSkills = catalog.skills.filter((skill) => [
@@ -733,6 +772,12 @@ async function main(): Promise<void> {
     if (gameSkills.length !== 7) throw new Error(`Expected 7 NovelToGame Skills, found ${String(gameSkills.length)}.`);
     if (JSON.stringify(videoSkills.map((skill) => skill.name).sort()) !== JSON.stringify(["video-recap", "video-script"])) {
       throw new Error(`Expected the two user-invocable video-recap entries, found ${videoSkills.map((skill) => skill.name).join(", ")}.`);
+    }
+    // Names alone cannot tell the plugin's bridged Skills from same-named copies found elsewhere.
+    const foreignSkills = [...ohStorySkills, ...dramaSkills, ...gameSkills, ...videoSkills]
+      .filter((skill) => !(skill.path ?? "").replaceAll("\\", "/").includes("/@oh-story/dsh/lib/"));
+    if (foreignSkills.length > 0) {
+      throw new Error(`Skills did not come from the installed plugin: ${JSON.stringify(foreignSkills.map((skill) => ({ name: skill.name, path: skill.path })))}`);
     }
     const storySessionTitle = `小说 · ${storyProjectName}`;
     const gameSessionTitle = "游戏 · Live Game Lab";
@@ -754,6 +799,20 @@ async function main(): Promise<void> {
     }
     await firstRunPage.getByRole("tablist", { name: "创作工作台" }).waitFor({ state: "visible", timeout: 20_000 });
     await welcome.waitFor({ state: "detached", timeout: 10_000 });
+    // DSH 0.1.7 opens a fresh home straight into a blank Session in its default workspace, so the
+    // guide belongs to that blank state: it returns with that Session and retires once it starts.
+    if (!useRealDeepSeek) {
+      // DSH lists a blank Session only while it is selected; its workspace's New Session action
+      // reuses that blank Session.
+      await firstRunPage.getByRole("treeitem").filter({ hasText: /^(?:Default workspace|默认工作区)/u }).first().hover();
+      await firstRunPage.getByRole("button", { name: /^(?:New session in Default workspace|在“默认工作区”中新建会话)$/u }).click();
+      await welcome.waitFor({ state: "visible", timeout: 10_000 });
+      const firstRunSessions = await rpc<{ readonly items: readonly { readonly sessionId: string; readonly blank: boolean }[] }>(origin, "session/list", { _request: {} });
+      const blankSessions = firstRunSessions.items.filter((item) => item.blank);
+      if (blankSessions.length !== 1) throw new Error(`Expected the default workspace's one blank Session: ${JSON.stringify(firstRunSessions.items)}`);
+      await prepareSession(origin, blankSessions[0]!.sessionId, "你好", "通用 · 首次启动");
+      await welcome.waitFor({ state: "detached", timeout: 10_000 });
+    }
     if (firstRunErrors.length > 0) throw new Error(`First-launch browser errors: ${JSON.stringify(firstRunErrors)}`);
     await firstRunBrowser.close();
     firstRunBrowser = undefined;
@@ -773,11 +832,11 @@ async function main(): Promise<void> {
       const roleCalls = roleEvents.filter((event) => event.type === "tool/call")
         .map((event) => event.data as { readonly callId?: string; readonly name?: string; readonly arguments?: unknown })
         .filter((call) => call.name === "oh_story_role");
+      // Session format V4 (DSH 0.1.7) lifts a result into a `tool`-role message that names its
+      // call directly; `isError` is present only when the call failed.
       const roleResult = roleEvents.filter((event) => event.type === "tool/result")
-        .flatMap((event) => (event.data as {
-          readonly message?: { readonly content?: readonly { readonly toolCallId?: string; readonly isError?: boolean }[] };
-        }).message?.content ?? [])
-        .find((result) => result.toolCallId === roleCalls[0]?.callId);
+        .map((event) => (event.data as { readonly message?: { readonly toolCallId?: string; readonly isError?: boolean } }).message)
+        .find((message) => message?.toolCallId !== undefined && message.toolCallId === roleCalls[0]?.callId);
       let roleArguments: unknown;
       try {
         const value = roleCalls[0]?.arguments;
@@ -788,7 +847,8 @@ async function main(): Promise<void> {
       if (roleCalls.length !== 1
         || (roleArguments as { readonly role?: unknown } | undefined)?.role !== "narrative-writer"
         || (roleArguments as { readonly prompt?: unknown } | undefined)?.prompt !== roleChildPrompt
-        || roleResult?.isError !== false
+        || roleResult === undefined
+        || roleResult.isError === true
         || !serializedRoleEvents.includes(roleChildReply)
         || !serializedRoleEvents.includes(roleParentReply)
         || JSON.stringify(roleTrace) !== JSON.stringify(["role-parent-start", "role-child-reference-start", "role-child-reference-resume", "role-parent-resume"])) {
@@ -1006,14 +1066,15 @@ async function main(): Promise<void> {
       }
     }
 
-    // DSH 0.1.2 preloads every browser module through one combined `/plugins/??a,b` URL,
-    // so the plugin's own registration is sliced back out of the shared response.
+    // DSH preloads browser modules through combined `plugins/??a,b` URLs, so the plugin's own
+    // registration is sliced back out of a shared response. 0.1.7 splits the preload into several
+    // relative URLs by phase; take the one that carries the plugin.
     const index = await (await dshFetch(origin)).text();
-    const preloadPath = index.match(/\/plugins\/\?\?[^"']+/u)?.[0].replaceAll("&amp;", "&");
-    if (preloadPath === undefined || !preloadPath.includes("@oh-story/dsh/client.js")) {
-      throw new Error("DSH did not publish the Oh Story Browser module.");
-    }
-    const bundle = await (await dshFetch(new URL(preloadPath, origin))).text();
+    const preloadPath = [...index.matchAll(/\/?plugins\/\?\?[^"'\s]+/gu)]
+      .map((match) => match[0].replaceAll("&amp;", "&"))
+      .find((path) => path.includes("@oh-story/dsh/client.js"));
+    if (preloadPath === undefined) throw new Error("DSH did not publish the Oh Story Browser module.");
+    const bundle = await (await dshFetch(new URL(preloadPath, `${origin}/`))).text();
     // Registrations appear both minified and pretty-printed in the combined bundle, so the
     // module boundaries have to tolerate the whitespace. Anchoring on the minified form only
     // silently ran the slice past the plugin and into whichever DSH module followed it.
@@ -1057,7 +1118,7 @@ async function main(): Promise<void> {
       }
       await page.locator('[class*="onboardingOverlay"]').waitFor({ state: "detached", timeout: 10_000 }).catch(() => undefined);
       await selectSession(page, storyWorkspace.workspace.title, storySessionTitle);
-      const blankSession = page.locator("button").filter({ hasText: /^\s*(?:New Session|新会话)\s*$/iu }).first();
+      const blankSession = page.getByRole("button", { name: /^(?:New session|新建会话)$/u }).filter({ visible: true }).first();
       try { await blankSession.waitFor({ state: "visible", timeout: 10_000 }); }
       catch (error) {
         const buttons = await page.getByRole("button").allTextContents();
@@ -1137,7 +1198,7 @@ async function main(): Promise<void> {
 
       // The Session Store is not persisted, so the choice has to survive on its own:
       // a new Session in the same workspace must open collapsed.
-      const plainBlankSession = page.locator("button").filter({ hasText: /^\s*(?:New Session|新会话)\s*$/iu }).first();
+      const plainBlankSession = page.getByRole("button", { name: /^(?:New session|新建会话)$/u }).filter({ visible: true }).first();
       await plainBlankSession.waitFor({ state: "visible", timeout: 10_000 });
       await plainBlankSession.click();
       await page.getByRole("treeitem", { selected: true }).filter({ hasText: /^(?:New Session|新会话)$/iu })
@@ -1523,7 +1584,10 @@ async function main(): Promise<void> {
       await captureGameEvidence(page, "game-studio-title");
       await captureDemoFrame(page, "game", 2);
       await enterGame.click();
-      await gameFrame.getByText("第一日 · 正堂", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+      // The opening scene's heading. It is upstream copy (NovelToGame 0.4 rewrote it), so every
+      // wait on the opening goes through this one locator.
+      const gameOpening = gameFrame.getByRole("heading", { name: "账上空了五十两", exact: true });
+      await gameOpening.waitFor({ state: "visible", timeout: 10_000 });
       const gameIframe = page.locator('iframe[title="《金瓶梅 · 风月总账》可试玩预览"]');
       await gameIframe.evaluate((element) => { element.setAttribute("data-e2e-instance", "jin-ping-mei-preserved"); });
       await captureGameEvidence(page, "game-studio-playable");
@@ -1536,7 +1600,7 @@ async function main(): Promise<void> {
       if (await gameIframe.getAttribute("data-e2e-instance") !== "jin-ping-mei-preserved") {
         throw new Error("Preview/Design switching remounted the Jin Ping Mei iframe.");
       }
-      await gameFrame.getByText("第一日 · 正堂", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+      await gameOpening.waitFor({ state: "visible", timeout: 10_000 });
       const fullscreenButton = gameStudio.getByRole("button", { name: "全屏试玩", exact: true });
       await fullscreenButton.click();
       await page.waitForFunction(() => document.fullscreenElement?.classList.contains("oh-game-preview-shell") === true);
@@ -1581,7 +1645,7 @@ async function main(): Promise<void> {
       if (await gameIframe.getAttribute("data-e2e-instance") !== "jin-ping-mei-preserved") {
         throw new Error("Compact Studio/Chat switching remounted the game iframe.");
       }
-      await gameFrame.getByText("第一日 · 正堂", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+      await gameOpening.waitFor({ state: "visible", timeout: 10_000 });
       await captureGameEvidence(page, "game-studio-compact");
       await page.setViewportSize({ width: 1_440, height: 900 });
       await page.waitForFunction(() => document.querySelector("[data-conversation-scroll]")?.getAttribute("data-oh-story-layout") === "wide");
@@ -1592,7 +1656,7 @@ async function main(): Promise<void> {
       if (await gameIframe.getAttribute("data-e2e-instance") !== "jin-ping-mei-preserved") {
         throw new Error("Novel/Game switching remounted the active game iframe.");
       }
-      await gameFrame.getByText("第一日 · 正堂", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+      await gameOpening.waitFor({ state: "visible", timeout: 10_000 });
       if (!useRealDeepSeek) {
         await projectSelect.selectOption(`workspace:${generatedGameId}`);
         await generatedFrame.getByRole("button", { name: "试玩成功", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
@@ -1701,7 +1765,7 @@ async function main(): Promise<void> {
             const seat = scroll === undefined
               ? undefined
               : Array.from(scroll.children).find((element): element is HTMLElement => element instanceof HTMLElement && element.hasAttribute("data-composer-seat"));
-            const flow = scroll?.querySelector<HTMLElement>("[data-chat-flow]");
+            const flow = scroll?.querySelector<HTMLElement>("[data-chat-flow]:not([data-step-process-content])");
             if (scroll === undefined || seat === undefined || flow == null) return { found: false };
             const marked = Array.from(flow.querySelectorAll<HTMLElement>("*"))
               .find((element) => element.children.length === 0 && (element.textContent ?? "").includes(marker));
@@ -1742,31 +1806,58 @@ async function main(): Promise<void> {
         }
         await page.setViewportSize({ width: 1_440, height: 900 });
         await page.waitForTimeout(300);
+        // DSH 0.1.7 keeps a reader who scrolled up where they are when a new Turn starts (only a
+        // Composer submission returns to the tail), so come back down the way that reader would
+        // before checking what the streaming Todo covers.
+        await page.evaluate(() => {
+          const scroll = Array.from(document.querySelectorAll<HTMLElement>("[data-conversation-scroll]"))
+            .find((element) => element.dataset.ohStoryWorkbench === "drama" && element.getBoundingClientRect().width > 0);
+          if (scroll === undefined) return;
+          scroll.dispatchEvent(new WheelEvent("wheel", { deltaY: 100_000, bubbles: true }));
+          scroll.scrollTop = scroll.scrollHeight;
+        });
+        await page.waitForTimeout(200);
         await rpc(origin, "session/prompt", { request: { requestId: crypto.randomUUID(), sessionId: dramaSession.sessionId, mode: "queue", content: [{ type: "text", text: todoLayoutPrompt }] } });
         const todo = page.locator('[data-testid="todo-panel"]');
         await todo.waitFor({ state: "visible", timeout: 30_000 });
         await todo.getByRole("button").click();
         await todo.locator("li").last().waitFor({ state: "attached", timeout: 20_000 });
-        await page.waitForFunction(() => {
+        const measureTodoLayout = () => page.evaluate(() => {
           const scroller = Array.from(document.querySelectorAll<HTMLElement>("[data-conversation-scroll]"))
             .find((element) => element.dataset.ohStoryWorkbench === "drama" && element.getBoundingClientRect().width > 0);
-          const flow = scroller?.querySelector<HTMLElement>("[data-chat-flow]");
+          const flow = scroller?.querySelector<HTMLElement>("[data-chat-flow]:not([data-step-process-content])");
           const seat = scroller === undefined
             ? undefined
             : Array.from(scroller.children).find((element): element is HTMLElement => element instanceof HTMLElement && element.hasAttribute("data-composer-seat"));
           const tail = flow?.lastElementChild;
-          if (!(tail instanceof HTMLElement) || seat === undefined || flow === null) return false;
+          if (!(tail instanceof HTMLElement) || seat === undefined || flow === null || flow === undefined || scroller === undefined) {
+            return { ready: false, scroller: scroller !== undefined, flow: flow !== null && flow !== undefined, seat: seat !== undefined, tail: tail?.tagName };
+          }
           const tailBox = tail.getBoundingClientRect();
           const seatBox = seat.getBoundingClientRect();
           const clearance = Number.parseFloat(getComputedStyle(flow).paddingBottom);
-          return clearance >= seatBox.height + 15 && tailBox.bottom <= seatBox.top + 1;
-        }, undefined, { timeout: 10_000 });
-        const flow = page.locator('[data-slot="conversation.session"] [data-chat-flow]');
+          return {
+            ready: clearance >= seatBox.height + 15 && tailBox.bottom <= seatBox.top + 1,
+            clearance,
+            seatHeight: Math.round(seatBox.height),
+            seatTop: Math.round(seatBox.top),
+            tailBottom: Math.round(tailBox.bottom),
+            tail: `${tail.tagName}.${tail.className}`,
+            fromBottom: Math.round(scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight)
+          };
+        });
+        let todoLayout = await measureTodoLayout();
+        for (const deadline = Date.now() + 10_000; !todoLayout.ready && Date.now() < deadline;) {
+          await page.waitForTimeout(100);
+          todoLayout = await measureTodoLayout();
+        }
+        if (!todoLayout.ready) throw new Error(`Streaming Todo left the Chat tail behind the Composer: ${JSON.stringify(todoLayout)}`);
+        const flow = page.locator('[data-slot="conversation.session"] [data-chat-flow]:not([data-step-process-content])');
         const tail = flow.locator(":scope > *").last();
         // The seat grows by the Todo panel one layout pass before the workbench
         // republishes its height, so assert the settled frame, not the resize.
         await page.waitForFunction(() => {
-          const body = document.querySelector('[data-slot="conversation.session"] [data-chat-flow]');
+          const body = document.querySelector('[data-slot="conversation.session"] [data-chat-flow]:not([data-step-process-content])');
           const seat = document.querySelector("[data-composer-seat]");
           const last = body?.lastElementChild;
           if (body == null || seat == null || last == null) return false;
@@ -1779,7 +1870,9 @@ async function main(): Promise<void> {
           tail.boundingBox(), page.locator("[data-composer-seat]").boundingBox(), scroller.boundingBox(),
           flow.evaluate((element) => Number.parseFloat(getComputedStyle(element).paddingBottom)), tail.getAttribute("data-chat-flow-key")
         ]);
-        if (tailBox === null || seatBox === null || scrollBox === null || tailFlowKey !== null
+        // DSH 0.1.7 ends the flow with the running Turn's step-process group, which carries a flow
+        // key; the geometry, not the kind of the last row, is what must hold.
+        if (tailBox === null || seatBox === null || scrollBox === null
           || tailBox.y < scrollBox.y - 1 || tailBox.y + tailBox.height > seatBox.y + 1 || clearance < seatBox.height + 15) {
           throw new Error(`Streaming Todo obscured Chat: ${JSON.stringify({ tailBox, seatBox, scrollBox, clearance, tailFlowKey })}`);
         }

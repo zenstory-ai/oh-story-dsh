@@ -5,11 +5,13 @@ import {
   createPendingJob,
   mediaTargetFromPath,
   mediaVersionMatchesJob,
+  productionQueueFromInbox,
   queuedItemForJob,
   reconcileProductionJobs,
   reconcileSequence,
   reorderSequence,
   sequenceIssues,
+  settleSupersededCompositions,
   type ProductionJob,
   type ProductionMediaVersion
 } from "../src/client/production-runtime.js";
@@ -31,12 +33,44 @@ describe("production runtime", () => {
     expect(activeProductionJobId([running, queued], queue, false)).toBeUndefined();
   });
 
+  it("reads DSH Queue rows from the inbox projection that replaced SessionSnapshot.queue (#50)", () => {
+    const longPrefix = "按顺序执行。".repeat(60);
+    const rows = [
+      { id: "message-1", content: [{ type: "text", text: `/short-drama-produce ${longPrefix}\n- 任务 ID：job-late` }], source: { kind: "user" } },
+      { id: "message-2", content: [{ type: "image", attachment: {} }, { type: "text", text: "任务 ID：job-claimed" }], source: { kind: "user", rpcId: "rpc-2" } },
+      { id: 7, content: [] },
+      null
+    ];
+
+    const queue = productionQueueFromInbox(rows, new Set(["rpc-2"]));
+    expect(queue.map((item) => item.id)).toEqual(["message-1"]);
+    // The label sits past the 200-character preview DSH 0.1.5 used to hand out.
+    expect(queuedItemForJob("job-late", queue)?.id).toBe("message-1");
+    expect(queuedItemForJob("job-claimed", queue)).toBeUndefined();
+    expect(queuedItemForJob("job-claimed", productionQueueFromInbox(rows))?.id).toBe("message-2");
+  });
+
+  it("treats an absent inbox projection as an empty DSH Queue", () => {
+    expect(productionQueueFromInbox(undefined)).toEqual([]);
+    expect(productionQueueFromInbox({ "next-turn": [] })).toEqual([]);
+  });
+
   it("associates media through exact path tokens instead of substring guesses", () => {
     expect(mediaTargetFromPath("剧集/EP001/制作成果/SHOT-EP001-010/result.mp4", ["SHOT-EP001-001", "SHOT-EP001-010"])).toBe("SHOT-EP001-010");
     expect(mediaTargetFromPath("剧集/EP001/制作成果/misc/SHOT-EP001-0100-result.mp4", ["SHOT-EP001-010"])).toBeUndefined();
     const version = { id: "opaque", targetId: "SHOT-001", kind: "video" as const, url: "/media", path: "剧集/EP001/SHOT-001-job-10.mp4" };
     expect(mediaVersionMatchesJob(version, "job-10")).toBe(true);
     expect(mediaVersionMatchesJob(version, "job-1")).toBe(false);
+  });
+
+  it("never reads edit-stage files under 制作成果/成片/ as a new shot version", () => {
+    const targets = ["SHOT-EP001-001", "MOTION-EP001-001"];
+    // Clips the edit stage normalised to the delivery spec may carry the MOTION or shot ID.
+    expect(mediaTargetFromPath("剧集/EP001/制作成果/成片/规格统一/MOTION-EP001-001.mp4", targets)).toBeUndefined();
+    expect(mediaTargetFromPath("剧集/EP001/制作成果/成片/规格统一/SHOT-EP001-001.mp4", targets)).toBeUndefined();
+    expect(mediaTargetFromPath("剧集/EP001/制作成果/成片/分段/CUT-EP001-01.mp4", targets)).toBeUndefined();
+    // The produce-stage original stays a version of its shot.
+    expect(mediaTargetFromPath("剧集/EP001/制作成果/SHOT-EP001-001/SHOT-EP001-001-job-1.mp4", targets)).toBe("SHOT-EP001-001");
   });
 
   it("completes an assembly job on the newly rendered cut rather than a stale one", () => {
@@ -138,6 +172,58 @@ describe("production runtime", () => {
       completedOutputs: 1,
       error: expect.stringContaining("已发现 1/2")
     });
+  });
+
+  it("points an assembly that ended without a cut at edit_tool check instead of a billing warning", () => {
+    const cutPath = "剧集/EP001/制作成果/成片/成片.mp4";
+    const stale: ProductionMediaVersion = { id: `workspace:${cutPath}:1`, targetId: "剧集/EP001", kind: "video", url: "/media/old", path: cutPath };
+    const running = {
+      ...createPendingJob({ id: "compose-1", targetId: "剧集/EP001", kind: "composition", prompt: "合成", outputPath: cutPath, supersededOutputIds: [stale.id] }),
+      status: "running" as const
+    };
+    // Composition is local ffmpeg: nothing was billed, so the paid-dispatch warning would mislead.
+    const ended = reconcileProductionJobs([running], [], false, [stale])[0]!;
+    expect(ended).toMatchObject({ status: "dispatched_unknown", completedOutputs: 0 });
+    expect(ended.error).toBe("成片未生成：请在 Chat 查看 edit_tool check 的阻断项（未采用镜头理由、画幅/帧率不一致等），修正后再合成。");
+    expect(ended.error).not.toContain("计费");
+    // Re-composing after the fix stays available, and a cut that lands later still completes the job.
+    expect(compositionInFlight([ended])).toBe(false);
+    const rendered: ProductionMediaVersion = { ...stale, id: `workspace:${cutPath}:2`, url: "/media/new" };
+    expect(reconcileProductionJobs([ended], [], false, [rendered])[0]).toMatchObject({ status: "succeeded", completedOutputs: 1, error: undefined });
+  });
+
+  it("fails an assembly that ended without a cut once a newer composition runs, so the new cut completes only the new job", () => {
+    const cutPath = "剧集/EP001/制作成果/成片/成片.mp4";
+    const stale: ProductionMediaVersion = { id: `workspace:${cutPath}:1`, targetId: "剧集/EP001", kind: "video", url: "/media/old", path: cutPath };
+    const assembly = (id: string) => createPendingJob({
+      id, targetId: "剧集/EP001", kind: "composition", prompt: "合成", outputPath: cutPath, supersededOutputIds: [stale.id]
+    });
+    const first = reconcileProductionJobs([{ ...assembly("compose-1"), status: "running" }], [], false, [stale])[0]!;
+    expect(first.status).toBe("dispatched_unknown");
+    const second = assembly("compose-2");
+    const rendered: ProductionMediaVersion = { ...stale, id: `workspace:${cutPath}:2`, url: "/media/new" };
+
+    // Still waiting in the DSH Queue (or withdrawn from it): the older job can still be finished in Chat.
+    const queue = [{ id: "q-2", preview: "/short-drama-edit 任务 ID：compose-2" }];
+    expect(reconcileProductionJobs([first, second], queue, true, [stale])[0]).toBe(first);
+    expect(reconcileProductionJobs([first, { ...second, status: "canceled" }], [], false, [rendered])[0]?.status).toBe("succeeded");
+
+    // Once the newer composition runs, its cut completes only itself — even when the cut lands in the same pass.
+    const [earlier, later] = reconcileProductionJobs([first, { ...second, status: "running" }], [], true, [rendered]);
+    expect(earlier).toMatchObject({ id: "compose-1", status: "failed", error: first.error, completedOutputs: 0 });
+    expect(earlier?.output).toBeUndefined();
+    expect(later).toMatchObject({ id: "compose-2", status: "succeeded", completedOutputs: 1 });
+    expect(later?.output?.id).toBe(rendered.id);
+
+    const paid = { ...createPendingJob({ id: "paid-1", targetId: "SHOT-EP001-001", kind: "video", prompt: "p" }), status: "dispatched_unknown" as const, error: "避免重复计费" };
+    const otherEpisode = {
+      ...createPendingJob({ id: "compose-ep2", targetId: "剧集/EP002", kind: "composition", prompt: "合成", outputPath: "剧集/EP002/制作成果/成片/成片.mp4" }),
+      status: "dispatched_unknown" as const
+    };
+    const settled = settleSupersededCompositions([first, paid, otherEpisode], second);
+    expect(settled[0]).toEqual({ ...first, status: "failed" });
+    expect(settled[1]).toBe(paid);
+    expect(settled[2]).toBe(otherEpisode);
   });
 
   it("keeps a prepared job awaiting explicit confirmation until the Agent tracks its dispatch", () => {
