@@ -1,6 +1,6 @@
 import { mkdir, mkdtemp, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, isAbsolute, join, resolve } from "node:path";
+import { basename, isAbsolute, join, relative, resolve } from "node:path";
 import { Context } from "@deepseek-ai/cordis";
 import type { FileSystem, FsDirEntry, FsInfo, FsTarget } from "@deepseek-ai/dsh-fs";
 import SessionStore, { type Session, type SessionEvent } from "@deepseek-ai/dsh-session";
@@ -28,7 +28,11 @@ function localDshFs(): StoryFileSystem {
   };
   return {
     resolve: vi.fn(resolveTarget),
-    contains: (parent, child) => child.displayPath === parent.displayPath || child.displayPath.startsWith(`${parent.displayPath}/`),
+    // Separator-agnostic, like DSH's own FileSystem: Windows display paths use backslashes.
+    contains: (parent, child) => {
+      const path = relative(parent.displayPath, child.displayPath);
+      return path === "" || (!path.startsWith("..") && !isAbsolute(path));
+    },
     stat: vi.fn(async (target): Promise<FsInfo | undefined> => stat(target.displayPath).then((info) => ({
       version: String(info.mtimeMs) as FsInfo["version"],
       type: info.isFile() ? "file" : info.isDirectory() ? "directory" : "other",

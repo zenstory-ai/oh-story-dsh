@@ -101,10 +101,16 @@ if (selftests.length !== manifest.skills.length) {
 }
 const python = await dramaPython();
 for (const selftest of selftests) {
-  await execFileAsync(python, ["-B", join(dramaRoot, selftest)], {
+  // A selftest must never wait on a prompt (ffmpeg asks before overwriting); close its stdin and
+  // bound it, so a stuck one fails with its name instead of holding CI until the job times out.
+  const run = execFileAsync(python, ["-B", join(dramaRoot, selftest)], {
     encoding: "utf8",
+    timeout: 300_000,
     env: { ...process.env, PYTHONDONTWRITEBYTECODE: "1" }
   });
+  run.child.stdin?.end();
+  try { await run; }
+  catch (error) { throw new Error(`Drama selftest ${selftest} failed: ${String(error)}`, { cause: error }); }
 }
 const source = dramaUpstreamRoot();
 if (process.env.DRAMA_SKILLS_UPSTREAM_DIR !== undefined && (await stat(source).catch(() => undefined))?.isDirectory()) {
