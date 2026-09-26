@@ -17,9 +17,12 @@ import {
   mutatingCallIds,
   preferredWorkbenchFile,
   previewMutation,
+  sameUndispatchedCalls,
   streamingAssistant,
+  undispatchedCalls,
   workbenchLabel,
   workbenchModeForPath,
+  type UndispatchedCall,
   type WorkbenchMode
 } from "./file-activity.js";
 import { buildFileTree, type FileTreeNode } from "./file-tree.js";
@@ -142,6 +145,14 @@ function applyUpdate<T>(current: T, update: Update<T>): T {
   return typeof update === "function" ? (update as (value: T) => T)(current) : update;
 }
 
+/**
+ * DSH 0.1.7 binds session-scoped Store instances to the Session binding's generation and drops
+ * them when that generation is released, which a Session switch is enough to do. The workbench
+ * keeps unsaved drafts, production jobs and layout in its Store, and those lived for the page
+ * before, so the plugin holds its own page-lifetime copy and restores it into a fresh instance.
+ */
+const workbenchMemoryBySession = new Map<string, WorkbenchMemory>();
+
 function createWorkbenchStore() {
   return defineStore({
     init: (): WorkbenchMemory => ({
@@ -168,6 +179,9 @@ function createWorkbenchStore() {
       productionIntentCalls: {}
     }),
     actions: {
+      restore: (draft, memory: WorkbenchMemory) => {
+        Object.assign(draft, memory);
+      },
       setBuffers: (draft, update: Update<Record<string, FileBuffer>>) => {
         draft.buffers = applyUpdate(draft.buffers, update);
       },
@@ -600,6 +614,7 @@ function CreativeWorkbench({
   sessionId,
   runningCalls,
   partial,
+  undispatched,
   settledMutation,
   sessionRunning,
   productionQueue,
@@ -620,6 +635,7 @@ function CreativeWorkbench({
   readonly sessionId: string;
   readonly runningCalls: readonly RunningToolCall[];
   readonly partial: PartialAssistant | null;
+  readonly undispatched: readonly UndispatchedCall[];
   readonly settledMutation: string | undefined;
   readonly sessionRunning: boolean;
   readonly productionQueue: readonly ProductionQueueEntry[];
@@ -634,8 +650,8 @@ function CreativeWorkbench({
   readonly welcome: boolean;
 } & Pick<WorkbenchSlotProps, "useStore" | "actions" | "sendProductionPrompt" | "cancelProduction" | "removeQueuedProduction">) {
   const activities = useMemo(
-    () => fileMutations(runningCalls, partial),
-    [partial, runningCalls]
+    () => fileMutations(runningCalls, partial, undispatched),
+    [partial, runningCalls, undispatched]
   );
   const normalizedActivities = useMemo(() => activities.flatMap((activity) => {
     const path = creativeRelativePath(activity.path, workspace?.cwd);
@@ -1560,7 +1576,25 @@ type WorkbenchSlotProps = PropsRuntime<"oh-story.workspace"> & PropsStore<Return
  * one-mount-per-Session contract the workbench was written against.
  */
 function CreativeSplitBridge(props: WorkbenchSlotProps) {
-  return <SessionWorkbenchBridge key={props.sessionId} {...props} />;
+  return <SessionWorkbenchMemory key={props.sessionId} {...props} />;
+}
+
+/** Restore this Session's workbench memory into a fresh Store before anything reads it. */
+function SessionWorkbenchMemory(props: WorkbenchSlotProps) {
+  const { sessionId, useStore, actions } = props;
+  const memory = useStore((state) => state);
+  const [restored, setRestored] = useState(() => !workbenchMemoryBySession.has(sessionId));
+  useLayoutEffect(() => {
+    if (restored) return;
+    const saved = workbenchMemoryBySession.get(sessionId);
+    // A surviving instance already holds the saved state; only a fresh one needs it back.
+    if (saved !== undefined && saved !== memory) actions.restore(saved);
+    setRestored(true);
+  }, []);
+  useEffect(() => {
+    if (restored) workbenchMemoryBySession.set(sessionId, memory);
+  }, [memory, restored, sessionId]);
+  return restored ? <SessionWorkbenchBridge {...props} /> : null;
 }
 
 /** Mount beside the official conversation without replacing Chat or Composer. */
@@ -1569,6 +1603,7 @@ function SessionWorkbenchBridge({ sessionId, useSession, useSessions, useProject
   const [target, setTarget] = useState<HTMLElement>();
   const runningCalls = useChat((snapshot) => snapshot.legacy.runningCalls);
   const partial = useChat((snapshot) => streamingAssistant(snapshot.timeline));
+  const undispatched = useChat((snapshot) => undispatchedCalls(snapshot), sameUndispatchedCalls);
   const settledMutation = useChat((snapshot) => latestSettledMutation(snapshot));
   const workbench = useStore((memory) => memory.workbench);
   const gamePane = useStore((memory) => memory.gamePane);
@@ -1602,7 +1637,11 @@ function SessionWorkbenchBridge({ sessionId, useSession, useSessions, useProject
     const document = marker.current?.ownerDocument;
     if (document === undefined) return;
     const locate = (): void => {
-      const anchor = document.querySelector<HTMLElement>("[data-conversation-scroll] > [data-slot='conversation.session']");
+      // DSH 0.1.7 renders the same conversation content inside the right sidebar's subagent
+      // chats, so only this Session's main column is a valid seat.
+      const anchor = document.querySelector<HTMLElement>(
+        `[data-conversation-content][data-conversation-session="${CSS.escape(sessionId)}"]:not([data-sidebar-chat] *) > [data-conversation-scroll] > [data-slot='conversation.session']`
+      );
       setTarget((current) => current === anchor ? current : anchor ?? undefined);
     };
     locate();
@@ -1681,7 +1720,7 @@ function SessionWorkbenchBridge({ sessionId, useSession, useSessions, useProject
     // reports leaves the reader behind the Composer again once it settles.
     let flowObserved = false;
     const observePanes = (): void => {
-      const flow = scroller.querySelector("[data-chat-flow]");
+      const flow = scroller.querySelector("[data-chat-flow]:not([data-step-process-content])");
       flowObserved = flow !== null;
       for (const pane of [composerSeat(), flow]) {
         if (pane === null || observed.has(pane)) continue;
@@ -1723,6 +1762,7 @@ function SessionWorkbenchBridge({ sessionId, useSession, useSessions, useProject
       sessionId={sessionId}
       runningCalls={runningCalls}
       partial={partial}
+      undispatched={undispatched}
       settledMutation={settledMutation}
       sessionRunning={sessionRunning}
       productionQueue={productionQueue}
@@ -1768,7 +1808,7 @@ function WorkbenchWelcome() {
     const document = marker.current?.ownerDocument;
     if (document === undefined) return;
     const locate = (): void => {
-      const anchor = document.querySelector<HTMLElement>("[data-conversation-scroll]");
+      const anchor = document.querySelector<HTMLElement>("[data-conversation-content]:not([data-sidebar-chat] *) > [data-conversation-scroll]");
       setTarget((current) => current === anchor ? current : anchor ?? undefined);
     };
     locate();

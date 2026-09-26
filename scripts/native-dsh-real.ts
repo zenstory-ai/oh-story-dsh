@@ -261,8 +261,11 @@ async function main(): Promise<void> {
       readonly groups: readonly { readonly id: string; readonly models: readonly { readonly id: string }[] }[];
     }>(origin, "session/modelCatalog", {});
     const deepseek = models.groups.find((group) => group.id === "deepseek-official");
-    const selectedModel = deepseek?.models.find((candidate) => candidate.id === "deepseek-v4-flash")?.id ?? deepseek?.models[0]?.id;
-    if (deepseek === undefined || selectedModel === undefined) throw new Error("DSH did not expose a DeepSeek official model.");
+    // DSH 0.1.7 renamed deepseek-v4-flash to deepseek-flash; a missing id fails instead of testing another model.
+    const selectedModel = deepseek?.models.find((candidate) => candidate.id === "deepseek-flash")?.id;
+    if (deepseek === undefined || selectedModel === undefined) {
+      throw new Error(`DSH did not expose deepseek-official/deepseek-flash: ${JSON.stringify(models.groups.map((group) => ({ id: group.id, models: group.models.map((candidate) => candidate.id) })))}`);
+    }
     await rpc(origin, "session/selectModel", { request: { sessionId: session.sessionId, provider: deepseek.id, model: selectedModel } });
 
     const skills = await rpc<{ readonly skills: readonly { readonly name: string }[] }>(origin, "skills/list", { request: { sessionId: session.sessionId } });

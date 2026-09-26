@@ -9,7 +9,9 @@ import {
   mutatingCallIds,
   preferredWorkbenchFile,
   previewMutation,
+  sameUndispatchedCalls,
   streamingAssistant,
+  undispatchedCalls,
   workbenchModeForPath
 } from "../src/client/file-activity.js";
 
@@ -119,6 +121,36 @@ describe("official DSH file activity", () => {
     const preparing: RunningToolCall[] = [{ phase: "preparing", callId: "write-next", name: "write", turn: 1, step: 1, time: 1, subCalls: [] }];
     expect(fileMutations(preparing)).toEqual([]);
     expect([...mutatingCallIds(preparing)]).toEqual(["write-next"]);
+  });
+
+  it("keeps a streamed write visible while DSH holds it before dispatch", () => {
+    // DSH 0.1.7 hides a call between its finished step and the durable tool/call event
+    // (pre-execute hooks, approval). Losing the activity there dropped the live preview and let
+    // the workbench reset the selection before the file existed.
+    const write = { kind: "tool-call" as const, callId: "write-held", name: "write", argsRaw: '{"file_path":"设定/角色/新人物.md","content":"完整内容"}' };
+    const chat = (status: "running" | "settled", turnStatus: "open" | "closed", results: readonly string[] = []) => ({
+      timeline: {
+        turnOrder: [3],
+        turns: new Map([[3, {
+          turn: 3,
+          status: turnStatus,
+          steps: [{ turn: 3, step: 2, data: { get: () => ({ status, turn: 3, step: 2, time: 1, blocks: [write, { kind: "text", text: "写入" }] }) } }]
+        }]])
+      },
+      legacy: { nodes: results.map((callId) => ({ kind: "tool-result", callId })) }
+    }) as unknown as ChatSnapshot;
+
+    const held = undispatchedCalls(chat("settled", "open"));
+    expect(held).toEqual([{ callId: "write-held", name: "write", argsRaw: write.argsRaw }]);
+    expect(fileMutations([], null, held).at(-1)).toMatchObject({ callId: "write-held", stage: "running", path: "设定/角色/新人物.md", newText: "完整内容" });
+    // A preparing row DSH still lists adds nothing on its own and does not duplicate the held call.
+    const preparing: RunningToolCall[] = [{ phase: "preparing", callId: "write-held", name: "write", turn: 3, step: 2, time: 1, subCalls: [] }];
+    expect(fileMutations(preparing, null, held)).toHaveLength(1);
+    // Streaming steps belong to `partial`; settled calls and closed Turns are no longer pending.
+    expect(undispatchedCalls(chat("running", "open"))).toEqual([]);
+    expect(undispatchedCalls(chat("settled", "open", ["write-held"]))).toEqual([]);
+    expect(undispatchedCalls(chat("settled", "closed"))).toEqual([]);
+    expect(sameUndispatchedCalls(held, undispatchedCalls(chat("settled", "open")))).toBe(true);
   });
 
   it("uses the latest durable DSH call when a fast call leaves the live window", () => {

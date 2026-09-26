@@ -427,8 +427,12 @@ async function prepareSession(origin: string, sessionId: string, prompt: string,
     readonly groups: readonly { readonly id: string; readonly models: readonly { readonly id: string }[] }[];
   }>(origin, "session/modelCatalog", {});
   const deepseek = models.groups.find((group) => group.id === "deepseek-official");
-  const model = deepseek?.models.find((candidate) => candidate.id === "deepseek-v4-flash")?.id ?? deepseek?.models[0]?.id;
-  if (deepseek === undefined || model === undefined) throw new Error("DSH did not expose a DeepSeek official model.");
+  // DSH 0.1.7 renamed deepseek-v4-flash to deepseek-flash. Fail on a missing id instead of falling
+  // back to whatever the catalog lists first, so a catalog change cannot swap the tested model.
+  const model = deepseek?.models.find((candidate) => candidate.id === "deepseek-flash")?.id;
+  if (deepseek === undefined || model === undefined) {
+    throw new Error(`DSH did not expose deepseek-official/deepseek-flash: ${JSON.stringify(models.groups.map((group) => ({ id: group.id, models: group.models.map((candidate) => candidate.id) })))}`);
+  }
   await rpc(origin, "session/selectModel", { request: { sessionId, provider: deepseek.id, model } });
   await rpc(origin, "session/prompt", {
     request: {
@@ -481,7 +485,12 @@ async function openFolder(page: Page, label: string): Promise<void> {
 
 /** DSH 0.1.2 folds a completed Turn's tool calls behind a turn-process disclosure. */
 async function expandTurnProcesses(page: Page): Promise<void> {
-  const collapsed = page.locator('button[data-turn-process][aria-expanded="false"]');
+  // DSH 0.1.7 also folds a Turn's tool rows into step-process groups whose header sits in a
+  // wrapper that is hidden while the group is not grouped.
+  const collapsed = page.locator([
+    'button[data-turn-process][aria-expanded="false"]',
+    '[data-step-process] > div:not([hidden]) > button[aria-controls][aria-expanded="false"]'
+  ].join(", "));
   // Each click re-renders the flow, so re-resolve the first collapsed toggle every round.
   for (let round = 0; round < 32 && await collapsed.count() > 0; round += 1) {
     await collapsed.first().click();
@@ -521,7 +530,7 @@ async function assertChatAnchorContract(
   await page.waitForFunction((layout) => (
     document.querySelector("[data-conversation-scroll]")?.getAttribute("data-oh-story-layout") === layout
   ), expectedLayout);
-  const anchor = page.locator("[data-chat-flow-key]").last();
+  const anchor = page.locator("[data-chat-flow]:not([data-step-process-content]) > [data-chat-flow-key]:not([hidden])").last();
   let measurement: {
     readonly anchorBox: Awaited<ReturnType<Locator["boundingBox"]>>;
     readonly composerBox: Awaited<ReturnType<Locator["boundingBox"]>>;
@@ -671,6 +680,7 @@ async function main(): Promise<void> {
         || /(?:^|\/)__pycache__(?:\/|$)/u.test(entry)
         || /\.pyc$/u.test(entry)
         || /(?:^|\/)\.DS_Store$/u.test(entry)
+        || /(?:^|\/)\.omc(?:\/|$)/u.test(entry)
         || /copy-path-safety\.py$/u.test(entry)
         || /dashboard_server\.py$/u.test(entry)
         || /drama\/skills\/short-drama\/references\/lifecycle-commands\.md$/u.test(entry)) {
@@ -688,7 +698,8 @@ async function main(): Promise<void> {
       DSH_HOME: dshHome,
       DSH_TELEMETRY_DISABLED: "1",
       DEEPSEEK_API_KEY: realApiKey ?? "oh-story-local-fixture",
-      DEEPSEEK_BASE_URL: mockDeepSeek?.baseURL ?? "https://api.deepseek.com"
+      // DSH 0.1.7 talks to DeepSeek's Anthropic-compatible Messages root, not the API root.
+      DEEPSEEK_BASE_URL: mockDeepSeek?.baseURL ?? "https://api.deepseek.com/anthropic"
     };
     run(process.execPath, [dshBin, "plugin", "--profile", "web", "add", archivePath], env);
     await isolateFirstUseWorkspace(dshHome, join(temporaryRoot, "documents"));
@@ -805,11 +816,11 @@ async function main(): Promise<void> {
       const roleCalls = roleEvents.filter((event) => event.type === "tool/call")
         .map((event) => event.data as { readonly callId?: string; readonly name?: string; readonly arguments?: unknown })
         .filter((call) => call.name === "oh_story_role");
+      // Session format V4 (DSH 0.1.7) lifts a result into a `tool`-role message that names its
+      // call directly; `isError` is present only when the call failed.
       const roleResult = roleEvents.filter((event) => event.type === "tool/result")
-        .flatMap((event) => (event.data as {
-          readonly message?: { readonly content?: readonly { readonly toolCallId?: string; readonly isError?: boolean }[] };
-        }).message?.content ?? [])
-        .find((result) => result.toolCallId === roleCalls[0]?.callId);
+        .map((event) => (event.data as { readonly message?: { readonly toolCallId?: string; readonly isError?: boolean } }).message)
+        .find((message) => message?.toolCallId !== undefined && message.toolCallId === roleCalls[0]?.callId);
       let roleArguments: unknown;
       try {
         const value = roleCalls[0]?.arguments;
@@ -820,7 +831,8 @@ async function main(): Promise<void> {
       if (roleCalls.length !== 1
         || (roleArguments as { readonly role?: unknown } | undefined)?.role !== "narrative-writer"
         || (roleArguments as { readonly prompt?: unknown } | undefined)?.prompt !== roleChildPrompt
-        || roleResult?.isError !== false
+        || roleResult === undefined
+        || roleResult.isError === true
         || !serializedRoleEvents.includes(roleChildReply)
         || !serializedRoleEvents.includes(roleParentReply)
         || JSON.stringify(roleTrace) !== JSON.stringify(["role-parent-start", "role-child-reference-start", "role-child-reference-resume", "role-parent-resume"])) {
@@ -1038,14 +1050,15 @@ async function main(): Promise<void> {
       }
     }
 
-    // DSH 0.1.2 preloads every browser module through one combined `/plugins/??a,b` URL,
-    // so the plugin's own registration is sliced back out of the shared response.
+    // DSH preloads browser modules through combined `plugins/??a,b` URLs, so the plugin's own
+    // registration is sliced back out of a shared response. 0.1.7 splits the preload into several
+    // relative URLs by phase; take the one that carries the plugin.
     const index = await (await dshFetch(origin)).text();
-    const preloadPath = index.match(/\/plugins\/\?\?[^"']+/u)?.[0].replaceAll("&amp;", "&");
-    if (preloadPath === undefined || !preloadPath.includes("@oh-story/dsh/client.js")) {
-      throw new Error("DSH did not publish the Oh Story Browser module.");
-    }
-    const bundle = await (await dshFetch(new URL(preloadPath, origin))).text();
+    const preloadPath = [...index.matchAll(/\/?plugins\/\?\?[^"'\s]+/gu)]
+      .map((match) => match[0].replaceAll("&amp;", "&"))
+      .find((path) => path.includes("@oh-story/dsh/client.js"));
+    if (preloadPath === undefined) throw new Error("DSH did not publish the Oh Story Browser module.");
+    const bundle = await (await dshFetch(new URL(preloadPath, `${origin}/`))).text();
     // Registrations appear both minified and pretty-printed in the combined bundle, so the
     // module boundaries have to tolerate the whitespace. Anchoring on the minified form only
     // silently ran the slice past the plugin and into whichever DSH module followed it.
@@ -1089,7 +1102,7 @@ async function main(): Promise<void> {
       }
       await page.locator('[class*="onboardingOverlay"]').waitFor({ state: "detached", timeout: 10_000 }).catch(() => undefined);
       await selectSession(page, storyWorkspace.workspace.title, storySessionTitle);
-      const blankSession = page.locator("button").filter({ hasText: /^\s*(?:New Session|新会话)\s*$/iu }).first();
+      const blankSession = page.getByRole("button", { name: /^(?:New session|新建会话)$/u }).filter({ visible: true }).first();
       try { await blankSession.waitFor({ state: "visible", timeout: 10_000 }); }
       catch (error) {
         const buttons = await page.getByRole("button").allTextContents();
@@ -1169,7 +1182,7 @@ async function main(): Promise<void> {
 
       // The Session Store is not persisted, so the choice has to survive on its own:
       // a new Session in the same workspace must open collapsed.
-      const plainBlankSession = page.locator("button").filter({ hasText: /^\s*(?:New Session|新会话)\s*$/iu }).first();
+      const plainBlankSession = page.getByRole("button", { name: /^(?:New session|新建会话)$/u }).filter({ visible: true }).first();
       await plainBlankSession.waitFor({ state: "visible", timeout: 10_000 });
       await plainBlankSession.click();
       await page.getByRole("treeitem", { selected: true }).filter({ hasText: /^(?:New Session|新会话)$/iu })
@@ -1736,7 +1749,7 @@ async function main(): Promise<void> {
             const seat = scroll === undefined
               ? undefined
               : Array.from(scroll.children).find((element): element is HTMLElement => element instanceof HTMLElement && element.hasAttribute("data-composer-seat"));
-            const flow = scroll?.querySelector<HTMLElement>("[data-chat-flow]");
+            const flow = scroll?.querySelector<HTMLElement>("[data-chat-flow]:not([data-step-process-content])");
             if (scroll === undefined || seat === undefined || flow == null) return { found: false };
             const marked = Array.from(flow.querySelectorAll<HTMLElement>("*"))
               .find((element) => element.children.length === 0 && (element.textContent ?? "").includes(marker));
@@ -1785,7 +1798,7 @@ async function main(): Promise<void> {
         await page.waitForFunction(() => {
           const scroller = Array.from(document.querySelectorAll<HTMLElement>("[data-conversation-scroll]"))
             .find((element) => element.dataset.ohStoryWorkbench === "drama" && element.getBoundingClientRect().width > 0);
-          const flow = scroller?.querySelector<HTMLElement>("[data-chat-flow]");
+          const flow = scroller?.querySelector<HTMLElement>("[data-chat-flow]:not([data-step-process-content])");
           const seat = scroller === undefined
             ? undefined
             : Array.from(scroller.children).find((element): element is HTMLElement => element instanceof HTMLElement && element.hasAttribute("data-composer-seat"));
@@ -1796,12 +1809,12 @@ async function main(): Promise<void> {
           const clearance = Number.parseFloat(getComputedStyle(flow).paddingBottom);
           return clearance >= seatBox.height + 15 && tailBox.bottom <= seatBox.top + 1;
         }, undefined, { timeout: 10_000 });
-        const flow = page.locator('[data-slot="conversation.session"] [data-chat-flow]');
+        const flow = page.locator('[data-slot="conversation.session"] [data-chat-flow]:not([data-step-process-content])');
         const tail = flow.locator(":scope > *").last();
         // The seat grows by the Todo panel one layout pass before the workbench
         // republishes its height, so assert the settled frame, not the resize.
         await page.waitForFunction(() => {
-          const body = document.querySelector('[data-slot="conversation.session"] [data-chat-flow]');
+          const body = document.querySelector('[data-slot="conversation.session"] [data-chat-flow]:not([data-step-process-content])');
           const seat = document.querySelector("[data-composer-seat]");
           const last = body?.lastElementChild;
           if (body == null || seat == null || last == null) return false;

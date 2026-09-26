@@ -177,18 +177,64 @@ function visitRunning(blocks: readonly ToolCallBlock[], visit: (call: RunningToo
   }
 }
 
+/** A call a finished Assistant step issued that DSH has not settled yet. */
+export interface UndispatchedCall {
+  readonly callId: string;
+  readonly name: string;
+  readonly argsRaw: string;
+}
+
+/**
+ * Calls of the open Turn whose Assistant step has finished streaming but that have no result yet.
+ * DSH 0.1.7 hides such a call's tool row until its durable `tool/call` event — through pre-execute
+ * hooks and any approval — so it is in neither `partial` nor the running calls, and a call it does
+ * list stays `preparing` without arguments. The step's own tool-call block still holds them.
+ */
+export function undispatchedCalls(chat: ChatSnapshot): UndispatchedCall[] {
+  const turnNumber = chat.timeline.turnOrder.at(-1);
+  const turn = turnNumber === undefined ? undefined : chat.timeline.turns.get(turnNumber);
+  if (turn?.status !== "open") return [];
+  const calls: UndispatchedCall[] = [];
+  for (const step of turn.steps) {
+    const assistant: AssistantChatData | undefined = step.data.get("assistant-step");
+    if (assistant?.status !== "settled") continue;
+    for (const block of assistant.blocks) {
+      if (block.kind === "tool-call") calls.push({ callId: block.callId, name: block.name, argsRaw: block.argsRaw });
+    }
+  }
+  if (calls.length === 0) return calls;
+  const settled = new Set<string>();
+  for (const node of chat.legacy.nodes as readonly unknown[]) {
+    const value = node as { readonly kind?: unknown; readonly callId?: unknown };
+    if (value.kind === "tool-result" && typeof value.callId === "string") settled.add(value.callId);
+  }
+  return calls.filter((call) => !settled.has(call.callId));
+}
+
+export function sameUndispatchedCalls(left: readonly UndispatchedCall[], right: readonly UndispatchedCall[]): boolean {
+  return left.length === right.length && left.every((call, index) => (
+    call.callId === right[index]?.callId && call.argsRaw === right[index].argsRaw
+  ));
+}
+
 /** Return every active file mutation in official DSH dispatch order, including nested Code Mode calls. */
 export function fileMutations(
   runningCalls: readonly RunningToolCall[],
-  partial: PartialAssistant | null = null
+  partial: PartialAssistant | null = null,
+  undispatched: readonly UndispatchedCall[] = []
 ): FileMutationActivity[] {
   const values: FileMutationActivity[] = [];
   visitRunning(runningCalls, (call) => {
-    // A preparing call is named before its arguments exist; its streamed arguments are read from `partial` below.
+    // A preparing call has no arguments; they come from `partial` or its finished step below.
     if (call.phase !== "start") return;
     const mutation = mutationFromArgs(call.name, call.callId, call.argsRaw, "running");
     if (mutation !== undefined) values.push(mutation);
   });
+  for (const call of undispatched) {
+    if (values.some((candidate) => candidate.callId === call.callId)) continue;
+    const mutation = mutationFromArgs(call.name, call.callId, call.argsRaw, "running");
+    if (mutation !== undefined) values.push(mutation);
+  }
   for (const block of partial?.blocks ?? []) {
     if (block.kind !== "tool-call") continue;
     const value = mutationFromArgs(block.name, block.callId, block.argsRaw, "streaming");
