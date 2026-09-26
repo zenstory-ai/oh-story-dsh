@@ -163,6 +163,24 @@ describe("production runtime", () => {
     });
   });
 
+  it("points an assembly that ended without a cut at edit_tool check instead of a billing warning", () => {
+    const cutPath = "剧集/EP001/制作成果/成片/成片.mp4";
+    const stale: ProductionMediaVersion = { id: `workspace:${cutPath}:1`, targetId: "剧集/EP001", kind: "video", url: "/media/old", path: cutPath };
+    const running = {
+      ...createPendingJob({ id: "compose-1", targetId: "剧集/EP001", kind: "composition", prompt: "合成", outputPath: cutPath, supersededOutputIds: [stale.id] }),
+      status: "running" as const
+    };
+    // Composition is local ffmpeg: nothing was billed, so the paid-dispatch warning would mislead.
+    const ended = reconcileProductionJobs([running], [], false, [stale])[0]!;
+    expect(ended).toMatchObject({ status: "dispatched_unknown", completedOutputs: 0 });
+    expect(ended.error).toBe("成片未生成：请在 Chat 查看 edit_tool check 的阻断项（未采用镜头理由、画幅/帧率不一致等），修正后再合成。");
+    expect(ended.error).not.toContain("计费");
+    // Re-composing after the fix stays available, and a cut that lands later still completes the job.
+    expect(compositionInFlight([ended])).toBe(false);
+    const rendered: ProductionMediaVersion = { ...stale, id: `workspace:${cutPath}:2`, url: "/media/new" };
+    expect(reconcileProductionJobs([ended], [], false, [rendered])[0]).toMatchObject({ status: "succeeded", completedOutputs: 1, error: undefined });
+  });
+
   it("keeps a prepared job awaiting explicit confirmation until the Agent tracks its dispatch", () => {
     const prepared = {
       ...createPendingJob({ id: "prepare-1", targetId: "SHOT-001", kind: "image", prompt: "p" }),

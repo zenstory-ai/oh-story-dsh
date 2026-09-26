@@ -106,6 +106,11 @@ describe("Drama Skills bundled provider", () => {
       expect(skill?.content).toContain("never create a parallel JSON/JSONL lifecycle truth");
       expect(skill?.content).toContain("Never upgrade a v0.5 structured project in place");
       expect(skill?.content).toContain("剧集/<EP>/剪辑单.md is the v0.7 assembly record, not a sixth creative truth");
+      // Drama 0.7.1 widened what the cut list records; the creative-truth boundary did not move.
+      expect(skill?.content).toContain("records what reaches the cut");
+      expect(skill?.content).toContain("the delivery spec including optional 颗粒 grain");
+      expect(skill?.content).toContain("It never changes a line, a shot's job, or a declared duration");
+      expect(skill?.content).not.toContain("records only which frames");
     }
     const routeCandidate = listed.find((candidate) => candidate.name === "short-drama");
     const route = await provider.get(routeCandidate!, {});
@@ -127,10 +132,24 @@ describe("Drama Skills bundled provider", () => {
     expect(production?.content).toContain("剧集/<EP>/制作成果/");
     expect(production?.content).toContain("orphaned_provider_job");
     expect(production?.content).toContain("collect spends nothing and does not need the confirmation gate");
+    // oh_story_production's jobKind is image | video | composition: speech and music keep the gate but never reach the task board.
+    expect(production?.content).toContain("from this Skill it registers image and video jobs only");
+    expect(production?.content).toContain("speech (tts) and music jobs pass through the same prepare → explicit creator confirmation → run gate but are never registered with track_job");
+    expect(production?.content).toContain("without ever becoming a reference of a video job");
+    expect(production?.content).toContain("every image, video, speech, or music result comes from a provider adapter");
     const editCandidate = listed.find((candidate) => candidate.name === "short-drama-edit");
     const edit = await provider.get(editCandidate!, {});
     expect(edit?.content).toContain("剧集/<EP>/制作成果/成片/");
-    expect(edit?.content).toContain("Keep the zero-dependency ffmpeg subtitle route by default");
+    expect(edit?.content).toContain("The default burned-subtitle route needs an ffmpeg built with libass");
+    expect(edit?.content).not.toContain("zero-dependency");
+    expect(edit?.content).toContain("`- 未采用镜头：MOTION-…（理由：…）；MOTION-…（理由：…）`");
+    expect(edit?.content).toContain("names 文件缺失, 质量不可用 or 叙事取舍");
+    expect(edit?.content).toContain("Every cut must share one width, height and frame rate");
+    expect(edit?.content).toContain("writing new files beside the originals");
+    expect(edit?.content).toContain("point 来源 at the new file");
+    expect(edit?.content).toContain("The 声音 line in 剪辑单.md is a record, not an instruction the built-in render executes");
+    expect(edit?.content).toContain("replaces 剧集/<EP>/制作成果/成片/成片.mp4");
+    expect(edit?.content).toContain("Run edit_tool.py verify last, on that delivered file, and report every 未测 item as untested");
     expect(edit?.content).toContain("This stage never generates footage");
   });
 });

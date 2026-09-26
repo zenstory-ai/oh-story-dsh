@@ -226,9 +226,13 @@ export function reconcileProductionJobs(
         status: "dispatched_unknown",
         progress: Math.round(outputs.length / job.expectedOutputs * 100),
         completedOutputs: outputs.length,
-        error: outputs.length === 0
-          ? "DSH Turn 已结束，尚未发现关联成果。任务可能已派发，请先刷新成果，避免重复计费。"
-          : `DSH Turn 已结束，已发现 ${String(outputs.length)}/${String(job.expectedOutputs)} 项成果；请刷新核对剩余输出。`
+        // Assembly is local ffmpeg, so nothing was billed: a missing cut usually means edit_tool
+        // check blocked the render, and those findings — not a billing warning — are what to show.
+        error: outputs.length > 0
+          ? `DSH Turn 已结束，已发现 ${String(outputs.length)}/${String(job.expectedOutputs)} 项成果；请刷新核对剩余输出。`
+          : job.kind === "composition"
+            ? "成片未生成：请在 Chat 查看 edit_tool check 的阻断项（未采用镜头理由、画幅/帧率不一致等），修正后再合成。"
+            : "DSH Turn 已结束，尚未发现关联成果。任务可能已派发，请先刷新成果，避免重复计费。"
       };
     }
     if (outputs.length > 0) {

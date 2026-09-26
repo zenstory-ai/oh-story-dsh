@@ -1,4 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
+// Type-only: erased from the browser bundle, but a modality added to the host registry
+// without a label below becomes a type error instead of an unlabelled chip.
+import type { DramaAdapterModality, DramaAdapterStatus } from "../drama-adapters.js";
 import { productionCompleteness, type DramaDocumentTarget, type DramaEpisodeProduction, type DramaProductionSection } from "./drama-production.js";
 import { endpoint } from "./workbench-ui.js";
 import { nativeBatchPrompt, nativeCompositionPrompt, nativeProductionPrompt } from "./production-prompts.js";
@@ -47,15 +50,15 @@ const ASSEMBLED_CUT_PATH = "制作成果/成片/成片.mp4";
 interface DramaPreflight {
   readonly python: { readonly ok: boolean; readonly version?: string };
   readonly adapterConfig: { readonly path: string; readonly generated: boolean; readonly ok: boolean };
-  readonly adapters: readonly { readonly name: string; readonly label: string; readonly modality: "image" | "video" | "music"; readonly configured: boolean; readonly missing: readonly string[] }[];
+  readonly adapters: readonly DramaAdapterStatus[];
 }
 
-const MODALITY_LABEL = { image: "图片", video: "视频", music: "音乐" } as const;
+const MODALITY_LABEL: Readonly<Record<DramaAdapterModality, string>> = { image: "图片", video: "视频", tts: "语音", music: "音乐" };
 
 /**
- * DeepSeek writes the prompts; the pictures, videos and music come from provider
- * APIs that the produce Skill calls. Nothing in the conversation says so, and the
- * keys live in the host environment, so the 生产 view states it up front.
+ * DeepSeek writes the prompts; the pictures, videos, speech and music come from
+ * provider APIs that the produce Skill calls. Nothing in the conversation says so,
+ * and the keys live in the host environment, so the 生产 view states it up front.
  */
 function ProductionEnvironment({ sessionId }: { readonly sessionId: string }) {
   const [preflight, setPreflight] = useState<DramaPreflight | "failed">();
@@ -81,7 +84,7 @@ function ProductionEnvironment({ sessionId }: { readonly sessionId: string }) {
     {typeof preflight === "object" && <>
       <span data-ready={preflight.python.ok || undefined}>Python {preflight.python.version ?? "未找到"}</span>
       {preflight.adapters.map((adapter) => <span key={adapter.name} data-ready={adapter.configured || undefined} title={adapter.configured ? `${adapter.name} 已配置` : `缺少环境变量 ${adapter.missing.join("、")}`}>{MODALITY_LABEL[adapter.modality]} {adapter.label}{adapter.configured ? "" : ` · 缺 ${adapter.missing.join("、")}`}</span>)}
-      <em>DeepSeek 只负责写提示词；图片、视频、音乐由上面的供应商 API 生成，Key 在启动 DSH 前写入宿主机环境变量。
+      <em>DeepSeek 只负责写提示词；图片、视频、语音、音乐由上面的供应商 API 生成，Key 在启动 DSH 前写入宿主机环境变量。
         {unconfigured.length === preflight.adapters.length && " 当前一个都没配置，生产任务会停在 adapter 之前。"}
         {" "}Adapter 配置{preflight.adapterConfig.generated ? "已自动登记" : "使用自定义文件"}{preflight.adapterConfig.ok ? "" : "（写入失败）"}：<code>{preflight.adapterConfig.path}</code>。详见 README「媒体生成 API」。</em>
     </>}
@@ -233,7 +236,7 @@ function TaskBoard({ jobs, queue, sessionRunning, onCancel, onRemoveQueued }: {
 }) {
   const activeJobId = activeProductionJobId(jobs, queue, sessionRunning);
   return <section className="oh-story-task-board">
-    <div className="oh-story-projection-note">图片与视频先预检、后确认。内置契约支持 GPT Image 2 / Seedance；实际账号、模型与可用性由当前 DSH 运行环境决定。</div>
+    <div className="oh-story-projection-note">图片、视频、语音、音乐都先预检、后确认。这里跟踪图片、视频与成片任务；语音和音乐在 Chat 里完成，结果直接落在制作成果目录。供应商见上方「生成环境」，实际账号、模型与可用性由当前 DSH 运行环境决定。</div>
     {jobs.length === 0 ? <div className="oh-story-production-empty">还没有生产任务。可从镜头或素材页提交单个或批量任务。</div> : [...jobs].reverse().map((job) => {
       const queued = queuedItemForJob(job.id, queue);
       const displayStatus = queued === undefined ? STATUS_LABELS[job.status] : "DSH Queue";
