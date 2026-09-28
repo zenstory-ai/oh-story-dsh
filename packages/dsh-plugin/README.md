@@ -23,15 +23,15 @@
 安装命令会临时提供 pnpm；只安装 Node.js 的机器也能执行。DSH 的 `plugin add` 内部需要 pnpm，单独运行 `npx @deepseek-ai/dsh ... plugin add` 不会自动补上它。
 
 ```bash
-npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.1.7-rc.2 dsh plugin --profile web add @oh-story/dsh@0.1.11 &&
-npx -y @deepseek-ai/dsh@0.1.7-rc.2 web
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.0-rc.1 dsh plugin --profile web add @oh-story/dsh@0.1.12 &&
+npx -y @deepseek-ai/dsh@0.2.0-rc.1 web
 ```
 
 也可以直接安装 GitHub Release 中的预构建包：
 
 ```bash
-npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.1.7-rc.2 dsh plugin --profile web add https://github.com/zenstory-ai/oh-story-dsh/releases/download/v0.1.11/oh-story-dsh-0.1.11.tgz &&
-npx -y @deepseek-ai/dsh@0.1.7-rc.2 web
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.0-rc.1 dsh plugin --profile web add https://github.com/zenstory-ai/oh-story-dsh/releases/download/v0.1.12/oh-story-dsh-0.1.12.tgz &&
+npx -y @deepseek-ai/dsh@0.2.0-rc.1 web
 ```
 
 保持终端运行。若浏览器未自动打开，访问终端打印的完整 `http://127.0.0.1:3080/?token=...` 链接完成首次认证。
@@ -82,7 +82,7 @@ Drama Skills 0.6.0 不支持把 v0.5 结构化项目原地升级为 creator-firs
 插件装进哪个 profile，那个 profile 的每个 Session 就都会加载创作 Skills；工作台只在有创作项目时显示。想让原版 `web` 保持干净、只在创作时打开工作台，就装进独立 profile：
 
 ```bash
-npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.1.7-rc.2 dsh plugin --profile story add @oh-story/dsh@0.1.11
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.0-rc.1 dsh plugin --profile story add @oh-story/dsh@0.1.12
 ```
 
 新 profile 默认没有界面。编辑 `~/.dsh/profiles/story/package.json`，把 `dsh.profile.bundles` 改成 `["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-web-app", "@oh-story/dsh"]`。
@@ -90,8 +90,8 @@ npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.1.7-rc.2 dsh plugin --
 `@deepseek-ai/dsh-web-app` 是 DSH 自带的 Web 界面包，需要在创作插件之前加载。
 
 ```bash
-npx -y @deepseek-ai/dsh@0.1.7-rc.2 web                          # 原版 DSH
-npx -y @deepseek-ai/dsh@0.1.7-rc.2 --profile story --port 3081  # 创作工作台
+npx -y @deepseek-ai/dsh@0.2.0-rc.1 web                          # 原版 DSH
+npx -y @deepseek-ai/dsh@0.2.0-rc.1 --profile story --port 3081  # 创作工作台
 ```
 
 模型、凭据、workspace 与历史会话由 DSH 统一保存，切换 profile 不会丢。安装与启动请使用同一个 dsh 版本。

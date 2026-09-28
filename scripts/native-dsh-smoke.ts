@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import { chromium, type Locator, type Page } from "@playwright/test";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const dshVersion = "0.1.7-rc.2";
+const dshVersion = "0.2.0-rc.1";
 /** Exact WebSocket route carrying every Typert Remote stream. */
 const REMOTE_STREAM_MUX_PATH = "/api/remote.mux";
 const demoFramesDirectory = process.env.OH_STORY_DEMO_FRAMES_DIR;
@@ -2021,7 +2021,7 @@ async function main(): Promise<void> {
         await preservedQueueRemove.waitFor({ state: "visible", timeout: 10_000 });
         const productionRequestsAfterCancel = mockDeepSeek?.requests.filter((request) => request === "production").length ?? 0;
         if (productionRequestsAfterCancel !== productionRequestsBeforeCancel + 1) {
-          throw new Error("Canceling the current DSH Turn unexpectedly dropped or executed the preserved queued task.");
+          throw new Error(`Canceling the current DSH Turn unexpectedly dropped or executed the preserved queued task (production requests ${String(productionRequestsBeforeCancel)} → ${String(productionRequestsAfterCancel)}).`);
         }
         await preservedQueueRemove.click();
         await preservedQueuedTask.getByText("已取消", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });

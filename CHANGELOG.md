@@ -11,6 +11,12 @@
 
 ## [Unreleased]
 
+## [0.1.12] - 2026-09-28
+
+### Changed
+
+- 适配 [DeepSeek Harness 0.2.0-rc.1](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.0-rc.1)（自 `0.1.7-rc.2`）。插件声明的 DSH 兼容范围从 `>=0.1.7-rc.2 <0.1.8-0` 改为 `>=0.2.0-rc.1 <0.2.1-0`，只兼容 DSH 0.2.0 这一条补丁线：**安装与启动命令都要换成 `@deepseek-ai/dsh@0.2.0-rc.1`**，还在 DSH 0.1.7 上的请继续用插件 0.1.11。0.2.0-rc.1 在 npm 上是 `next` 标签，不带版本号的 `npx @deepseek-ai/dsh` 仍解析到 `latest`（`0.1.7-rc.2`），两条命令都要写明版本。插件用到的 DSH 接口在这一版没有破坏性变化，工作台代码不变；四套随包 Skills 的版本也不变（Oh Story 0.8.4、Drama Skills 0.8.0、NovelToGame 0.4.0、video-recap-skills 0.6.0）。
+
 ## [0.1.11] - 2026-09-27
 
 ### Added
@@ -258,7 +264,8 @@
 - 提供 13 个 Oh Story 小说 Skills、7 个专业 Roles 与 10 个 Drama Skills。
 - 提供文件树、Markdown/JSONL 编辑预览与官方 DSH Chat 同屏的三栏工作台。
 
-[Unreleased]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.11...HEAD
+[Unreleased]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.12...HEAD
+[0.1.12]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.11...v0.1.12
 [0.1.11]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.10...v0.1.11
 [0.1.10]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.9...v0.1.10
 [0.1.9]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.8...v0.1.9
