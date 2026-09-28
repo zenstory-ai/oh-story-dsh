@@ -99,6 +99,9 @@ describe("DSH-native production prompts", () => {
     expect(prompt).not.toContain("原文件旁边的新文件");
     expect(prompt).toContain("把「来源」改指新文件");
     expect(prompt).toContain("默认的硬字幕路线需要带 libass 的 ffmpeg");
+    expect(prompt).toContain("剪辑单里只要有「画面文字」行也必须要它");
+    expect(prompt).toContain("未同意就不写「画面文字」行");
+    expect(prompt).toContain("混入「音效」行");
     expect(prompt).not.toContain("零依赖");
     expect(prompt).toContain("剪辑单的「声音」行只是记录，render 不执行它");
     expect(prompt).toContain("这一步最后要像 render 一样按剪辑单的「交付响度」对整片做两遍 loudnorm（I=交付响度、TP=-1.5、LRA=11，第二遍代入第一遍的实测值并用 linear=true），音频编码为 AAC 192k、48 kHz，然后才替换 剧集/EP001/制作成果/成片/成片.mp4");

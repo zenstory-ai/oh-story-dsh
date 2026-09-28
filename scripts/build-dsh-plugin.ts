@@ -23,6 +23,14 @@ const platformGlue = [
   "skills/story-setup/references/reasonix/",
   "skills/story-setup/references/templates/",
   "skills/story-setup/references/zcode/",
+  "skills/story-setup/references/deploy-antigravity.md",
+  "skills/story-setup/references/deploy-claude-code.md",
+  "skills/story-setup/references/deploy-codex.md",
+  "skills/story-setup/references/deploy-generic.md",
+  "skills/story-setup/references/deploy-openclaw.md",
+  "skills/story-setup/references/deploy-opencode.md",
+  "skills/story-setup/references/deploy-reasonix.md",
+  "skills/story-setup/references/deploy-zcode.md",
   "skills/story-setup/scripts/deploy-antigravity-skills.py",
   "skills/story-setup/scripts/generate-antigravity-agents.mjs",
   "skills/story-setup/scripts/merge-antigravity-hooks.py",
@@ -126,7 +134,14 @@ for (const excluded of [
   "oh-story/skills/story-short-scan/scripts",
   "oh-story/skills/story-setup/scripts/copy-path-safety.py",
   "oh-story/skills/story-setup/scripts/deploy-antigravity-skills.py",
-  "oh-story/skills/story-setup/references/antigravity"
+  "oh-story/skills/story-setup/references/antigravity",
+  "oh-story/skills/story-setup/references/deploy-claude-code.md",
+  "video-recap/skills/video-recap/scripts/dashboard_server.py",
+  "video-recap/skills/video-recap/scripts/dashboard_data.py",
+  "video-recap/skills/video-recap/scripts/dashboard_io.py",
+  "video-recap/skills/video-recap/scripts/dashboard_runs.py",
+  "video-recap/skills/video-recap/scripts/dashboard_templates.py",
+  "video-recap/skills/video-recap/assets/dashboard"
 ]) {
   const present = await access(resolve(outputRoot, excluded)).then(() => true, () => false);
   if (present) throw new Error(`Release bundle retained excluded platform/scraper code: ${excluded}`);

@@ -6,7 +6,7 @@
  * 采集策略：
  *   1. 默认优先读取 m.qidian.com 的 SSR pageContext JSON（不依赖 CDP，规避 PC 站风控页）。
  *   2. 移动端不可用时再回退到 Chrome CDP 采集 PC 页面。
- * 输出 Markdown 格式匹配 scan-output-format.md 规范。
+ * 输出 Markdown 格式见 references/platform-qidian.md；aggregate-rank.js 按此格式聚合。
  *
  * 用法：
  *   node qidian-rank-scraper.js --type hotsales               # 畅销榜

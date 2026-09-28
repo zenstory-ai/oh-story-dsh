@@ -2,11 +2,11 @@
 # 源文质量评估清单
 
 > **定位**：story-short-analyze（短篇拆书）的质量自检清单，评估**拆解对象（源文）**的成文质量时逐项核对。
-> 拆书管道本身的质量检查见 output-templates.md「质量检查必填字段」；所有数值阈值的唯一权威定义见 material-decomposition.md「质量标准」与「节奏分析」，本清单不自定义数值。
+> 拆书管道本身的质量检查见 quality-checklist.md「质量检查必填字段」；所有数值阈值的唯一权威定义见 quality-checklist.md「质量标准」与 stage4-6-reversal-summary.md「节奏分析」，本清单不自定义数值。
 >
 > **三类质量的分工（别混用）**：
 >
-> 1. **拆书管道质量检查**（执行过程中）→ [output-templates.md「质量检查必填字段」](output-templates.md)。每条带 `[BLOCK]` / `[WARN]` 标注；`[BLOCK]` 缺失 → 「BLOCK 项扫描」阻断。
+> 1. **拆书管道质量检查**（执行过程中）→ [quality-checklist.md「质量检查必填字段」](quality-checklist.md)。每条带 `[BLOCK]` / `[WARN]` 标注；`[BLOCK]` 缺失 → 「BLOCK 项扫描」阻断。
 > 2. **评估对象（源文）质量**（拆什么样的料）→ 本文件。回答"这篇源文写得好不好"。
 > 3. **拆文报告本身质量**（写什么样的报告）→ [analysis-report-style.md](analysis-report-style.md)。报告自身由「拆文报告表达自检」守门；源文中的套话和 AI 腔仍是分析对象，不作输入过滤。
 
@@ -81,6 +81,7 @@
 ### 五维评分标准
 
 每个维度 0-100 分，根据评分结果选择精修策略。
+严重度：critical、high＝必须修；medium＝建议看；low＝仅提示。
 
 ### 维度 1：核心一致度
 检查：关键冲突、关键行动、人物动机是否前后一致。
@@ -108,7 +109,6 @@
 | 问题 | 严重度 | 修复 |
 |------|--------|------|
 | 段落长度差异过大 | medium | 调整段落划分 |
-| 章节字数偏离目标 | **high** | 写作/大纲修复时先回到细纲补足计划内情节点，再展开；去AI味已有正文时不得新增剧情 |
 | 格式混乱（对话/描写不统一）| low | 统一格式 |
 
 ### 维度 4：可读性
@@ -195,7 +195,7 @@
 
 > **本表评估的是源文**（拆解对象写得好不好），毒点判断必须引用源文证据，不替源文改写。
 > **不要把本表用来评估拆文报告本身**：报告自身走「拆文报告表达自检」+ [analysis-report-style.md](analysis-report-style.md)。
-> **拆文管道完成度** 走 [output-templates.md「质量检查必填字段」](output-templates.md) 的 `[BLOCK]` / `[WARN]` 清单。
+> **拆文管道完成度** 走 [quality-checklist.md「质量检查必填字段」](quality-checklist.md) 的 `[BLOCK]` / `[WARN]` 清单。
 
 | 检查项 | 标准 |
 |--------|------|

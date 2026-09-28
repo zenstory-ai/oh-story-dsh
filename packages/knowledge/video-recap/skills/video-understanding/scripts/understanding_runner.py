@@ -14,6 +14,7 @@ from extract import extract_frames
 from detect import detect_scenes, detect_silence_periods, detect_speech_boundary_anchors
 
 from asr import transcribe_audio
+from asr_timing_evidence import write_asr_timing_evidence, asr_evidence_summary_for_brief
 
 from vlm import (
     analyze_scenes,
@@ -27,6 +28,7 @@ from brief import build_agent_brief, assess_understanding_substrate
 from understanding_brief import _research_context, _write_brief_from_existing_artifacts
 from understanding_cache import (
     _asr_cache_payload,
+    _asr_cache_state,
     _frames_cache_valid,
     _load_json,
     _merge_overview_into_scenes,
@@ -112,7 +114,6 @@ def main():
         CONFIG["target_duration"] = args.target_duration
     if args.mimo_video_overview:
         CONFIG["mimo_video_overview"] = True
-    scene_threshold = CONFIG.get("scene_threshold")
 
     video_duration = get_video_duration(video)
     if CONFIG["fps"] <= 0:
@@ -145,21 +146,39 @@ def main():
         scenes = _load_json(scenes_json)
         log(f"跳过场景检测（已存在 {len(scenes)} 个场景）")
     else:
-        scenes = detect_scenes(video, work_dir, scene_threshold)
+        scenes = detect_scenes(video, work_dir, CONFIG["scene_threshold"])
         _write_stage_meta(scenes_json, scenes_meta)
 
     # Step 3: ASR
     asr_meta = _asr_cache_payload(video, skip_asr=args.skip_asr)
+    cache_state = None
+    if not args.skip_asr and not args.force:
+        cache_state = _asr_cache_state(asr_json, asr_meta, video)
     if args.skip_asr:
         asr_result = []
         asr_json.write_text(
             json.dumps(asr_result, ensure_ascii=False, indent=2), encoding="utf-8"
         )
         _write_stage_meta(asr_json, asr_meta)
+        write_asr_timing_evidence(
+            work_dir, video, "EXPLICITLY_SKIPPED", final_segments=asr_result
+        )
         log("跳过 ASR（--skip-asr）")
-    elif not args.force and _stage_cache_valid(asr_json, asr_meta):
+    elif cache_state in {
+        "FRESH",
+        "LEGACY_UNVERIFIED",
+    }:
         asr_result = _load_json(asr_json)
-        log(f"跳过 ASR（已存在 {len(asr_result)} 段）")
+        if cache_state == "LEGACY_UNVERIFIED":
+            write_asr_timing_evidence(
+                work_dir,
+                video,
+                "LEGACY_UNVERIFIED",
+                final_segments=asr_result,
+            )
+            log(f"复用旧 ASR（{len(asr_result)} 段；时间/声学证据未经验证）")
+        else:
+            log(f"跳过 ASR（证据匹配，已存在 {len(asr_result)} 段）")
     else:
         try:
             asr_result = transcribe_audio(video, work_dir)
@@ -188,13 +207,13 @@ def main():
         vlm_analysis = _load_json(vlm_json)
         log(f"跳过 VLM 分析（已存在 {len(vlm_analysis)} 个场景）")
     else:
-        if not CONFIG.get("api_key"):
-            key_name = CONFIG.get("api_key_source", "MIMO_API_KEY")
+        if not CONFIG["api_key"]:
+            key_name = CONFIG["api_env_var"]
             raise SystemExit(f"请设置 {key_name} 环境变量（VLM 画面分析需要）")
         log("VLM API 连通性预检...")
         api_call(
             {
-                "model": CONFIG.get("vlm_model", ""),
+                "model": CONFIG["vlm_model"],
                 "messages": [{"role": "user", "content": "hi"}],
                 "max_tokens": 5,
             }
@@ -204,8 +223,8 @@ def main():
 
     # Step 4.1: optional MiMo scene-chunk video understanding
     overview_path = work_dir / "mimo_video_overview.json"
-    if CONFIG.get("mimo_video_overview", False):
-        if not CONFIG.get("mimo_video_api_key"):
+    if CONFIG["mimo_video_overview"]:
+        if not CONFIG["mimo_video_api_key"]:
             log("跳过 MiMo 分片视频概览：未设置 MIMO_API_KEY")
             overview_path.unlink(missing_ok=True)
             _write_mimo_overview_status(
@@ -227,7 +246,7 @@ def main():
                 log(f"MiMo 分片视频概览失败（忽略）: {e}")
                 _write_mimo_overview_status(work_dir, "failed", e, None)
             else:
-                if overview_path.exists() and overview:
+                if overview:
                     _write_mimo_overview_status(
                         work_dir, "ok", "MiMo 分片视频概览完成", overview_path.name
                     )
@@ -341,8 +360,9 @@ def main():
         video_duration,
         work_dir,
         args.style,
-        mimo_overview_enabled=CONFIG.get("mimo_video_overview", False),
+        mimo_overview_enabled=CONFIG["mimo_video_overview"],
         mimo_overview_video_path=video,
+        asr_evidence=asr_evidence_summary_for_brief(work_dir, video),
     )
     # C1: post-process the RETURNED brief FILE (not brief.py) so the brief⇄narration twin stays
     # byte-identical. Prepends a storyboard header pointing the agent at the sheet(s).

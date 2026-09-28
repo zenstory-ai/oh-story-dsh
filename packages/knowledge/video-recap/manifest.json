@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "upstream": {
     "repository": "https://github.com/zenstory-ai/video-recap-skills.git",
-    "commit": "ec369e7e38866f23e953903fb30de9638a900e57",
-    "releaseVersion": "0.5.0"
+    "commit": "e7eb0a82f13aab930f64a669e91ece78b82f65f5",
+    "releaseVersion": "0.6.0"
   },
-  "generatedAt": "2026-09-10T13:26:16.832Z",
+  "generatedAt": "2026-09-28T04:09:53.544Z",
   "skills": [
     "video-assemble",
     "video-cut",
@@ -17,8 +17,8 @@
   "files": [
     {
       "path": "CHANGELOG.md",
-      "sha256": "98c82ba7cf52881794d701ea5baca926638c1eb5e696bf34dbbc96002a7d3380",
-      "bytes": 33937
+      "sha256": "1f1c9b54c80ccd4bd4ae65cc115e123ef88601df63cd078c5d8ad8d0b85418cc",
+      "bytes": 49652
     },
     {
       "path": "LICENSE",
@@ -27,18 +27,33 @@
     },
     {
       "path": "README.en.md",
-      "sha256": "689dfc34a7c2eb6abda6bcdd04d62d79d7700ad110efacbca08e0f28511132fa",
-      "bytes": 15743
+      "sha256": "d34ac318ae1adaddd6ba0a9f5d3e2ae8156e0c857721491be90d96c3d6c21e51",
+      "bytes": 29374
     },
     {
       "path": "README.md",
-      "sha256": "7dacb2ddbcf4c7ab656ec7288eaa90f223a37ca5fbe1d56567e9d960f3975a9f",
-      "bytes": 13804
+      "sha256": "cbbeaaae063cbe821540b73edb1775b545266ebcf9d3acab59d4019734085ad2",
+      "bytes": 25433
     },
     {
       "path": "skills/video-assemble/SKILL.md",
-      "sha256": "e0771facf681f6a55481f9317c2c75ebe76ba1079b2f258d5a8013fd9d287b8b",
-      "bytes": 6926
+      "sha256": "0d2225578266896418dbbc30e877c01da293c824a8ba3e500734453ea61143dd",
+      "bytes": 8875
+    },
+    {
+      "path": "skills/video-assemble/references/audio-modes.md",
+      "sha256": "39a6544ba0918db7de0a113f6d40a3af3c4e96d6158464e698681cbcef451bac",
+      "bytes": 3537
+    },
+    {
+      "path": "skills/video-assemble/references/explicit-audio-mix.md",
+      "sha256": "06957b2ba1879fd2064efb873d93c5640d86ac9247bf6de72147483f22a5c148",
+      "bytes": 3756
+    },
+    {
+      "path": "skills/video-assemble/references/foreground-compose.md",
+      "sha256": "c7112618cd62e43a0a98a4dd31c43a2c5657fec8134c0b70df63be131f32d2fb",
+      "bytes": 5244
     },
     {
       "path": "skills/video-assemble/references/jianying/LICENSE.duo-video",
@@ -106,29 +121,84 @@
       "bytes": 2447
     },
     {
+      "path": "skills/video-assemble/references/narration-adoption.md",
+      "sha256": "fe1da17dcf5d5ad2daf1a66ce372dbc828e3d8dcd2b448d13745021df7abcf6e",
+      "bytes": 4767
+    },
+    {
+      "path": "skills/video-assemble/references/packaging.md",
+      "sha256": "a3dd8e54f0e0bc696a3083f40e25875d5eda7695b03128ca4ae5e9a7f71616a0",
+      "bytes": 2832
+    },
+    {
+      "path": "skills/video-assemble/references/pair-media.md",
+      "sha256": "797e94f495cddbae2e11e9a6544cd39487110939ca9737147007047d3ba7d7b1",
+      "bytes": 4151
+    },
+    {
+      "path": "skills/video-assemble/references/source-score.md",
+      "sha256": "cbed800c93e32ddc00987ae4cb5fa77e7e4cc5bbc677a134e61d6adb925c7208",
+      "bytes": 6864
+    },
+    {
+      "path": "skills/video-assemble/references/subtitle-track.md",
+      "sha256": "e34a687763061ef6b213483692af5b8b56902dfbc4ea3493c83e1af69889d18b",
+      "bytes": 8730
+    },
+    {
+      "path": "skills/video-assemble/scripts/adoption/__init__.py",
+      "sha256": "e10434b751cea0b67f4b56c4a4266ca19d55f305da5db4e1747e28968898c64f",
+      "bytes": 94
+    },
+    {
+      "path": "skills/video-assemble/scripts/adoption/audio_mix_binding.py",
+      "sha256": "0906c5ac568d26fe558b8e59d384f714f61cfd1062b091dbd8f3615df7efb6d7",
+      "bytes": 13727
+    },
+    {
+      "path": "skills/video-assemble/scripts/adoption/frozen_audio.py",
+      "sha256": "86445ab4e90c58444645e965b56c4f44b150ec79c4f03e89ce362cec3ea39169",
+      "bytes": 7750
+    },
+    {
+      "path": "skills/video-assemble/scripts/adoption/narration_binding.py",
+      "sha256": "3a9fced5c64e3f1b5bb795c9f16f3ad73dfeeb8beed0ecb3d15e70aa2c1789ec",
+      "bytes": 14877
+    },
+    {
+      "path": "skills/video-assemble/scripts/adoption/strict_inputs.py",
+      "sha256": "24bc01baade017e2c1f7921fdecad284a502d37728a1af599f807a3ddfed8881",
+      "bytes": 4200
+    },
+    {
+      "path": "skills/video-assemble/scripts/adoption/strict_publish.py",
+      "sha256": "0f51790a7a724385e2c8d06aa64a1aee727ad153fb2bae49b97f91d50be5848f",
+      "bytes": 6144
+    },
+    {
       "path": "skills/video-assemble/scripts/artifacts.py",
-      "sha256": "15ad56b5a39f6879c00c50d90f6aacd393de83926d813c9c596607a7dbab4ca2",
-      "bytes": 2808
+      "sha256": "0f7d502f6637ab58dfbd8496fe7e42784f4b2030ccfc9cce339d6e2998fa7a01",
+      "bytes": 1399
     },
     {
       "path": "skills/video-assemble/scripts/assemble.py",
-      "sha256": "6ac40f8281e7648fd07a40e512c560133926bf40b14349cc54720a7127804253",
-      "bytes": 16425
+      "sha256": "3f38bde7943eb1c2779e60ea146dc4a25ec0956b92733f426f674df7dcc3c0c6",
+      "bytes": 29707
     },
     {
       "path": "skills/video-assemble/scripts/assemble_constants.py",
-      "sha256": "6c2d0d58a7d2d5f91a7fdf9cac4c1455458f837e3cadbd03a378bd6dad0bee62",
-      "bytes": 1044
+      "sha256": "73774582f82f387c40003d9d758e19d5c0070b3a8abee749647685f445971467",
+      "bytes": 2024
     },
     {
       "path": "skills/video-assemble/scripts/assembly_contract.py",
-      "sha256": "c9405f40848153e23b0ef5dbdecd4cd56d99eee30cfb8dfd7ceece90f6914f61",
-      "bytes": 11345
+      "sha256": "976acc985f75f644dbf3f5305221d4d7421002c57b1dc9d1a8f150125bedfe72",
+      "bytes": 13881
     },
     {
       "path": "skills/video-assemble/scripts/assembly_settings.py",
-      "sha256": "b95322ebe2fdbb001a533c4d1ffd3b1a9085d79d2ea5c101a929033fa6b0ef5b",
-      "bytes": 4474
+      "sha256": "ab052125d1ca695bf7e10d63c1ca6fbf917f41531dfc1a72b153861d98fbac1e",
+      "bytes": 6710
     },
     {
       "path": "skills/video-assemble/scripts/audio_automation.py",
@@ -137,133 +207,178 @@
     },
     {
       "path": "skills/video-assemble/scripts/audio_mix.py",
-      "sha256": "2a30865aed73723281ad82263aaa67e1762debb801ba804ebc800fa8a559c92d",
-      "bytes": 18981
+      "sha256": "4624eb6859cdd306f971fb49898d863aff692ca8b81c76a86ecbd0d8d99e6b57",
+      "bytes": 18940
+    },
+    {
+      "path": "skills/video-assemble/scripts/compose_foreground.py",
+      "sha256": "49ba6eb4c6cfc179991c55c5a054eb43bc2c47fce31ccd3ea6bdea61d1ec794e",
+      "bytes": 14431
     },
     {
       "path": "skills/video-assemble/scripts/export_jianying.py",
-      "sha256": "bf5d57dbb58b2f5b4b640035a17f318ae714fdf424d5b55945b356ffd0de7588",
-      "bytes": 8874
+      "sha256": "447fc4bd39f63445cb790430d637554ba643d4716b6a69f5dd3e7b42351b1596",
+      "bytes": 8684
     },
     {
-      "path": "skills/video-assemble/scripts/jianying_builders.py",
-      "sha256": "925a6f25eda0938a62494dc2cc76196a3c2cb8facf72d9e9918e541c14c24294",
-      "bytes": 32203
+      "path": "skills/video-assemble/scripts/jianying/__init__.py",
+      "sha256": "cd934c6910bd483080448b958f8c7b48e10609da4fb8b11361e646b8b56c3772",
+      "bytes": 49
     },
     {
-      "path": "skills/video-assemble/scripts/jianying_model.py",
-      "sha256": "5c8b3bac994b6e6d4ff53de04d51b63393ea952c018c0907c38d8baeea499e0b",
-      "bytes": 3778
+      "path": "skills/video-assemble/scripts/jianying/builders.py",
+      "sha256": "4c66e77043cfbcb32b46a5345489c6c07425554730845c1271435dcba1c7b2d6",
+      "bytes": 30773
     },
     {
-      "path": "skills/video-assemble/scripts/jianying_optional.py",
-      "sha256": "6ef8bcc1db532746201b0231be6b8052488f51c7be1e4e6254f1663c9447b1dd",
-      "bytes": 1013
+      "path": "skills/video-assemble/scripts/jianying/model.py",
+      "sha256": "02787ddfbe98132a1e53c2df458a365c29d1cb3d5882362f1ef31cdc9854b3b1",
+      "bytes": 3432
     },
     {
-      "path": "skills/video-assemble/scripts/jianying_schema.py",
-      "sha256": "ebfb30c6e2290e02469cdf4cea6922450ba2033e8457d60aa0079a1b2818194c",
-      "bytes": 5723
+      "path": "skills/video-assemble/scripts/jianying/optional.py",
+      "sha256": "9b410526c0a28e40ed9f58b234ea5f24d03dbf108191acd2a65f91dc44f29c10",
+      "bytes": 1012
     },
     {
-      "path": "skills/video-assemble/scripts/jianying_templates.py",
-      "sha256": "ff1360b1ad4dec80e4c3830b0f7393d67d874e94de1c7357ffb100d9a03c77fe",
-      "bytes": 1226
+      "path": "skills/video-assemble/scripts/jianying/schema.py",
+      "sha256": "fb66aba99d010477a418a7f45d87e92ced1ae5d9995f6f66b326890e41dc51bd",
+      "bytes": 2600
     },
     {
-      "path": "skills/video-assemble/scripts/jianying_timeline_contract.py",
-      "sha256": "a49e0a456d5f7517148a8f19540b7925945cd3cdafcd2b270a1090e79a5a608f",
-      "bytes": 8680
+      "path": "skills/video-assemble/scripts/jianying/templates.py",
+      "sha256": "5857fc622dbf71ec4ccb1012ddac56f03788e2da9294083ba5e46e3f08c648ad",
+      "bytes": 1233
     },
     {
-      "path": "skills/video-assemble/scripts/jianying_tracks.py",
+      "path": "skills/video-assemble/scripts/jianying/timeline_contract.py",
+      "sha256": "c4b2eee6f0cb4a2e9eb6a8c15e258732f8e2f5908c820b2a20b372b9e513d14a",
+      "bytes": 9634
+    },
+    {
+      "path": "skills/video-assemble/scripts/jianying/tracks.py",
       "sha256": "9c20912d62b4845ca4b48c4c1c6a71c3899150865b6d7db05f21a34bd976888b",
       "bytes": 2666
     },
     {
-      "path": "skills/video-assemble/scripts/jianying_writer.py",
-      "sha256": "19933e70071bfaabbdabad971f7a027c175a2d3858db5c7d3ab9201ae5de0755",
-      "bytes": 15688
+      "path": "skills/video-assemble/scripts/jianying/writer.py",
+      "sha256": "24304446d7fe33b30abf2a1d91eaba604a34d1e6da0874e2f5854aae2d0d6e1e",
+      "bytes": 15245
     },
     {
       "path": "skills/video-assemble/scripts/lib.py",
-      "sha256": "6e23176483d2914450c512312c2feb9a73dd2a34048a0a4c264a417ab251ef92",
-      "bytes": 12859
+      "sha256": "e043e844d34a68712c9774a51e29cdd3c5a1a0934422a973f31f0c28a27ae86d",
+      "bytes": 14370
     },
     {
       "path": "skills/video-assemble/scripts/media.py",
-      "sha256": "7f968e87ec0da6e55b8d571b54e529cb488766de0df616be19fc39f4a92224e5",
-      "bytes": 8656
+      "sha256": "f0d416bfafd45c1743e7de5dc09f248837776e3b743038ac7be15ab1e51c1d63",
+      "bytes": 8422
     },
     {
       "path": "skills/video-assemble/scripts/narration_audio.py",
-      "sha256": "c3d9b2b5042161ab278f75ff0b290baa6253c777fc28947412f2d12e52b86443",
-      "bytes": 17953
+      "sha256": "d20d48a37f2a49982e34d2c5ac20ed7581fd7f47ef8a646cbe164a6e746e8582",
+      "bytes": 19362
+    },
+    {
+      "path": "skills/video-assemble/scripts/packaging.py",
+      "sha256": "f4c59b07dac1b65509ca6c3d1f9d2770798b1b981b8d71be685788fdf2c29ae0",
+      "bytes": 5586
+    },
+    {
+      "path": "skills/video-assemble/scripts/pair_media.py",
+      "sha256": "18be86a9eb1856f7f4ba9e1148ab1113e2fe28d33f6091c8485f42095764cc69",
+      "bytes": 11113
     },
     {
       "path": "skills/video-assemble/scripts/render_preflight.py",
-      "sha256": "19166fdce29774a6b8b815f9d570e13ac271e72d29d3c1eeb874626cc542bccc",
-      "bytes": 1352
+      "sha256": "62f0e2b2cf37ce7c1e6d5e2142fd198cb358b433339381d9cdfb6ab4e9ac3ce0",
+      "bytes": 1329
+    },
+    {
+      "path": "skills/video-assemble/scripts/source_score.py",
+      "sha256": "db1dc8804c10f1a5d1db512025a09a4a8846e7a7f0eb2f05500862211314aaf8",
+      "bytes": 24274
     },
     {
       "path": "skills/video-assemble/scripts/source_subtitles.py",
-      "sha256": "7d97fd9836cf7101f5795a9d524b7b197acb145e1b34c0ddc412f28d7f492e8e",
-      "bytes": 19462
+      "sha256": "5d47a798d7c321d632d070f6346ea3db9bb2a0fae72524234db06d0a2330ed3d",
+      "bytes": 20485
     },
     {
-      "path": "skills/video-assemble/scripts/subtitle_core.py",
-      "sha256": "b5f492af251d87b9e3fb4c9e92989db5a0c0e2274be32af8236fedf0895b94b0",
-      "bytes": 13612
+      "path": "skills/video-assemble/scripts/subtitles/__init__.py",
+      "sha256": "2e32301538d2a80e1f1731ed7d22174f0727a5f9973f5dbe668a8e8196cc9ae3",
+      "bytes": 56
     },
     {
-      "path": "skills/video-assemble/scripts/subtitle_render.py",
-      "sha256": "a7835b5358eb8b5ae3ef54865d524aeed1c956dd22bc1761aae8d9b0f4aebd1a",
-      "bytes": 3418
+      "path": "skills/video-assemble/scripts/subtitles/core.py",
+      "sha256": "2019e96e8c8024fc2eac42a2d84abb709317a1f944e0a6bf553d9c6d33ad14f3",
+      "bytes": 13938
+    },
+    {
+      "path": "skills/video-assemble/scripts/subtitles/render.py",
+      "sha256": "acb4d5db2082fbb51bcc788d224f7d0d4d0e7b57e15148ad12bb2c44d020dd5f",
+      "bytes": 3577
+    },
+    {
+      "path": "skills/video-assemble/scripts/subtitles/track.py",
+      "sha256": "11f15d2af362c9f9ab37fdc5e11ccb52200ca82b40cb5b6cb4210bbe316a9129",
+      "bytes": 12878
+    },
+    {
+      "path": "skills/video-assemble/scripts/subtitles/track_binding.py",
+      "sha256": "e04b86fe8d5f15cd2fce33b8aad5be0da5bda7cd6ef0dc712b3963298e635d3e",
+      "bytes": 10572
     },
     {
       "path": "skills/video-assemble/scripts/timeline.py",
-      "sha256": "69ad2a2a1b8a7faf90d2b04425e61137f0f5d034c065fe0e55a90d278d759477",
-      "bytes": 10308
+      "sha256": "e25f5c933809769f3b705bf64f6f1cbc28d9efef34c2d8c4501dc9db8ae304b0",
+      "bytes": 9466
     },
     {
       "path": "skills/video-assemble/scripts/timeline_emit.py",
-      "sha256": "be95ae2a3bac008aafc4875f357a22a7fcf29c472bfa4c6bd2da05dbc06f80a6",
-      "bytes": 3707
+      "sha256": "0b4af848b4774d095bf3556c2781f7673ff5d156f202ce898a59d2e4fea23774",
+      "bytes": 7854
     },
     {
       "path": "skills/video-assemble/scripts/visual_render.py",
-      "sha256": "7c2adbb74ce3eab3958f98e19481aae2f0deebeb66290b532ca6ad1ddc6dbe07",
-      "bytes": 16677
+      "sha256": "6310e6eac017578fe945bffcdb221ef1f58246e66b0adfacf7bf10497adaad65",
+      "bytes": 17225
     },
     {
       "path": "skills/video-cut/SKILL.md",
-      "sha256": "6ac561990a6eb89da6023f3df3136f96160b89927247530e733e384d76e97116",
-      "bytes": 6060
+      "sha256": "9a403ef16ed16d961f161d828ad9e601f8c3a85b9982e7fd756b76386fff021e",
+      "bytes": 7281
+    },
+    {
+      "path": "skills/video-cut/references/shot-review.md",
+      "sha256": "188699940f614a6876b4018990e74e117165e5b462a28db949814ca2137839b7",
+      "bytes": 5549
     },
     {
       "path": "skills/video-cut/scripts/cut.py",
-      "sha256": "97e2b5b16bf6a84efdad5c1ed9cb8754439be127aa22eb0e32ea6a7b8221825f",
-      "bytes": 1769
+      "sha256": "a1c3228d71ec25115f8e57f02b0b94e7c9d36fb91bc08844bce9b71eb4f4fe67",
+      "bytes": 1131
     },
     {
       "path": "skills/video-cut/scripts/cut_cli.py",
-      "sha256": "01145cc6b03c4c3372cbfd5986a206f65eb264a2dafd32228479f68fa3980a96",
-      "bytes": 12203
+      "sha256": "16b6b47247196f5dcd0704fe1eaba011980189e2b4f9a7252c2724350d4f0b42",
+      "bytes": 12385
     },
     {
       "path": "skills/video-cut/scripts/cut_contract.py",
-      "sha256": "81ad6426d32f64eb41f9510d9a9dbf1f2335442af90718521d6136c9a751f493",
-      "bytes": 19327
+      "sha256": "8bd575ac319e97551ef44bdd8fa0feb369e92cbe1ae27cef647d25dc94eb052b",
+      "bytes": 16364
     },
     {
       "path": "skills/video-cut/scripts/cut_render.py",
-      "sha256": "4395d4816005f9b5ec88ee981741c00979612f833388a5ebc8fb3d26bfee3903",
-      "bytes": 10974
+      "sha256": "b979e9d1c67102f29cd98c1f34e861ca995bc337304592cb3ab21e67825d50c4",
+      "bytes": 11249
     },
     {
       "path": "skills/video-cut/scripts/lib.py",
-      "sha256": "42c010d218d44389b2a7b7de2f9a0add1fe7a49e992b1a7846d49d9879888205",
-      "bytes": 3275
+      "sha256": "6b5f2a63869d61d5b60ed2860cdc36ac03e2fe8ec0f0acbceff3923af46f8c9c",
+      "bytes": 4796
     },
     {
       "path": "skills/video-cut/scripts/media_geometry.py",
@@ -272,8 +387,13 @@
     },
     {
       "path": "skills/video-cut/scripts/narration_mapping.py",
-      "sha256": "65afd4ce9c73287f9910b389d2c00a3451cacab0e0a8ce893d10041b77fcdd39",
-      "bytes": 9055
+      "sha256": "b1a95b0ac1cac78137a4c3f1a5ab9255f3b8ad6ed4d3ccaada103aa8a6454495",
+      "bytes": 2674
+    },
+    {
+      "path": "skills/video-cut/scripts/narrative_selection.py",
+      "sha256": "a3f22fe3176578a0869ab48ee90a2c6f739c3d75d0e6ee67db84aa47ae679676",
+      "bytes": 8972
     },
     {
       "path": "skills/video-cut/scripts/sentence_boundaries.py",
@@ -281,104 +401,119 @@
       "bytes": 22883
     },
     {
+      "path": "skills/video-cut/scripts/shot_review.py",
+      "sha256": "0b341a1050bbfcf5484db633349542521ecc3823a36454cf93815b218727b0b7",
+      "bytes": 17440
+    },
+    {
       "path": "skills/video-recap/SKILL.md",
-      "sha256": "217913bc6f9e47e01fd5e32154e126f8abec7aaee52f3525982bece01e3c0abc",
-      "bytes": 12492
+      "sha256": "021dc178c4ba55e3b1f546430481658a7240e36802a7feecf2411f93a92b1fba",
+      "bytes": 15438
+    },
+    {
+      "path": "skills/video-recap/references/audio-routing.md",
+      "sha256": "5613ec941acec2e36ed9557839340bc0427834a16d39cc03cde1706ac03557fc",
+      "bytes": 7139
     },
     {
       "path": "skills/video-recap/references/config-playbook.md",
-      "sha256": "b3b9b3e0141ded55c40cac54fce07b8de5b5ae38a6ece32f03e8908cacf9e007",
-      "bytes": 11246
-    },
-    {
-      "path": "skills/video-recap/references/creative-editing-playbook.md",
-      "sha256": "dbf367620a250b542bfcb9faeba6fdc4d752f029ef46978cec1b0ae770ed912c",
-      "bytes": 12407
+      "sha256": "649eecc1de73b3eb3137c945ad3a0ac0aee1ad7c5c3d40924f37100fe445b288",
+      "bytes": 11916
     },
     {
       "path": "skills/video-recap/references/data-schema.md",
-      "sha256": "38228f689aa66409aa924a772d6e73b5badb6e082f5e5e3813c685977d7d5571",
-      "bytes": 26854
+      "sha256": "916973e83f24c6e1b90a55a6a115ca3b3ad1ce9fee47a1f480d0ded1876b63c1",
+      "bytes": 28353
     },
     {
-      "path": "skills/video-recap/references/research-guide.md",
-      "sha256": "5d8a0830ee2092ea759a05ed842c63679fb205b653af79af8a99f1234e406b13",
-      "bytes": 2880
+      "path": "skills/video-recap/references/resource-library.md",
+      "sha256": "1d29835427b82352c7a404c78e20b42977b8d1700e677e8e6aec33fb4ff419d9",
+      "bytes": 8460
     },
     {
       "path": "skills/video-recap/references/shift-left-qc-schema.md",
-      "sha256": "d4db18ce8b58fc160dcd08174fbc48dbf1a724b27d7d95dcf13817c979218df2",
-      "bytes": 2314
-    },
-    {
-      "path": "skills/video-recap/references/timeline-and-jianying.md",
-      "sha256": "9fa138687a42c4701808aecb18d23cf7b2c01775728fc828e708b88859896110",
-      "bytes": 13652
+      "sha256": "3e2628f803fda686611dfdbcdd018799155f2a9d7833d934e20a872cb641eae3",
+      "bytes": 2288
     },
     {
       "path": "skills/video-recap/scripts/doctor.py",
-      "sha256": "c94ca5d1b8da15f72b228e55493ce527844e296e17ae794c40cd64aad19638ff",
-      "bytes": 16968
+      "sha256": "50a12a5526dc9d5c025f838ea0d03b86a7bacec5e59147670b4b199a86716ddb",
+      "bytes": 20852
     },
     {
       "path": "skills/video-recap/scripts/final_qc.py",
-      "sha256": "3615e7a749bace6213eaafe321762d813a6d1ea06d4223b85be253ec708e5569",
-      "bytes": 25284
+      "sha256": "e4ed593259cc2190ec7d6fdf097e5f08eb0a864a83ed0746827dce145048823d",
+      "bytes": 23040
     },
     {
       "path": "skills/video-recap/scripts/lib.py",
-      "sha256": "279680fcb17a45ef19b1c3f8a50b7a38b341d9f2a790baa315c3cf86f838495d",
-      "bytes": 10080
+      "sha256": "e5de141a2fb548824f43f56e1974d6d06559f06d35ebee60f062e5323e8dfc50",
+      "bytes": 10070
+    },
+    {
+      "path": "skills/video-recap/scripts/library.py",
+      "sha256": "739fa6f16a376e5430a9fc9c21bcb03940f29f644fe04b0ea448f390c81db757",
+      "bytes": 25314
     },
     {
       "path": "skills/video-recap/scripts/materials.py",
-      "sha256": "ab9cff9176d8fbee66d83aaa240b29f46cc08a7d57d5794c1baa2b35671cca7b",
-      "bytes": 17528
+      "sha256": "49f66b14b8ee617e2e7f9e9d93382b4180244f6799f479584022078742004228",
+      "bytes": 16415
     },
     {
       "path": "skills/video-recap/scripts/mimo_qc.py",
-      "sha256": "54dc05048b034cf2e57ea3c877ffed6ceff18618d3ca2071454a1039cb35e73d",
-      "bytes": 2083
+      "sha256": "3dcfe28a9d4dc5235e4924c73b23d2a99bf401bac8d44e29d0e4c20d2c4e53b0",
+      "bytes": 885
     },
     {
-      "path": "skills/video-recap/scripts/mimo_qc_client.py",
-      "sha256": "6ab7a39202ee1ce9098c9d37cfd33872acd31320c2fd142a45a014460b446087",
-      "bytes": 398
+      "path": "skills/video-recap/scripts/project_binding.py",
+      "sha256": "678f1ad5a7f14b72a037c316f5313af44760d9698522d0656ffba35118d153d1",
+      "bytes": 12121
     },
     {
-      "path": "skills/video-recap/scripts/mimo_qc_contract.py",
+      "path": "skills/video-recap/scripts/qc/__init__.py",
+      "sha256": "df3276d8bc4e83f0dd2be8bbca7ec976dc67b7ad5a7f3312c8d0974972f58ff2",
+      "bytes": 26
+    },
+    {
+      "path": "skills/video-recap/scripts/qc/mimo_client.py",
+      "sha256": "47010cda466f92600c5744d72e7f716cb3c6542bd8e3ae70d6f6f10fcf412bb7",
+      "bytes": 410
+    },
+    {
+      "path": "skills/video-recap/scripts/qc/mimo_contract.py",
       "sha256": "e51d30a11798d056ebfadfd1fa21142fea82bc69a07d611670b0dab394cca6fc",
       "bytes": 239
     },
     {
-      "path": "skills/video-recap/scripts/mimo_qc_evidence.py",
-      "sha256": "4dc0ca12953299ee187591ff6229c9f937026b45b07e756358b64277a8f17b2a",
-      "bytes": 10461
+      "path": "skills/video-recap/scripts/qc/mimo_evidence.py",
+      "sha256": "d2cba1f68f4f43f7314f48a4e44bcef501668cf9ea58fee6b34cadacc15fdf03",
+      "bytes": 9696
     },
     {
-      "path": "skills/video-recap/scripts/mimo_qc_observations.py",
-      "sha256": "84232242ce3a6ba0af780294908c207b567b37a27b01db4863c5071a753a5a04",
-      "bytes": 6801
+      "path": "skills/video-recap/scripts/qc/mimo_observations.py",
+      "sha256": "4c2cfbf621c85d1943d7a47adeeb3ea1c939b60762e160b74f78597a8f35ec51",
+      "bytes": 6425
     },
     {
-      "path": "skills/video-recap/scripts/mimo_qc_payload.py",
-      "sha256": "fc09d63726f7f969348c6a610dcbf498365fce6b2967b22504381dfec36d5695",
-      "bytes": 10855
+      "path": "skills/video-recap/scripts/qc/mimo_payload.py",
+      "sha256": "fffaefe42ff475c2e836ff4abadcce5d2b77b14869a73d4f4716404622f4b567",
+      "bytes": 10673
     },
     {
-      "path": "skills/video-recap/scripts/mimo_qc_report.py",
-      "sha256": "386a3c03b764b4d92ece6069e5f46ece5c97dd7a939c345238660b5aa70085e3",
-      "bytes": 10681
+      "path": "skills/video-recap/scripts/qc/mimo_report.py",
+      "sha256": "a13f93981ab55710b169554122e129902e1ba1a6c1655ec72b05bb2e90a02234",
+      "bytes": 10588
     },
     {
-      "path": "skills/video-recap/scripts/mimo_qc_runner.py",
-      "sha256": "68641b646363dc0ea3dddaa88e8d3120e826f9e81ca481200b5afc4e3de2f2dc",
+      "path": "skills/video-recap/scripts/qc/mimo_runner.py",
+      "sha256": "a14d14c657e8fff13af672e953f5b6ca558738cbd9050e11e885929c15f3d3a8",
       "bytes": 3823
     },
     {
       "path": "skills/video-recap/scripts/qc_contract.py",
-      "sha256": "a2c4a57cd95421fb5d5826dfb62444d70e2184967f891c10115ced9de6b89dc9",
-      "bytes": 12798
+      "sha256": "a105e3b6f12debd9de3e50d1bc39a3d0520b7397ac7d659b60ded9b8f078f6a9",
+      "bytes": 11990
     },
     {
       "path": "skills/video-recap/scripts/recap.py",
@@ -387,78 +522,73 @@
     },
     {
       "path": "skills/video-recap/scripts/recap_cli.py",
-      "sha256": "69f5d9acf9a145e4d9bf9fc3efd9f4fb9854de17d8a97b994c1915fcad10dda5",
-      "bytes": 5016
+      "sha256": "ba6161ebb0ec30b1e228b2155535fdd66cfdd9bc4b9e7785c9fe63a3d498e16d",
+      "bytes": 7602
     },
     {
       "path": "skills/video-recap/scripts/recap_inspect.py",
-      "sha256": "36a33d75072d50f2c283e749d7d1e88655a2b9e9a7440d22e7bc7393316f5e19",
-      "bytes": 21712
+      "sha256": "37a5b9a9f74be9af478329cc2e453527dc45a685264819ee74cfeb2cb8c8bbee",
+      "bytes": 18688
     },
     {
       "path": "skills/video-recap/scripts/recap_review.py",
-      "sha256": "0d02a69a190cba2ac5152e8432241fb9405ef12e9aab2e5d7b21bd5984b79188",
-      "bytes": 3441
+      "sha256": "4aeb13286d6f7f31fb8b43ab3e60a2f7cbad1b8926cb35213362b3b5b93e746f",
+      "bytes": 2894
     },
     {
       "path": "skills/video-recap/scripts/recap_runner.py",
-      "sha256": "c10be6f5d235f801af17f31b930335e220d3c57264548404cec525cc1eefbc8c",
-      "bytes": 24584
+      "sha256": "7a5baa9ebefce4369f21154ef418fe6bdbbf5d9ebbbf215456a167e47d61e0dd",
+      "bytes": 28650
     },
     {
       "path": "skills/video-recap/scripts/recap_runtime.py",
-      "sha256": "9926173b1d689d605336a26575c3416ca4a4b363f3948b8daf9d6f952d1160a3",
-      "bytes": 9309
+      "sha256": "0c5f4d2baa72b57c4f629c3f0426d4c814c53f1cb92bd963443216f7dfc7b7d0",
+      "bytes": 9557
+    },
+    {
+      "path": "skills/video-recap/scripts/recap_source.py",
+      "sha256": "401eb5b81b66bfe9081c082000ad40e65831261b49e6a9ed6137446a41d17673",
+      "bytes": 10645
     },
     {
       "path": "skills/video-recap/scripts/recap_stage_qc.py",
-      "sha256": "5abd51015ee30b26bc9db8aee44a129a740c2846fd385c3ce9da048f69f89771",
-      "bytes": 4959
+      "sha256": "f7f31e92aa234a7f837abf5c02ed2c4fb472053b1771b843f1b1d174e95e22f9",
+      "bytes": 5793
     },
     {
       "path": "skills/video-recap/scripts/recap_timeline.py",
-      "sha256": "2d1757a363d6a30fe30275e7afd21d938cc9da3a3e3f3bf558eb4eea9156f402",
-      "bytes": 27570
+      "sha256": "205f0c89969365daecd0d8183b1ebc83dbd85cd83550310c7a76b126f01654b8",
+      "bytes": 28631
+    },
+    {
+      "path": "skills/video-recap/scripts/resource_lock.py",
+      "sha256": "6ea34ef4a4befdf6749c99d7042e77d701d30833c5143585021ae0f92bb99942",
+      "bytes": 7163
     },
     {
       "path": "skills/video-script/SKILL.md",
-      "sha256": "58d03a784e81589a4933f3c321bc783bf37bb914436881058774e54213f06675",
-      "bytes": 13116
+      "sha256": "bec6a27c499bb342779c5e2115cf57440c4ebc454e18806a628396ac747ab253",
+      "bytes": 13634
     },
     {
       "path": "skills/video-script/references/creative-editing-playbook.md",
-      "sha256": "dbf367620a250b542bfcb9faeba6fdc4d752f029ef46978cec1b0ae770ed912c",
-      "bytes": 12407
+      "sha256": "c20ee6bd4f6923a1009b451408416e6db91f70a683f072ffd4e89b3fbb1fe436",
+      "bytes": 13959
+    },
+    {
+      "path": "skills/video-script/references/promotional-copy.md",
+      "sha256": "08f653dac1a0cd9cadb963a3c03e388cb657b953e5254536efc415cac53a2b4a",
+      "bytes": 5170
     },
     {
       "path": "skills/video-script/references/research-guide.md",
-      "sha256": "d239f4bc8680313184c91650cba0ee4fff2d454b91bf2edfdbeea02cd2adab48",
-      "bytes": 3243
-    },
-    {
-      "path": "skills/video-script/scripts/agent_brief.py",
-      "sha256": "92ebe1b2b5976b82401a983e03c85b38463b35e84794e359589d9f5f42159907",
-      "bytes": 26333
+      "sha256": "8bae849ff5a9aa2faa0ed7bf62f7bbf70c458b10774306308cce7a8fdfc1ee63",
+      "bytes": 3189
     },
     {
       "path": "skills/video-script/scripts/agent_text.py",
       "sha256": "49880a67bde8ae872743b604435222e766db81147e9bd64f2435a510c4622341",
       "bytes": 11084
-    },
-    {
-      "path": "skills/video-script/scripts/brief_context.py",
-      "sha256": "8ffc33ab1bc34da1f9002c2ecf42771753e169413a7cfa9d70da8c5d181c51df",
-      "bytes": 14169
-    },
-    {
-      "path": "skills/video-script/scripts/brief_inputs.py",
-      "sha256": "8eb025f7b48e23dc763a612b503bdba36b925015340b230be28065adb0b239ef",
-      "bytes": 10045
-    },
-    {
-      "path": "skills/video-script/scripts/brief_timeline.py",
-      "sha256": "4c79202bcefb096c8dfaa6e79dbd968b1f4e0925e128231e4d25350c5d7a4bbf",
-      "bytes": 13820
     },
     {
       "path": "skills/video-script/scripts/deslop_qc.py",
@@ -467,48 +597,43 @@
     },
     {
       "path": "skills/video-script/scripts/evidence_bundle.py",
-      "sha256": "b65f71fbc9d327fa29566101f34f763ba7b7c8bea60ec0881cd9e9a658bffb7f",
-      "bytes": 17303
+      "sha256": "c6357f68a142df77325b60cf0250101740de1bc9887d7199fca22b6723699ba8",
+      "bytes": 14769
     },
     {
       "path": "skills/video-script/scripts/lib.py",
-      "sha256": "92fca08ac275861ff0cf3c30f80ff90c3178f4b263f351eb127cb121f75d960c",
-      "bytes": 17293
-    },
-    {
-      "path": "skills/video-script/scripts/narration.py",
-      "sha256": "2a562a02de57fec1a772d411c2e30379e275972c0787e45d49cbed4cab69f49d",
-      "bytes": 370
+      "sha256": "f53ef1ac0a1ce83d1f6c11b72674116b6d543b761de27fdf2c978bb4cb9057a8",
+      "bytes": 12853
     },
     {
       "path": "skills/video-script/scripts/narration_lint.py",
-      "sha256": "11ed5f09c4baf42af678083fafd4836cb80c2022d8497a99ffe49168c3053810",
-      "bytes": 27867
+      "sha256": "2df85ede64f78bdbcafc4887162c4d7f3327d106a2aeb62f5fde1149764944e3",
+      "bytes": 28869
     },
     {
       "path": "skills/video-script/scripts/review.py",
-      "sha256": "73882f2181be51e944a095174832c5b6a910600f0db9d904f6520e4888955eb6",
-      "bytes": 1087
+      "sha256": "50b65f01cd354cc8e9dcc08cd0c5c73d9b06630512b253f945b98dc4a73ed7ae",
+      "bytes": 1007
     },
     {
       "path": "skills/video-script/scripts/review_grounding.py",
-      "sha256": "cda8e661ac8728d05b5dea4b661c4873c4e021aef70aac60914934ad044d5c33",
-      "bytes": 9873
+      "sha256": "3d1b21ec6a64da90d1dd317d954bcb9a8a8cbc79243dd0a6c820679f3f6eccc5",
+      "bytes": 9245
     },
     {
       "path": "skills/video-script/scripts/review_response.py",
-      "sha256": "6060ad5010500a6bf963ffe4609d55896ded0437d32fd9cce65f792e4daf58c5",
-      "bytes": 32846
+      "sha256": "825332ce92b00eac46676d774562cefcbbbf5031db5ebcae48ec8ab523a30857",
+      "bytes": 31624
     },
     {
       "path": "skills/video-script/scripts/review_runner.py",
-      "sha256": "a41ff732ff3047c9d5a1f0118cc1a67e1c5ff3dbb5b5320b4c015c8a91029278",
-      "bytes": 7372
+      "sha256": "02fb26fd14fe6a35b9024bb040464d27345e6905c9a54c67b3ee00fd7a984c51",
+      "bytes": 6869
     },
     {
       "path": "skills/video-script/scripts/speech_ownership.py",
-      "sha256": "0f474ec2e2730e31f6f1a52ad4ff2f1f3961a0b585de8e589b61328550e59835",
-      "bytes": 5008
+      "sha256": "3816fdf7e2817c7ddc958025337c387e02bee571c3bbc1e72187ccd7c0c90e51",
+      "bytes": 5009
     },
     {
       "path": "skills/video-script/scripts/timeline_fusion.py",
@@ -517,18 +642,18 @@
     },
     {
       "path": "skills/video-script/scripts/validate.py",
-      "sha256": "91ef0764d9992822d2b84ba95fa1089022aa55d670d8e8a27b0e1966217d6a79",
-      "bytes": 6193
+      "sha256": "ee8ba36179192af23f499663697d4d25c6f6edf0d9faf68c3ecebac9920d0885",
+      "bytes": 6682
     },
     {
       "path": "skills/video-understanding/SKILL.md",
-      "sha256": "86c395f032d934f66dba719c0cc8d908fa47c98fff23b0c1b94438dbd47af7bf",
-      "bytes": 3852
+      "sha256": "3cd5bc643ea2f427c96e3c37d9cf3ea67606f653f07ba64c3a1f57c186bfbec9",
+      "bytes": 4128
     },
     {
       "path": "skills/video-understanding/references/data-schema.md",
-      "sha256": "d9f2a1a6f8a1e1c033b635af450cf3337b2f6767389737a67a26c462cd14e699",
-      "bytes": 11586
+      "sha256": "479a5475e4bb964243d9c60273f21a1e1ab781fa6a51967e005296b75835fc89",
+      "bytes": 6925
     },
     {
       "path": "skills/video-understanding/references/prompt-templates.md",
@@ -537,13 +662,8 @@
     },
     {
       "path": "skills/video-understanding/references/research-guide.md",
-      "sha256": "adb44c43a19310ebe1a735832c4d66a816dcda35e98efb478c482f695ab2d9a2",
-      "bytes": 2833
-    },
-    {
-      "path": "skills/video-understanding/scripts/agent_brief.py",
-      "sha256": "92ebe1b2b5976b82401a983e03c85b38463b35e84794e359589d9f5f42159907",
-      "bytes": 26333
+      "sha256": "5d8a0830ee2092ea759a05ed842c63679fb205b653af79af8a99f1234e406b13",
+      "bytes": 2880
     },
     {
       "path": "skills/video-understanding/scripts/agent_text.py",
@@ -552,33 +672,48 @@
     },
     {
       "path": "skills/video-understanding/scripts/asr.py",
-      "sha256": "155c6e543a2c9a40af58bf31e1b48792f2c3f2fc55b882bd643f77150dea1b11",
-      "bytes": 10458
+      "sha256": "c75749ee562ae1bfc3cba9dbad3067c55e8ba591346df848bf313b1e07eac9b7",
+      "bytes": 11124
+    },
+    {
+      "path": "skills/video-understanding/scripts/asr_timing_evidence.py",
+      "sha256": "f2787d1465ae0ac5020c213b44847d078cba431582d481b133c61795defdae1e",
+      "bytes": 10508
     },
     {
       "path": "skills/video-understanding/scripts/brief.py",
-      "sha256": "2a562a02de57fec1a772d411c2e30379e275972c0787e45d49cbed4cab69f49d",
-      "bytes": 370
+      "sha256": "15c070ebcdf4d2a2010c586243c35af951136ac068ec41af7ae2be8f29652a12",
+      "bytes": 250
     },
     {
-      "path": "skills/video-understanding/scripts/brief_context.py",
-      "sha256": "8ffc33ab1bc34da1f9002c2ecf42771753e169413a7cfa9d70da8c5d181c51df",
-      "bytes": 14169
+      "path": "skills/video-understanding/scripts/briefing/__init__.py",
+      "sha256": "795f69ec8ba7f2f3026bb53f92e5bf6b9039956016a9433947307d1fa3b4af1d",
+      "bytes": 101
     },
     {
-      "path": "skills/video-understanding/scripts/brief_inputs.py",
-      "sha256": "8eb025f7b48e23dc763a612b503bdba36b925015340b230be28065adb0b239ef",
-      "bytes": 10045
+      "path": "skills/video-understanding/scripts/briefing/builder.py",
+      "sha256": "15bc4c392a0bbaea56b451afe2dd7af2667e4f42a65fc64927ec25906d836b3b",
+      "bytes": 27097
     },
     {
-      "path": "skills/video-understanding/scripts/brief_timeline.py",
-      "sha256": "4c79202bcefb096c8dfaa6e79dbd968b1f4e0925e128231e4d25350c5d7a4bbf",
-      "bytes": 13820
+      "path": "skills/video-understanding/scripts/briefing/context.py",
+      "sha256": "977a7c906f7bbaed4cc50ab077b7728d29af99faf532fb741aa1de6d9a39517d",
+      "bytes": 11882
+    },
+    {
+      "path": "skills/video-understanding/scripts/briefing/inputs.py",
+      "sha256": "3f7cff1180414f3aabe7f9a9f2577a3fec7cc71b3aed32f2c1e74c8789f5ea42",
+      "bytes": 9375
+    },
+    {
+      "path": "skills/video-understanding/scripts/briefing/timeline.py",
+      "sha256": "f8f7d82398114644a8f6b0627c6db7622ac3c9c8249444c8ffb32a4849c2a99c",
+      "bytes": 13737
     },
     {
       "path": "skills/video-understanding/scripts/consolidate.py",
-      "sha256": "79afa9d631f72cd9fd7f5efb49449edf8f5e7a72d7c962ea78ba79276a84fbb0",
-      "bytes": 24951
+      "sha256": "e748c207c19076c3e514a8e009f669a9174d9da1695b4c24b81ad826278c6eb1",
+      "bytes": 23213
     },
     {
       "path": "skills/video-understanding/scripts/deslop_qc.py",
@@ -587,8 +722,8 @@
     },
     {
       "path": "skills/video-understanding/scripts/detect.py",
-      "sha256": "bf639b522c7f01d42430576bbfff44e145f45b2c05f1c61b8124fda6cf564123",
-      "bytes": 21996
+      "sha256": "60dd6217e2822459345392b489a79d91a33949eb2396cbaea5f7c9e49c8b474f",
+      "bytes": 21490
     },
     {
       "path": "skills/video-understanding/scripts/extract.py",
@@ -597,23 +732,23 @@
     },
     {
       "path": "skills/video-understanding/scripts/lib.py",
-      "sha256": "7ad8dda638664f4b8a8a887ec639dbb57fb0937200050d21b29c221b152db421",
-      "bytes": 25008
+      "sha256": "8cbc1b9800683371fe569a3e967c623f74a4b39f292dd7737354c4892e7effd4",
+      "bytes": 22160
     },
     {
       "path": "skills/video-understanding/scripts/narration_lint.py",
-      "sha256": "11ed5f09c4baf42af678083fafd4836cb80c2022d8497a99ffe49168c3053810",
-      "bytes": 27867
+      "sha256": "2df85ede64f78bdbcafc4887162c4d7f3327d106a2aeb62f5fde1149764944e3",
+      "bytes": 28869
     },
     {
       "path": "skills/video-understanding/scripts/speech_ownership.py",
-      "sha256": "0f474ec2e2730e31f6f1a52ad4ff2f1f3961a0b585de8e589b61328550e59835",
-      "bytes": 5008
+      "sha256": "3816fdf7e2817c7ddc958025337c387e02bee571c3bbc1e72187ccd7c0c90e51",
+      "bytes": 5009
     },
     {
       "path": "skills/video-understanding/scripts/storyboard.py",
-      "sha256": "5e2f2ca56d0e1c99174ae857f271a57980cead6d4c260688c20dfbffe2e157f1",
-      "bytes": 21080
+      "sha256": "632c9f75d49034ae3c75e86dc0db0ab7007ee0a9af1188f2cf8cea59c74939f5",
+      "bytes": 18908
     },
     {
       "path": "skills/video-understanding/scripts/timeline_fusion.py",
@@ -627,48 +762,68 @@
     },
     {
       "path": "skills/video-understanding/scripts/understanding_brief.py",
-      "sha256": "c95fe9cdf60a9b6647a1b769eb955f440c3fdeef3cd425ea4fcef546c1a895e2",
-      "bytes": 8286
+      "sha256": "73ee674ebfed90bb5dff42786aa57d6993d8a8a29851d424ba6c219c5f677193",
+      "bytes": 7554
     },
     {
       "path": "skills/video-understanding/scripts/understanding_cache.py",
-      "sha256": "02e06fd7adaf4bf88860aa77162af62ec454ab3cb5ccf4549c6d12a27e2d0b9d",
-      "bytes": 11339
+      "sha256": "ebd1c7a66838b673eb9fddcfb9f63a18925dfdc02697dc55bdf5d0692795e83c",
+      "bytes": 12322
     },
     {
       "path": "skills/video-understanding/scripts/understanding_runner.py",
-      "sha256": "1feea70d1a866591a3d43bbb73fc9f0cbc59bb552a703621b17249ead84b3865",
-      "bytes": 14404
+      "sha256": "8d13ba78d93ce7f22803a0ff02ddd535d777413a8279cd5b754329d477ec03ce",
+      "bytes": 15080
     },
     {
       "path": "skills/video-understanding/scripts/understanding_storyboard.py",
-      "sha256": "da8dbe988303756758a09c78afa4d8e7c36ea574dde6c0093f8db1bd2bdb793c",
-      "bytes": 6929
+      "sha256": "9ab94c02141a8d1fc9f9cb2db5f0d16b08d2ead1d1202fcd2c20e2feab26271e",
+      "bytes": 6940
     },
     {
       "path": "skills/video-understanding/scripts/vlm.py",
-      "sha256": "a39fd3bf5cfad4bb9c18a68d5f55cd1ffea37e2a3ad8065937722f3f597f1787",
-      "bytes": 30137
+      "sha256": "e5345bd144d4e56b6af320b562fe22c73fca894bd248624845576c656e70ebab",
+      "bytes": 28797
     },
     {
       "path": "skills/video-voiceover/SKILL.md",
-      "sha256": "e726cda155ae10def4c8da6a2970a1bc6a16d7ad32f5158a739b2f0d5a665dc4",
-      "bytes": 4510
+      "sha256": "c7a716b0ef9bcb30f5411cb3eb07ea8c4d79174f47a94a8b2aab2cb69fde4566",
+      "bytes": 5941
+    },
+    {
+      "path": "skills/video-voiceover/references/index-tts.md",
+      "sha256": "89607ca70af6ad92ac3f4155d34dbf6344c8f4bcc82a0b24c99f819b43f20aaf",
+      "bytes": 1603
+    },
+    {
+      "path": "skills/video-voiceover/scripts/approved_text_policy.py",
+      "sha256": "8ac33e2fbf37813b30edf1d35936c46a9030e7edc3783372d85203c304ed0f08",
+      "bytes": 4329
     },
     {
       "path": "skills/video-voiceover/scripts/dub.py",
-      "sha256": "5a00c7ebcf57497c4d74c0cbf0cbdc2c9c882521037a4a4d128ef340faa92e10",
-      "bytes": 28221
+      "sha256": "51ca829a694eea54417e4ee84b0b60772d250c7aee5c8ebe5358156722bb5ae0",
+      "bytes": 28343
     },
     {
-      "path": "skills/video-voiceover/scripts/fish_audio.py",
+      "path": "skills/video-voiceover/scripts/lib.py",
+      "sha256": "24fec28435d5b6c838683749c68930e1d1888600c0a713876b71a4268d9396d4",
+      "bytes": 15754
+    },
+    {
+      "path": "skills/video-voiceover/scripts/providers/__init__.py",
+      "sha256": "b9d1d3cd6607c706884ad435c2c40d6890f07daae7dcb22806eea01ec9041901",
+      "bytes": 85
+    },
+    {
+      "path": "skills/video-voiceover/scripts/providers/fish_audio.py",
       "sha256": "1a48175331d295a0a5f1b4fcdcefaf5df464b3ac7f68c7c7fb77f577120072bb",
       "bytes": 3102
     },
     {
-      "path": "skills/video-voiceover/scripts/lib.py",
-      "sha256": "3ee613e921e3f09c3d1401e81159bd2dabd7bf20923a715bce7a62dcd410ac63",
-      "bytes": 17302
+      "path": "skills/video-voiceover/scripts/providers/index_tts.py",
+      "sha256": "356af19c59908a3cc553b6d9507bc13c33b520dc453abe475e8140cbcc4f2911",
+      "bytes": 7490
     },
     {
       "path": "skills/video-voiceover/scripts/tts_audio.py",
@@ -677,8 +832,8 @@
     },
     {
       "path": "skills/video-voiceover/scripts/voiceover.py",
-      "sha256": "d9bb5a29a7ded64c25d92737a3b91bcaab709d4a7c0e19dd57ece9e8ac7e161f",
-      "bytes": 28877
+      "sha256": "2ae0847403bd0d2092e91d2b28aaa001f31af789d797d5fbb66505df414bd4f3",
+      "bytes": 32915
     }
   ]
 }

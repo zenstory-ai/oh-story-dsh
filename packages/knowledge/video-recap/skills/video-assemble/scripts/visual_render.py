@@ -4,7 +4,6 @@ import json
 import re
 from pathlib import Path
 
-from artifacts import _artifact_fingerprint
 from assemble_constants import (
     SUBTITLE_STYLE_REF_H,
     VISUAL_OVERLAYS,
@@ -19,7 +18,7 @@ from source_subtitles import (
     _original_gap_subtitle_entries,
     _source_subtitle_mask_policy,
 )
-from subtitle_core import (
+from subtitles.core import (
     _measured_subtitle_band,
     _measured_subtitle_safe_area,
     _normalize_subtitle_text,
@@ -136,7 +135,7 @@ def _load_visual_overlays(work_dir):
     """Return (overlays, source) from the canonical visual_overlays.json handoff."""
     path = Path(work_dir) / VISUAL_OVERLAYS
     if not path.exists():
-        return [], {"present": False, "path": str(path), "fingerprint": None}
+        return [], {"present": False, "path": str(path)}
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as exc:
@@ -152,7 +151,6 @@ def _load_visual_overlays(work_dir):
     source = {
         "present": True,
         "path": str(path),
-        "fingerprint": _artifact_fingerprint(path),
         "schema_version": 1,
     }
     return data["overlays"], source
@@ -236,14 +234,14 @@ def _visual_overlay_filters(work_dir, canvas, video_duration):
         if typ == "top_title":
             filt = (
                 "drawtext="
-                f"text='{safe_text}':x=(w-text_w)/2:y={int(bbox['y'])}:"
+                f"{_drawtext_font_option()}text='{safe_text}':x=(w-text_w)/2:y={int(bbox['y'])}:"
                 f"fontsize={font_size}:fontcolor=white:borderw=2:bordercolor=black@0.85:"
                 f"box=1:boxcolor=black@0.35:boxborderw=12:enable='{enable}'"
             )
         else:
             filt = (
                 "drawtext="
-                f"text='{safe_text}':x={int(bbox['x'])}:y={int(bbox['y'])}:"
+                f"{_drawtext_font_option()}text='{safe_text}':x={int(bbox['x'])}:y={int(bbox['y'])}:"
                 f"fontsize={font_size}:fontcolor=white:borderw=2:bordercolor=black@0.85:"
                 f"box=1:boxcolor=black@0.45:boxborderw=8:enable='{enable}'"
             )
@@ -352,8 +350,24 @@ def _escape_subtitle_filter_path(path):
 
 
 def _subtitle_burn_filter(subtitle_path):
-    """Build the ffmpeg video filter used for hard-sub rendering."""
-    return f"subtitles=filename='{_escape_subtitle_filter_path(subtitle_path)}'"
+    """Build the ffmpeg video filter used for hard-sub rendering.
+
+    With SUBTITLE_FONT_FILE set, libass also loads the fonts in that file's directory so
+    the ASS style's family name resolves to the declared file instead of a system font.
+    """
+    filt = f"subtitles=filename='{_escape_subtitle_filter_path(subtitle_path)}'"
+    font_file = CONFIG["subtitle_font_file"]
+    if font_file:
+        fonts_dir = Path(font_file).expanduser().resolve().parent
+        filt += f":fontsdir='{_escape_subtitle_filter_path(fonts_dir)}'"
+    return filt
+
+
+def _drawtext_font_option():
+    font_file = CONFIG["subtitle_font_file"]
+    if not font_file:
+        return ""
+    return f"fontfile='{_escape_subtitle_filter_path(Path(font_file).expanduser().resolve())}':"
 
 
 def _output_downscale_filter(max_h):

@@ -61,6 +61,23 @@ function isPortableSourceAsset(path: string): boolean {
     && !normalized.endsWith("/.DS_Store");
 }
 
+// 0.6.0 ships a standalone local dashboard (its own web server and UI over run directories). The
+// native 视频 tab owns that view in DSH, so the server, its helpers and its static assets stay out.
+// Listed per file: library.py, project_binding.py and resource_lock.py sit beside them but are
+// imported by recap_runner.py and belong to the pipeline.
+export const videoRecapPlatformGlue: readonly string[] = [
+  "video-recap/scripts/dashboard_server.py",
+  "video-recap/scripts/dashboard_data.py",
+  "video-recap/scripts/dashboard_io.py",
+  "video-recap/scripts/dashboard_runs.py",
+  "video-recap/scripts/dashboard_templates.py",
+  "video-recap/assets/dashboard/"
+];
+
+function isVideoRecapPlatformGlue(bundledPath: string): boolean {
+  return videoRecapPlatformGlue.some((entry) => bundledPath === entry.replace(/\/$/u, "") || bundledPath.startsWith(entry));
+}
+
 export async function currentVideoRecapFiles(): Promise<VideoRecapAssetManifest["files"]> {
   return Promise.all((await regularFiles(videoRecapRoot))
     .filter(isPortableSourceAsset)
@@ -75,10 +92,11 @@ export async function synchronizeVideoRecapAssets(): Promise<VideoRecapAssetMani
   }
   await rm(videoRecapRoot, { recursive: true, force: true });
   await mkdir(videoRecapRoot, { recursive: true });
-  await cp(join(source, "skills"), join(videoRecapRoot, "skills"), {
+  const sourceSkills = join(source, "skills");
+  await cp(sourceSkills, join(videoRecapRoot, "skills"), {
     recursive: true,
     dereference: false,
-    filter: isPortableSourceAsset
+    filter: (path) => isPortableSourceAsset(path) && !isVideoRecapPlatformGlue(portableRelative(sourceSkills, path))
   });
   for (const file of ["LICENSE", "README.md", "README.en.md", "CHANGELOG.md"]) {
     await cp(join(source, file), join(videoRecapRoot, file));

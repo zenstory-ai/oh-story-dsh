@@ -5,9 +5,12 @@
 - [Promise](#story-promise-and-engine)
 - [Episode](#episode-shape)
 - [Entry and serial memory](#entry-character-and-serial-memory)
+- [Adaptation fidelity](#adaptation-fidelity)
 - [Scene](#scene-test)
 - [Action](#action-and-production-meaning)
 - [Dialogue](#dialogue)
+- [Rhythm profile](#rhythm-profile-rev-12)
+- [Local passes](#local-passes-rev-13)
 - [Findings](#common-findings)
 
 ## Story promise and engine
@@ -55,8 +58,9 @@
 A capacity estimate (`STY-16`) is informational, never a blocking finding. If a
 planned episode's shot/duration magnitude is far from the project's own accepted
 ratios, note it as an advisory observation with the sampled basis, and leave the
-resolution to the creator. Never derive a word, line, or shot quota from it, and
-never compare against another project's numbers.
+resolution to the creator. Do not derive a word, line, or shot quota from it. The only
+numbers a review checks are the ones in an accepted rhythm profile
+([below](#rhythm-profile-rev-12)), and never another project's numbers.
 
 When the premise grants foreknowledge or externally authorized ability (`STY-17`), keep
 two layers apart and cite each from its own place:
@@ -117,7 +121,28 @@ What is reportable:
   A breathing scene should process a consequence rather than suspend the story.
 
 Do not require a fixed hook type, beat count, reversal, climax timestamp, or
-dialogue quota.
+dialogue quota beyond what an accepted rhythm profile declares.
+
+## Adaptation fidelity
+
+Active only when the project adapts a source. Read the source span each mapping in
+`项目开发/adaptation-map.jsonl` cites, then the episode record and screenplay.
+
+- For each core source character: is their stance toward the protagonist, their way of
+  acting, and their relationships the same on screen as in the source (`STY-07`)?
+  Pressure made louder or spoken aloud is fine; a supportive figure turned oppressor,
+  or a relationship reversed, is a finding unless the creator accepted the change.
+  Cite the source fact and the conflicting screenplay line (`REV-03`).
+- Does the main line still run the source's way, and does any invented detail
+  contradict a source fact?
+- Is every character, scene, or opponent the source lacks registered as its own `add`
+  mapping, with the function it serves, why existing source material cannot carry it,
+  the source facts checked against it, and a line in the brief for the creator (`STY-30`)?
+  An addition hidden inside `change_carrier`, `merge`, or `move_earlier` notes is a
+  `craft_default` finding; an unregistered addition that also contradicts the source
+  is a `STY-07` finding.
+- When an episode's opponent was manufactured to meet `opposed_reversals_per_episode_min`,
+  say so: the profile deviation is the honest outcome, not a new antagonist.
 
 ## Scene test
 
@@ -197,6 +222,54 @@ them fit this checklist. A loud scene can fail when nothing changes.
 Silence, interruption, slang, narration, and sentence length are creator options,
 not universal scoring ratios.
 
+## Rhythm profile (`REV-12`)
+
+Active only when `short-drama.json#/creator_authority/rhythm_profile` has `status`
+`accepted`. A missing, `unset`, or `proposed` profile means nothing here is checked.
+The review does arithmetic on the accepted values against the current screenplay and
+nothing else:
+
+| Field | What the reviewer measures |
+|---|---|
+| `first_hook_seconds` | Seconds from the episode start to the first hook: crisis, conflict, anomaly, or promised spectacle already happening on screen. |
+| `beat_interval_seconds_max` | The longest gap between consecutive emotional touchpoints: a conflict line, a situation-changing action, or new information. |
+| `opposed_reversals_per_episode_min` | Reversals driven or suffered by a human opponent with an agenda; changes completed by a system, a number, or the environment alone do not count. |
+| `end_on_peak` | Whether the last beat sits on or just before the peak, with no afterglow, summary, or quiet coda after it. |
+| `reprise_previous_last_beat` | Whether the opening replays the previous episode's last beat. Not applicable to the first episode. |
+| `vo_share_max` | `[VO]` spoken characters as a share of all spoken characters; `$short-drama-write`'s duration estimate reports it when run with the project file. |
+| `first_major_payoff_by_episode` | Series review only: the episode in which the first major payoff lands. |
+
+Seconds come from the project's declared pacing, or from a real-time read-through
+labelled as a text estimate; state which. A deviation is a `craft_default` finding that
+cites the field, the accepted value, the measured value, and the location. Severity
+follows audience impact and is never `blocker`; the creator may keep the episode with a
+stated reason. Storyboard fields (`target_avg_shot_seconds`, `close_shot_share_min`)
+are measured in the [visual rubric](rubric-visual-motion.md#rhythm-profile-shots).
+
+## Local passes (`REV-13`)
+
+After the whole-episode read, run three passes that each read one part only. A whole
+read lets a strong middle excuse a flat opening; a part read cannot.
+
+1. **Opening hook**: read only the first segment, up to `first_hook_seconds` or, with
+   no accepted profile, the first scene. Would a viewer who saw only this stay? Name
+   the hook and say whether it is happening or only being set up. Then read the first
+   beat alone, the opening frame: does it raise a question by itself,
+   or does it need on-screen text read, a character recognized, or the next line heard
+   first (`SCR-22`)? A still image that poses its own question passes. For a first
+   episode, also check that the brief compared the entry candidates on that same image
+   (`STY-25`).
+2. **Ending suspense**: read only the last segment, the final scene's closing beats.
+   What question is left open? Does it grow out of this episode's result? Is it a line
+   hook (an unfinished question, an identity hint) or an image hook (a door half open,
+   an envelope half torn)? Does it stop before the answer?
+3. **Mid-episode reversal density**: read only the middle. List each reversal with its
+   location and the person driving or suffering it; flag long stretches with no
+   touchpoint and reversals bunched at the end.
+
+Each finding cites its own segment. The passes apply with or without a profile; only
+the numeric comparisons need one.
+
 ## Replaceable realization (`SCR-10`)
 
 Only for beats the creator marked. **An unmarked beat leaves this section
@@ -230,6 +303,7 @@ the benefit is not, and the mark exists precisely so the strong version can stay
 - cliffhanger withholds all payoff;
 - episode pauses an unfinished action without producing a local result (`STY-13`);
 - first episode dumps the backstory reservoir instead of selecting an active entry;
+- an adaptation hardens a source character or invents an opponent without an `add` mapping or creator acceptance;
 - a declared character arc has no pressure test, choice, cost, or changed strategy;
 - serial summary omits an information permission or unpaid setup obligation;
 - generic emotion adjectives replace visible performance;

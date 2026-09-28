@@ -106,14 +106,13 @@
 {
   "schema_version": 2,
   "timeline": "cut_output",
-  "clip_plan_fingerprint": "md5-of-canonical-clip-plan",
   "sentence_anchors": [{"time": 4.0, "pause_start": 3.8, "confidence": "high"}],
   "speech_spans": [{"start": 0.0, "end": 3.8}],
   "quiet_windows": [{"start": 3.8, "end": 4.1}]
 }
 ```
 
-`clip_plan_fingerprint` 必须与当前 `clip_plan_validated.json` 一致。缺失、过期或畸形的
+该文件必须不早于当前 `clip_plan_validated.json`（按修改时间判断）。缺失、过期或畸形的
 output 证据一律 fail closed，不能回退到原片时钟或信任 Agent 写入的
 `overlaps_speech=false`。多来源剪辑的每条映射记录还保留 `source_id` 和原片起止时间。
 
@@ -143,7 +142,7 @@ output 证据一律 fail closed，不能回退到原片时钟或信任 Agent 写
 
 ## narration.json
 
-Agent 撰写的解说词。full 模式下使用原视频时间；**orchestrated cut 模式（`video-recap --edit-mode cut`）下，第二次暂停时已经先剪出 `edited_source.mp4`，因此 `narration.json` 必须直接使用剪后成片的 OUTPUT 时间轴（0..成片总时长），不会再生成或消费 `narration_mapped.json`。只有 legacy direct `video-cut` 单 pass 路径才会把原视频时间的 narration remap 成 `narration_mapped.json`：
+Agent 撰写的解说词。full 模式下使用原视频时间；**orchestrated cut 模式（`video-recap --edit-mode cut`）下，第二次暂停时已经先剪出 `edited_source.mp4`，因此 `narration.json` 必须直接使用剪后成片的 OUTPUT 时间轴（0..成片总时长）；不存在原视频时间→输出时间的旁白映射产物：
 
 ```json
 [
@@ -181,7 +180,7 @@ Agent 撰写的解说词。full 模式下使用原视频时间；**orchestrated 
 
 ## recap_story_plan.json / visual_audio_board.json（Agent 创作工作产物）
 
-这两个 JSON 是 skill 层的创作决策记录：前者保存导演意图、备选剪辑假设、POV/主线和 change-based beats；后者保存每拍的画面/表演选择、入点/出点、原声锚点、`audio_owner` 与 `narration_job`。完整字段与工作流见本技能的 `creative-editing-playbook.md`。
+这两个 JSON 是 skill 层的创作决策记录：前者保存导演意图、备选剪辑假设、POV/主线和 change-based beats；后者保存每拍的画面/表演选择、入点/出点、原声锚点、`audio_owner` 与 `narration_job`。完整字段与工作流见 video-script 技能的 `creative-editing-playbook.md`。
 
 CLI 不以它们作为渲染硬门禁，也不新增解析服务；建议型解说评审在文件存在时读取它们，Agent 则用它们保证 cut、旁白和声音选择没有偏离同一个创作意图。
 
@@ -264,19 +263,19 @@ CLI 不以它们作为渲染硬门禁，也不新增解析服务；建议型解�
 
 ## multi_source_manifest.json（多视频 cut）
 
-多视频剪辑模式下，项目级 `work_dir/multi_source_manifest.json` 是编排、剪辑与合成阶段共用的来源契约。`source_id` 默认由源文件 SHA-256 派生为 `src_<fingerprint[:12]>`；同一项目里重复 fingerprint 的不同路径会追加短 path hash 后缀。
+多视频剪辑模式下，项目级 `work_dir/multi_source_manifest.json` 是编排、剪辑与合成阶段共用的来源契约。`source_id` 由源文件名主干与文件大小派生为 `src_<stem>_<size>`；同一项目里得到相同 id 的后续来源按输入顺序追加 `_2`、`_3` 后缀。`source_video_identity` 记录该文件的 `{size, mtime_ns}`，续跑时与当前输入逐项比对。
 
 ```json
 {
   "schema_version": 1,
   "sources": [
     {
-      "source_id": "src_0123456789ab",
+      "source_id": "src_episode1_734003200",
       "source_path": "/abs/episode1.mp4",
       "source_name": "episode1.mp4",
-      "source_video_fingerprint": "0123456789abcdef...",
-      "source_work_dir": "sources/src_0123456789ab",
-      "material_id": "episode1-0123456789ab"
+      "source_video_identity": {"size": 734003200, "mtime_ns": 1758326400000000000},
+      "source_work_dir": "sources/src_episode1_734003200",
+      "material_id": "episode1-734003200"
     }
   ]
 }
@@ -307,8 +306,8 @@ cut 模式下 Agent 选择要保留的原片片段，数组或 `{ "clips": [...]
 {
   "target_duration": "10m",
   "clips": [
-    {"source_id": "src_0123456789ab", "start": 12.0, "end": 38.0, "reason": "b01 | setup | knowledge: unknown→clue | POV=主角 | 保留迟疑反应 | 入点=线索出现 | 出点=疑问成立"},
-    {"source_id": "src_fedcba987654", "start": 4.0, "end": 22.0, "reason": "b02 | payoff | power: suspect→hero | POV=主角 | 保留最终选择 | 入点=证据落下 | 出点=代价显现"}
+    {"source_id": "src_episode1_734003200", "start": 12.0, "end": 38.0, "reason": "b01 | setup | knowledge: unknown→clue | POV=主角 | 保留迟疑反应 | 入点=线索出现 | 出点=疑问成立"},
+    {"source_id": "src_episode2_689110016", "start": 4.0, "end": 22.0, "reason": "b02 | payoff | power: suspect→hero | POV=主角 | 保留最终选择 | 入点=证据落下 | 出点=代价显现"}
   ]
 }
 ```
@@ -347,7 +346,7 @@ CLI 校验 `clip_plan.json` 后写出，额外包含输出时间轴：
   "clips": [
     {
       "clip_id": 0,
-      "source_id": "src_0123456789ab",
+      "source_id": "src_episode1_734003200",
       "source_path": "/abs/episode1.mp4",
       "source_start": 12.0,
       "source_end": 38.0,
@@ -362,7 +361,7 @@ CLI 校验 `clip_plan.json` 后写出，额外包含输出时间轴：
 
 ## material library（可选，grep 复用）
 
-`--material-library-dir <dir> --save-materials` 会把每个源视频的已分析小文件复制到 `<dir>/materials/<material_id>/`，不复制原始媒体。`--use-materials` 会在 fingerprint 和 settings fingerprint 匹配时把这些 JSON/MD 产物恢复到当前 per-source `work_dir`。
+`--material-library-dir <dir> --save-materials` 会把每个源视频的已分析小文件复制到 `<dir>/materials/<material_id>/`，不复制原始媒体。`--use-materials` 会在源文件路径、`source_video_identity`（`{size, mtime_ns}`）和分析 `settings` 都相等时把这些 JSON/MD 产物恢复到当前 per-source `work_dir`。
 
 ```text
 .video-materials/
@@ -377,26 +376,9 @@ CLI 校验 `clip_plan.json` 后写出，额外包含输出时间轴：
     artifacts/understanding_index.json
 ```
 
-`materials_index.jsonl` 每次保存追加一行，字段包括 `schema_version`, `event`, `material_id`, `source_name`, `source_path`, `source_video_fingerprint`, `settings_fingerprint`, `summary`, `tags`, `material_dir`, `updated_at`。当前权威状态始终以 `materials/<material_id>/material.json` 为准。MVP 只承诺 `grep -R "关键词" <library>` 这类文件检索；没有 DB、embedding 或语义搜索。
+`materials_index.jsonl` 每次保存追加一行，字段包括 `schema_version`, `event`, `material_id`, `source_name`, `source_path`, `source_video_identity`, `summary`, `tags`, `material_dir`, `updated_at`；`material.json` 另外记录分析 `settings` 字典与每个产物的 `bytes`。当前权威状态始终以 `materials/<material_id>/material.json` 为准。MVP 只承诺 `grep -R "关键词" <library>` 这类文件检索；没有 DB、embedding 或语义搜索。
 
 保存时会对凭证形态（`tp-`/`sk-`/`gh*_`/`AKIA`/JWT 与 `KEY=VALUE` 赋值）和凭证命名的 JSON key 做脱敏，但这只是**尽力而为**的兜底，不是保证：陌生格式的密钥仍可能漏过。请从源头避免把密钥写进分析产物——key 从环境变量/`.env` 读取，不需要落进 scenes/ASR/VLM/summary 等 JSON。
-
-## narration_mapped.json
-
-仅 legacy direct `video-cut` 单 pass 路径会生成。orchestrated cut 模式不使用它：Agent 在 pass2 直接按剪后成片 OUTPUT 时间轴写 `narration.json`。当 legacy 路径启用时，`start/end` 已变成短视频输出时间，`source_start/source_end` 保留原视频时间：
-
-```json
-[
-  {
-    "start": 2.0,
-    "end": 7.0,
-    "source_start": 14.0,
-    "source_end": 19.0,
-    "source_clip_id": 0,
-    "narration": "解说文本"
-  }
-]
-```
 
 ## original_subtitles.json / user_subtitles.{json,srt,ass}（可选，原声留白字幕）
 
@@ -484,6 +466,35 @@ CLI 校验 `clip_plan.json` 后写出，额外包含输出时间轴：
 
 > 正常（无失败）运行也会带 `"partial": false, "failures": []`。partial 成片只适合预览，不建议直接发布。
 
+`voice` 记录本次实际使用的音色：`{"provider": "mimo-tts", "model": "mimo-v2.5-tts", "voice_id": "冰糖", "reference": null}`。
+用参考音频克隆时 `voice_id` 为 `null`，`reference` 为 `{path, size, mtime_ns}`；Fish Audio 的 `voice_id` 是 reference id，
+index-tts 的是 `INDEX_TTS_VOICE`。旧 `tts_meta.json` 没有这个字段时按只知道 `engine` 处理。
+
+## resource_lock.json（本次运行用到的资源）
+
+full / cut 流程（含本地采用路径）合成完成后，video-recap 在 `work_dir` 写出 `resource_lock.json`，汇总运行清单、
+`tts_meta.json.voice` 与 `assembly_manifest.json`（BGM 路径、字幕字体）里已有的事实；配置了资源库时，按解析后的路径
+（音色按 provider + voice_id）把每项对上已登记的资源，带出授权与声音授权状态。dub 模式不写。
+
+```json
+{
+  "schema": "video-recap.resource-lock.v1",
+  "work_dir": "/abs/work_dir",
+  "library": "/abs/library",
+  "project": null,
+  "templates": [],
+  "resources": [
+    {"role": "bgm", "path": "/abs/library/resources/bgm/pulse-demo/pulse-demo.wav", "size": 8044, "mtime_ns": 1,
+     "detail": {}, "library": {"id": "pulse-demo", "kind": "bgm", "license": "owned", "consent": null}}
+  ],
+  "attention": [{"code": "license_unknown", "role": "voice", "message": "…"}]
+}
+```
+
+`role` ∈ `source_video` / `voice` / `bgm` / `subtitle_font`（项目绑定后还会有模板引入的资源）。`attention` 列出需要人确认的项：
+`license_unknown` / `license_restricted`、参考音频的 `consent_unknown` / `consent_denied`，以及配置了资源库但没有登记的
+`unregistered`。它只提示、不阻断；`final_qc.json` 只承载阻断项，不包含这些提示。
+
 组装后，`assembly_manifest.json.audio_segments[]` 另外记录 `fit_status`、`truncated`、
 `truncate_reason`、`placed_audio_duration`、`placed_audio_path`、`source_duck_end`、
 `source_restore_at` 与 `source_handoff_status`。组装阶段从不按时间裁旁白尾音：放不下时用
@@ -496,7 +507,7 @@ CLI 校验 `clip_plan.json` 后写出，额外包含输出时间轴：
 
 Dub 模式下，`dub_script.json` 在 voiceclone **之前**先经过 deterministic lint，把明显不可发布的脚本挡在昂贵的克隆 TTS 之前。空译文、相邻行重叠、时间越界、`room < 0.4s` 等 **error** 会 `verdict=FAIL` 并阻断 render；`fast_speech`、`trim_risk` 等是 warning，不阻断。
 
-每行 voiceclone 原始 WAV 会按模型、合成提示、中文台词和参考音频 SHA-256 写入相邻的 `*.wav.meta.json`。指纹完全匹配且 WAV 可读取时，dub render 直接复用并在 `dub_manifest.json.lines[].tts_cache` 记录 `hit`；台词、参考音频、模型或提示变化都会自动失效并重新合成。
+每行 voiceclone 原始 WAV 会把中文台词、模型/提示等合成设置和参考音频信息写入相邻的 `*.wav.meta.json`。台词与设置完全相等且 WAV 可读取时，dub render 直接复用并在 `dub_manifest.json.lines[].tts_cache` 记录 `hit`；台词、参考音频、模型或提示变化都会重新合成。
 
 ```json
 {
@@ -527,7 +538,7 @@ Dub 模式下，`dub_script.json` 在 voiceclone **之前**先经过 determinist
 
 `preflight_qc.json`、`final_qc.json`、`golden_eval.json`、`mimo_qc.json` 共用最小 QC 契约；stage 仅允许 `pre_cut` / `post_cut` / `pre_tts` / `post_tts` / `pre_assemble` / `post_render` / `golden`，其中 `mimo_qc.json` 是 artifact 而不是 stage。详见 `shift-left-qc-schema.md`。
 
-`recap.py` 可通过 `--mimo-qc pre-assemble|post-render|both`（默认 `off`）在组装前和/或成片后写 `mimo_qc.json`。每个 stage 最多一次 live request；相同素材/模型命中内容缓存，`--mimo-qc-refresh` 可刷新。`post_render` 最多临时抽取 6 张、最长边 768px 的 JPEG；base64 只进入请求，不写进 artifact。多 stage 报告聚合在 `metadata.stages`，状态为 `completed` / `cached` / `unavailable` / `failed`，任何状态都不阻断、也不自动修复。关闭功能会清理旧 `mimo_qc.json`，避免陈旧建议被误认为本轮结果。
+`recap.py` 可通过 `--mimo-qc pre-assemble|post-render|both`（默认 `off`）在组装前和/或成片后写 `mimo_qc.json`。每个 stage 最多一次 live request；报告的 `metadata.cache_input`（证据文件的 kind/bytes/mtime_ns、模型、提示与抽帧元数据）与本次完全相等时复用上次结果，`--mimo-qc-refresh` 可刷新。`post_render` 最多临时抽取 6 张、最长边 768px 的 JPEG；base64 只进入请求，不写进 artifact。多 stage 报告聚合在 `metadata.stages`，状态为 `completed` / `cached` / `unavailable` / `failed`，任何状态都不阻断、也不自动修复。关闭功能会清理旧 `mimo_qc.json`，避免陈旧建议被误认为本轮结果。
 
 QC 证据把 `source_asr` 与 `generated_subtitles` 分开：前者只用于源事实/原声时序，后者是本轮旁白派生字幕，不能反过来充当事实证据。多视频项目从 `multi_source_manifest.json` 指向的逐源 work dir 汇集 ASR；`cut_output` 解说评审同样按 `source_id` 映射逐源 VLM/ASR，避免项目根目录没有单一 ASR 文件时产生空证据。
 

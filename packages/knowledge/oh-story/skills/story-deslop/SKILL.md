@@ -14,9 +14,9 @@ metadata: {"openclaw":{"source":"https://github.com/zenstory-ai/oh-story-claudec
 
 ---
 
-> Agent 兼容性：只检查当前运行时的 canonical 目录：Claude `.claude/agents/{agent}.md`、OpenCode `.opencode/agents/{agent}.md`、Codex `.codex/agents/{agent}.toml`、Antigravity `.agents/agents/agent-name/agent.md`（`agent-name` 为目标 agent 名），不得因其他端文件存在而误判。Codex 使用同名 `agent_type`；Antigravity 使用 `invoke_subagent` + `TypeName`。对应运行时未暴露 custom-agent registry / `invoke_subagent` 或返回未知 agent 时，必须降级 solo/direct。检测到 `.zcode/` 时同样直接 solo/direct，因为 ZCode 3.3.4 不执行项目 custom agents；报告 `Fallback: project custom agents unavailable -> solo`。Claude 用 `subagent_type`；OpenCode 用 `subagent` 工具的 `agent` 参数。
+> Agent 兼容性：只检查当前运行时的 canonical 目录：Claude `.claude/agents/{agent}.md`、OpenCode `.opencode/agents/{agent}.md`、Codex `.codex/agents/{agent}.toml`、Antigravity `.agents/agents/agent-name/agent.md`（`agent-name` 为目标 agent 名），不得因其他端文件存在而误判。Claude 用 `subagent_type`，OpenCode 用 `subagent` 工具的 `agent` 参数，Codex 用同名 `agent_type`，Antigravity 用 `invoke_subagent` + `TypeName`。运行时未暴露 custom-agent registry / `invoke_subagent`、返回未知 agent，或检测到 `.zcode/`（ZCode 3.3.4 不执行项目 custom agents）时降级 solo/direct：报告里一句白话告诉作者「这次由我直接改」，`Fallback: project custom agents unavailable -> solo` 原文只写进报告最后一行「技术备注：」。
 >
-> Spawn 版本提示（不阻断 spawn）：先读取项目根 `.story-deployed` 的 `agents_version`。与本版 `agents_version: 32` 不一致时（标记缺失、字段缺失/非整数、小于或大于 32）**照常按文件存在性检查并 spawn**，同时报告 `Notice: agents bundle 版本不匹配（项目 {N}，本版 32）` 并提示重新运行 `/story-setup` 后新开会话；大于 32 时额外提示先更新 oh-story-claudecode，不要用本地旧版 setup 降级覆盖。只有 agent 文件缺失、或运行时不暴露 custom agent 时才降级 solo/direct，报告 `Fallback: ... -> solo`。
+> Spawn 版本提示（不阻断 spawn）：先读取项目根 `.story-deployed` 的 `agents_version`。与本版 `agents_version: 34` 不一致时（标记缺失、字段缺失/非整数、小于或大于 34）**照常按文件存在性检查并 spawn**，同时用一句白话提示作者「写作助手是旧版，运行 /story-setup 后新开对话」，`Notice: agents bundle 版本不匹配（项目 {N}，本版 34）` 原文写进技术备注行；大于 34 时额外提示先更新 oh-story-claudecode，不要用本地旧版 setup 降级覆盖。只有 agent 文件缺失、或运行时不暴露 custom agent 时才降级 solo/direct，`Fallback: ... -> solo` 同样只进技术备注行。
 
 ## 核心哲学
 
@@ -50,7 +50,7 @@ AI味不按语法错误处理，也不需要"修正"。它属于风格问题：�
 
 ### 作者习惯
 
-若作者记忆 state 已存在，改写前用 `scripts/author_memory_commit.py query --kind prose_style --book-root {书目录}` 获取匹配的 active 文风条目（总输出 ≤2KB），并交给 inline/spawn 执行者作为自然倾向，不逐条展示或最大化命中，不牺牲连贯、节奏和字数；当前请求、原文剧情功能和本 skill 保护规则优先。用户明确声明长期文风习惯时，改写后按 [references/author-memory.md](references/author-memory.md) 用 `record` 写入并按其「回执怎么告诉作者」转告；只记作者明确说的，一次性要求、反复修改、检测器 findings 和助手自己的结果不记录。
+若作者记忆 state 已存在，改写前用 `scripts/author_memory_commit.py query --workspace {工作区} --book-root {书目录} --kind prose_style [--genre {题材}] [--workflow 去AI味]` 获取匹配的 active 文风条目（`--workspace` 必传；`--genre` 填本书题材类型；总输出 ≤2KB），并交给 inline/spawn 执行者作为自然倾向，不逐条展示或最大化命中，不牺牲连贯、节奏和字数；当前请求、原文剧情功能和本 skill 保护规则优先。用户明确声明长期文风习惯时，改写后按 [references/author-memory.md](references/author-memory.md) 用 `record` 写入并按其「回执怎么告诉作者」转告；只记作者明确说的，一次性要求、反复修改、检测器 findings 和助手自己的结果不记录。
 
 ---
 
@@ -89,6 +89,8 @@ AI味不按语法错误处理，也不需要"修正"。它属于风格问题：�
 
 ### Phase 1：AI味扫描
 
+**先认篇幅**：目标是单个 `正文.md`（同目录常有 `小节大纲.md` 或 `设定.md`）按短篇处理，门禁 F/G 保留短篇卖点（主观审判句、火葬场预告、心死式章尾）；`正文/` 下逐章文件或章节片段按长篇处理。拿不准问作者一句。
+
 对用户提交的文本做快速扫描，标记AI味浓重的位置。报告写给作者：问题用白话说并附原文，脚本名、检测器类别名、Gate 字母不进报告。
 
 <!-- author-report -->
@@ -111,7 +113,7 @@ AI味不按语法错误处理，也不需要"修正"。它属于风格问题：�
 | 第Q段 | 动作清单 | "伸手拿起…取过…放下…转身…" | 像监控录像，缺人物的感受 |
 ```
 
-> 类型 → Gate 速查（内部计数用，不写进表）：套话 = A，句式 = B，情绪空转 = C，节奏 = D，对话腔调 = E，结尾升华 = F，解释腔 = G，重复描写 = C/D，动作清单 = D/E。「诊断与分级」判定"7 Gate 中 4+ 个有问题"时按此换算计数。
+> 类型 → Gate 速查（选 Gate 用，不写进表）：套话 = A，句式 = B，情绪空转 = C，节奏 = D，对话腔调 = E，结尾升华 = F，解释腔 = G，重复描写 = C/D，动作清单 = D/E。
 
 > 评价只输出 AI味等级（轻度/中度/重度）与问题标记；不做「上乘 / 新人投稿属上乘 / 性价比高」这类横向市场判断——skill 没有平台投稿分布数据，这类措辞是无依据的越权担保。
 
@@ -122,7 +124,7 @@ node scripts/check-ai-patterns.js --check --fail-on=blocking <正文文件...>
 ```
 
 - 检测器 blocking＝必须修，advisory＝建议看；轻/中/重分档另按「诊断与分级」定，用来选 Gate。
-- severity=blocking 的类别（`not-is-comparison` / `em-dash` / `voice-contrast` / `negation-parade` / `reverse-not-is` / `trailer-ending` / `trailer-summary`）并入 Gate B，属于写作/去 AI 味时优先处理的 blocking 类问题。
+- severity=blocking 的类别（`not-is-comparison` / `em-dash` / `voice-contrast` / `negation-parade` / `reverse-not-is` / `trailer-ending` / `trailer-summary`）是写作/去 AI 味时优先处理的问题：章尾预告与章尾状态总结（`trailer-ending` / `trailer-summary`）归 Gate F，其余 blocking 并入 Gate B。
 - 其他 findings（碎句号、长段落、微动作、套式反应细节、动作清单、抽象总结、套词、比喻密度、解释链、公文腔、过度精炼、低连接密度、引号强调滥用、`formulaic-parallelism` 工整并列）只作读感提示；完整类别和修法见 `references/anti-ai-writing.md`。其中工整并列会扫描台词，必须读语境判断，不能因为 hook 对台词低误报豁免就跳过。
 - 处理方式：删掉否定铺垫，直接写后项；或改成角色动作、物件细节、身体反应来呈现。
 - 若用户只要检测，保留报告不改文。若执行去 AI 味，只改确实损害读感且无叙事功能的问题；功能性写法标 `[需复核]` 并保留。
@@ -131,21 +133,17 @@ node scripts/check-ai-patterns.js --check --fail-on=blocking <正文文件...>
 
 ### Phase 2：诊断与分级
 
-用户明确指定 Gate 时，直接使用该范围；未指定时，根据「AI味扫描」检测结果判断 AI 味程度，决定处理策略：
+用户明确指定 Gate 时，直接使用该范围；未指定时按下表定档、选处理策略：
 
-| AI味程度 | 量化标准（参考值） | 特征 | 处理策略 |
-|----------|---------|------|----------|
-| 轻度 | 禁用词命中 ≤5 处/千字，无连续 3+ 句式套路 | 少量禁用词，偶有书面腔 | 只过 Gate A + B |
-| 中度 | 禁用词命中 6-15 处/千字，或有连续 3+ 句式套路 | 多处禁用词 + 句式套路 + 心理描写抽象 | 过 Gate A + B + C + D + G |
-| 重度 | 禁用词命中 >15 处/千字，或 7 Gate 中 4+ 个有问题 | 全文AI味明显，节奏/对话/结尾/解释腔都有问题 | 完整 7 Gate + 重点段落重写 |
+| AI味程度 | 特征 | 处理策略 |
+|----------|------|----------|
+| 轻度 | 少量禁用词，偶有书面腔 | 只过 Gate A + B |
+| 中度 | 多处禁用词 + 句式套路 + 心理描写抽象 | 过 Gate A + B + C + D + G |
+| 重度 | 全文AI味明显，节奏/对话/结尾/解释腔都有问题 | 完整 7 Gate + 重点段落重写 |
 
-> 量化标准为参考值。命中 = banned-words.md 中条目作为连续字符串在文本中出现一次。`.deslop-whitelist` 中的词如果是命中片段的真子串，跳过该次计数（避免误报世界观术语）。同一词在一处出现计 1 次。
->
-> **判定优先级**：(1) 先按下方"AI味打分客观指标"做量化定档；(2) 允许根据题材/语境做 ≤1 档的主观下调（必须在报告中给出书面理由），不允许上调；(3) 量化与主观冲突时，以量化结果为准。
+**定档只看这六项**（阈值是参考值，按题材放宽，如古风的对话标签天然偏多）：
 
-**AI味打分客观指标**：
-
-| 指标 | 计算方式 | 轻度阈值 | 中度阈值 | 重度阈值 |
+| 指标 | 计算方式 | 轻度 | 中度 | 重度 |
 |------|----------|---------|---------|---------|
 | 禁用词密度 | 命中次数 / 千字 | ≤5 | 6-15 | >15 |
 | 连续排比段数 | 连续相同句式结构的段落数 | ≤2 | 3-4 | ≥5 |
@@ -154,11 +152,10 @@ node scripts/check-ai-patterns.js --check --fail-on=blocking <正文文件...>
 | 平均段落句数 | 总句数 / 总段落数 | ≤3 | 3-5 | >5 |
 | 重复描写密度 | 同一信息/动作/情绪连续多段拆写的处数 / 千字 | ≤1处/千字 | 2-3处/千字 | ≥4处/千字 |
 
-> 备注：核心场景（开篇、高潮、收束）出现 1 次重复描写即按 ≥1 档加权（轻→中，中→重）。
->
-> 以上阈值为参考值，需结合题材特点调整。例如古风题材的对话标签密度天然偏高，应适当放宽。
->
-> **综合判定规则**：取六项指标中的最高档位。任一指标达重度即按重度处理；无重度时，中度指标 ≥3 项按中度处理，否则按轻度处理。
+- **怎么定档**：任一项到重度，或四项及以上到中度，按重度；有一项到中度，按中度；六项都在轻度，按轻度。
+- **要紧处加一档**：本次处理的这段文字里，开头约 500 字、高潮那场戏、最后约 500 字出现重复描写，「重复描写密度」这一项按高一档算（轻→中，中→重）。短篇按全篇、长篇按本章算开头和结尾。
+- **禁用词怎么数**：banned-words.md 的条目作为连续字符串出现一次算一处，同一处只算一次；`.deslop-whitelist` 里的词是命中片段的一部分时不算（免得误报世界观术语）。
+- 按指标定档后，可按题材语境往下调至多一档，并在报告里写明理由；不往上调。
 
 **改写顺序**（只排所选 Gate 的先后，不扩大范围）：先去泛化与套话（禁用词、抽象情绪、工整对仗、解释腔），再去书面腔，最后回自然节奏、对话差异与结尾落点；做法与范例见 [references/anti-ai-writing.md](references/anti-ai-writing.md)。
 
@@ -171,12 +168,12 @@ node scripts/check-ai-patterns.js --check --fail-on=blocking <正文文件...>
 「诊断与分级」完成后，按以下顺序选择执行路径：
 
 1. **已在 narrative-writer 子代理内**：按选定 Gate 范围 inline 执行，不再 spawn（嵌套 spawn 会被静默降级）。
-2. **未在子代理内且按顶部顺序找到 `narrative-writer` agent**：按当前运行时调用；Antigravity 用 `invoke_subagent(TypeName: "narrative-writer")`，Claude/OpenCode/Codex 用各自字段。prompt 保持：`项目目录：{dir}\n任务描述：去AI味\nGate 细则：执行前按你的参考表读取 deslop-gates.md 的删除保护与所选 Gate（部署副本与本 skill 同源）\n检查分工：你负责本次语义去味；父流程负责 Phase 4 最终文件扫描，不重复整轮改稿\n检查范围：{待处理的正文文件}\n文风路径：{本书文风全文路径，无则写无}\nstyle_resolution：{本次生效要求及来源、被覆盖的默认条款、事实边界}\n作者偏好：{query 命中的 prose_style 项}\nAI味等级：{诊断与分级结果}\n处理策略：{实际选定的 Gate 范围；优先使用用户指定范围}\n删除优先：每条 AI 味项先判能否删除——删后不丢伏笔/钩子/角色/情节/人物记忆/情绪承接/因果锚点/必要信息/必要转折的直接删，会丢才进 Gate 润色；看似解释/评价但承担小连贯的句子，压成白话承接、动作或物件锚点，不机械删除；已有任务/手续/物件/证据缺口可以压成角色当下要处理的具体卡点，但不新增原文没有的事件链；删除服从比例上限与字数下限，跌破下限改降AI重写。\n模式处理：按 references/anti-ai-writing.md 的问题模式目录执行；模式 8（解释腔/上帝视角/安排感）归入 Gate G，其余新增模式归入 Gate A-F 的对应处理。相邻段重复表达同一信息/动作/情绪时，按 Gate C/D 合并去重；`。
-3. **agent 不存在或 spawn 失败**：主线程 inline 执行。
+2. **未在子代理内且按顶部顺序找到 `narrative-writer` agent**：按当前运行时调用；Antigravity 用 `invoke_subagent(TypeName: "narrative-writer")`，Claude/OpenCode/Codex 用各自字段。prompt 照 [references/agent-calls.md](references/agent-calls.md) 填，只在交给写手时读。
+3. **agent 不存在或 spawn 失败**：主会话 inline 执行。
 
 #### Gate 规则入口
 
-实际执行者在逐项清除前读取 [references/deslop-gates.md](references/deslop-gates.md) 的删除保护与所选 Gate 细则；inline 与 agent 使用同源规则。按上文「改写顺序」排所选 Gate 的先后，不另起一次全篇去味。
+实际执行者逐项清除前读 [references/deslop-gates.md](references/deslop-gates.md) 的删除保护、所选 Gate 细则与「写法抽查」；inline 与 agent 使用同源规则。按上文「改写顺序」排所选 Gate 的先后，不另起一次全篇去味。
 
 ### Phase 4：确定性收尾（文件模式）
 
@@ -218,6 +215,7 @@ node scripts/normalize-punctuation.js <正文文件...>
 {文件模式（默认；章节/正文文件、批量与长篇去AI）：直接改写落盘，写明改了哪个文件，本节只回 ≤200 字代表性片段，不向父会话返回全文。文本模式（仅限交互式贴入、无文件路径的零散片段）：完整输出润色后的文本。}
 
 下一步：{一句话，如「要我接着处理下一章吗？」}
+技术备注：{降级或版本提示的原文；没有就删掉这一行}
 ```
 
 **字数硬约束**：删除比例不得超过「诊断与分级」对应上限（轻度 ≤15%、中度 ≤25%、重度 ≤35%）。超限时分段输出并在报告里标记，不得整段删除正文。
@@ -248,6 +246,7 @@ node scripts/normalize-punctuation.js <正文文件...>
 |------|----------|
 | [references/banned-words.md](references/banned-words.md) | 检测和替换禁用词时 |
 | [references/deslop-gates.md](references/deslop-gates.md) | 逐项清除前：删除保护与所选 Gate 的细则、示例 |
+| [references/agent-calls.md](references/agent-calls.md) | 交给 narrative-writer 去味时：prompt 模板 |
 | [references/anti-ai-writing.md](references/anti-ai-writing.md) | **去AI味完整指南**：预防+改写顺序+范例 |
 | [scripts/normalize-punctuation.js](scripts/normalize-punctuation.js) | 文件模式落盘后做确定性标点收尾；默认保留引号风格 |
 | [scripts/check-ai-patterns.js](scripts/check-ai-patterns.js) | 文件模式「AI味扫描」预检与「确定性收尾」复扫（只看引号外叙述），只报告不改写 |

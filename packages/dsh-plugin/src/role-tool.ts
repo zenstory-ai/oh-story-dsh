@@ -22,7 +22,8 @@ const roleTools: Readonly<Record<OhStoryRoleName, readonly string[]>> = {
   "consistency-checker": [OH_STORY_REFERENCE_TOOL_NAME, "read", "glob", "grep"],
   "narrative-writer": [OH_STORY_REFERENCE_TOOL_NAME, "read", "glob", "grep", "write", "edit", "bash"],
   "story-architect": [OH_STORY_REFERENCE_TOOL_NAME, "read", "glob", "grep", "write", "edit"],
-  "story-explorer": ["read", "glob", "grep"],
+  // Oh Story 0.8.2 moved benchmark_style_load's procedure into agent-references/benchmark-style-load.md.
+  "story-explorer": [OH_STORY_REFERENCE_TOOL_NAME, "read", "glob", "grep"],
   "story-researcher": ["read", "glob", "grep", "bash", "write", "web_search", "web_fetch"]
 };
 

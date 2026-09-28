@@ -74,6 +74,8 @@ export async function synchronizeDramaAssets(): Promise<DramaAssetManifest> {
         && !normalized.endsWith(".pyc")
         && !normalized.endsWith("/.DS_Store")
         && bundledPath !== "short-drama/scripts/dashboard_server.py"
+        // 创作台 v2 (0.8.0) view models, imported only by dashboard_server.py.
+        && bundledPath !== "short-drama/scripts/creator_views.py"
         && !bundledPath.startsWith("short-drama/assets/dashboard/");
     }
   });

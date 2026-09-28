@@ -1,7 +1,6 @@
 """Self-contained config + utilities for this skill (no cross-skill imports).
 Merged from the shared core; reads the same env vars as the rest of the bundle."""
 import json
-import hashlib
 import math
 import os
 import re
@@ -22,8 +21,6 @@ MIMO_TOKEN_PLAN_API_URLS = {
     "ams": "https://token-plan-ams.xiaomimimo.com/v1",
 }
 DEFAULT_MIMO_MODEL = "mimo-v2.5"          # VLM / chat (vision understanding)
-DEFAULT_MIMO_ASR_MODEL = "mimo-v2.5-asr"  # speech-to-text
-DEFAULT_MIMO_TTS_MODEL = "mimo-v2.5-tts"  # text-to-speech
 
 
 def normalize_api_url(raw_url):
@@ -99,32 +96,13 @@ def env_float(name, default, *, minimum=None):
 # are optional and fall back to MIMO_API_KEY / MIMO_API_URL. Token-Plan keys (tp-*) auto-
 # route to the Token-Plan cluster base URL; pay-as-you-go keys use api.xiaomimimo.com.
 _mimo_api_key = os.environ.get("MIMO_API_KEY", "")
-_mimo_video_api_key = os.environ.get("MIMO_VIDEO_API_KEY", "") or _mimo_api_key
 _raw_api_url = os.environ.get("MIMO_API_URL") or default_mimo_api_url(is_mimo_token_plan_key(_mimo_api_key))
-_raw_mimo_video_api_url = (
-    os.environ.get("MIMO_VIDEO_API_URL")
-    or os.environ.get("MIMO_API_URL")
-    or default_mimo_api_url(is_mimo_token_plan_key(_mimo_video_api_key))
-)
 
 CONFIG = {
     "api_url": normalize_api_url(_raw_api_url),
     "api_key": _mimo_api_key,
-    "api_key_source": "MIMO_API_KEY",
-    "mimo_video_api_url": normalize_api_url(_raw_mimo_video_api_url),
-    "mimo_video_model": os.environ.get("MIMO_VIDEO_MODEL") or os.environ.get("MIMO_MODEL", DEFAULT_MIMO_MODEL),
+    "api_env_var": "MIMO_API_KEY",
     "vlm_model": os.environ.get("MIMO_MODEL", DEFAULT_MIMO_MODEL),
-    "mimo_media_resolution": os.environ.get("MIMO_MEDIA_RESOLUTION", "default"),
-    "mimo_video_overview": env_bool("MIMO_VIDEO_OVERVIEW", False),  # opt-in (--mimo-video-overview / =1); when on it becomes the PRIMARY per-scene description, frames stay the anchor/fallback
-    "mimo_video_fps": env_float("MIMO_VIDEO_FPS", 3.0, minimum=0.1),
-    "mimo_video_chunk_max_seconds": env_float("MIMO_VIDEO_CHUNK_MAX_SECONDS", 20.0, minimum=1.0),
-    "mimo_video_chunk_min_seconds": env_float("MIMO_VIDEO_CHUNK_MIN_SECONDS", 1.0, minimum=0.2),
-    "mimo_video_base64_max_mb": env_float("MIMO_VIDEO_BASE64_MAX_MB", 45.0, minimum=1.0),
-    "mimo_video_prompt": os.environ.get(
-        "MIMO_VIDEO_PROMPT",
-        "请用中文分析这个视频分片的主要人物、场景变化、关键动作、情绪走向和剧情冲突，"
-        "重点提取适合写短视频解说的故事线索。不要泛泛复述画面，要标出对后续写稿有用的信息。",
-    ),
     "mimo_disable_thinking": env_bool("MIMO_DISABLE_THINKING", True),
     # TTS 语速（字符/秒）。实测 mimo-tts 冰糖音色中位 ~3.9 字/秒，可用 SPEECH_RATE 覆盖
     # 生成解说时使用 speech_rate * safety_margin 作为约束
@@ -134,7 +112,6 @@ CONFIG = {
     "narration_coverage_target": 0.7,   # rough first-draft/diagnostic fallback; content-led audio decisions may differ (not a quota)
     "narration_coverage_max": 0.85,     # above this coverage → no_original_blocks (narration is wall-to-wall)
     "narration_coverage_min": 0.5,      # below this coverage → under_narrated
-    "narration_block_seconds": 9.0,     # block cadence used to derive target block count
     "original_block_min_seconds": 2.5,  # a deliberate original-audio gap must be at least this long
     "narration_block_min_chars": 16,    # below this avg block size → fragmented_beats
     "breath_ms": 250,  # 段间呼吸空间(ms)；block recap 块内连贯、块间留原声呼吸
@@ -145,73 +122,19 @@ CONFIG = {
     "visual_beat_max_facts": 3,  # 单段解说最多建议覆盖的 frame_facts 锚点数量
     "asr_chunk_min_chars": env_int("ASR_CHUNK_MIN_CHARS", 500, minimum=1),  # brief 中 ASR 写作分块最小字数/词数
     "asr_chunk_max_chars": env_int("ASR_CHUNK_MAX_CHARS", 800, minimum=1),  # brief 中 ASR 写作分块最大字数/词数
-    "context_info": "",              # 额外上下文（节目名、角色名等）
     "edit_mode": os.environ.get("EDIT_MODE", "full"),  # full | cut
-    "target_duration": os.environ.get("TARGET_DURATION", ""),  # cut 模式目标成片时长，如 10m
 }
-
-def narration_tempo_budget(tts_rate_offset=0.0, *, config=None):
-    """Return the canonical tempo budget shared by voiceover and assemble."""
-    cfg = config or CONFIG
-    global_speed = max(0.01, float(cfg.get("narration_speed", 1.0) or 1.0))
-    rate_factor = max(0.01, 1.0 + float(tts_rate_offset or 0.0))
-    cumulative_max = max(1.0, float(cfg.get("narration_cumulative_tempo_max", 1.35) or 1.35))
-    hard_max = max(cumulative_max, float(cfg.get("narration_cumulative_tempo_hard_max", 1.40) or 1.40))
-    legacy_segment_cap = max(1.0, float(cfg.get("tts_segment_tempo_max", 1.20) or 1.20))
-    segment_tempo_max = max(1.0, min(legacy_segment_cap, cumulative_max / (global_speed * rate_factor)))
-    return {
-        "global_narration_speed": global_speed,
-        "tts_rate_factor": rate_factor,
-        "cumulative_tempo_max": cumulative_max,
-        "cumulative_tempo_hard_max": hard_max,
-        "segment_tempo_max": segment_tempo_max,
-        "max_raw_duration_factor": global_speed * segment_tempo_max,
-    }
 
 def log(msg):
     print(f"[video-recap] {msg}", flush=True)
 
-def stable_json_dumps(value):
-    """Serialize values deterministically for non-secret cache fingerprints."""
-    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str)
-
-def stable_hash(value):
-    """Return an md5 digest for deterministic JSON-serializable values."""
-    return hashlib.md5(stable_json_dumps(value).encode("utf-8")).hexdigest()
-
-_FILE_FINGERPRINT_MEMO = {}
-
-
-def _file_identity(path):
-    """(device, inode, size, mtime_ns) — changes whenever the bytes could have changed."""
+def file_identity(path):
+    """{size, mtime_ns} of an input file: the identity brief consumers compare against
+    the provenance a producer stored, instead of re-hashing bytes."""
     st = os.stat(os.fspath(path))
-    return (st.st_dev, st.st_ino, st.st_size, st.st_mtime_ns)
+    return {"size": st.st_size, "mtime_ns": st.st_mtime_ns}
 
 
-def file_fingerprint(path, chunk_size=1024 * 1024):
-    """Return a full-content fingerprint for cache-correct identity checks.
-
-    The digest covers CONTENT only — never the path or mtime — so a copied video or
-    artifact is still recognised as the same asset, while any byte change invalidates
-    the cache even if timestamps, size, head, or tail bytes are misleading.
-
-    Identity metadata is used ONLY to memoize within a single process. One understanding
-    run fingerprints the same source video 8-10 times and the whole extracted frame set
-    2-3 times; on a 40-minute video at fps=1 that is gigabytes of redundant reads before
-    any real work starts. A file rewritten in place gets a new (size, mtime_ns) and is
-    re-hashed, so the memo can never serve a stale digest.
-    """
-    key = _file_identity(path)
-    memoized = _FILE_FINGERPRINT_MEMO.get(key)
-    if memoized is not None:
-        return memoized
-    h = hashlib.sha256()
-    with open(os.fspath(path), "rb") as f:
-        for chunk in iter(lambda: f.read(chunk_size), b""):
-            h.update(chunk)
-    digest = h.hexdigest()
-    _FILE_FINGERPRINT_MEMO[key] = digest
-    return digest
 def _retry_after_seconds(value, fallback):
     """Parse Retry-After seconds or HTTP-date; return fallback on malformed input."""
     if not value:
@@ -245,7 +168,7 @@ def _sanitize_api_error(value, limit=500):
 def _api_headers(api_provider=None, api_url=None, api_key=None):
     """Build MiMo auth headers (OpenAI-compatible chat/completions with an api-key header)."""
     del api_provider, api_url  # MiMo is the only provider; signature kept for call sites
-    key = CONFIG.get("api_key", "") if api_key is None else api_key
+    key = CONFIG["api_key"] if api_key is None else api_key
     return {
         "Content-Type": "application/json",
         "User-Agent": "video-recap/1.0",
@@ -258,9 +181,9 @@ def _prepare_api_payload(payload, api_provider=None, api_url=None):
     normalized = dict(payload)
     if "max_tokens" in normalized and "max_completion_tokens" not in normalized:
         normalized["max_completion_tokens"] = normalized.pop("max_tokens")
-    model = str(normalized.get("model") or "")
+    model = normalized["model"]
     if (
-        CONFIG.get("mimo_disable_thinking", True)
+        CONFIG["mimo_disable_thinking"]
         and not model.endswith(("-tts", "-asr"))
         and "thinking" not in normalized
     ):
@@ -269,7 +192,7 @@ def _prepare_api_payload(payload, api_provider=None, api_url=None):
         normalized["thinking"] = {"type": "disabled"}
     return normalized
 
-def api_call(payload, max_retries=8, *, api_provider=None, api_url=None, api_key=None, api_key_source=None):
+def api_call(payload, max_retries=8, *, api_provider=None, api_url=None, api_key=None, api_env_var=None):
     """调用 OpenAI-compatible API，带重试。
 
     集群的 429 限流是常态而非错误，所以重试更耐心（更多次数 + 退避封顶 60s + 遵从 Retry-After），
@@ -292,7 +215,7 @@ def api_call(payload, max_retries=8, *, api_provider=None, api_url=None, api_key
                 wait = _retry_after_seconds(retry_after, max(wait, 10))
                 log(f"API 速率限制 (尝试 {attempt+1}/{max_retries}), 等待 {wait}s")
             elif e.code == 401:
-                key_name = api_key_source or CONFIG.get("api_key_source", "MIMO_API_KEY")
+                key_name = api_env_var or CONFIG["api_env_var"]
                 raise RuntimeError(f"API 认证失败 (401)。请检查 {key_name} 和 API URL 是否匹配。")
             elif e.code == 403:
                 hint = "API 访问被拒绝 (403)。"

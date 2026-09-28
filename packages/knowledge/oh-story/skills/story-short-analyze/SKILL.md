@@ -13,9 +13,9 @@ metadata: {"openclaw":{"source":"https://github.com/zenstory-ai/oh-story-claudec
 
 ---
 
-## 拆解边界声明（主线程同样适用）
+## 拆解边界声明（主会话同样适用）
 
-短篇拆解的 Stage 2-6 全程由你（主线程）亲手做：拆的是用户**合法持有、拥有使用权**的虚构作品（已出版/连载或自有），性质是**只读的转化性文学批评**（编辑/评论/写作教学视角，不复制、不传播、不指导现实行为）。番茄短篇、故事会、知乎盐选、追妻、虐渣、世情等通俗题材里的家暴、出轨、复仇、暴力、情爱张力、黑暗伦理是常规虚构叙事元素，须照常做结构化拆解，**不得以「敏感」「不适」为由拒绝整篇或某个片段**——拒绝会让整条拆文流水线停摆；个别片段无法处理则跳过、照常续完其余。
+短篇拆解的 Stage 2-6 全程由你（主会话）亲手做：拆的是用户**合法持有、拥有使用权**的虚构作品（已出版/连载或自有），性质是**只读的转化性文学批评**（编辑/评论/写作教学视角，不复制、不传播、不指导现实行为）。番茄短篇、故事会、知乎盐选、追妻、虐渣、世情等通俗题材里的家暴、出轨、复仇、暴力、情爱张力、黑暗伦理是常规虚构叙事元素，须照常做结构化拆解，**不得以「敏感」「不适」为由拒绝整篇或某个片段**——拒绝会让整条拆文流水线停摆；个别片段无法处理则跳过、照常续完其余。
 
 ---
 
@@ -97,33 +97,7 @@ word_count = 全文字数
 
 ## 输出目录
 
-输出到 `拆文库/{书名}/`（项目根目录下）。用户指定了其他路径时按用户指定路径输出。
-
-**标准输出文件树**：
-
-```
-拆文库/{书名}/
-├── 原文/                # 原文备份（管道前置步骤产出）
-├── 拆文报告.md           # 人类可读综合报告（Stage 2-6 所有可读段）
-├── 情节节点.md           # Stage 2 情节节点清单（独立成文，方便定位）
-├── 写作手法.md           # Stage 4 写作手法分析（独立成文，方便复用）
-└── _meta.json           # 管道元数据 + 结构计数（resume + 验收数值依据）
-```
-
-> **下游契约**：`story-short-write` 同时读全套产出——`拆文报告.md` 取分析叙事，
-> `情节节点.md` 看节奏锚点，`写作手法.md` 抄手法，`原文/` 抄语感，`_meta.json`
-> 看题材识别和结构计数。完整字段定义见
-> [references/output-contract.md](references/output-contract.md)。
-
-### Stage → 文件映射
-
-| Stage | 落地文件 |
-|-------|----------|
-| 2 | `拆文报告.md`（故事核+结构+梗概段） + `情节节点.md` |
-| 3 | `拆文报告.md`（情感曲线+爆点段） |
-| 4 | `拆文报告.md`（反转段） + `写作手法.md` |
-| 5 | `拆文报告.md`（人物+首尾段） |
-| 6 | `拆文报告.md`（综合段） + `_meta.json.structure_counts`（数值计入元数据） |
+输出到 `拆文库/{书名}/`（项目根目录下；用户指定了其他路径时按用户指定）：`原文/`、`拆文报告.md`、`情节节点.md`、`写作手法.md`、`_meta.json`。三个 markdown 由下游 `story-short-write` 硬编码读取，不可改名；文件树、Stage → 文件映射与 `_meta.json` 字段见 [references/output-contract.md](references/output-contract.md)。
 
 ### 原文备份（管道前置步骤）
 
@@ -150,67 +124,41 @@ word_count = 全文字数
 
 | 阶段 | 名称 | 输入 | 输出 | 完成标志 |
 |------|------|------|------|----------|
-| 2 | 结构+情节节点 | 全文 | 故事核 + 故事梗概 + 功能分段（4-6段，必须含开端/发展/高潮/结局）+ 情节节点清单。节点以语义变化为边界提取，见 material-decomposition.md「情节节点提取规则」。 | 结构划分 ≥4 段 + 故事核已提取 |
+| 2 | 结构+情节节点 | 全文 | 故事核 + 故事梗概 + 功能分段（4-6段，必须含开端/发展/高潮/结局）+ 情节节点清单（以语义变化为边界提取）。 | 结构划分 ≥4 段 + 故事核已提取 |
 | 3 | 情感线+爆点 | 故事核+结构划分+情节节点数据 | 情感曲线（≥5节点）+ 爆点分析（6维度）+ 期待感分析。 | 爆点分析 6 维度齐全 |
-| 4 | 反转+写作手法 | 节点+情感数据 | 前置反转检查 + 反转机制（铺垫≥2条）+ 写作手法（≥5项维度：POV/对话/时间/信息/其他）。 | 写作手法 ≥5 项 |
+| 4 | 反转+写作手法 | 节点+情感数据 | 前置反转检查 + 反转机制（铺垫≥3条）+ 写作手法（≥5项维度：POV/对话/时间/信息/其他）。 | 写作手法 ≥5 项 |
 | 5 | 人物+开头结尾 | 情节节点+全文 | 所有人物（分类+功能标签+功能评估）+ 开头分析（前50/100字）+ 结尾分析（收束检查）。 | 人物功能评估完成 |
-| 6 | 综合评估 + `_meta.json` 写计数 | 全部数据 | 五维评分 + 爆点性 + 话题性 + 共鸣分析（≥3层）+ 可复用结构（≥3条）+ 节奏速报 + **算出并写入 `_meta.json.structure_counts`**。 | 五维评分完成 + 爆点性/话题性已分析 + 共鸣≥3层 + 可复用≥3条 + 节奏速报已包含 + `_meta.json.structure_counts` 各字段达「structure_counts 数值校验」阈值 |
+| 6 | 综合评估 + `_meta.json` 写计数 | 全部数据 | 五维评分 + 爆点性 + 话题性 + 共鸣分析（≥3层）+ 可复用结构（≥3条）+ 节奏速报 + **算出并写入 `_meta.json.structure_counts`**。 | 左列输出齐全 + `structure_counts` 各字段达「structure_counts 数值校验」阈值 |
 
 > 管道执行顺序：2 → 3 → 4 → 5 → 6（严格串行，每阶段依赖前一阶段数据）。可选模块
-> （同类对比、平台适配、详细节奏）可在 Stage 6 后执行。
+> （同类对比、平台适配、详细节奏）可在 Stage 6 后执行，读 [references/optional-modules.md](references/optional-modules.md)。
 
-**Stage 写盘协议**（crash safety）：每个 Stage 开始前先把 `_meta.json.last_stage_in_progress`
-置为当前 Stage 编号；该 Stage 所有目标文件写完后再做 non-empty / 最小长度检查，通过
-才清空 `last_stage_in_progress` 并 append 到 `stages_completed[]`。半成品文件不被
-信任，resume 时该 Stage 整段重跑。完整协议见
-[references/output-contract.md](references/output-contract.md) 「写入顺序 (crash safety)」段。
+### 按时刻读
 
-**非标文本分段**：对话体、聊天记录、帖子体、书信体等非标准章节格式，先按时间/说话人
-切换/信息揭示点分段，再映射到开端、发展、高潮、结局；不要机械按自然段数量切分。
+管道分两个时刻，进入时刻只读该行的文件；两个时刻之间只靠落盘的 `拆文报告.md`、`情节节点.md`、`写作手法.md` 和 `_meta.json` 交接，续跑或换新对话都按 `_meta.json` 的进度接上。
 
-**投稿层拆解**（拆 Stage 5 开头 / Stage 6 可复用时顺带记录进 拆文报告.md，非阻断；story-short-write 定平台基调时可作初判参考）：
-- **平台基调**：判定源文更贴哪一路——知乎盐选（第一人称剥洋葱、细思极恐、章末颠覆认知细节）/ 小程序（开局即地狱、当众打脸、章末卡脖子断点）/ 番茄短篇（顺滑无毒点、金手指直白、大满贯收尾）。
-- **导语写法**：源文开头前 150-220 字（多数就是正文第一段）怎么钩人——四维骨架（起因+核心冲突+人设底色+情绪反转）、黄金三角（具体物件+信息差+留白钩子）各落在哪句。
-- **付费点/最强断点**：源文把最强悬念断点（读者最想往下翻的地方）卡在第几节章末；付费点前后每章剧情点密度是否递增。
+| 时刻 | 读 | 交接 |
+|---|---|---|
+| Stage 2–3 结构与情感线 | [output-contract.md](references/output-contract.md)、[analysis-method.md](references/analysis-method.md)、[stage2-3-structure-emotion.md](references/stage2-3-structure-emotion.md)、[quality-checklist.md](references/quality-checklist.md)、[analysis-report-style.md](references/analysis-report-style.md) | `stages_completed` 含 3 |
+| Stage 4–6 反转到综合评估、验收 | output-contract.md、analysis-method.md、[stage4-6-reversal-summary.md](references/stage4-6-reversal-summary.md)、quality-checklist.md、analysis-report-style.md；Stage 6 要判断源文本身好坏（毒点、虐爽节奏、证据链等）时加 [source-story-quality.md](references/source-story-quality.md) | 验收通过，`stages_completed` 含 6 |
 
-详细模板见 [output-templates.md](references/output-templates.md)，方法论见
-[material-decomposition.md](references/material-decomposition.md)，输出契约见
-[output-contract.md](references/output-contract.md)。
+对照标尺类参考按下方「参考资料」的条件在对应 Stage 读。
+
+**Stage 写盘协议**（crash safety）：每个 Stage 开始前置 `_meta.json.last_stage_in_progress`，
+目标文件写完并通过 non-empty / 最小长度检查才清空它并 append 到 `stages_completed[]`；
+半成品不被信任，resume 时该 Stage 整段重跑。完整协议见 output-contract.md「写入顺序 (crash safety)」。
 
 ---
 
 ## 验收（Stage 6 之后、写 stages_completed[6] 之前）
 
-Stage 6 内容写完后，**不**立刻 append `6` 到 `stages_completed[]`。先跑三道检查：
+Stage 6 内容写完后**不**立刻 append `6`，先按 output-contract.md「验收接入点」跑三道检查，全过才写：
 
-### Step 1：拆文报告表达自检
+- **拆文报告表达自检**：按 analysis-report-style.md 扫描 `拆文报告.md`，跳过源文引用（以 `>` 开头的引用行、表格「关键台词 / 原文引用」列的引号直引），只扫分析师本人的措辞；命中就修订**拆文报告本身**的证据不足、空转套话或越界推测，不改写源文，也不评价源文是否 AI 写的。
+- **structure_counts 数值校验**：阈值以 output-contract.md 为准（单一权威），注意「无反转」是合法枚举，此时 `setup_clues` 跳过、不计入阻断。
+- **BLOCK 项扫描**：扫 quality-checklist.md 全部 `[BLOCK]` 项；`[WARN]` 缺项不阻断，写入 `拆文报告.md` 末尾「待补」清单供用户决定。
 
-按 [references/analysis-report-style.md](references/analysis-report-style.md) 扫描
-`拆文报告.md` 全文的证据链和高风险表达。
-扫描时跳过源文引用——以 `>` 开头的引用行、以及表格中「关键台词 / 原文引用」列的引号直引不计入，只扫分析师本人写的措辞。
-
-- **命中** → 不写 `stages_completed[6]`，列出命中位置，修订**拆文报告本身**的
-  证据不足、空转套话或越界推测；不要改写源文。
-- **未命中** → 继续「structure_counts 数值校验」。
-
-> 守门员定位：本节检查「我们写的拆文报告」；不要评价「源文是否 AI 写的」。
-
-### Step 2：`_meta.json.structure_counts` 数值校验
-
-按 [references/output-contract.md](references/output-contract.md) 「structure_counts 数值校验」表
-逐项检查 `_meta.json` 里 Stage 6 写入的结构计数。阈值与 carve-out 以 output-contract.md 为准（单一权威，不在此重复内联表以免漂移）——特别注意两条合法产出态：`reversal_type` 枚举**含「无反转」**（甜宠/喜剧/报应型）；`reversal_type=无反转` 时 **`setup_clues` 跳过该行、不计入阻断**。
-
-任一项不达标 → 阻断，回到对应 Stage 补足；原文确实没有、补不出来时，用故事话告诉作者缺什么（如「反转前的铺垫线索只找到 1 条」），不报字段名和 Stage 编号。
-
-### Step 3：`output-templates.md` [BLOCK] 项扫描
-
-扫描 `output-templates.md` 中所有 `[BLOCK]` 标注项，确认对应产出段已完成。任一缺失
-→ 阻断。`[WARN]` 项不阻断，但写入 `拆文报告.md` 末尾的「待补」清单供用户决定。
-
-### Step 4：通过
-
-「拆文报告 AI 腔自检」「structure_counts 数值校验」和「BLOCK 项扫描」全通过 → 清空 `_meta.json.last_stage_in_progress`，append `6` 到
-`stages_completed[]`，按下方格式告诉作者：
+任一阻断 → 回到对应 Stage 补足；原文确实没有、补不出来时，用故事话告诉作者缺什么（如「反转前的铺垫线索只找到 1 条」），不报字段名和 Stage 编号。全通过 → 清空 `_meta.json.last_stage_in_progress`，append `6` 到 `stages_completed[]`，按下方格式告诉作者：
 
 <!-- author-report -->
 ```md
@@ -220,19 +168,6 @@ Stage 6 内容写完后，**不**立刻 append `6` 到 `stages_completed[]`。�
 - 还缺的：{拆文报告末尾"待补"里需要作者决定的项；没有就写"无"}
 下一步：想照这个路子写一篇，运行 `/story-short-write`。
 ```
-
----
-
-## 质量检查概要
-
-各阶段完成后需通过质量检查。逐项 checklist 见
-[output-templates.md 质量检查必填字段](references/output-templates.md)。
-
-质量标准的阈值、数值与计算方式的唯一权威定义见
-[material-decomposition.md 质量标准](references/material-decomposition.md)。
-
-强阻断 / 警告区分：见 `output-templates.md` 每条 checklist 末尾的 `[BLOCK]` /
-`[WARN]` 标注。`[BLOCK]` 不通过 → 「BLOCK 项扫描」阻断。
 
 ---
 
@@ -251,38 +186,30 @@ Stage 6 内容写完后，**不**立刻 append `6` 到 `stages_completed[]`。�
 
 ## 参考资料
 
-### 核心方法论（拆文时必须加载）
+核心方法与模板按上方「按时刻读」加载；以下是对照标尺，按条件读。
+
+### 按需加载（拆解对应题材 / 维度时作为对照标尺，一次只查一份）
 
 | 文件 | 何时加载 |
 |------|----------|
-| [references/output-contract.md](references/output-contract.md) | 全程：Stage→文件映射 / `_meta.json` schema（含 structure_counts）/ 下游消费规范 / 验收接入点 |
-| [references/output-templates.md](references/output-templates.md) | 拆文时：输出模板 + 结构库 + 质量检查（含 [BLOCK]/[WARN] 标注） |
-| [references/material-decomposition.md](references/material-decomposition.md) | 拆文方法论：情节节点提取 + 写作手法 + 情感线 + 节奏分析 + 共鸣分析 + 人物规则 + **质量标准唯一权威** |
-| [references/source-story-quality.md](references/source-story-quality.md) | 评估**源文**质量时：短篇拆书的质量自检清单（评估对象的好坏，不是评估拆文报告本身） |
-| [references/analysis-report-style.md](references/analysis-report-style.md) | 「拆文报告表达自检」：检查**报告本身**的证据链、高风险套话与推测边界（不是源文滤镜） |
-
-### 按需加载（拆解对应题材 / 维度时作为对照标尺）
-
-| 文件 | 何时加载 |
-|------|----------|
-| [references/deconstruction-examples.md](references/deconstruction-examples.md) | 校准拆文方法时：3 个完整案例作为参照 |
-| [references/zhihu-style.md](references/zhihu-style.md) | 拆解知乎盐言故事时作为平台特性对照 |
-| [references/analysis-short-genres.md](references/analysis-short-genres.md) | 拆解特定题材时：按短篇源文的识别锚点、读者承诺和结算归属判断主副类型 |
-| [references/analysis-short-hooks.md](references/analysis-short-hooks.md) | 拆解段落/小节边界、钩子链与候选付费断点时作为短篇源文观察标尺 |
-| [references/analysis-short-suspense.md](references/analysis-short-suspense.md) | 拆解主副问题、信息差、证据释放、阶段答案与回收时作为短篇源文观察标尺 |
-| [references/analysis-paragraph-hooks.md](references/analysis-paragraph-hooks.md) | 拆解段落钩子时作为 11 种段落级钩子对照 |
-| [references/analysis-character-basics.md](references/analysis-character-basics.md) | 拆解人物基础设定时作为人设要素对照 |
-| [references/analysis-character-design.md](references/analysis-character-design.md) | 拆解人物内在矛盾时作为三层标签反差对照（contradiction_axis 来源） |
-| [references/analysis-character-relations.md](references/analysis-character-relations.md) | 拆解人物关系网时作为关系类型对照 |
-| [references/analysis-short-mechanics.md](references/analysis-short-mechanics.md) | 拆解核心梗、有限复现、规则兑现、代价与主角代理权时作为观察标尺 |
-| [references/analysis-reader-profile.md](references/analysis-reader-profile.md) | 拆解读者心理与期待管理时作为读者画像对照 |
+| [references/deconstruction-examples.md](references/deconstruction-examples.md) | 校准拆文方法：3 个完整案例 |
+| [references/zhihu-style.md](references/zhihu-style.md) | 拆知乎盐言故事：平台特性对照 |
+| [references/analysis-short-genres.md](references/analysis-short-genres.md) | Phase 1 / Stage 2 判主副类型：识别锚点、读者承诺、结算归属 |
+| [references/analysis-short-hooks.md](references/analysis-short-hooks.md) | Stage 3 / 5：段落与小节边界、钩子链、候选付费断点 |
+| [references/analysis-short-suspense.md](references/analysis-short-suspense.md) | Stage 3 / 4：主副问题、信息差、证据释放、阶段答案与回收 |
+| [references/analysis-paragraph-hooks.md](references/analysis-paragraph-hooks.md) | Stage 3 / 5：11 种段落级钩子对照 |
+| [references/analysis-character-basics.md](references/analysis-character-basics.md) | Stage 5：人设要素对照 |
+| [references/analysis-character-design.md](references/analysis-character-design.md) | Stage 5 细拆反差手法：按标题查「三层标签反差人设法」（数反差人物用 stage4-6 的判定，不读本文件） |
+| [references/analysis-character-relations.md](references/analysis-character-relations.md) | Stage 5：关系类型对照 |
+| [references/analysis-short-mechanics.md](references/analysis-short-mechanics.md) | Stage 2 / 6：核心梗、有限复现、规则兑现、代价与主角代理权 |
+| [references/analysis-reader-profile.md](references/analysis-reader-profile.md) | Stage 3 / 6：读者心理与期待管理 |
 
 ### 补充资料（拆 Stage 6「可复用结构」时按需对照）
 
 > **短篇结构模式**：`references/analysis-short-patterns.md`（比较源文实际功能链、偏离方式
 > 与失败条件；不按固定章位、百分比或线索数判“合标”）
 > **通用写作技法**：`references/analysis-writing-techniques.md`（情绪操控 / 感情线 /
-> 震惊场景 / 喜剧机制——拆 reusable_structures.fail_mode 时引用「感情线四阶段推进法」表「禁忌」列）
+> 震惊场景 / 喜剧机制——拆 reusable_structures.fail_mode 时按标题只查「感情线四阶段推进法」表的「禁忌」列，不整读）
 > **市场数据**：`references/real-market-data.md`（跨平台写作差异对照表）
 
 所有 references 在 `story-short-analyze` 中都是**观察标尺**——先报告源文实际发生了什么，

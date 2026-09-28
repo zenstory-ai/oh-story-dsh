@@ -1,14 +1,19 @@
 ---
 name: video-script
 description: >
- 对已完成分析的视频进行导演与剪辑策划，再写带时间戳的中文解说并校验。work_dir 已包含
- agent_narration_brief.md 与 vlm_analysis.json 时使用。适用于故事方向、片段选择、画面/原声/旁白分工、
- 解说写作与复核。输入 work_dir 中的理解索引；输出 recap_story_plan.json、visual_audio_board.json、
- 可选 style_card.json、cut 模式需要的 clip_plan.json，以及通过校验的 narration.json。触发词：解说词、写解说、视频旁白、
+ 对已完成分析的视频进行导演与剪辑策划，再写带时间戳的中文解说并校验；也处理已有短片的
+ 宣发标题、花字修订和外部文案回填。普通策划输入 work_dir 的 agent_narration_brief.md 与
+ vlm_analysis.json；文案返修输入当前成片的工程与内容证据。策划输出 recap_story_plan.json、visual_audio_board.json、
+ 可选 style_card.json、cut 模式需要的 clip_plan.json，以及通过校验的 narration.json；仅宣发文案任务交付提案或回填既有包装计划。
+ 触发词：解说词、写解说、视频旁白、宣发标题、花字修订、文案回填、
  narration script、写稿、解说文案、剪辑思路、导演思路。
 ---
 
 ## 1. 定位
+
+只改宣发标题、封面、花字或回填外部文案时，直接读 `references/promotional-copy.md`，
+按当前短片的观看理由和兑现位置处理指定文字层，不重做下述策划/旁白链。
+普通解说写作不因此增加平台调研或包装任务。
 
 本技能负责：创作方向、画面/声音计划、旁白写作与校验。Agent 不是 JSON 填写器，而要依次扮演：
 
@@ -18,9 +23,9 @@ description: >
 4. 声音/旁白编辑
 5. 第一次观看的观众
 
-Agent 先记录简洁决定，再写时间线产物。`validate.py` 负责对理解索引做机械校验；full 模式还会把旁白对齐到安静窗口。
+Agent 先记录简洁决定，再写时间线产物。`validate.py` 负责对理解索引做机械校验；full 模式默认还会执行预算整理并计算旁白的原声重叠。已有批准稿应加 `--preserve-approved-text`，保留段落顺序、数量、时间、文本、停顿和扩展元数据，仅允许依据现有声音证据更新 `overlaps_speech`。
 
-下面的 `scripts/...` 均相对于本技能目录。若执行器从仓库根目录启动，请给脚本路径加上本技能的绝对目录。本技能不从其他技能目录读取参考文件或辅助脚本；外部输入只来自显式路径与 `work_dir` 产物。
+下面的 `scripts/...` 均相对于本技能目录。若执行器从仓库根目录启动，请给脚本路径加上本技能的绝对目录。
 
 ### 1.1 创作控制模式
 
@@ -125,7 +130,7 @@ cut 模式先根据 `recap_story_plan.json` 与 `visual_audio_board.json` 写原
 beat_id | function | change | POV | preferred moment | 入点 | 出点
 ```
 
-片段顺序必须构成一条完整故事线，而不是无序高光。可使用 0–1 个 cold open，随后回到因果清楚的 setup → turn → escalation → payoff。片段长度服从具体时刻，不使用统一秒数模板；片尾必须保留完整台词或动作。对短时间内密集的 scene-change 候选，先区分原片切点与本次拼接点：原片无关短镜头整段删，相关短镜头扩展到完整动作/反应；本次拼接点优先移动边界、恢复同源连续运动或合并片段，尽量不制造人工闪切。
+片段顺序必须构成一条完整故事线，而不是无序高光。可使用 0–1 个 cold open，随后回到因果清楚的 setup → turn → escalation → payoff。片段长度服从具体时刻，不使用统一秒数模板；片尾必须保留完整台词或动作。密集 scene-change 候选的来源判断与处理规则由剪辑阶段定义，写计划时遵循同一规则，不制造人工闪切。
 
 ## 4. 撰写旁白
 
@@ -232,17 +237,15 @@ python3 scripts/review.py --work-dir <work_dir>
 
 ```bash
 python3 scripts/validate.py --work-dir <work_dir> --mode full
+python3 scripts/validate.py --work-dir <work_dir> --mode full --preserve-approved-text
 # cut 输出时间线由编排器使用 --mode cut_output
 ```
 
-命令写出 `narration_lint.json`。full 模式还会根据安静窗口重写 `narration.json` 的时间。修复所有 error 后重复运行，直到校验干净，再继续 TTS 与合成。
+命令写出 `narration_lint.json`。full 模式默认执行字符预算整理、去重合并并依据安静窗口计算 `overlaps_speech`，但不会把时间段移动到安静窗口；`--preserve-approved-text` 则保留批准稿的原始时间、文本、停顿、顺序与扩展元数据，只允许更新实测 `overlaps_speech`。修复所有 error 后重复运行，直到校验干净，再继续 TTS 与合成。
 
 片名或题材明确但缺少剧情上下文时，先按本技能的 `references/research-guide.md` 写 `background_research.json`。若理解素材偏薄，brief 中的数量只能当上限：宁可少写、写实，也不要为凑数复述画面。
 
 ## 7. 能力边界
 
-- 不运行 ASR / VLM；只消费视频理解索引。
-- 不合成 TTS，也不渲染视频。
-- 不根据平台分析做优化；先建立内容意图与剪辑一致性。
-- `review.py` 不改写 `narration.json`；是否采用严格门禁由调用方决定。
-- `validate.py` 不改写文本含义，只检查或对齐时间与安静窗口。
+- 不运行 ASR / VLM，不合成 TTS，不渲染视频；只消费视频理解索引。
+- 平台研究仅用于明确的宣发任务；不替代当前片内事实，也不默认改变解说和剪辑。

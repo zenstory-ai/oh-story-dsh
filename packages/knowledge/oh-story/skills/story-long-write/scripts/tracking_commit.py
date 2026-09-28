@@ -58,8 +58,31 @@ CONTEXT_HEADINGS = (
 FORESHADOW_STATUSES = ("已埋", "已回收", "已过期", "放弃")
 FORESHADOW_IMPORTANCE = ("高", "中", "低")
 REVEAL_STATUSES = ("未揭示", "部分揭示", "已揭示")
+# 伏笔与时间线条目里模型常用的同义写法：含义明确的直接改成正式名，不让一次提交为措辞失败。
+ACTION_ALIASES = {
+    "add": "upsert", "new": "upsert", "create": "upsert", "update": "upsert", "plant": "upsert",
+    "advance": "upsert", "resolve": "upsert", "insert": "upsert",
+    "新增": "upsert", "埋设": "upsert", "更新": "upsert", "推进": "upsert", "回收": "upsert",
+    "remove": "delete", "删除": "delete",
+}
+# 带状态含义的伏笔动作词：它们也映射成 upsert，但动作词本身说了伏笔走到哪一步。
+# status 缺省时按动作词补上（意图只有这一个来源，不会猜错）；status 与动作词矛盾时退回，
+# 因为无法判断是动作词用错还是状态写错——静默改任何一边都可能把没回收的伏笔记成已回收。
+FORESHADOW_ACTION_STATUS = {
+    "resolve": "已回收", "回收": "已回收",
+    "advance": "已埋", "推进": "已埋",
+}
+FORESHADOW_KEY_ALIASES = {
+    "planned_chapter": "planned_resolution_chapter", "planned_payoff_chapter": "planned_resolution_chapter",
+    "payoff_chapter": "planned_resolution_chapter", "resolution_chapter": "planned_resolution_chapter",
+    "resolve_chapter": "planned_resolution_chapter", "plant_chapter": "planted_chapter",
+    "planted": "planted_chapter", "description": "summary", "content": "summary",
+}
+TIMELINE_KEY_ALIASES = {"time": "story_time", "fact": "objective_fact", "reveal": "reveal_status"}
 INVALID_FILE_CHARS = re.compile(r"[<>:\"/\\|?*\x00-\x1f]")
 FORESHADOW_ID = re.compile(r"^F\d{3,}$")
+SNAPSHOT_TEXT_FIELDS = ("identity", "location", "goal", "state")
+SNAPSHOT_LIST_FIELDS = ("abilities_resources", "relationships", "knowledge", "open_threads")
 EVENT_ID = re.compile(r"^E\d{3,}$")
 WINDOWS_RESERVED_NAMES = {
     "CON",
@@ -112,9 +135,34 @@ def as_int(value: object, label: str, *, minimum: int = 0) -> int:
     return value
 
 
+def as_chapter(value: object, label: str, *, minimum: int = 1) -> int:
+    """章号：模型常写成 "22"。纯数字字符串按整数收，语义不变；其余照旧报错。"""
+    if isinstance(value, str) and value.strip().isdecimal():
+        value = int(value.strip())
+    return as_int(value, label, minimum=minimum)
+
+
+def with_aliases(row: dict[str, Any], aliases: dict[str, str]) -> dict[str, Any]:
+    """把含义明确的同义字段名改成正式字段名；正式字段已在时不动，留给未知字段报错。"""
+    row = dict(row)
+    for alias, canonical in aliases.items():
+        if alias in row and canonical not in row:
+            row[canonical] = row.pop(alias)
+    return row
+
+
+def normalize_action(value: object, label: str, *, allow_delete: bool) -> str:
+    action = clean_text(value, label, max_bytes=24)
+    action = ACTION_ALIASES.get(action.lower(), action.lower())
+    allowed = ("upsert", "delete") if allow_delete else ("upsert",)
+    require(action in allowed, f"{label} is invalid: use {' or '.join(allowed)}")
+    return action
+
+
 def require_known_keys(mapping: dict[str, Any], allowed: set[str], label: str) -> None:
     unknown = set(mapping) - allowed
-    require(not unknown, f"{label} contains unsupported fields: {', '.join(sorted(unknown))}")
+    require(not unknown, f"{label} contains unsupported fields: {', '.join(sorted(unknown))}"
+                         f"（只收 {', '.join(sorted(allowed))}）")
 
 
 # 事务校验期间收集全部超长字段，一次报完；None 表示逐条立即报错（初始化、状态读取等路径）。
@@ -311,8 +359,22 @@ def validate_position(value: object, label: str = "context.position") -> dict[st
     }
 
 
+def joined_text(value: object) -> object:
+    """单句字段写成了字符串列表时按「；」连成一句，内容不丢。"""
+    if isinstance(value, list) and value and all(isinstance(item, str) for item in value):
+        return "；".join(value)
+    return value
+
+
+def as_text_list(value: object) -> object:
+    """列表字段只写了一句时当作一项。"""
+    return [value] if isinstance(value, str) and value.strip() else value
+
+
 def normalize_snapshot(value: object, label: str) -> dict[str, Any]:
     snapshot = as_mapping(value, label)
+    snapshot = {key: joined_text(item) if key in SNAPSHOT_TEXT_FIELDS else as_text_list(item)
+                if key in SNAPSHOT_LIST_FIELDS else item for key, item in snapshot.items()}
     require_known_keys(
         snapshot,
         {"identity", "location", "goal", "state", "abilities_resources", "relationships", "knowledge", "open_threads"},
@@ -379,23 +441,33 @@ def normalize_foreshadow_change(
     allow_delete: bool,
     through_chapter: int,
 ) -> dict[str, Any]:
-    row = as_mapping(value, label)
+    row = with_aliases(as_mapping(value, label), FORESHADOW_KEY_ALIASES)
     require_known_keys(
         row,
         {"action", "id", "summary", "planted_chapter", "planned_resolution_chapter", "status", "importance"},
         label,
     )
-    action = clean_text(row.get("action", "upsert"), f"{label}.action", max_bytes=24)
-    require(action in ({"upsert", "delete"} if allow_delete else {"upsert"}), f"{label}.action is invalid")
+    raw_action = row.get("action", "upsert")
+    action = normalize_action(raw_action, f"{label}.action", allow_delete=allow_delete)
     identifier = clean_text(row.get("id"), f"{label}.id", max_bytes=24)
     require(FORESHADOW_ID.fullmatch(identifier) is not None, f"{label}.id must look like F001")
     if action == "delete":
         return {"action": action, "id": identifier}
-    planted_chapter = as_int(row.get("planted_chapter"), f"{label}.planted_chapter", minimum=1)
+    implied = FORESHADOW_ACTION_STATUS.get(" ".join(str(raw_action).split()).lower())
+    if implied is not None:
+        if row.get("status") in (None, ""):
+            row["status"] = implied
+        right = "回收了就写 status=已回收" if implied == "已回收" else "只是推进、还没回收就写 status=已埋"
+        require(
+            row["status"] == implied,
+            f"{label}.action={raw_action} 与 status={row['status']} 矛盾：{right}；"
+            "不是这个意思就把 action 改成 upsert 并写实际状态",
+        )
+    planted_chapter = as_chapter(row.get("planted_chapter"), f"{label}.planted_chapter")
     require(planted_chapter <= through_chapter, f"{label}.planted_chapter cannot be in the future")
     planned_raw = row.get("planned_resolution_chapter")
     planned_chapter = (
-        None if planned_raw is None else as_int(planned_raw, f"{label}.planned_resolution_chapter", minimum=1)
+        None if planned_raw in (None, "") else as_chapter(planned_raw, f"{label}.planned_resolution_chapter")
     )
     require(
         planned_chapter is None or planned_chapter >= planted_chapter,
@@ -471,14 +543,13 @@ def normalize_timeline_change(
     allow_delete: bool,
     through_chapter: int,
 ) -> dict[str, Any]:
-    event = as_mapping(value, label)
+    event = with_aliases(as_mapping(value, label), TIMELINE_KEY_ALIASES)
     require_known_keys(
         event,
         {"action", "id", "story_time", "objective_fact", "reader_knowledge", "reveal_status", "reveal_chapter", "characters"},
         label,
     )
-    action = clean_text(event.get("action", "upsert"), f"{label}.action", max_bytes=24)
-    require(action in ({"upsert", "delete"} if allow_delete else {"upsert"}), f"{label}.action is invalid")
+    action = normalize_action(event.get("action", "upsert"), f"{label}.action", allow_delete=allow_delete)
     identifier = clean_text(event.get("id"), f"{label}.id", max_bytes=24)
     require(EVENT_ID.fullmatch(identifier) is not None, f"{label}.id must look like E001")
     if action == "delete":
@@ -486,7 +557,7 @@ def normalize_timeline_change(
     reveal_status = clean_text(event.get("reveal_status"), f"{label}.reveal_status", max_bytes=24)
     require(reveal_status in REVEAL_STATUSES, f"{label}.reveal_status must be one of {REVEAL_STATUSES}")
     reveal_raw = event.get("reveal_chapter")
-    reveal_chapter = None if reveal_raw is None else as_int(reveal_raw, f"{label}.reveal_chapter", minimum=1)
+    reveal_chapter = None if reveal_raw in (None, "") else as_chapter(reveal_raw, f"{label}.reveal_chapter")
     if reveal_status == "未揭示":
         require(reveal_chapter is None, f"{label} must not put a future reveal chapter in established timeline facts")
     else:
@@ -708,7 +779,8 @@ def normalize_delta(
         # 本章退役的角色记录最后一次变化即可，不必再交一份马上要删的快照。
         require(
             not is_core or name in snapshots or portable_name_key(name) in retiring,
-            f"core character {name} changed but has no current snapshot",
+            f"core character {name} changed but has no current snapshot: 把 draft 输出 current_snapshots 里"
+            f"「{name}」的快照整份改成本章结束时的状态，放进 character_snapshots",
         )
         character_changes.append(
             {"name": name, "change": clean_text(change.get("change"), f"delta.character_changes[{index}].change", max_bytes=360)}
@@ -755,11 +827,18 @@ def normalize_delta(
     }
 
 
+def render_commitments(commitments: list[str]) -> list[str]:
+    # 常见情形一行用「；」连写；有承诺原文自带「；」时连写就拆不回来，改成逐条缩进子项。
+    if any("；" in item for item in commitments):
+        return ["- 下一章承诺："] + [f"  - {item}" for item in commitments]
+    return ["- 下一章承诺：" + ("；".join(commitments) or "无")]
+
+
 def render_delta(chapter: int, title: str, delta: dict[str, Any], core_names: set[str]) -> str:
     lines = [
         f"# 第{chapter:03d}章 · {title}",
         f"- 结果：{delta['result']}",
-        "- 下一章承诺：" + ("；".join(delta["next_chapter_commitments"]) or "无"),
+        *render_commitments(delta["next_chapter_commitments"]),
         "",
         "## 角色变化",
     ]
@@ -938,6 +1017,11 @@ def normalize_transaction(project: Path, state: dict[str, Any], document: object
     return transaction
 
 
+# 本文件在 story-long-write / story-review / story-import 三份逐字相同；只有 story-long-write 带 storyctl.py。
+RECOUNT_HINT = ("修订请用 story-long-write 的 storyctl.py chapter commit（带外用 chapter accept-current-length）"
+                "提交同一份事务，它会重新计数并清理本章工作目录")
+
+
 def _normalize_transaction(project: Path, state: dict[str, Any], document: object) -> dict[str, Any]:
     root = as_mapping(document, "transaction")
     require_known_keys(
@@ -978,6 +1062,15 @@ def _normalize_transaction(project: Path, state: dict[str, Any], document: objec
         wordcount = wordcount_value(
             wordcount_core.validate_current_wordcount_record, project, chapter, wordcount_input
         )
+    elif mode == "revision" and str(chapter) in state["wordcount_records"]:
+        # 已提交字数记录的章节：正文或目标改过却绕开 storyctl 提交修订，会留下过期的 actual/body_sha256。
+        # 只核对记录钉住的正文与目标；细纲事后补的「字数范围」不算过期。
+        try:
+            drift = wordcount_core.wordcount_record_drift(project, chapter, state["wordcount_records"][str(chapter)])
+        except wordcount_core.WordcountError as exc:
+            raise TrackingError(f"第{chapter}章的字数记录无法核对（{exc}）；{RECOUNT_HINT}") from exc
+        if drift:
+            raise TrackingError(f"第{chapter}章{'和'.join(drift)}已改；{RECOUNT_HINT}")
     return {
         "mode": mode,
         "chapter": chapter,
@@ -1171,6 +1264,11 @@ def _apply_transaction_locked(project: Path, document: object) -> dict[str, Any]
     state = load_state(project)
     transaction = normalize_transaction(project, state, document)
     next_state = merge_transaction(state, transaction)
+    path = delta_path(tracking, transaction["chapter"])
+    previous_record = parse_chapter_record(path) if transaction["mode"] == "revision" else None
+    if previous_record is not None:
+        # 退役只在 append 发生；修订重写旧章记录时把当初的退役登记原样带过来，不让它随修订消失。
+        transaction["delta"]["retired_context_items"] = previous_record["retired"]
 
     delta_payload = render_delta(
         transaction["chapter"],
@@ -1181,7 +1279,6 @@ def _apply_transaction_locked(project: Path, document: object) -> dict[str, Any]
     )
     views = render_views(next_state)
     next_state_payload = json_payload(next_state)
-    path = delta_path(tracking, transaction["chapter"])
     if transaction["mode"] == "append" and path.exists():
         require(
             path.read_text(encoding="utf-8") == delta_payload,
@@ -1193,7 +1290,19 @@ def _apply_transaction_locked(project: Path, document: object) -> dict[str, Any]
     # 唯一权威文件最后落盘；在此之前失败可用同一事务直接重跑。
     atomic_write_text(state_path(project), next_state_payload)
     warn_sizes(views, delta_payload)
+    if previous_record is not None:
+        warn_emptied_record(transaction["chapter"], previous_record, transaction["delta"])
     return next_state
+
+
+def warn_emptied_record(chapter: int, previous: dict[str, Any], delta: dict[str, Any]) -> None:
+    labels = {"character_changes": "角色变化", "foreshadow_changes": "伏笔变化", "timeline_events": "时间与揭示",
+              "constraints": "连贯性约束", "next_chapter_commitments": "下一章承诺"}
+    emptied = [f"{label}（原有 {len(previous[key])} 项）" for key, label in labels.items()
+               if previous[key] and not delta[key]]
+    if emptied:
+        emit(f"WARNING: 第{chapter}章修订把逐章记录的 " + "、".join(emptied)
+             + " 清空了；修订的 delta 是本章完整记录，不是只写改动。不是有意删除就用 draft 重新预填后再提交。", error=True)
 
 
 def apply_transaction(project: Path, document: object) -> dict[str, Any]:
@@ -1241,11 +1350,123 @@ DRAFT_LIMITS = {
 }
 
 
+RECORD_SECTIONS = {"角色变化": "character_changes", "伏笔变化": "foreshadow_changes",
+                   "时间与揭示": "timeline_events", "连贯性约束": "constraints", "本章退役登记": "retired"}
+
+
+def parse_chapter_record(path: Path) -> dict[str, Any] | None:
+    """读回本工具自己渲染的逐章记录（render_delta 的固定格式），供修订草稿预填与修订提交核对。
+    这是对自家确定性输出的逆运算，不是解析手写 Markdown；读不到返回 None。"""
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeError):
+        return None
+    record: dict[str, Any] = {"title": "", "result": "", "next_chapter_commitments": [],
+                              **{key: [] for key in RECORD_SECTIONS.values()}}
+    section = None
+    in_commitments = False
+    for line in text.splitlines():
+        heading = re.match(r"^# 第\d+章 · (.+)$", line)
+        if heading and not record["title"]:
+            record["title"] = heading.group(1).strip()
+            continue
+        if line.startswith("## "):
+            section = RECORD_SECTIONS.get(line[3:].strip())
+            in_commitments = False
+            continue
+        if in_commitments and line.startswith("  - "):
+            record["next_chapter_commitments"].append(line[4:])
+            continue
+        in_commitments = False
+        if not line.startswith("- "):
+            continue
+        item = line[2:]
+        if section is None:
+            if item.startswith("结果："):
+                record["result"] = item[len("结果："):]
+            elif item.startswith("下一章承诺："):
+                value = item[len("下一章承诺："):]
+                # 空值 = 逐条子项格式（render_commitments），后面的缩进行逐条读回。
+                in_commitments = value == ""
+                record["next_chapter_commitments"] = [] if value in ("无", "") else value.split("；")
+            continue
+        if item == "无" and section != "retired":
+            continue
+        record[section].append(item)
+    return record
+
+
+def record_prefill(state: dict[str, Any], record: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any], list[str]]:
+    """把已提交的逐章记录还原成修订 delta：结果、承诺、约束、角色变化按记录原文；伏笔与时间线
+    取受影响 ID 的当前值（修订提交的就是截至最新章的当前值）。另返回记录里核心角色的当前快照。"""
+    notes: list[str] = []
+    changes = []
+    for line in record["character_changes"]:
+        parts = line.split("｜", 2)
+        if len(parts) == 3:
+            changes.append({"name": parts[0], "change": parts[2]})
+    snapshots = {item["name"]: copy.deepcopy(state["characters"][item["name"]])
+                 for item in changes if item["name"] in state["characters"]}
+
+    def rows(lines: list[str], current: dict[str, Any], label: str) -> list[dict[str, Any]]:
+        prefilled = []
+        for line in lines:
+            parts = line.split("｜")
+            identifier = parts[0]
+            if len(parts) > 1 and parts[1] == "删除当前登记":
+                if identifier in current:
+                    notes.append(f"{label} {identifier} 本章删过、后来又登记了，没有预填删除，确需删除自行加回")
+                else:
+                    prefilled.append({"action": "delete", "id": identifier})
+            elif identifier in current:
+                prefilled.append({"action": "upsert", **{key: copy.deepcopy(value) for key, value in current[identifier].items()
+                                                         if key not in ("updated_chapter", "first_recorded_chapter")}})
+            else:
+                notes.append(f"{label} {identifier} 已在后续章节删除，没有预填")
+        return prefilled
+
+    delta = {
+        "result": record["result"],
+        "character_changes": changes,
+        "foreshadow_changes": rows(record["foreshadow_changes"], state["foreshadow"], "伏笔"),
+        "timeline_events": rows(record["timeline_events"], state["timeline"], "时间线事件"),
+        "constraints": list(record["constraints"]),
+        "next_chapter_commitments": list(record["next_chapter_commitments"]),
+    }
+    return delta, snapshots, notes
+
+
+def entry_shapes(chapter: int) -> dict[str, Any]:
+    """draft 当场给出每类条目的形状：模型填 delta 时手里只有空数组，字段名、整数、枚举都靠猜，
+    首次提交几乎都因此被退回。取值从校验用的同一组常量生成，不另立一套。"""
+    return {
+        "delta.character_changes[]": {"name": "角色名", "change": "一句话：本章起了什么变化"},
+        "delta.foreshadow_changes[]": {
+            "action": "upsert（撤掉整条写 delete，只带 id）", "id": "F007", "summary": "伏笔一句话",
+            "planted_chapter": chapter, "planned_resolution_chapter": "计划回收章的整数，未定写 null",
+            "status": "|".join(FORESHADOW_STATUSES), "importance": "|".join(FORESHADOW_IMPORTANCE),
+        },
+        "delta.timeline_events[]": {
+            "action": "upsert（撤掉整条写 delete，只带 id）", "id": "E012", "story_time": "故事内时间",
+            "objective_fact": "客观发生了什么", "reader_knowledge": "读者此刻知道/以为什么",
+            "reveal_status": "|".join(REVEAL_STATUSES),
+            "reveal_chapter": f"已揭示或部分揭示时写揭示章的整数（不晚于 {chapter}），未揭示写 null",
+            "characters": ["角色名"],
+        },
+        "character_snapshots.{角色名}": {
+            **{key: "一句话" for key in SNAPSHOT_TEXT_FIELDS},
+            **{key: ["一条一句"] for key in SNAPSHOT_LIST_FIELDS},
+        },
+    }
+
+
 def draft_transaction(project: Path, chapter: int) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
-    """按当前 state 预填一份逐章事务：修订号、模式、章名和整份提交的上下文当前值都填好，
-    调用方只写本章变化。另返回在场核心角色的当前快照，供有变化时整份改写后放进事务。
-    新章（append）的故事时间与场景留空：它们必须是本章结束时的位置，沿用上一章的值能静默提交，
-    所以不预填，上一章的值另行返回作参考。"""
+    """按当前 state 预填一份逐章事务：修订号、模式、章名和整份提交的上下文当前值都填好。
+    新章（append）调用方只写本章变化；另返回在场核心角色的当前快照，供有变化时整份改写后放进事务。
+    新章的故事时间与场景留空：它们必须是本章结束时的位置，沿用上一章的值能静默提交，
+    所以不预填，上一章的值另行返回作参考。
+    修订（revision）的 delta 是修订后本章的完整记录，所以按已提交的逐章记录预填，调用方在上面改；
+    第三项返回 {"notes": [...], "prefilled": bool}：没能预填的条目，以及逐章记录是否读到。"""
     state = load_state(project)
     last = state["last_committed_chapter"]
     require(1 <= chapter <= last + 1, f"draft chapter must be between 1 and {last + 1}")
@@ -1263,9 +1484,21 @@ def draft_transaction(project: Path, chapter: int) -> tuple[dict[str, Any], dict
         "result": "", "character_changes": [], "foreshadow_changes": [], "timeline_events": [],
         "constraints": [], "next_chapter_commitments": [],
     }
+    snapshots_prefill: dict[str, Any] = {}
+    notes: list[str] = []
+    prefilled = False
     if mode == "append":
         delta.update({"retired_context_items": [], "retired_characters": []})
         context["position"].update({"story_time": "", "scene": ""})
+    else:
+        record = parse_chapter_record(delta_path(tracking_root(project), chapter))
+        if record is not None:
+            prefilled = True
+            delta, snapshots_prefill, notes = record_prefill(state, record)
+            title = title or record["title"]
+            if chapter == last:
+                # 最新章的承诺原样在 state 里，比从记录行按「；」拆回更准。
+                delta["next_chapter_commitments"] = list(state["context"]["next_chapter_commitments"])
     document = {
         "schema_version": INPUT_SCHEMA_VERSION,
         "mode": mode,
@@ -1275,11 +1508,13 @@ def draft_transaction(project: Path, chapter: int) -> tuple[dict[str, Any], dict
         "delta": delta,
         "context": {key: context[key] for key in
                     ("position", "long_term_constraints", "active_character_names", "continuity_risks")},
-        "character_snapshots": {},
+        "character_snapshots": snapshots_prefill,
     }
     snapshots = {name: state["characters"][name] for name in context["active_character_names"]
                  if name in state["characters"]}
-    return document, snapshots, previous_position if mode == "append" else {}
+    if mode == "revision":
+        return document, snapshots, {"notes": notes, "prefilled": prefilled}
+    return document, snapshots, previous_position
 
 
 def rebuild_stale_draft(document: dict[str, Any], existing: dict[str, Any], append: bool,
@@ -1375,7 +1610,10 @@ def main() -> int:
     args = build_parser().parse_args()
     try:
         if args.command == "draft":
-            document, snapshots, previous_position = draft_transaction(args.project, args.chapter)
+            document, snapshots, extra = draft_transaction(args.project, args.chapter)
+            previous_position = extra if document["mode"] == "append" else {}
+            prefill_notes = extra.get("notes", []) if document["mode"] == "revision" else []
+            record_prefilled = bool(extra.get("prefilled")) if document["mode"] == "revision" else False
             out = args.out or args.project / ".story" / "work" / f"第{args.chapter:03d}章" / "tracking.json"
             out.parent.mkdir(parents=True, exist_ok=True)
             refreshed = ""
@@ -1392,9 +1630,25 @@ def main() -> int:
                     refreshed = rebuild_stale_draft(document, existing, bool(previous_position),
                                                     load_state(args.project)["characters"])
             out.write_text(json.dumps(document, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
-            fill = ("只填 delta 里本章的变化；context 其余字段已是当前值，要撤下的长期约束或连贯性风险从 context 删掉并把原文放进 "
-                    "delta.retired_context_items（仅 append）；本章有变化的核心角色把下面的当前快照整份改好放进 character_snapshots，"
-                    "并在 character_changes 写一句变化。不要从脚本源码或 state 文件里另找格式。")
+            if document["mode"] == "revision" and not record_prefilled:
+                fill = (f"这是修订，但本章逐章记录缺失或读不了（{delta_path(Path('追踪'), args.chapter).as_posix()}），delta 没有预填："
+                        "按修订后正文把本章完整记录整份写上（结果、承诺、角色变化、伏笔、时间线、约束），没写的项不会进记录。"
+                        "角色快照、伏笔、时间线写截至最新已写章的当前值；context 原样保留全部当前条目（修订不能退役）。"
+                        "正文改过就用 story-long-write 的 storyctl.py chapter commit 提交（重新计数并清理本章工作目录）。"
+                        "不要从脚本源码或 state 文件里另找格式。")
+            elif document["mode"] == "revision":
+                fill = ("这是修订：delta 是修订后本章的完整记录，已按本章现有逐章记录预填（伏笔与时间线取当前值，"
+                        "记录里的核心角色快照已放进 character_snapshots）。对照修订后正文逐项改：仍成立的原样保留，"
+                        "被推翻的删掉或改写，新增的补上；不要清空后只写改动，没写的项会从本章记录里消失。"
+                        "角色快照、伏笔、时间线改成截至最新已写章的当前值；context 原样保留全部当前条目（修订不能退役）。"
+                        "正文改过就用 story-long-write 的 storyctl.py chapter commit 提交（重新计数并清理本章工作目录）。"
+                        "不要从脚本源码或 state 文件里另找格式。")
+                if prefill_notes:
+                    fill += "没能预填：" + "；".join(prefill_notes) + "。"
+            else:
+                fill = ("只填 delta 里本章的变化；context 其余字段已是当前值，要撤下的长期约束或连贯性风险从 context 删掉并把原文放进 "
+                        "delta.retired_context_items（仅 append）；本章有变化的核心角色把下面的当前快照整份改好放进 character_snapshots，"
+                        "并在 character_changes 写一句变化。每类条目照 shapes 的形状写，不要从脚本源码或 state 文件里另找格式。")
             blank = not (document["context"]["position"].get("story_time") or document["context"]["position"].get("scene"))
             if previous_position and blank:
                 fill = ("context.position 的 story_time 与 scene 留空，填本章结束时的故事时间与场景（上一章结束时见 "
@@ -1405,6 +1659,7 @@ def main() -> int:
                 "expected_state_revision": document["expected_state_revision"],
                 "fill": (f"{refreshed}；要从头生成加 --force。" if refreshed else "") + fill,
                 "limits_chars": DRAFT_LIMITS,
+                "shapes": entry_shapes(args.chapter),
                 "current_snapshots": snapshots,
             }
             if previous_position:

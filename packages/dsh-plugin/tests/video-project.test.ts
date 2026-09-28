@@ -45,6 +45,17 @@ describe("video recap project projection", () => {
     expect(passTwo).toMatchObject({ state: "waiting", nextArtifact: "narration.json" });
   });
 
+  it("skips the narration pause for runs that keep the source audio", () => {
+    const root = "video-recaps/mix";
+    const base = [file(`${root}/sources/source.mp4`, "media", "video/mp4"), file(`${root}/work/recap_run_manifest.json`)];
+    const cut = { settings: { edit_mode: "cut" }, audio: { mode: "source-mix" } };
+    expect(summarizeVideoProject(root, base, { runManifest: cut })).toMatchObject({ state: "waiting", nextArtifact: "clip_plan.json" });
+    const edited = [...base, file(`${root}/work/clip_plan.json`), file(`${root}/work/edited_source.mp4`, "media", "video/mp4")];
+    expect(summarizeVideoProject(root, edited, { runManifest: cut })).toMatchObject({ state: "working", stage: "assemble", nextArtifact: undefined });
+    const full = { settings: { edit_mode: "full" }, audio: { mode: "adopted-packet-copy" } };
+    expect(summarizeVideoProject(root, base, { runManifest: full })).toMatchObject({ state: "working", stage: "assemble", nextArtifact: undefined });
+  });
+
   it("validates one-level project roots", () => {
     expect(videoProjectRoot("video-recaps/我的项目/work/timeline.json")).toBe("video-recaps/我的项目");
     expect(videoProjectRoot("video-recaps/.hidden/work/timeline.json")).toBeUndefined();

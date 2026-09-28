@@ -50,7 +50,7 @@ interface VideoPreflightSummary {
   readonly python: { readonly ok: boolean; readonly version?: string | undefined };
   readonly ffmpeg: { readonly ok: boolean; readonly subtitles: boolean };
   readonly ffprobe: { readonly ok: boolean };
-  readonly credentials: { readonly mimo: boolean; readonly fish: boolean; readonly ttsProvider: string };
+  readonly credentials: { readonly mimo: boolean; readonly fish: boolean; readonly indexTts: boolean; readonly ttsProvider: string };
 }
 
 interface WorkspaceFile {
@@ -148,7 +148,10 @@ async function videoPreflight(): Promise<VideoPreflightSummary> {
       // Upstream falls back to the shared MIMO_API_KEY only when a per-service key is unset.
       mimo: configured("MIMO_API_KEY", "MIMO_VIDEO_API_KEY", "MIMO_TTS_API_KEY", "MIMO_ASR_API_KEY"),
       fish: configured("FISH_API_KEY"),
-      ttsProvider: process.env.TTS_PROVIDER ?? "mimo"
+      // index-tts fails before any request unless both are set (video-voiceover/references/index-tts.md).
+      indexTts: configured("INDEX_TTS_ENDPOINT") && configured("INDEX_TTS_VOICE"),
+      // Upstream accepts auto | mimo-tts | fish-audio | index-tts and defaults to auto (voiceover.py).
+      ttsProvider: (process.env.TTS_PROVIDER ?? "").trim().toLowerCase() || "auto"
     }
   };
   videoPreflightCache = { expires: Date.now() + 30_000, value };

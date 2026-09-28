@@ -2,11 +2,13 @@
   "name": "short-drama-subtitles",
   "version": "1.0.0",
   "private": true,
-  "description": "Remotion subtitle layer for short-drama-edit. Renders a transparent overlay from cues.json.",
+  "description": "Remotion overlay for short-drama-edit: subtitles and screen text on transparent frames.",
   "scripts": {
-    "render": "remotion render Subtitles"
+    "render": "remotion render Overlay"
   },
   "dependencies": {
+    "@fontsource/jetbrains-mono": "5.3.0",
+    "@fontsource/noto-sans-sc": "5.3.0",
     "@remotion/cli": "4.0.418",
     "react": "19.0.0",
     "react-dom": "19.0.0",

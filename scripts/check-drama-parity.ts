@@ -44,7 +44,8 @@ for (const required of [
 }
 for (const forbidden of [
   "skills/short-drama/references/lifecycle-commands.md",
-  "skills/short-drama/scripts/dashboard_server.py"
+  "skills/short-drama/scripts/dashboard_server.py",
+  "skills/short-drama/scripts/creator_views.py"
 ]) {
   if (paths.has(forbidden)) throw new Error(`Bundled Drama Skills retained incompatible runtime content ${forbidden}.`);
 }

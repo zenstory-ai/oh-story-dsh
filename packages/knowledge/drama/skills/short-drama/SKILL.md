@@ -91,7 +91,7 @@ python3 {技能目录}/scripts/project_tool.py set-authority <project> \
   --decision-ref "创作者决策/production-profile.jsonl#CD-H3"
 ```
 
-各字段取值由命中的模型方言给出：`$short-drama-video-prompts` 的 MiniMax H3 / Seedance 方言文件都写了
+各字段取值由命中的模型方言给出：`$short-drama-video-prompts` 的 MiniMax H3 / Seedance / Wan 3.0 方言文件都写了
 推荐档案。写完用 `status` 复核 `video_model_profile` 是否已经出现。
 
 项目定位与安全写入见 [运行预检](references/runtime-preflight.md)。用户明确要求 Dashboard 时运行：
@@ -112,12 +112,24 @@ python3 {技能目录}/scripts/dashboard_server.py --workspace <workspace> --sto
 同一 workspace 已有在跑的 Dashboard 时，再次启动只会打印同一个链接，不再开第二个端口；确实要换
 端口或换令牌时加 `--restart`。不加 `--detach` 时行为不变：前台运行，Ctrl-C 结束。
 
-Dashboard 展示和编辑创作文件，不负责工作流编排或媒体生产。
+Dashboard 按阶段展示项目：全剧页给出下一步和分集进度，每集分剧本、设定、分镜、提示词、成片、审查
+六个视图，⌘K 搜索全剧。结构视图只读，改动在「编辑原文」里保存 Markdown。画面只认文档里的绑定：
+缩略图是分镜里 `用途：起始帧` 的 `REF-...`，每镜素材是剪辑单的「来源」，成片是剪辑输出；没有绑定
+就显示空位，不按文件名配图。它不负责工作流编排或媒体生产，需要写作或生成的地方只复制一句请求交回对话。
+每集目标时长取自 `status` 的 `format`，节奏对照只用已接受的 `rhythm_profile`。
 
 ## 项目级创作决定
 
 制作形态、视觉方向、播放面和集长目标确实约束多个阶段时，展示选择及影响后由用户决定。
 Look Development 是可选分支，不是进入图片提示词或分镜的固定门槛。
+
+节奏数值（首钩秒数、情绪触点间隔、反转次数、VO 占比、平均镜长等）住在
+`creator_authority.rhythm_profile`。字段与默认值由 `$short-drama-develop` 按制作形态提出，
+创作者接受或改写后，按上文三步写入：决策的 `accepted_value` 是完整档案对象，`--field`
+写 `/creator_authority/rhythm_profile`；档案已接受后，单改一个值时 `--field` 指向该字段。
+`set-authority` 只校验类型与范围，缺字段、越界或多出未知字段都拒绝写入。下游只按 `status` 为 `accepted` 的档案做算术核对，缺失、`unset` 或
+`proposed` 都表示「未声明，不核对」。写完用 `status` 复核 `rhythm_profile`；手改后档案不合法时
+它返回空档案，问题列在 `rhythm_profile_problems`。
 
 按问题只读取一份相关知识：
 

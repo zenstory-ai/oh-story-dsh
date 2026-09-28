@@ -5,6 +5,7 @@ import { promisify } from "node:util";
 import {
   currentVideoRecapFiles,
   readVideoRecapManifest,
+  videoRecapPlatformGlue,
   videoRecapRoot,
   videoRecapUpstreamRoot
 } from "./video-recap-assets.js";
@@ -40,6 +41,12 @@ for (const required of [
   "skills/video-assemble/scripts/assemble.py"
 ]) {
   if (!manifest.files.some((entry) => entry.path === required)) throw new Error(`Bundled video-recap asset is missing ${required}.`);
+}
+for (const glue of videoRecapPlatformGlue) {
+  const forbidden = `skills/${glue}`;
+  if (manifest.files.some(({ path }) => path === forbidden.replace(/\/$/u, "") || path.startsWith(forbidden))) {
+    throw new Error(`Bundled video-recap assets retained standalone dashboard content ${forbidden}.`);
+  }
 }
 if (manifest.files.some(({ path }) => path.includes("/__pycache__/") || path.endsWith(".pyc") || path.endsWith("/.DS_Store"))) {
   throw new Error("Bundled video-recap assets retained upstream workspace artifacts.");

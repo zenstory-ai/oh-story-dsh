@@ -9,7 +9,6 @@ disallowedTools: [Edit]
 model: sonnet
 maxTurns: 20
 # maxTurns: 20 — 覆盖 CDP 搜索 + 多源交叉验证场景。
-memory: project
 ---
 
 # Story Researcher -- 资料研究员

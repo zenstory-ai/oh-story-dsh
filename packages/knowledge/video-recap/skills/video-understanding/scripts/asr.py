@@ -6,11 +6,21 @@ import time
 from pathlib import Path
 
 from lib import CONFIG
-from lib import log, run_cmd, get_video_duration, mimo_asr_api_call, file_fingerprint
+from lib import log, run_cmd, get_video_duration, mimo_asr_api_call
+from detect import _audio_meta_path, _write_audio_meta
+from asr_timing_evidence import (
+    EVIDENCE_FILENAME,
+    load_glossary_names,
+    write_asr_timing_evidence,
+)
 
 # ── Step 3: ASR 转录（MiMo mimo-v2.5-asr，云端 API）────────────────────────
 
 _ASR_AUDIO_MIME = "audio/wav"
+
+
+class ASRProviderError(RuntimeError):
+    """Provider/API response failed, so an empty transcript is not cacheable success."""
 
 
 def _load_name_glossary(work_dir):
@@ -18,31 +28,7 @@ def _load_name_glossary(work_dir):
 
     返回去重后、长度 >=2 的人名列表（按长度降序，长名优先匹配）。文件缺失或无名字时返回 []。
     """
-    research_path = Path(work_dir) / "background_research.json"
-    if not research_path.exists():
-        return []
-    try:
-        data = json.loads(research_path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return []
-    if not isinstance(data, dict):
-        return []
-
-    names = set()
-    characters = data.get("characters")
-    if isinstance(characters, dict):
-        names.update(characters.keys())
-    details = data.get("character_details")
-    if isinstance(details, dict):
-        for key, val in details.items():
-            names.add(key)
-            if isinstance(val, dict):
-                aliases = val.get("aliases")
-                if isinstance(aliases, list):
-                    names.update(a for a in aliases if isinstance(a, str))
-
-    cleaned = {n for n in names if isinstance(n, str) and len(n) >= 2}
-    return sorted(cleaned, key=len, reverse=True)
+    return load_glossary_names(work_dir)
 
 
 def _correct_text_with_glossary(text, names):
@@ -91,77 +77,109 @@ def _apply_glossary_corrections(segments, work_dir):
     if not names:
         return segments
     for seg in segments:
-        original = seg.get("text") or ""
+        original = seg["text"]
         corrected = _correct_text_with_glossary(original, names)
         if corrected != original:
             seg["text"] = corrected
     return segments
 
 
-def _audio_meta_path(work_dir):
-    return Path(work_dir) / "audio.wav.meta.json"
-
-
-def _write_audio_meta(work_dir, video_path):
-    _audio_meta_path(work_dir).write_text(
-        json.dumps({
-            "schema_version": 1,
-            "source_video_fingerprint": file_fingerprint(video_path),
-            "audio": "audio.wav",
-        }, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
-
 
 def transcribe_audio(video_path, work_dir):
     """提取音频并用 MiMo ASR 分段转录，通过分段合成时间戳。"""
+    work_dir = Path(work_dir)
     asr_file = work_dir / "asr_result.json"
+    (work_dir / EVIDENCE_FILENAME).unlink(missing_ok=True)
 
-    if not CONFIG.get("mimo_asr_api_key"):
-        key_name = CONFIG.get("mimo_asr_api_key_source", "MIMO_API_KEY")
+    if not CONFIG["mimo_asr_api_key"]:
+        key_name = CONFIG["mimo_asr_env_var"]
         log(f"ASR 跳过：未设置 {key_name}（MiMo ASR 需要；VLM/TTS 也需要同一个 key）。"
             f"如不需要对白可加 --skip-asr")
         asr_file.write_text(json.dumps([], ensure_ascii=False, indent=2), encoding="utf-8")
+        write_asr_timing_evidence(
+            work_dir, video_path, "UNAVAILABLE_NO_KEY", final_segments=[]
+        )
         return []
 
     # 提取音频
     audio_wav = work_dir / "audio.wav"
+    audio_meta = _audio_meta_path(work_dir)
+    audio_wav.unlink(missing_ok=True)
+    audio_meta.unlink(missing_ok=True)
     cmd = ["ffmpeg", "-y", "-i", str(video_path), "-vn",
            "-ar", "16000", "-ac", "1", str(audio_wav)]
-    result = run_cmd(cmd)
+    try:
+        result = run_cmd(cmd)
+    except Exception as exc:
+        audio_wav.unlink(missing_ok=True)
+        audio_meta.unlink(missing_ok=True)
+        asr_file.unlink(missing_ok=True)
+        write_asr_timing_evidence(work_dir, video_path, "FAILED_AUDIO_EXTRACTION")
+        raise RuntimeError("音频提取失败: ffmpeg 无法完成") from exc
     if result.returncode != 0:
+        audio_wav.unlink(missing_ok=True)
+        audio_meta.unlink(missing_ok=True)
+        asr_file.unlink(missing_ok=True)
+        write_asr_timing_evidence(work_dir, video_path, "FAILED_AUDIO_EXTRACTION")
         raise RuntimeError(f"音频提取失败: {result.stderr}")
     _write_audio_meta(work_dir, video_path)
 
-    # 获取音频时长
-    duration = get_video_duration(video_path)
-    if duration <= 0:
-        # ffprobe 失败时不再伪造 180s 时长，否则会向 asr_result.json 写入虚构时间戳
-        log("ASR 警告: 无法获取音频时长（ffprobe 失败），跳过 ASR 转录")
+    # 获取音频时长；ffprobe 失败时不伪造时长（否则会向 asr_result.json 写入虚构时间戳），
+    # 而是记录 UNAVAILABLE_NO_DURATION 证据并跳过转录
+    try:
+        duration = get_video_duration(audio_wav)
+    except RuntimeError as exc:
+        log(f"ASR 警告: 无法获取音频时长，跳过 ASR 转录: {exc}")
         asr_file.write_text(json.dumps([], ensure_ascii=False, indent=2), encoding="utf-8")
+        write_asr_timing_evidence(
+            work_dir,
+            video_path,
+            "UNAVAILABLE_NO_DURATION",
+            final_segments=[],
+            audio_path=audio_wav,
+        )
         return []
 
     segments_dir = work_dir / "audio_segments"
     segments_dir.mkdir(exist_ok=True)
 
-    segment_length = max(5, int(CONFIG.get("asr_segment_seconds", 30) or 30))
-    if duration <= segment_length:
-        # 短音频，整段转录
-        text = _run_asr(audio_wav)
-        asr_result = [{"start": 0.0, "end": round(duration, 2), "text": text}]
-    else:
-        # 长音频，分段转录（更细的窗口 → 更精细的对白时间戳）
-        asr_result = _segment_and_transcribe(audio_wav, segments_dir, duration, segment_length)
+    segment_length = int(CONFIG["asr_segment_seconds"])
+    try:
+        if duration <= segment_length:
+            # 短音频，整段转录
+            text = _run_asr(audio_wav)
+            asr_result = [{"start": 0.0, "end": round(duration, 2), "text": text}]
+        else:
+            # 长音频，分段转录（固定粗窗口，不是词级或对白边界对齐）
+            asr_result = _segment_and_transcribe(
+                audio_wav, segments_dir, duration, segment_length
+            )
+    except ASRProviderError:
+        asr_file.unlink(missing_ok=True)
+        write_asr_timing_evidence(
+            work_dir, video_path, "FAILED_PROVIDER", audio_path=audio_wav
+        )
+        raise
 
     # 用 background_research.json 的人名表修正 ASR 同音字错误（如 叶青眉 → 叶轻眉）；无人名表时为 no-op
+    observed_result = [dict(segment) for segment in asr_result]
     _apply_glossary_corrections(asr_result, work_dir)
 
     # 保存
     asr_file.write_text(json.dumps(asr_result, ensure_ascii=False, indent=2), encoding="utf-8")
+    status = "AVAILABLE_COARSE" if any(s["text"] for s in asr_result) else "EMPTY_UNKNOWN"
+    write_asr_timing_evidence(
+        work_dir,
+        video_path,
+        status,
+        observed_segments=observed_result,
+        final_segments=asr_result,
+        audio_path=audio_wav,
+    )
 
     total_text = " ".join(s["text"] for s in asr_result if s["text"])
     empty = sum(1 for s in asr_result if not s["text"])
-    suffix = f"（{empty} 段无文本：静音/切分失败/超限被跳过）" if empty else ""
+    suffix = f"（{empty} 段无文本：原因未知，不代表已证实静音）" if empty else ""
     log(f"ASR 转录完成: {len(asr_result)} 段, 共 {len(total_text)} 字{suffix}")
     return asr_result
 
@@ -195,14 +213,14 @@ def _run_asr(wav_path):
         return ""
 
     b64 = base64.b64encode(raw).decode("ascii")
-    max_b64_bytes = int(float(CONFIG.get("mimo_asr_base64_max_mb", 10.0)) * 1024 * 1024)
+    max_b64_bytes = int(float(CONFIG["mimo_asr_base64_max_mb"]) * 1024 * 1024)
     if len(b64) > max_b64_bytes:
         log(f"ASR 警告: 分片 base64 体积 {len(b64) / 1024 / 1024:.1f}MB 超过 MiMo 上限 "
-            f"{CONFIG.get('mimo_asr_base64_max_mb')}MB，跳过该段；可调小 ASR_SEGMENT_SECONDS")
+            f"{CONFIG['mimo_asr_base64_max_mb']}MB，跳过该段；可调小 ASR_SEGMENT_SECONDS")
         return ""
 
     payload = {
-        "model": CONFIG.get("mimo_asr_model", "mimo-v2.5-asr"),
+        "model": CONFIG["mimo_asr_model"],
         "messages": [{
             "role": "user",
             "content": [{
@@ -210,22 +228,24 @@ def _run_asr(wav_path):
                 "input_audio": {"data": f"data:{_ASR_AUDIO_MIME};base64,{b64}"},
             }],
         }],
-        "asr_options": {"language": CONFIG.get("mimo_asr_language", "auto")},
+        "asr_options": {"language": CONFIG["mimo_asr_language"]},
     }
     try:
         resp = mimo_asr_api_call(payload)
     except Exception as e:
-        raise RuntimeError(f"MiMo ASR 调用失败: {e}") from e
+        raise ASRProviderError(f"MiMo ASR 调用失败: {e}") from e
     try:
         return _strip_reasoning_residue(str(resp["choices"][0]["message"]["content"] or "")).strip()
     except (KeyError, IndexError, TypeError):
-        raise RuntimeError(f"MiMo ASR 返回结构异常: {json.dumps(resp, ensure_ascii=False)[:200]}")
+        raise ASRProviderError(
+            f"MiMo ASR 返回结构异常: {json.dumps(resp, ensure_ascii=False)[:200]}"
+        )
 
 
 def _segment_and_transcribe(audio_wav, segments_dir, total_duration, segment_length=None):
     """分段转录长音频"""
     if segment_length is None:
-        segment_length = max(5, int(CONFIG.get("asr_segment_seconds", 30) or 30))
+        segment_length = int(CONFIG["asr_segment_seconds"])
     # 长视频 ASR 是顺序调用；可选节流让调用间隔开，降低踩到集群限流的频率（默认 0=不节流）
     try:
         throttle = max(0.0, float(os.environ.get("ASR_THROTTLE_SECONDS", "0") or 0))

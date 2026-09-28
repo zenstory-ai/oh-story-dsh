@@ -35,7 +35,7 @@ interface VideoPreflight {
   readonly python: { readonly ok: boolean; readonly version?: string };
   readonly ffmpeg: { readonly ok: boolean; readonly subtitles: boolean };
   readonly ffprobe: { readonly ok: boolean };
-  readonly credentials: { readonly mimo: boolean; readonly fish: boolean; readonly ttsProvider: string };
+  readonly credentials: { readonly mimo: boolean; readonly fish: boolean; readonly indexTts: boolean; readonly ttsProvider: string };
 }
 
 function preferredPreview(project: VideoProject): VideoPreviewAsset | undefined {
@@ -167,8 +167,11 @@ function VideoArtifacts({ project, sessionId }: { readonly project: VideoProject
           <span data-ready={(preflight.ffmpeg.ok && preflight.ffmpeg.subtitles) || undefined}>ffmpeg {preflight.ffmpeg.subtitles ? "· libass" : "· 缺字幕滤镜"}</span>
           <span data-ready={preflight.ffprobe.ok || undefined}>ffprobe {preflight.ffprobe.ok ? "可用" : "未找到"}</span>
           <span data-ready={preflight.credentials.mimo || undefined}>MiMo Key {preflight.credentials.mimo ? "已配置" : "未配置"}</span>
-          {preflight.credentials.ttsProvider === "fish"
+          {/* auto voices with MiMo when its key is set and falls back to Fish Audio otherwise. */}
+          {(preflight.credentials.ttsProvider === "fish-audio" || (preflight.credentials.ttsProvider === "auto" && !preflight.credentials.mimo))
             && <span data-ready={preflight.credentials.fish || undefined}>Fish Key {preflight.credentials.fish ? "已配置" : "未配置"}</span>}
+          {preflight.credentials.ttsProvider === "index-tts"
+            && <span data-ready={preflight.credentials.indexTts || undefined}>IndexTTS {preflight.credentials.indexTts ? "已配置" : "缺 INDEX_TTS_ENDPOINT / INDEX_TTS_VOICE"}</span>}
           <em>DSH Host 进程环境；Agent 执行世界以 <code>video-recap --doctor</code> 为准。</em>
         </> : <button type="button" onClick={() => {
           void fetch(endpoint("video-preflight", sessionId)).then(async (response) => {

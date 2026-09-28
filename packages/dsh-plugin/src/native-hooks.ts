@@ -1,5 +1,5 @@
 import type { Context } from "@deepseek-ai/cordis";
-import type { FileSystem, FsTarget } from "@deepseek-ai/dsh-fs";
+import type { FileSystem, FsDirEntry, FsTarget } from "@deepseek-ai/dsh-fs";
 import { boundContextSummary, createUserMessage, type ContextFormed } from "@deepseek-ai/dsh-llm";
 import type {} from "@deepseek-ai/dsh-session";
 import type { PostToolDecision, PreToolDecision, ToolExecution } from "@deepseek-ai/dsh-tools";
@@ -87,7 +87,7 @@ export function detectStoryMutation(name: string, args: unknown, cwd: string | u
   return { root, path: normalized, ...(chapterText === undefined ? {} : { chapter: Number(chapterText) }) };
 }
 
-type StoryFileSystem = Pick<FileSystem, "resolve" | "contains" | "stat" | "listDir">;
+type StoryFileSystem = Pick<FileSystem, "resolve" | "contains" | "stat" | "listDir"> & Partial<Pick<FileSystem, "readBytes">>;
 
 async function storyMutation(exec: ToolExecution, fs: StoryFileSystem): Promise<StoryMutation | undefined> {
   const cwd = exec.agent?.session.header.cwd;
@@ -118,12 +118,33 @@ async function isLongFormBook(fs: StoryFileSystem, root: string, book: string, s
   return await exists(fs, root, inBook(book, "大纲"), signal) || await exists(fs, root, inBook(book, "追踪"), signal);
 }
 
-async function hasChapterOutline(fs: StoryFileSystem, root: string, book: string, chapter: number, signal?: AbortSignal): Promise<boolean> {
+/** Upstream story_hook_core.js `OUTLINE_MIN_CHARS` (Oh Story 0.8.1). */
+const OUTLINE_MIN_CHARS = 30;
+const OUTLINE_READ_LIMIT = 64 * 1024;
+
+/**
+ * Upstream `outlineIsEmpty`: after a BOM and each line's leading `#`s, fewer than
+ * {@link OUTLINE_MIN_CHARS} characters other than whitespace (full-width space
+ * included). A file that cannot be read or is not UTF-8 counts as written, as upstream.
+ */
+async function outlineIsEmpty(fs: StoryFileSystem, outline: FsTarget, signal?: AbortSignal): Promise<boolean> {
+  if (fs.readBytes === undefined) return false;
+  let text: string;
+  try { text = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(await fs.readBytes(outline, signal, OUTLINE_READ_LIMIT)); }
+  catch { return false; }
+  if (text.startsWith("\uFEFF")) text = text.slice(1);
+  const body = text.split("\n").map((line) => line.replace(/^[ \t]*#+/u, "")).join("");
+  return Array.from(body.replace(/[ \t\r\n\f\v\u3000]/gu, "")).length < OUTLINE_MIN_CHARS;
+}
+
+/** The chapter's 细纲 files; any one with content satisfies the gate, as upstream. */
+async function chapterOutlines(fs: StoryFileSystem, root: string, book: string, chapter: number, signal?: AbortSignal): Promise<FsDirEntry[]> {
   const entries = await target(fs, root, inBook(book, "大纲"), signal)
     .then((directory) => fs.listDir(directory, signal))
     .catch(() => []);
-  return entries.some((entry) => entry.type === "file"
-    && Number(/^细纲_第0*(\d+)章.*\.md$/u.exec(entry.name)?.[1]) === chapter);
+  return entries.filter((entry) => entry.type === "file"
+    && Number(/^细纲_第0*(\d+)章.*\.md$/u.exec(entry.name)?.[1]) === chapter)
+    .sort((left, right) => (left.name < right.name ? -1 : left.name > right.name ? 1 : 0));
 }
 
 const TRACKING_STATE = "追踪/_tracking-state.json";
@@ -158,7 +179,7 @@ async function hasImportSignal(fs: StoryFileSystem, root: string, book: string, 
 /**
  * Mirrors the outline gate of upstream Oh Story's prose guard
  * (`proseBlockReason`) for books with 大纲/ or 追踪/: creating a new
- * `正文/第N章*.md` requires its `大纲/细纲_第N章*.md`, whether or not Tracking
+ * `正文/第N章*.md` requires a `大纲/细纲_第N章*.md` that is not empty, whether or not Tracking
  * exists yet. The one bypass is an import window — an import signal while the
  * book has no `追踪/_tracking-state.json`. Rewriting an existing chapter is not
  * gated on its outline.
@@ -184,7 +205,13 @@ export async function validateStoryMutation(
   if (!(await hasTrackingState(fs, mutation.root, book, signal)) && await hasImportSignal(fs, mutation.root, book, signal)) {
     return undefined;
   }
-  if (await hasChapterOutline(fs, mutation.root, book, mutation.chapter, signal)) return undefined;
+  const outlines = await chapterOutlines(fs, mutation.root, book, mutation.chapter, signal);
+  const [first] = outlines;
+  if (first !== undefined) {
+    for (const outline of outlines) if (!(await outlineIsEmpty(fs, outline.target, signal))) return undefined;
+    return `Oh Story 阻止写入第 ${String(mutation.chapter)} 章：细纲 ${inBook(book, "大纲")}/${first.name} 是空的（不计 # 号和空白不到 ${String(OUTLINE_MIN_CHARS)} 字）。`
+      + "先按 story-long-write 单章流程把细纲写完整（这章发生什么、主角做什么选择），再写正文。";
+  }
   const padded = String(mutation.chapter).padStart(3, "0");
   return `Oh Story 阻止写入第 ${String(mutation.chapter)} 章：未找到对应的 ${inBook(book, "大纲")}/细纲_第${padded}章*.md。`
     + "先按 story-long-write 单章流程补建细纲再写正文。";
@@ -294,7 +321,7 @@ export function postWriteReminderText(path: string, options: PostWriteReminderOp
     "每次写入正文都会出现这条提醒，一章写到一半时也会；它不表示本章已经完成，也不是作者的新写作要求，继续当前步骤即可。",
     ...options.trackingUninitialized === true
       ? [
-          "本书还没有 追踪/_tracking-state.json。新书写第一章时，draft 之前先按 story-long-write workflow-daily 的「首次初始化」完整读取 references/tracking-initialization.md，构造 last_chapter=0 的初始化事务存书目录 .story/work/init.json，运行 scripts/tracking_commit.py init，再运行 tracking_commit.py check，通过后删掉 init.json；",
+          "本书还没有 追踪/_tracking-state.json。新书写第一章时，draft 之前先按 story-long-write workflow-chapter 开头的初始化步骤完整读取 references/tracking-initialization.md，构造 last_chapter=0 的初始化事务存书目录 .story/work/init.json，运行 scripts/tracking_commit.py init，再运行 tracking_commit.py check，通过后删掉 init.json；",
           "书里在本章之前已有正文时不要初始化，停下来改走 story-import 的「旧追踪项目迁移」。"
         ]
       : [],

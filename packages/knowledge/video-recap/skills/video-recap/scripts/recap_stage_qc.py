@@ -45,11 +45,9 @@ def _write_shift_left_stage_qc(work_dir, stage, metadata, findings=None):
 
 
 def _tts_qc_metadata(work_dir):
+    """Called after video-voiceover exited 0, which always writes tts_meta.json."""
     work_dir = Path(work_dir)
-    metadata = {}
-    tts_meta = work_dir / "tts_meta.json"
-    if tts_meta.exists():
-        metadata["tts_meta"] = json.loads(tts_meta.read_text(encoding="utf-8"))
+    metadata = {"tts_meta": json.loads((work_dir / "tts_meta.json").read_text(encoding="utf-8"))}
     tts_dir = work_dir / "tts_segments"
     if tts_dir.is_dir():
         metadata["tts_segments"] = [
@@ -59,14 +57,12 @@ def _tts_qc_metadata(work_dir):
 
 
 def _post_render_qc_metadata(work_dir, final_output):
-    work_dir = Path(work_dir)
-    metadata = {"final_output": str(final_output)}
-    manifest = work_dir / ASSEMBLY_MANIFEST
-    if manifest.exists():
-        metadata["assembly_manifest"] = json.loads(
-            manifest.read_text(encoding="utf-8")
-        )
-    return metadata
+    """Called after video-assemble exited 0, which always writes assembly_manifest.json."""
+    manifest = Path(work_dir) / ASSEMBLY_MANIFEST
+    return {
+        "final_output": str(final_output),
+        "assembly_manifest": json.loads(manifest.read_text(encoding="utf-8")),
+    }
 
 
 def _write_final_qc_reports(work_dir, final_output):
@@ -91,6 +87,23 @@ def _print_final_qc_pointer(result):
             "[video-recap] ⚠️  最终 QC 未通过（仅报告，不阻断）: "
             + "; ".join(problems)
             + "；详见 final_qc.json / golden_eval.json"
+        )
+
+
+def _require_final_qc(result, work_dir):
+    """Fail closed unless both final summaries are literal blocker-free passes."""
+    paths = [Path(work_dir) / name for name in ("final_qc.json", "golden_eval.json")]
+    print("[video-recap] 最终 QC 报告: " + "; ".join(map(str, paths)))
+    invalid = []
+    for name in ("final_qc", "golden_eval"):
+        summary = result.get(name) if isinstance(result, dict) else None
+        blockers = summary.get("blocker_count") if isinstance(summary, dict) else None
+        if not isinstance(summary, dict) or summary.get("ok") is not True or \
+                type(blockers) is not int or blockers != 0:
+            invalid.append(name)
+    if invalid:
+        raise SystemExit(
+            "严格最终 QC 未通过或摘要格式无效: " + ", ".join(invalid)
         )
 
 

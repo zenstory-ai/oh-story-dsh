@@ -46,7 +46,8 @@ license: MIT
 
 目标为 `seedance-2.0` 时按 [Seedance 2.0 方言](references/seedance-2.0.md) 写，目标为
 `seedance-2.5` 时按 [Seedance 2.5 方言](references/seedance-2.5.md) 写，目标为 `minimax-h3` 时按
-[MiniMax H3 方言](references/minimax-h3.md) 写。只读命中的一份。其他目标或版本不
+[MiniMax H3 方言](references/minimax-h3.md) 写，目标为 `wan-3.0` 时按 [Wan 3.0 方言](references/wan-3.0.md)
+写。只读命中的一份。其他目标或版本不
 套用相近模型的语法，继续按 [目标模型能力档案](references/target-model-profile.md) 的通用路径写。
 
 沿用 creator-first 既有骨架：`## MOTION-... · 中文名`，字段名依次使用「分镜、时长、生成方式、
@@ -78,7 +79,7 @@ license: MIT
    [对白预算](references/performance-action-timing.md#对白预算) 补做判断。秒段加总正确不代表台词说得完。
 6. 写不能动的边框：图生视频以参考帧和视觉设定锁定；文生视频把必要静态事实写入「静态视觉锚点」和可复制正文。
 7. 原样读取分镜的「起点 → 唯一动作 → 终点」，确认人物、双手和持物的状态转换都发生在镜内。
-8. 写“静态锚点 → 起点 → 唯一动作（触发、接触、落点）→ 次级反应 → 运镜 → 声音 → 终点”，
+8. 写“静态锚点 → 起点 → 唯一动作（触发、接触、落点）→ 次级反应 → 运镜 → 声音 → 终点”，运镜按分镜的「运镜」一行写，
    必要时用秒数分段；下一镜从这个终点继续，不另造镜外转换。
 9. 只在真实参考帧已经说明静态外观时删除重复描述；《视觉设定.md》连续性锁的锁面不在可删之列。
 10. 把限制动作空间的已确认关系写成贯穿本镜的正向可见状态，只安排关系允许的动作通道；只有分镜明确改变关系时才写变化过程。优先用可见状态说明边界，必要时保留明确的排除条件。
@@ -135,7 +136,8 @@ license: MIT
 - 目标执行端的时长、参考、声音同轨等能力：[目标模型能力档案](references/target-model-profile.md)
 - Seedance 2.0 的中文分镜、素材与声音语法：[Seedance 2.0 方言](references/seedance-2.0.md)
 - Seedance 2.5 的长叙事、时间戳和任务类型语法：[Seedance 2.5 方言](references/seedance-2.5.md)
-- MiniMax H3 的结构化正文与参考模式：[MiniMax H3 方言](references/minimax-h3.md)
+- MiniMax H3 的结构化正文、参考模式与逐切关键帧容器：[MiniMax H3 方言](references/minimax-h3.md)
+- Wan 3.0 的中文正文、素材编号与多镜时间段：[Wan 3.0 方言](references/wan-3.0.md)
 - 多镜容器或静态漫剧的交付方式：[交付形态](references/delivery-profile.md)
 - 完成前的边界检查：[审查与示例](references/review-and-fixtures.md)
 

@@ -35,12 +35,12 @@
 
 | 工作台 | 上游能力（固定版本，随插件打包） | 主要入口 |
 | --- | --- | --- |
-| 小说 | [Oh Story 0.8.0](https://github.com/zenstory-ai/oh-story-claudecode/releases/tag/v0.8.0) · 13 Skills · 7 Roles | `/story`、`/story-long-write`、`/story-review` |
-| 短剧 | [Drama Skills 0.7.1](https://github.com/zenstory-ai/drama-skills/releases/tag/v0.7.1) · 11 Skills | `/short-drama`、`/short-drama-write`、`/short-drama-storyboard`、`/short-drama-edit` |
+| 小说 | [Oh Story 0.8.4](https://github.com/zenstory-ai/oh-story-claudecode/releases/tag/v0.8.4) · 13 Skills · 7 Roles | `/story`、`/story-long-write`、`/story-review` |
+| 短剧 | [Drama Skills 0.8.0](https://github.com/zenstory-ai/drama-skills/releases/tag/v0.8.0) · 11 Skills | `/short-drama`、`/short-drama-write`、`/short-drama-storyboard`、`/short-drama-edit` |
 | 游戏 | [NovelToGame 0.4.0](https://github.com/zenstory-ai/novel-to-game) · 7 Skills · 《金瓶梅》可玩示例 | `/novel-to-game quick`、`/game-build`、`/game-qa` |
-| 视频 | [video-recap-skills 0.5.0](https://github.com/zenstory-ai/video-recap-skills) · 6 Skills | `/video-recap`、`/video-script` |
+| 视频 | [video-recap-skills 0.6.0](https://github.com/zenstory-ai/video-recap-skills/releases/tag/v0.6.0) · 6 Skills | `/video-recap`、`/video-script` |
 
-> 最新版本 **v0.1.10**（2026-09-25），需要 DeepSeek Harness `0.1.7-rc.2`。变更见 [CHANGELOG.md](CHANGELOG.md) 与 [Releases](https://github.com/zenstory-ai/oh-story-dsh/releases)；升级步骤见常见问题[「升级到新版本后要做什么」](#升级到新版本后要做什么)。
+> 最新版本 **v0.1.11**（2026-09-27），需要 DeepSeek Harness `0.1.7-rc.2`。变更见 [CHANGELOG.md](CHANGELOG.md) 与 [Releases](https://github.com/zenstory-ai/oh-story-dsh/releases)；升级步骤见常见问题[「升级到新版本后要做什么」](#升级到新版本后要做什么)。
 
 ## 四个工作台
 
@@ -83,7 +83,7 @@
 需要 Node.js 24+。安装命令会临时提供 pnpm，只装了 Node.js 的机器也能执行：
 
 ```bash
-npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.1.7-rc.2 dsh plugin --profile web add @oh-story/dsh@0.1.10 &&
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.1.7-rc.2 dsh plugin --profile web add @oh-story/dsh@0.1.11 &&
 npx -y @deepseek-ai/dsh@0.1.7-rc.2 web
 ```
 
@@ -97,7 +97,7 @@ npx -y @deepseek-ai/dsh@0.1.7-rc.2 web
 GitHub Release 中的预构建包经过同一套测试：
 
 ```bash
-npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.1.7-rc.2 dsh plugin --profile web add https://github.com/zenstory-ai/oh-story-dsh/releases/download/v0.1.10/oh-story-dsh-0.1.10.tgz &&
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.1.7-rc.2 dsh plugin --profile web add https://github.com/zenstory-ai/oh-story-dsh/releases/download/v0.1.11/oh-story-dsh-0.1.11.tgz &&
 npx -y @deepseek-ai/dsh@0.1.7-rc.2 web
 ```
 
@@ -106,7 +106,7 @@ npx -y @deepseek-ai/dsh@0.1.7-rc.2 web
 <details>
 <summary>视频工作台的宿主机依赖</summary>
 
-视频流水线还需要宿主机安装 Python 3.10+ 与带 libass `subtitles` 滤镜的 ffmpeg/ffprobe（macOS `brew install ffmpeg`，Debian/Ubuntu `sudo apt install ffmpeg`）。视频解说另用 `MIMO_API_KEY`（Fish Audio TTS 另需 `FISH_API_KEY`）。
+视频流水线还需要宿主机安装 Python 3.10+ 与带 libass `subtitles` 滤镜的 ffmpeg/ffprobe（Debian/Ubuntu `sudo apt install ffmpeg`；Homebrew 的 ffmpeg 自 2026 年 1 月起不带 libass，macOS 上要另装带 libass 的构建，或让流水线加 `--no-burn-subtitles` 不烧字幕）。视频解说另用 `MIMO_API_KEY`（Fish Audio TTS 另需 `FISH_API_KEY`）。
 
 </details>
 
@@ -139,7 +139,7 @@ npx -y @deepseek-ai/dsh@0.1.7-rc.2 web
 插件装进哪个 profile，那个 profile 的每个 Session 就都会加载创作 Skills。想让原版 `web` 保持干净，就把插件装进独立 profile：
 
 ```bash
-npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.1.7-rc.2 dsh plugin --profile story add @oh-story/dsh@0.1.10
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.1.7-rc.2 dsh plugin --profile story add @oh-story/dsh@0.1.11
 ```
 
 新 profile 默认没有界面。编辑 `~/.dsh/profiles/story/package.json`，把 `dsh.profile.bundles` 改成：
@@ -211,25 +211,26 @@ Oh Story 阻止写入第 21 章：未找到对应的 大纲/细纲_第021章*.md
 
 ### 一个镜头在短剧五份文档里各管一层
 
-`视觉设定.md` 给跨镜不变的造型上锁，锁面能原样贴进提示词；`分镜.md` 只写起点、终点和依据；`视频提示词.md` 只写两点之间的动作：
+`视觉设定.md` 给跨镜不变的造型上锁，锁面能原样贴进提示词；`分镜.md` 只写起点、唯一动作、终点和依据；`视频提示词.md` 把两点之间的动作写成模型能执行的英文：
 
 ```markdown
-- 连续性锁：LOCK-JIANGCHEN-DRESS《江晨橄榄绿立领常服》（镜头：SHOT-EP001-002、SHOT-EP001-003、SHOT-EP001-007）· 锁面：olive-green stand-collar service dress
+- 连续性锁：LOCK-JIANGCHEN-DRESS《江晨松枝绿常服》（镜头：SHOT-EP001-002、SHOT-EP001-003、SHOT-EP001-007……；图片提示词项：IMG-JIANGCHEN-SHEET）· 锁面：pine-green lapel service jacket
 ```
 
 ```markdown
-## SHOT-EP001-002 · 把空白交到他手里
+## SHOT-EP001-002 · 四个号，四个粉
 - 来源：EP001-SC001
-- 时长：8s
-- 起点：材料在周薄森手下，茶缸停在旧茶渍旁。
-- 终点：纸角抵住江晨指尖；周薄森说出“基本还是空白”。
-- 视觉依据：《视觉设定.md》·人物「江晨」……；道具「缺口搪瓷茶缸」（控制：右侧把手缺瓷、深灰铁胎）。
+- 时长：4s
+- 起点：周薄森面对笔记本坐得笔直，右手搭在茶杯旁；江晨双手掌心朝下撑在玻璃桌沿，眼神涣散。
+- 唯一动作：哄笑声滚过来，周薄森下颌收紧、腰背又挺直一分；江晨眨了一下眼，眼神猛地聚拢。
+- 终点：画面停在周薄森绷紧的脸与屏幕冷光；江晨仍撑着桌沿，留在画右边缘。
+- 视觉依据：《视觉设定.md》·人物「江晨」……；道具「玻璃泡茶杯」（控制：双层玻璃杯身、沉底茶叶）。
 ```
 
 ```markdown
-## MOTION-EP001-002 · 把空白交到他手里
-> …… The middle-aged officer pushes the paper stack about twenty centimeters across the glass desk while speaking calmly.
-> The young man does not reach for it until the paper touches his fingertip. ……
+## MOTION-EP001-002 · 四个号，四个粉
+> …… The seated officer's jaw tightens and his back straightens a little more.
+> The young man blinks once and his eyes snap into focus. ……
 ```
 
 原文：[`剧本.md`](scripts/demo-fixtures/drama/让你管账号/剧集/EP001/剧本.md) · [`视觉设定.md`](scripts/demo-fixtures/drama/让你管账号/剧集/EP001/视觉设定.md) · [`分镜.md`](scripts/demo-fixtures/drama/让你管账号/剧集/EP001/分镜.md) · [`图片提示词.md`](scripts/demo-fixtures/drama/让你管账号/剧集/EP001/图片提示词.md) · [`视频提示词.md`](scripts/demo-fixtures/drama/让你管账号/剧集/EP001/视频提示词.md)。
@@ -239,8 +240,8 @@ Oh Story 阻止写入第 21 章：未找到对应的 大纲/细纲_第021章*.md
 把这集样例故意改坏三处（来源指向不存在的场景、视频提示词指向不存在的镜头、图片提示词 ID 重复），「生产」视图报的是原因和行号：
 
 ```text
-SHOT-EP001-002 的来源 EP001-SC009 在剧本中不存在。            分镜.md:21
-MOTION-EP001-003 指向不存在的 SHOT-EP001-030。                 视频提示词.md:29
+SHOT-EP001-002 的来源 EP001-SC009 在剧本中不存在。            分镜.md:25
+MOTION-EP001-003 指向不存在的 SHOT-EP001-030。                 视频提示词.md:33
 IMG-JIANGCHEN-SHEET 在当前集内重复，后出现的条目会遮蔽前一条。   图片提示词.md:3
 ```
 
@@ -311,13 +312,13 @@ DSH 的 `plugin add` 内部需要 pnpm，单独运行 `npx @deepseek-ai/dsh ... 
 
 ### Windows 能用吗？
 
-能。类型、资产、单测与构建这道门在 CI 里每次都在 macOS 和 Windows 上跑；打包后装进官方 DSH Web 的集成测试在 Linux 上跑。视频流水线在任何平台都需要 Python 3.10+ 与带 libass 的 ffmpeg；长篇拆文、导入与长篇追踪同样需要宿主机上的 Python 3，短剧成片需要 ffmpeg/ffprobe，默认的烧录字幕还要求 ffmpeg 带 libass。
+能。类型、资产、单测与构建这道门在 CI 里每次都在 macOS 和 Windows 上跑；打包后装进官方 DSH Web 的集成测试在 Linux 上跑。视频流水线在任何平台都需要 Python 3.10+ 与带 libass 的 ffmpeg；长篇拆文、导入与长篇追踪同样需要宿主机上的 Python 3，短剧成片需要 ffmpeg/ffprobe，默认的烧录字幕还要求 ffmpeg 带 libass，剪辑单里有「画面文字」时还需要 Node.js（Remotion）；长篇的章节检查需要 Node.js 18+。
 
 ### 升级到新版本后要做什么？
 
 重新执行安装命令，把 `@oh-story/dsh@` 后的版本号换成新版本，再重启 DSH；安装与启动用同一个 dsh 版本。Skills 与 Roles 随插件打包，不需要在项目里重新部署。既有短剧项目要注意两次收紧：0.1.5 起《分镜.md》每镜必写「视觉依据」、`REF-*` 槽位必须声明 `用途`；0.1.7 起每镜「来源」必须以《剧本.md》真实存在的场景 ID 开头。
 
-0.1.10 另有三点：DSH 要一起升到 `0.1.7-rc.2`，它会把会话记录升级到新格式，之后不能再用同一个 DSH 目录退回 0.1.5；Oh Story 0.8.0 把作者记忆分成工作区与书两级，升级前写在工作区的「本书：」条目要对每本书运行一次 `author_memory_commit.py migrate --workspace {工作区} --book-root {书目录}` 才会重新参与查询（本插件的单书布局下两个参数都是工作区本身；也可以直接对 Agent 说「整理作者记忆」）；Drama Skills 0.7.1 起《剪辑单.md》要在第一个 `## CUT-` 之前用一行 `- 未采用镜头：` 交代没有用上的 `MOTION-*`，否则成片检查会拦下。逐版变更见 [CHANGELOG.md](CHANGELOG.md)。
+0.1.10 另有三点：DSH 要一起升到 `0.1.7-rc.2`，它会把会话记录升级到新格式，之后不能再用同一个 DSH 目录退回 0.1.5；Oh Story 0.8.0 把作者记忆分成工作区与书两级，升级前写在工作区的「本书：」条目要对每本书运行一次 `author_memory_commit.py migrate --workspace {工作区} --book-root {书目录}` 才会重新参与查询（本插件的单书布局下两个参数都是工作区本身；也可以直接对 Agent 说「整理作者记忆」）；Drama Skills 0.7.1 起《剪辑单.md》要在第一个 `## CUT-` 之前用一行 `- 未采用镜头：` 交代没有用上的 `MOTION-*`，否则成片检查会拦下。0.1.11 再有三点：视频流水线升到 video-recap-skills 0.6.0 后，运行清单换了字段，0.5.0 时停在中途的视频项目不能续跑，新开一个 `work/` 目录或从第一阶段重跑；短剧剪辑升到 Drama Skills 0.8.0 后，重新渲染默认会在同一场景内自动接镜（想保持旧画面，在剪辑单交付规格写 `- 接镜匹配：无`），剪辑单里写了「画面文字」就必须用 Remotion，以前装过的要在 `~/.cache/short-drama-edit/remotion` 里重新 `npm install`；小说这边，细纲只有标题、不计 `#` 与空白不到 30 字时，写正文会被拦下，先把细纲写完整。逐版变更见 [CHANGELOG.md](CHANGELOG.md)。
 
 ## 延伸阅读
 

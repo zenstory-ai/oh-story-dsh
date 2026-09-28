@@ -37,12 +37,12 @@
 
 | Workbench | Upstream capability (pinned, bundled with the plugin) | Main entry points |
 | --- | --- | --- |
-| Novel | [Oh Story 0.8.0](https://github.com/zenstory-ai/oh-story-claudecode/releases/tag/v0.8.0) · 13 Skills · 7 Roles | `/story`, `/story-long-write`, `/story-review` |
-| Short drama | [Drama Skills 0.7.1](https://github.com/zenstory-ai/drama-skills/releases/tag/v0.7.1) · 11 Skills | `/short-drama`, `/short-drama-write`, `/short-drama-storyboard`, `/short-drama-edit` |
+| Novel | [Oh Story 0.8.4](https://github.com/zenstory-ai/oh-story-claudecode/releases/tag/v0.8.4) · 13 Skills · 7 Roles | `/story`, `/story-long-write`, `/story-review` |
+| Short drama | [Drama Skills 0.8.0](https://github.com/zenstory-ai/drama-skills/releases/tag/v0.8.0) · 11 Skills | `/short-drama`, `/short-drama-write`, `/short-drama-storyboard`, `/short-drama-edit` |
 | Game | [NovelToGame 0.4.0](https://github.com/zenstory-ai/novel-to-game) · 7 Skills · playable 《金瓶梅》 sample | `/novel-to-game quick`, `/game-build`, `/game-qa` |
-| Video | [video-recap-skills 0.5.0](https://github.com/zenstory-ai/video-recap-skills) · 6 Skills | `/video-recap`, `/video-script` |
+| Video | [video-recap-skills 0.6.0](https://github.com/zenstory-ai/video-recap-skills/releases/tag/v0.6.0) · 6 Skills | `/video-recap`, `/video-script` |
 
-> Latest release **v0.1.10** (2026-09-25), which requires DeepSeek Harness `0.1.7-rc.2`. See [CHANGELOG.md](CHANGELOG.md) and [Releases](https://github.com/zenstory-ai/oh-story-dsh/releases); upgrade steps are in the FAQ entry [“What do I do after upgrading?”](#what-do-i-do-after-upgrading).
+> Latest release **v0.1.11** (2026-09-27), which requires DeepSeek Harness `0.1.7-rc.2`. See [CHANGELOG.md](CHANGELOG.md) and [Releases](https://github.com/zenstory-ai/oh-story-dsh/releases); upgrade steps are in the FAQ entry [“What do I do after upgrading?”](#what-do-i-do-after-upgrading).
 
 ## The four workbenches
 
@@ -85,7 +85,7 @@ Boundaries and protocols for each workbench are in the [architecture notes](docs
 Requires Node.js 24+. The install command provides pnpm temporarily, so a machine with only Node.js can run it:
 
 ```bash
-npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.1.7-rc.2 dsh plugin --profile web add @oh-story/dsh@0.1.10 &&
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.1.7-rc.2 dsh plugin --profile web add @oh-story/dsh@0.1.11 &&
 npx -y @deepseek-ai/dsh@0.1.7-rc.2 web
 ```
 
@@ -99,7 +99,7 @@ Before creating with AI, add a Provider and API key under DSH's Settings → Mod
 The prebuilt package in the GitHub Release passes the same test suite:
 
 ```bash
-npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.1.7-rc.2 dsh plugin --profile web add https://github.com/zenstory-ai/oh-story-dsh/releases/download/v0.1.10/oh-story-dsh-0.1.10.tgz &&
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.1.7-rc.2 dsh plugin --profile web add https://github.com/zenstory-ai/oh-story-dsh/releases/download/v0.1.11/oh-story-dsh-0.1.11.tgz &&
 npx -y @deepseek-ai/dsh@0.1.7-rc.2 web
 ```
 
@@ -108,7 +108,7 @@ npx -y @deepseek-ai/dsh@0.1.7-rc.2 web
 <details>
 <summary>Host dependencies for the video workbench</summary>
 
-The video pipeline additionally needs Python 3.10+ and ffmpeg/ffprobe built with the libass `subtitles` filter on the host (macOS `brew install ffmpeg`, Debian/Ubuntu `sudo apt install ffmpeg`). Video recaps use `MIMO_API_KEY` (Fish Audio TTS additionally needs `FISH_API_KEY`).
+The video pipeline additionally needs Python 3.10+ and ffmpeg/ffprobe built with the libass `subtitles` filter on the host (Debian/Ubuntu `sudo apt install ffmpeg`; Homebrew's ffmpeg has shipped without libass since January 2026, so on macOS install a libass build or let the pipeline run with `--no-burn-subtitles`). Video recaps use `MIMO_API_KEY` (Fish Audio TTS additionally needs `FISH_API_KEY`).
 
 </details>
 
@@ -141,7 +141,7 @@ Configure only what you use: without a video key you can still write storyboards
 Whichever profile the plugin is installed into, every Session of that profile loads the creation Skills. To keep the stock `web` profile clean, install into a separate profile:
 
 ```bash
-npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.1.7-rc.2 dsh plugin --profile story add @oh-story/dsh@0.1.10
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.1.7-rc.2 dsh plugin --profile story add @oh-story/dsh@0.1.11
 ```
 
 A new profile has no UI by default. Edit `~/.dsh/profiles/story/package.json` and set `dsh.profile.bundles` to:
@@ -217,36 +217,37 @@ Oh Story 阻止写入第 21 章：未找到对应的 大纲/细纲_第021章*.md
 
 ### One shot owns one layer in each of the five short-drama documents
 
-`视觉设定.md` (visual bible) locks a look that must survive across shots, with a lock face that pastes into a prompt verbatim; `分镜.md` (storyboard) writes only start, end and basis; `视频提示词.md` (video prompt) writes only the motion between them:
+`视觉设定.md` (visual bible) locks a look that must survive across shots, with a lock face that pastes into a prompt verbatim; `分镜.md` (storyboard) writes only start, the one action, end and basis; `视频提示词.md` (video prompt) turns the motion between them into English a model can execute:
 
 ```markdown
-- 连续性锁：LOCK-JIANGCHEN-DRESS《江晨橄榄绿立领常服》（镜头：SHOT-EP001-002、SHOT-EP001-003、SHOT-EP001-007）· 锁面：olive-green stand-collar service dress
+- 连续性锁：LOCK-JIANGCHEN-DRESS《江晨松枝绿常服》（镜头：SHOT-EP001-002、SHOT-EP001-003、SHOT-EP001-007……；图片提示词项：IMG-JIANGCHEN-SHEET）· 锁面：pine-green lapel service jacket
 ```
 
 ```markdown
-## SHOT-EP001-002 · 把空白交到他手里
+## SHOT-EP001-002 · 四个号，四个粉
 - 来源：EP001-SC001
-- 时长：8s
-- 起点：材料在周薄森手下，茶缸停在旧茶渍旁。
-- 终点：纸角抵住江晨指尖；周薄森说出“基本还是空白”。
-- 视觉依据：《视觉设定.md》·人物「江晨」……；道具「缺口搪瓷茶缸」（控制：右侧把手缺瓷、深灰铁胎）。
+- 时长：4s
+- 起点：周薄森面对笔记本坐得笔直，右手搭在茶杯旁；江晨双手掌心朝下撑在玻璃桌沿，眼神涣散。
+- 唯一动作：哄笑声滚过来，周薄森下颌收紧、腰背又挺直一分；江晨眨了一下眼，眼神猛地聚拢。
+- 终点：画面停在周薄森绷紧的脸与屏幕冷光；江晨仍撑着桌沿，留在画右边缘。
+- 视觉依据：《视觉设定.md》·人物「江晨」……；道具「玻璃泡茶杯」（控制：双层玻璃杯身、沉底茶叶）。
 ```
 
 ```markdown
-## MOTION-EP001-002 · 把空白交到他手里
-> …… The middle-aged officer pushes the paper stack about twenty centimeters across the glass desk while speaking calmly.
-> The young man does not reach for it until the paper touches his fingertip. ……
+## MOTION-EP001-002 · 四个号，四个粉
+> …… The seated officer's jaw tightens and his back straightens a little more.
+> The young man blinks once and his eyes snap into focus. ……
 ```
 
-(Storyboard: source scene EP001-SC001, 8 s; start: papers under Zhou's hand, mug by the old tea ring; end: paper corner at Jiang's fingertip as Zhou says “basically still blank”; visual basis: the two characters and the chipped enamel mug from the bible.) Sources: [`剧本.md`](scripts/demo-fixtures/drama/让你管账号/剧集/EP001/剧本.md) · [`视觉设定.md`](scripts/demo-fixtures/drama/让你管账号/剧集/EP001/视觉设定.md) · [`分镜.md`](scripts/demo-fixtures/drama/让你管账号/剧集/EP001/分镜.md) · [`图片提示词.md`](scripts/demo-fixtures/drama/让你管账号/剧集/EP001/图片提示词.md) · [`视频提示词.md`](scripts/demo-fixtures/drama/让你管账号/剧集/EP001/视频提示词.md).
+(Storyboard: source scene EP001-SC001, 4 s; start: Zhou sits bolt upright at the laptop while Jiang leans dazed on the desk edge; the one action: laughter rolls in, Zhou's jaw tightens and Jiang's eyes snap into focus; end: on Zhou's tight face in the screen glow, Jiang at the right edge; visual basis: the two characters and the glass tea tumbler from the bible.) Sources: [`剧本.md`](scripts/demo-fixtures/drama/让你管账号/剧集/EP001/剧本.md) · [`视觉设定.md`](scripts/demo-fixtures/drama/让你管账号/剧集/EP001/视觉设定.md) · [`分镜.md`](scripts/demo-fixtures/drama/让你管账号/剧集/EP001/分镜.md) · [`图片提示词.md`](scripts/demo-fixtures/drama/让你管账号/剧集/EP001/图片提示词.md) · [`视频提示词.md`](scripts/demo-fixtures/drama/让你管账号/剧集/EP001/视频提示词.md).
 
 ### Mistakes are pointed out
 
 Break the sample episode in three places (a source pointing at a scene that does not exist, a video prompt pointing at a non-existent shot, a duplicated image-prompt ID) and the Production view reports the cause and the line:
 
 ```text
-SHOT-EP001-002 的来源 EP001-SC009 在剧本中不存在。            分镜.md:21
-MOTION-EP001-003 指向不存在的 SHOT-EP001-030。                 视频提示词.md:29
+SHOT-EP001-002 的来源 EP001-SC009 在剧本中不存在。            分镜.md:25
+MOTION-EP001-003 指向不存在的 SHOT-EP001-030。                 视频提示词.md:33
 IMG-JIANGCHEN-SHEET 在当前集内重复，后出现的条目会遮蔽前一条。   图片提示词.md:3
 ```
 
@@ -321,13 +322,13 @@ Add a work directory and open a session first. In an empty directory, run a crea
 
 ### Does it work on Windows?
 
-Yes. The type, asset, unit-test and build gate runs on both macOS and Windows in CI on every change; the integration test that packages the plugin into the official DSH Web runs on Linux. The video pipeline needs Python 3.10+ and ffmpeg with libass on every platform; long-form analysis, import and long-form tracking also need Python 3 on the host, and short-drama assembly needs ffmpeg/ffprobe, with libass for the default burned-in subtitles.
+Yes. The type, asset, unit-test and build gate runs on both macOS and Windows in CI on every change; the integration test that packages the plugin into the official DSH Web runs on Linux. The video pipeline needs Python 3.10+ and ffmpeg with libass on every platform; long-form analysis, import and long-form tracking also need Python 3 on the host, and short-drama assembly needs ffmpeg/ffprobe, with libass for the default burned-in subtitles and Node.js (Remotion) whenever the cut list has on-screen text; the long-form chapter check needs Node.js 18+.
 
 ### What do I do after upgrading?
 
 Rerun the install command with the new version after `@oh-story/dsh@`, then restart DSH; use the same dsh version for install and start. Skills and Roles ship inside the plugin, so nothing needs to be redeployed into your project. Existing short-drama projects should note two tightenings: since 0.1.5 every storyboard shot must state its "视觉依据" (visual basis) and every `REF-*` slot must declare a `用途` (purpose); since 0.1.7 every shot's "来源" (source) must begin with a scene ID that really exists in `剧本.md`.
 
-0.1.10 adds three more: upgrade DSH to `0.1.7-rc.2` together with the plugin — it moves session logs to a new format, after which the same DSH home cannot go back to 0.1.5; Oh Story 0.8.0 splits author memory into a workspace store and a per-book store, so "本书：" entries written before the upgrade only take part in queries again after running `author_memory_commit.py migrate --workspace {workspace} --book-root {book dir}` once per book (in this plugin's single-book layout both are the workspace itself; or just ask the agent to "整理作者记忆"); and since Drama Skills 0.7.1, `剪辑单.md` must account for every unused `MOTION-*` on one `- 未采用镜头：` line before the first `## CUT-`, or the cut check blocks. See [CHANGELOG.md](CHANGELOG.md) for each release.
+0.1.10 adds three more: upgrade DSH to `0.1.7-rc.2` together with the plugin — it moves session logs to a new format, after which the same DSH home cannot go back to 0.1.5; Oh Story 0.8.0 splits author memory into a workspace store and a per-book store, so "本书：" entries written before the upgrade only take part in queries again after running `author_memory_commit.py migrate --workspace {workspace} --book-root {book dir}` once per book (in this plugin's single-book layout both are the workspace itself; or just ask the agent to "整理作者记忆"); and since Drama Skills 0.7.1, `剪辑单.md` must account for every unused `MOTION-*` on one `- 未采用镜头：` line before the first `## CUT-`, or the cut check blocks. 0.1.11 adds three more: after video-recap-skills 0.6.0 the run manifest has new fields, so a video project paused midway under 0.5.0 cannot resume — start a new `work/` directory or rerun from the first stage; after Drama Skills 0.8.0 a re-render auto-matches adjacent cuts within one scene by default (write `- 接镜匹配：无` in the cut list's delivery spec to keep the old look), any "画面文字" (on-screen text) line in `剪辑单.md` requires Remotion, and an earlier Remotion install must run `npm install` again in `~/.cache/short-drama-edit/remotion`; and on the novel side, writing prose is blocked while the chapter's outline is an empty shell (fewer than 30 characters besides `#` and whitespace) — finish the outline first. See [CHANGELOG.md](CHANGELOG.md) for each release.
 
 ## Further reading
 

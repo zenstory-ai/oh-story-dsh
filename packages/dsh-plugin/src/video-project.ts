@@ -58,6 +58,9 @@ const VISIBLE_TEXT_FILES = new Set([
   "final_qc.json",
   "final_qc.md",
   "delivery_qc.json",
+  "cut_delivery_qc.json",
+  "recap_project.json",
+  "resource_lock.json",
   "subtitles.srt",
   "subtitles.ass"
 ]);
@@ -78,6 +81,9 @@ const ARTIFACT_META: Readonly<Record<string, { readonly label: string; readonly 
   "final_qc.json": { label: "最终质检", kind: "quality" },
   "final_qc.md": { label: "最终质检报告", kind: "quality" },
   "delivery_qc.json": { label: "交付质检", kind: "quality" },
+  "cut_delivery_qc.json": { label: "剪后片质检", kind: "quality" },
+  "recap_project.json": { label: "项目绑定", kind: "manifest" },
+  "resource_lock.json": { label: "资源锁定", kind: "manifest" },
   "subtitles.srt": { label: "SRT 字幕", kind: "subtitle" },
   "subtitles.ass": { label: "ASS 字幕", kind: "subtitle" }
 };
@@ -158,6 +164,9 @@ export function summarizeVideoProject(
   ].filter((value): value is VideoPreviewAsset => value !== undefined);
   const names = new Set(projectFiles.map((file) => file.path.split("/").at(-1)));
   const cutMode = settings?.edit_mode === "cut" || names.has("clip_plan.json") || edited !== undefined;
+  // 0.6.0 records --audio-mode in the run manifest; source-mix and adopted-packet-copy never write
+  // narration, so a cut goes straight from edited_source.mp4 to assembly and full has no pause at all.
+  const narrated = (text(record(manifest?.audio)?.mode) ?? "narration") === "narration";
   let state: VideoProjectSummary["state"] = "not-started";
   let stage = "source";
   let stageLabel = source === undefined ? "等待导入视频" : "可以开始";
@@ -169,9 +178,12 @@ export function summarizeVideoProject(
   } else if (names.has("narration.json")) {
     state = "working"; stage = "voiceover"; stageLabel = "配音与合成";
   } else if (cutMode && edited !== undefined) {
-    state = "waiting"; stage = "narration"; stageLabel = "等待解说词"; nextArtifact = "narration.json";
+    if (narrated) { state = "waiting"; stage = "narration"; stageLabel = "等待解说词"; nextArtifact = "narration.json"; }
+    else { state = "working"; stage = "assemble"; stageLabel = "正在合成"; }
   } else if (cutMode && names.has("clip_plan.json")) {
     state = "working"; stage = "cut"; stageLabel = "正在剪辑";
+  } else if (manifest !== undefined && !cutMode && !narrated) {
+    state = "working"; stage = "assemble"; stageLabel = "正在合成";
   } else if (manifest !== undefined) {
     state = "waiting";
     stage = cutMode ? "clip-plan" : "narration";

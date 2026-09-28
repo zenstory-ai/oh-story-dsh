@@ -1,6 +1,5 @@
 """Own recap timeline artifacts, continuation state, and cut QC surfaces."""
 
-import hashlib
 import json
 import os
 import shlex
@@ -15,6 +14,7 @@ from recap_runtime import (
     _multi_run_manifest_payload,
     _run_manifest_payload,
 )
+from recap_source import audio_binding, uses_narration
 
 ASSEMBLY_MANIFEST = "assembly_manifest.json"
 
@@ -23,6 +23,7 @@ PHASE_LEDGER = "recap_phase.json"
 CUT_TIMELINE_CRAFT_BULLETS = [
     "- 片段顺序必须服务同一条故事主线，而不是无序高光；可使用 0–1 个 cold open，随后回到 setup → turn → escalation → payoff。",
     "- 每个片段必须对应 `recap_story_plan.json` 中的一个 change-based beat；删除后不损失因果、人物或情绪的片段通常不保留。",
+    "- 已从源证据确认的必保问答、反应或兑现段，写入同一 `clip_plan.json.required_evidence`（nodes登记id/source绝对路径/start/end原片秒/track/content，before登记必要先后）；只锁具体区间，不锁整个beat。剪点吸附后工具会核验，reason或花字不能代替缺失的源段。",
     "- `reason` 统一写成 `beat_id | function | change | POV | preferred moment | 入点 | 出点`，不能只写 hook、重要剧情或事件摘要。",
     "- 优先保留因果、揭示、决定、关系移动、情绪转向与不可替代的表演/反应；跳过片尾、广告、重复静态画面和水印废片段。",
     "- 片段追求最短但完整：建立镜头可以短，关键表演/反应允许多停一点；在完整台词、完整动作或自然声音边界结束，避免原声从半句中切入或切出。",
@@ -104,24 +105,15 @@ def _print_grounding_qc_pointer(work_dir):
 def _print_narration_review_pointer(work_dir, *, review_ran=True):
     """Surface the advisory narration review produced by this run, if any.
 
-    Review is optional/fail-open. Avoid surfacing a stale narration_review.md from an
-    older run when review was disabled or failed before producing fresh artifacts.
+    Review is optional/fail-open: review_ran=False (disabled or failed) prints nothing so a
+    stale narration_review.md from an older run is never surfaced. When it ran, video-script's
+    review_runner has written both narration_review.json and .md.
     """
     _print_grounding_qc_pointer(work_dir)
     if not review_ran:
         return
     review_md = Path(work_dir) / "narration_review.md"
-    if not review_md.exists():
-        return
-    review_json = Path(work_dir) / "narration_review.json"
-    if not review_json.exists():
-        print(f"[video-recap] 📋 解说评审（建议性，不拦截）→ {review_md}")
-        return
-    try:
-        data = load_json(review_json)
-    except (OSError, ValueError):
-        print(f"[video-recap] 📋 解说评审（建议性，不拦截）→ {review_md}")
-        return
+    data = load_json(Path(work_dir) / "narration_review.json")
     n_err = sum(1 for f in data["findings"] if f["severity"] == "error")
     print(
         f"[video-recap] 📋 解说评审（建议性，不拦截）: {data['verdict']} · "
@@ -152,11 +144,17 @@ def _manifest_mismatches(work_dir, video, args):
     # as a mismatch rather than a crash.
     mismatches = [
         f"{key}: expected {expected[key]!r}, got {actual.get(key)!r}"
-        for key in ("source_video", "source_video_fingerprint")
+        for key in ("source_video", "source_video_identity")
         if actual.get(key) != expected[key]
     ]
     if _settings_for_compare(actual["settings"]) != _settings_for_compare(expected["settings"]):
         mismatches.append("settings: 当前 CLI/env 参数与 Phase A manifest 不匹配")
+    actual_audio = actual.get("audio")
+    expected_audio = audio_binding(args)
+    if actual_audio != expected_audio:
+        mismatches.append(
+            f"audio: expected {expected_audio!r}, got {actual_audio!r}"
+        )
     return mismatches
 
 
@@ -168,24 +166,28 @@ def _multi_manifest_mismatches(work_dir, videos, args, source_records):
     if actual.get("mode") != "multi_source":
         return [f"mode: expected 'multi_source', got {actual.get('mode')!r}"]
     mismatches = []
-    identity = ("source_id", "source_path", "source_video_fingerprint")
-    if [{k: s[k] for k in identity} for s in actual["sources"]] != [
+    identity = ("source_id", "source_path", "source_video_identity")
+    # A 0.5.0 manifest carries `source_video_fingerprint` instead of `source_video_identity`;
+    # .get() reports it as a mismatch rather than a crash.
+    if [{k: s.get(k) for k in identity} for s in actual["sources"]] != [
         {k: s[k] for k in identity} for s in expected["sources"]
     ]:
         mismatches.append(
-            "sources: 当前输入视频列表/顺序/source_id/fingerprint 与 Phase A manifest 不匹配"
+            "sources: 当前输入视频列表/顺序/source_id/identity 与 Phase A manifest 不匹配"
         )
     if _settings_for_compare(actual["settings"]) != _settings_for_compare(expected["settings"]):
         mismatches.append("settings: 当前 CLI/env 参数与 Phase A manifest 不匹配")
+    actual_audio = actual.get("audio")
+    expected_audio = audio_binding(args)
+    if actual_audio != expected_audio:
+        mismatches.append(
+            f"audio: expected {expected_audio!r}, got {actual_audio!r}"
+        )
     return mismatches
 
 
 def _read_assembly_output(work_dir):
     return Path(load_json(Path(work_dir) / ASSEMBLY_MANIFEST)["final_output"])
-
-
-def _file_md5(path):
-    return hashlib.md5(Path(path).read_bytes()).hexdigest()
 
 
 def _read_phase_ledger(work_dir):
@@ -209,14 +211,17 @@ def _write_phase_ledger(work_dir, **fields):
     return ledger
 
 
-def _cut_narration_is_stale(ledger, current_clip_plan_fp):
+def _cut_narration_is_stale(ledger, current_clip_plan_identity):
     """Two-pass cut: the narration is authored against the rendered cut shown at the A2 pause,
-    i.e. against the clip_plan recorded in the ledger. If clip_plan changed since (a re-cut)
-    while that narration is still present, it describes the OLD cut — stale."""
-    return ledger is not None and ledger["clip_plan_fingerprint"] != current_clip_plan_fp
+    i.e. against the clip_plan recorded in the ledger (its ``{size, mtime_ns}`` identity). If
+    clip_plan.json was rewritten since (a re-cut) while that narration is still present, it
+    describes the OLD cut — stale."""
+    return ledger is not None and ledger["clip_plan_identity"] != current_clip_plan_identity
 
 
 def _continuation_command(video, work_dir, args):
+    # Values a project binding filled in are re-derived from --project on resume.
+    bound = getattr(args, "_bound_from_project", frozenset())
     parts = [
         sys.executable,
         str(_entry("video-recap", "recap.py")),
@@ -232,12 +237,14 @@ def _continuation_command(video, work_dir, args):
         parts += ["--style", args.style]
     if args.edit_mode != "full":
         parts += ["--edit-mode", args.edit_mode]
+    if args.audio_mode != "narration":
+        parts += ["--audio-mode", args.audio_mode]
+    if args.audio_stream_index != 0:
+        parts += ["--audio-stream-index", str(args.audio_stream_index)]
     if args.target_duration:
         parts += ["--target-duration", args.target_duration]
     if args.allow_duration_drift:
         parts.append("--allow-duration-drift")
-    if args.allow_sparse_cut:
-        parts.append("--allow-sparse-cut")
     if args.skip_asr:
         parts.append("--skip-asr")
     if args.mimo_video_overview:
@@ -250,14 +257,17 @@ def _continuation_command(video, work_dir, args):
         parts.append("--no-consolidate")
     if args.consolidate_asr:
         parts.append("--consolidate-asr")
-    if args.mimo_tts_voice:
-        parts += ["--mimo-tts-voice", args.mimo_tts_voice]
-    if args.tts_provider != "auto":
-        parts += ["--tts-provider", args.tts_provider]
-    if args.voice_ref:
-        parts += ["--voice-ref", args.voice_ref]
-    if args.allow_partial_tts:
-        parts.append("--allow-partial-tts")
+    if uses_narration(args):
+        if args.mimo_tts_voice and "mimo_tts_voice" not in bound:
+            parts += ["--mimo-tts-voice", args.mimo_tts_voice]
+        if args.tts_provider != "auto" and "tts_provider" not in bound:
+            parts += ["--tts-provider", args.tts_provider]
+        if args.voice_ref and "voice_ref" not in bound:
+            parts += ["--voice-ref", args.voice_ref]
+        if args.allow_partial_tts:
+            parts.append("--allow-partial-tts")
+        if args.preserve_approved_text:
+            parts.append("--preserve-approved-text")
     if args.burn_subtitles is not None:
         parts.append("--burn-subtitles" if args.burn_subtitles else "--no-burn-subtitles")
     if args.subtitle_y_top is not None:
@@ -272,16 +282,23 @@ def _continuation_command(video, work_dir, args):
         parts.append("--jianying-bundle-media")
     if args.jianying_no_bundle_media:
         parts.append("--jianying-no-bundle-media")
-    if args.review_narration is not None:
-        parts.append("--review-narration" if args.review_narration else "--no-review-narration")
-    if args.require_narration_review:
-        parts.append("--require-narration-review")
-    if args.material_library_dir:
+    if uses_narration(args):
+        if args.review_narration is not None:
+            parts.append(
+                "--review-narration" if args.review_narration else "--no-review-narration"
+            )
+        if args.require_narration_review:
+            parts.append("--require-narration-review")
+    if args.material_library_dir and "material_library_dir" not in bound:
         parts += ["--material-library-dir", args.material_library_dir]
+    if getattr(args, "project", None):
+        parts += ["--project", args.project]
     if args.use_materials:
         parts.append("--use-materials")
     if args.save_materials:
         parts.append("--save-materials")
+    if args.require_final_qc:
+        parts.append("--require-final-qc")
     return " ".join(shlex.quote(part) for part in parts)
 
 
@@ -398,7 +415,6 @@ def _write_multi_source_clip_brief(work_dir, source_records, args):
             f"### {s['source_id']} — {s['source_name']}",
             f"- path: `{s['source_path']}`",
             f"- work_dir: `{swd}`",
-            f"- fingerprint: `{s['source_video_fingerprint']}`",
             f"- material_id: `{s['material_id']}`",
         ]
         excerpt = _brief_excerpt(swd / "agent_narration_brief.md")
@@ -449,11 +465,7 @@ def _write_multi_source_output_speech_evidence(work_dir, source_records, plan):
             when = float(anchor["time"])
             if not (source_start - 0.05 <= when <= source_end + 0.05):
                 continue
-            try:
-                pause = float(anchor["pause_start"])
-            except (TypeError, ValueError):
-                pause = when
-            pause = max(source_start, min(pause, when))
+            pause = max(source_start, min(float(anchor["pause_start"]), when))
             item = dict(anchor)
             item.update(
                 source_id=source_id,
@@ -491,11 +503,6 @@ def _write_multi_source_output_speech_evidence(work_dir, source_records, plan):
         "artifact": "speech_boundary_anchors_output.json",
         "timeline": "cut_output",
         "source_artifact": "multi_source_manifest.json",
-        "clip_plan_fingerprint": hashlib.md5(
-            json.dumps(
-                plan, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str
-            ).encode("utf-8")
-        ).hexdigest(),
         "sentence_anchors": sorted(mapped_anchors, key=lambda row: row["time"]),
         "speech_spans": sorted(mapped_speech, key=lambda row: (row["start"], row["end"])),
         "quiet_windows": sorted(mapped_quiet, key=lambda row: (row["start"], row["end"])),

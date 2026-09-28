@@ -35,7 +35,8 @@ UNIT_IN_TITLE = re.compile(r"(?<![\w-])([LD]\d+-\d+|U\d+)(?![\w-])")
 # 批次底稿里出现跨章祈使＝这条约束在写作期还有效，而写作档不给底稿 → 必须下沉
 IMPERATIVE = re.compile(r"全程不许|一律不许|往后任何章|此后不再|往后每|从此不|终局前不")
 CH_RANGE = re.compile(r"章节范围[：:]\s*第\s*(\d+)\s*[-–—~至]\s*(\d+)\s*章")
-ARC_ROW = re.compile(r"^\|\s*(\d+)\s*\|")
+# 情绪弧线逐章行：首列写「12」或模板里的「第12章」都认
+ARC_ROW = re.compile(r"^\|\s*第?\s*(\d+)\s*章?\s*\|")
 
 
 def read(path):

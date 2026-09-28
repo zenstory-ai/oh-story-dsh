@@ -11,6 +11,32 @@
 
 ## [Unreleased]
 
+## [0.1.11] - 2026-09-27
+
+### Added
+
+- 同步 [video-recap-skills 0.6.0](https://github.com/zenstory-ai/video-recap-skills/releases/tag/v0.6.0)（`e7eb0a8`，自 0.5.0 `ec369e7`）：新增资源库与模板（`library.py check|list|show` 只读校验，`--project recap_project.json` 把字幕样式、音色、BGM 或包装模板绑定到一次运行，每次运行写 `resource_lock.json`）、静态包装图层、`--audio-mode narration|source-mix|adopted-packet-copy`（不写解说、保留原声的剪辑）、自建 TTS `--tts-provider index-tts`（`INDEX_TTS_ENDPOINT` + `INDEX_TTS_VOICE`）与 `--require-final-qc`；ffmpeg 9 上的长剪辑渲染重新可用，dub 模式不再要求 libass。「视频」工作台列出剪后片质检、项目绑定与资源锁定三份新产物，技能桥写明项目绑定放在 `video-recaps/<project>/recap_project.json`。
+- 同步 [Drama Skills 0.8.0](https://github.com/zenstory-ai/drama-skills/releases/tag/v0.8.0)（`0afa4ea`）：改编爽点先行，新增节奏档案（`short-drama.json` 可选的 `rhythm_profile`）、系统流 / 逆袭 / 重生穿越题材卡与年代锚点；分镜每镜新增「运镜」行；剪辑单新增「画面文字」与「音效」行，`render` 在同一场景内自动接镜、混入音效、叠加画面文字，`verify` 额外报告切点亮度变化、疑似坏帧与画面文字 / 音效落点；新增 Wan 3.0 视频提示词方言（没有随包 adapter，只作提示词写法）。内置 adapter 与所需环境变量不变。
+- 写正文守卫对齐 Oh Story 0.8.1：长篇新章的细纲如果只是空壳（去掉 BOM、行首 `#` 与空白后不到 30 字，全角空格也算空白），写正文会被拦下，提示先把细纲写完整；同一章有多份细纲时任一份有内容即放行，读不出或不是 UTF-8 的细纲按已写处理，与上游一致。
+
+### Changed
+
+- 同步 [Oh Story 0.8.4](https://github.com/zenstory-ai/oh-story-claudecode/releases/tag/v0.8.4)（`4a50d55`，`agents_version` 32 → 34，跨过 0.8.1–0.8.3）：每一步只加载用得上的规矩（单次加载压到 35K 字以内），开书按「定方向 → 定设定 → 卷纲 → 细纲」分段、每段落盘后可以新开对话接着做；导入改为按确认点分时刻，全程保留 `.story/work/导入记录.md`，细纲按 10–20 章一批反推；拆文每个 Stage 独立成文件，长篇拆文批次多了按字数折算的情节点下限；扫榜结论落盘到 `扫榜/{日期}/`；细纲可以写 `字数范围：A-B`；章节检查缺 Node.js 时报「工具不可用」而不再当作通过。在 DSH 里所有 Role 都用会话模型，上游把写手改用 Opus 的调整不适用。
+- `story-explorer` Role 可以读随包的 agent 参考资料：上游 0.8.2 把写前对标文风召回的流程挪进 `agent-references/benchmark-style-load.md`，Role 需要 `oh_story_bundled_reference` 才能读到。
+- 长篇拆文与导入的批次派发按上游照抄计划字段，多了 `min_plot_points` 与计划给出的 `handoff_cache`；提交被拒时带上全部字段和错误码重新派发同一批，让 chapter-extractor 只改出错处。
+- 导入覆盖层跟随上游新顺序：Phase 3-L 的 Step 2 复制正文、Step 10 分批反推细纲、Phase 4 初始化追踪，`.story/work/导入中.md` 在 Phase 4 的 `tracking_commit.py init` 与 `check` 都通过后删除；需要的脚本改为 `build_outline_brief.py`、`tracking_commit.py`（Python 3）与 `check-outline-contract.js`（Node）。上游新增的「先装写作环境」选项在 DSH 里不出现，导入记录直接记为已装。
+- 写后提醒指向上游新的位置：新书第一章的追踪初始化现在在 `workflow-chapter.md` 开头，旧的「首次初始化」一节已不存在。
+- 原生扫榜 Skill 把结论写进 `扫榜/{YYYYMMDD}/`：长篇写 `选题决策.md`（带「扫榜日期」），短篇写 `短篇扫榜结论.md`，与上游 story-long-write 开书、story-short-write 构思的接续一致；原生 `story` 路由在整理作者记忆或迁移「本书：」条目时加载新的 `author-memory-maintenance.md`。
+- 短剧剪辑覆盖层与「成片」页指令按 Drama Skills 0.8.0 重写 `render` 的职责：切段、同场景自动接镜（CUT 写「画面」校正即替代，`- 画面：不校` 跳过，交付规格 `- 接镜匹配：无` 整集关闭）、拼接、混入「音效」行、烧字幕与画面文字、可选颗粒、统一响度；「音效」行之外的混音仍是经审批的外部 ffmpeg 步骤。**剪辑单里只要有「画面文字」就必须用 Remotion**，它装在项目外的 `~/.cache/short-drama-edit/remotion`，只有创作者同意安装时才走，未同意就不写「画面文字」行。**0.8 之前装过 Remotion 的，要在该目录重新 `npm install`**（新增两套字体包）；叠层文件从 `字幕叠层.webm` 改名为 `叠层.webm`。**重新渲染已有剧集时画面会变**：同场景自动接镜默认开启，字幕样式也换了；想保持旧画面，在交付规格写 `- 接镜匹配：无`。重新审查可能对已有项目新报 STY-07、STY-29、AST-14。
+- **video-recap-skills 0.5.0 时停在中途的视频项目不能续跑**：运行清单的 `source_video_fingerprint` 换成了 `source_video_identity`，还新增了 `audio` 一段，续跑旧 `work/` 会报 `source_video_identity: expected …`。新开一个 `work/` 目录，或从第一阶段重跑。`recap.py --allow-sparse-cut` 与 `cut.py --narration`、`--no-narration-map`、`--allow-sparse-cut` 已删除，剪辑一律先剪片、再对着剪后片写解说；`recap.py` 不再接受缩写参数；字幕渲染版本升到 9，已有字幕会重新渲染。
+- 「视频」工作台对 `--audio-mode source-mix` 与 `adopted-packet-copy` 的运行不再显示「等待解说词」：剪完直接进入合成，整段模式没有暂停点。
+- 「视频」工作台的配音环境检查改用上游认的供应商名（`auto`、`mimo-tts`、`fish-audio`、`index-tts`，默认 `auto`）。此前按 `fish` 判断，设了合法的 `TTS_PROVIDER=fish-audio` 反而不显示 Fish Key 状态；现在 `fish-audio`、或 `auto` 且没有 MiMo Key 时显示 Fish Key，`index-tts` 时显示 `INDEX_TTS_ENDPOINT` / `INDEX_TTS_VOICE` 是否都已设置。
+- 短剧演示 fixture 换成上游 0.8.0 的示例：同一集从 8 镜扩到 22 镜、11 项素材，README 的示例片段与报错行号随之更新。NovelToGame 在 0.4.0 之后没有新发布，保持 `d76cdca`。
+
+### Removed
+
+- 随包资产不再包含上游新增的独立 dashboard：video-recap-skills 的 `dashboard_server.py`、`dashboard_*.py` 与 `assets/dashboard/`，Drama Skills 创作台 v2 只被 dashboard 引用的 `creator_views.py`，以及 Oh Story `story-setup/references/` 下 8 份按宿主拆分的 `deploy-*.md`。DSH 的「视频」「短剧」工作台与原生 `story-setup` 取代它们；技能桥写明 dashboard 请求指向「视频」工作台，查看资源库改用只读的 `library.py`。视频流水线实际引用的 `library.py`、`project_binding.py` 与 `resource_lock.py` 照常随包。
+
 ## [0.1.10] - 2026-09-25
 
 ### Added
@@ -232,7 +258,8 @@
 - 提供 13 个 Oh Story 小说 Skills、7 个专业 Roles 与 10 个 Drama Skills。
 - 提供文件树、Markdown/JSONL 编辑预览与官方 DSH Chat 同屏的三栏工作台。
 
-[Unreleased]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.10...HEAD
+[Unreleased]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.11...HEAD
+[0.1.11]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.10...v0.1.11
 [0.1.10]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.9...v0.1.10
 [0.1.9]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.8...v0.1.9
 [0.1.8]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.7...v0.1.8

@@ -4,7 +4,7 @@
  *
  * 配合 browser-cdp skill 使用。先启动 Chrome CDP 环境，再运行本脚本。
  * 采集策略：刺猬猫 rank-index 页面单页展示所有榜单，文本解析提取结构化数据。
- * 输出 Markdown 格式匹配 scan-output-format.md 规范。
+ * 输出 Markdown 格式见 references/platform-ciweimao.md；aggregate-rank.js 按此格式聚合。
  *
  * 用法：
  *   node ciweimao-rank-scraper.js --type click       # 点击榜

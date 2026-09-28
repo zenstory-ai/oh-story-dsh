@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, isAbsolute, join, relative, resolve } from "node:path";
 import { Context } from "@deepseek-ai/cordis";
@@ -19,7 +19,9 @@ import {
 import { observeOhStoryRoleDescriptor, ohStoryRoleOfSession } from "../src/role-identity.js";
 
 const roots: string[] = [];
-type StoryFileSystem = Pick<FileSystem, "resolve" | "contains" | "stat" | "listDir">;
+type StoryFileSystem = Pick<FileSystem, "resolve" | "contains" | "stat" | "listDir" | "readBytes">;
+// Upstream (Oh Story 0.8.1) blocks prose under a 细纲 with fewer than 30 characters besides # and whitespace.
+const OUTLINE = "# 第一章\n\n江晨接下账号任务，决定当晚就发出第一条混剪，赌上自己在团里的去留。\n";
 
 function localDshFs(): StoryFileSystem {
   const resolveTarget = async (path: string, options?: { readonly cwd?: string }): Promise<FsTarget> => {
@@ -42,7 +44,8 @@ function localDshFs(): StoryFileSystem {
       name: entry.name,
       type: entry.isFile() ? "file" : entry.isDirectory() ? "directory" : "other",
       target: await resolveTarget(entry.name, { cwd: target.displayPath })
-    }))))
+    })))),
+    readBytes: vi.fn(async (target): Promise<Uint8Array> => readFile(target.displayPath))
   } as StoryFileSystem;
 }
 
@@ -137,7 +140,7 @@ describe("native DSH prose guards", () => {
     await mkdir(join(root, "大纲"));
     await expect(validateStoryMutation(localDshFs(), { root, path: "正文/第001章.md", chapter: 1 }))
       .resolves.toBe(outlineDenial(1, "大纲"));
-    await writeFile(join(root, "大纲", "细纲_第001章_开局.md"), "# 第一章\n");
+    await writeFile(join(root, "大纲", "细纲_第001章_开局.md"), OUTLINE);
     await expect(validateStoryMutation(localDshFs(), { root, path: "正文/第001章.md", chapter: 1 }))
       .resolves.toBeUndefined();
   });
@@ -191,9 +194,28 @@ describe("native DSH prose guards", () => {
   it("allows a mutation when Tracking and the matching outline exist", async () => {
     const root = await project();
     await writeFile(join(root, "追踪", "_tracking-state.json"), "{}\n");
-    await writeFile(join(root, "大纲", "细纲_第002章_回声.md"), "# 第二章\n");
+    await writeFile(join(root, "大纲", "细纲_第002章_回声.md"), OUTLINE);
     await expect(validateStoryMutation(localDshFs(), { root, path: "正文/第002章.md", chapter: 2 }))
       .resolves.toBeUndefined();
+  });
+
+  it("blocks a chapter whose every outline is empty, like upstream's outlineIsEmpty", async () => {
+    const root = await project();
+    await writeFile(join(root, "追踪", "_tracking-state.json"), "{}\n");
+    const mutation = { root, path: "正文/第002章.md", chapter: 2 };
+    // BOM, heading marks and whitespace (full-width space included) do not count toward the 30 characters.
+    await writeFile(join(root, "大纲", "细纲_第002章.md"), "\uFEFF# 第二章\n\n##　情节点\n- 待定\n");
+    await expect(validateStoryMutation(localDshFs(), mutation)).resolves
+      .toBe("Oh Story 阻止写入第 2 章：细纲 大纲/细纲_第002章.md 是空的（不计 # 号和空白不到 30 字）。先按 story-long-write 单章流程把细纲写完整（这章发生什么、主角做什么选择），再写正文。");
+    await writeFile(join(root, "大纲", "细纲_第02章_回声.md"), OUTLINE);
+    await expect(validateStoryMutation(localDshFs(), mutation)).resolves.toBeUndefined();
+  });
+
+  it("treats an outline that is not UTF-8 as written, as upstream does", async () => {
+    const root = await project();
+    await writeFile(join(root, "追踪", "_tracking-state.json"), "{}\n");
+    await writeFile(join(root, "大纲", "细纲_第002章.md"), Buffer.from([0xff, 0xfe, 0x00]));
+    await expect(validateStoryMutation(localDshFs(), { root, path: "正文/第002章.md", chapter: 2 })).resolves.toBeUndefined();
   });
 
   it("does not gate rewriting an existing chapter on its outline", async () => {
@@ -219,7 +241,7 @@ describe("native DSH prose guards", () => {
     const root = await project();
     const fs = localDshFs();
     const agent = agentOn(root, fs);
-    await writeFile(join(root, "大纲", "细纲_第002章.md"), "# 第二章\n");
+    await writeFile(join(root, "大纲", "细纲_第002章.md"), OUTLINE);
     await expect(decideStoryMutation(execution("write", { file_path: "正文/第002章.md" }, agent), async () => ({ kind: "allow" })))
       .resolves.toEqual({ kind: "allow" });
     expect(agent?.ctx.get).toHaveBeenCalledWith("fs");
@@ -262,14 +284,18 @@ describe("native DSH prose guards", () => {
           targetKey: "/virtual-story/大纲/细纲_第002章_虚拟.md" as FsTarget["targetKey"],
           displayPath: "/virtual-story/大纲/细纲_第002章_虚拟.md"
         }
-      }])
+      }]),
+      readBytes: vi.fn(async (target: FsTarget): Promise<Uint8Array> => {
+        calls.push(target.displayPath);
+        return new TextEncoder().encode(OUTLINE);
+      })
     } as StoryFileSystem;
     const agent = agentOn("/virtual-story", fs);
 
     await expect(decideStoryMutation(execution("write", { file_path: "正文/第002章.md" }, agent), async () => ({ kind: "allow" })))
       .resolves.toEqual({ kind: "allow" });
     expect(agent?.ctx.get).toHaveBeenCalledWith("fs");
-    expect(calls).toEqual(expect.arrayContaining(["/virtual-story/大纲", "/virtual-story/正文/第002章.md"]));
+    expect(calls).toEqual(expect.arrayContaining(["/virtual-story/大纲", "/virtual-story/正文/第002章.md", "/virtual-story/大纲/细纲_第002章_虚拟.md"]));
   });
 });
 
@@ -280,7 +306,7 @@ describe("chapter-extractor write fence", () => {
     await writeFile(join(root, "拆文库", "某书", "_progress.md"), "# 进度\n");
     await mkdir(join(root, "拆文库", "无索引", "_analysis_cache"), { recursive: true });
     await mkdir(join(root, "大纲"));
-    await writeFile(join(root, "大纲", "细纲_第001章.md"), "# 第一章\n");
+    await writeFile(join(root, "大纲", "细纲_第001章.md"), OUTLINE);
     return root;
   }
 
@@ -423,7 +449,7 @@ describe("registered native hooks", () => {
     expect(handlers.get("tools/pre-execute")).toHaveLength(2);
 
     const root = await project();
-    await writeFile(join(root, "大纲", "细纲_第001章.md"), "# 第一章\n");
+    await writeFile(join(root, "大纲", "细纲_第001章.md"), OUTLINE);
     const fs = localDshFs();
     const session = { header: { cwd: root } } as unknown as Session;
     const write = execution("write", { file_path: "正文/第001章.md", content: "x" }, agentOn(root, fs, session));
@@ -444,7 +470,7 @@ describe("registered native hooks", () => {
       execution("str_replace_editor", { command: "create", path: join(root, "正文", "第001章.md"), file_text: "x" }, main)
     ]) await expect(preExecute(handlers, call)).resolves.toEqual({ kind: "deny", reason: outlineDenial(1, "大纲") });
 
-    await writeFile(join(root, "大纲", "细纲_第001章.md"), "# 第一章\n");
+    await writeFile(join(root, "大纲", "细纲_第001章.md"), OUTLINE);
     await expect(preExecute(handlers, execution("write", { file_path: "正文/第001章.md", content: "x" }, main)))
       .resolves.toEqual({ kind: "allow" });
   });
@@ -491,7 +517,7 @@ describe("registered native hooks", () => {
     const reminder = JSON.stringify(decision.additionalContexts);
     expect(reminder).toContain("oh-story-post-write");
     expect(reminder).toContain(postWriteReminderText("正文/第001章.md").replaceAll("\"", "\\\""));
-    expect(reminder).not.toContain("首次初始化");
+    expect(reminder).not.toContain("tracking-initialization.md");
 
     const plain = await workspace("oh-story-hook-plain-");
     await mkdir(join(plain, "正文"));
@@ -513,14 +539,14 @@ describe("registered native hooks", () => {
 
     const book = await workspace();
     await mkdir(join(book, "大纲"));
-    await writeFile(join(book, "大纲", "细纲_第001章.md"), "# 第一章\n");
+    await writeFile(join(book, "大纲", "细纲_第001章.md"), OUTLINE);
     await mkdir(join(book, "正文"));
     await writeFile(join(book, "正文", "第001章.md"), "# 第一章\n");
     const fresh = await reminderFor(book);
     expect(fresh).toContain(escaped(postWriteReminderText("正文/第001章.md", { trackingUninitialized: true })));
     for (const step of [
       "本书还没有 追踪/_tracking-state.json",
-      "draft 之前先按 story-long-write workflow-daily 的「首次初始化」",
+      "draft 之前先按 story-long-write workflow-chapter 开头的初始化步骤",
       "references/tracking-initialization.md",
       "last_chapter=0 的初始化事务存书目录 .story/work/init.json",
       "运行 scripts/tracking_commit.py init，再运行 tracking_commit.py check，通过后删掉 init.json",
@@ -535,7 +561,7 @@ describe("registered native hooks", () => {
     await writeFile(join(book, "追踪", "_tracking-state.json"), "{}\n");
     const committed = await reminderFor(book);
     expect(committed).toContain(escaped(postWriteReminderText("正文/第001章.md")));
-    expect(committed).not.toContain("首次初始化");
+    expect(committed).not.toContain("tracking-initialization.md");
   });
 
   it("keeps the reminder out of oh_story_role children", async () => {

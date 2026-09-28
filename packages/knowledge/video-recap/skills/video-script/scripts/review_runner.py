@@ -11,13 +11,12 @@ from lib import CONFIG, log, api_call
 
 from evidence_bundle import build_evidence_bundle
 from review_grounding import (
-    _load,
     _load_cut_clip_spans,
+    _load_required,
     _load_review_grounding,
     remap_grounding_to_output_timeline,
 )
 from review_response import (
-    _bundle_fingerprint,
     _chunk_evidence_bundle,
     _load_review_research_context,
     _merge_chunk_reviews,
@@ -34,9 +33,7 @@ COVERAGE_POLICY_VERSION = "coverage_policy_v1"
 
 def review_narration(work_dir, *, timeline="source", strict_evidence=False):
     work_dir = Path(work_dir)
-    narration = _load(work_dir, "narration.json")
-    if narration is None:
-        raise SystemExit(f"缺少 {work_dir / 'narration.json'}；先写解说草稿再评审")
+    narration = _load_required(work_dir, "narration.json", "先写解说草稿再评审")
     vlm_analysis, asr_result = _load_review_grounding(work_dir)
     warnings = []
     if timeline == "cut_output":
@@ -62,7 +59,6 @@ def review_narration(work_dir, *, timeline="source", strict_evidence=False):
         research=_load_review_research_context(work_dir),
         warnings=warnings,
     )
-    bundle_fp = _bundle_fingerprint(bundle)
     chunk_reviews = []
     chunks = _chunk_evidence_bundle(bundle)
     for chunk in chunks:
@@ -75,11 +71,11 @@ def review_narration(work_dir, *, timeline="source", strict_evidence=False):
         )
         resp = api_call(
             {
-                "model": CONFIG.get("vlm_model", ""),
+                "model": CONFIG["vlm_model"],
                 "messages": messages,
                 "max_tokens": 2000 if len(chunks) == 1 else 1600,
                 "temperature": 0,
-                "seed": 7 + int(chunk.get("chunk_index", 0)),
+                "seed": 7 + chunk["chunk_index"],
             }
         )
         content = ""
@@ -88,8 +84,8 @@ def review_narration(work_dir, *, timeline="source", strict_evidence=False):
         except (KeyError, IndexError, TypeError):
             log("评审 API 返回结构异常")
         parsed = parse_review_response(content)
-        parsed["chunk_index"] = chunk.get("chunk_index", 0)
-        parsed["chunk_count"] = chunk.get("chunk_count", len(chunks))
+        parsed["chunk_index"] = chunk["chunk_index"]
+        parsed["chunk_count"] = chunk["chunk_count"]
         chunk_reviews.append(parsed)
     review = _merge_chunk_reviews(chunk_reviews)
     if warnings:
@@ -97,10 +93,9 @@ def review_narration(work_dir, *, timeline="source", strict_evidence=False):
     review["evidence_contract"] = {
         "schema_version": EVIDENCE_CONTRACT_VERSION,
         "timeline": timeline,
-        "clock": bundle.get("clock"),
+        "clock": bundle["clock"],
         "coverage_policy_version": COVERAGE_POLICY_VERSION,
-        "selected_ranges": bundle.get("coverage", {}).get("selected_ranges", []),
-        "evidence_bundle_fingerprint": bundle_fp,
+        "selected_ranges": bundle["coverage"]["selected_ranges"],
         "chunk_count": len(chunks),
         "warnings": warnings,
     }
@@ -124,15 +119,14 @@ def _auto_timeline(work_dir):
     orchestrator does: cut_output when narration.json is in the cut OUTPUT timeline, else
     source. Without this, reviewing a cut narration on the default 'source' timeline compares
     OUTPUT-time narration against SOURCE-time evidence and floods false-positive 'hallucination'
-    findings (and the inverse flood for a legacy source-time narration mis-read as cut_output).
+    findings.
 
     Detection is authoritative-first: the orchestrator records the run's edit_mode in
     recap_run_manifest.json. In orchestrated cut mode narration.json is OUTPUT time; in full
     mode it is SOURCE time. Trusting edit_mode is correct even when stale cut artifacts from a
     prior run linger in a reused work_dir. Only when no manifest is present (standalone review
-    or a hand-built work_dir) do we fall back to artifact sniffing — and even then the legacy
-    legacy direct single-pass path writes a SOURCE-time narration.json alongside a separate
-    output-time narration_mapped.json, so its presence pins us back to source."""
+    or a hand-built work_dir) do we fall back to artifact sniffing: a rendered cut
+    (clip_plan_validated.json + edited_source.mp4) means narration.json is OUTPUT time."""
     work_dir = Path(work_dir)
     manifest = work_dir / "recap_run_manifest.json"
     if manifest.exists():
@@ -151,9 +145,7 @@ def _auto_timeline(work_dir):
     has_cut = (work_dir / "clip_plan_validated.json").exists() and (
         work_dir / "edited_source.mp4"
     ).exists()
-    if has_cut and not (work_dir / "narration_mapped.json").exists():
-        return "cut_output"
-    return "source"
+    return "cut_output" if has_cut else "source"
 
 
 def main():

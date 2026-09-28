@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from edit_tool import (  # noqa: E402
     _unaccounted_shots,
     DEFAULT_REMOTION_CONCURRENCY,
+    DisplayCue,
     REMOTION_SOURCE,
     REMOTION_SOURCE_FILES,
     EditError,
@@ -102,7 +103,7 @@ def check_subtitle_geometry() -> None:
     """
 
     width, height = 768, 1344
-    ass = _build_ass([(1.0, 2.0, "这条路我自己走")], width, height)
+    ass = _build_ass([DisplayCue(1.0, 2.0, "这条路我自己走")], width, height)
     require(f"PlayResX: {width}" in ass, "PlayResX 必须等于画面宽")
     require(f"PlayResY: {height}" in ass, "PlayResY 必须等于画面高")
     style = next(line for line in ass.splitlines() if line.startswith("Style:"))
@@ -113,7 +114,12 @@ def check_subtitle_geometry() -> None:
         f"字号 {font_size} 不在画面高度的 2%–6% 之间",
     )
     margin_v = float(fields[21])
-    require(margin_v < height * 0.2, f"底边距 {margin_v} 会把字幕推离安全区")
+    # The baseline sits about a quarter up, above the platform's own bottom UI;
+    # much higher and the line lands on faces.
+    require(
+        height * 0.15 < margin_v < height * 0.3,
+        f"底边距 {margin_v} 不在画面高度的 15%–30% 之间",
+    )
     margin_h = float(fields[19])
     require(margin_h > 0, "左右边距为 0 时长句会顶到画面边缘")
     require("这条路我自己走" in ass, "台词原文必须原样进 ASS")
@@ -148,18 +154,17 @@ def check_subtitle_timing() -> None:
 
 
 def check_shot_match() -> None:
-    """A declared correction is applied; an undeclared one never is.
+    """A stated correction becomes its own filter chain, within the tool's ranges.
 
-    Generated shots drift a stop apart, so the join reads as a mistake. The
-    correction has to be visible in the document — a tool that measured clips
-    and adjusted them on its own would be changing pictures nobody could review.
+    Generated shots drift a stop apart, so the join reads as a mistake. What a
+    cut states in 「画面」 replaces the automatic within-scene match for that cut.
     """
 
     with tempfile.TemporaryDirectory() as scratch:
         root = Path(scratch)
         episode = build(root, CUT_LIST)
         _, cuts, _ = parse_cut_list(episode / "剪辑单.md")
-        require(_shot_match_filter(cuts[0]) == "", "没写画面的段不得被改动")
+        require(_shot_match_filter(cuts[0]) == "", "没写画面的段没有自己的校正")
 
         listed = CUT_LIST.replace(
             "- 声音：保留原声\n- 字幕：无",
@@ -341,7 +346,7 @@ def check_ass_escaping() -> None:
     escaped = _ass_text(line)
     require("\\{" in escaped and "\\}" in escaped, f"花括号没有转义: {escaped}")
     require("姓名" in escaped, "转义把字弄丢了")
-    ass = _build_ass([(1.0, 2.0, line)], 1080, 1920)
+    ass = _build_ass([DisplayCue(1.0, 2.0, line)], 1080, 1920)
     dialogue = [row for row in ass.splitlines() if row.startswith("Dialogue")][0]
     require(dialogue.endswith(escaped), f"Dialogue 行没有用转义后的正文: {dialogue}")
     require(
@@ -362,7 +367,7 @@ def check_remotion_sources_all_shipped() -> None:
         path.relative_to(REMOTION_SOURCE).as_posix()
         for path in REMOTION_SOURCE.rglob("*")
         if path.is_file()
-        and path.suffix in {".ts", ".tsx", ".json"}
+        and path.suffix in {".ts", ".tsx", ".mjs", ".json"}
         and "node_modules" not in path.parts
     }
     listed = set(REMOTION_SOURCE_FILES)
@@ -439,6 +444,40 @@ def check_missing_shots_are_reported() -> None:
     require(not _unaccounted_shots(known, [Stub(m) for m in known], []), "全采用时不该报")
 
 
+def check_screen_text_and_effects() -> None:
+    """Screen text is traced to [画面文字] lines; effects are held to their cut."""
+
+    with tempfile.TemporaryDirectory() as scratch:
+        root = Path(scratch)
+        episode = build(root, CUT_LIST)
+        (episode / "剧本.md").write_text(
+            SCREENPLAY + "\n[画面文字] 剩余 4 天 23:59:58\n", encoding="utf-8"
+        )
+        (episode / "media" / "chime.wav").write_bytes(b"")
+        anchor = "- 字幕：这条路我自己走"
+        require(anchor in CUT_LIST, "夹具里应当有一条台词字幕")
+        lines = (
+            "- 画面文字 1：0.00-1.00 任务面板 剩余（倒计时：431998）\n"
+            "- 画面文字 2：1.00-2.00 角标 剩余（倒计时：接续）\n"
+            "- 音效：0.00-0.50 media/chime.wav（增益：-10）"
+        )
+        (episode / "剪辑单.md").write_text(
+            CUT_LIST.replace(anchor, anchor + "\n" + lines), encoding="utf-8"
+        )
+        _, cuts, _ = parse_cut_list(episode / "剪辑单.md")
+        require(len(cuts[1].screen_texts) == 2, "两条画面文字应全部解析")
+        require(len(cuts[1].sound_effects) == 1, "音效应当解析")
+        require(not check_cuts(episode, cuts, root, probe=False), "合法的画面文字与音效不该报错")
+
+        (episode / "剪辑单.md").write_text(
+            CUT_LIST.replace(anchor, anchor + "\n- 画面文字：0.00-1.00 卡片 剩余 5 天"),
+            encoding="utf-8",
+        )
+        _, cuts, _ = parse_cut_list(episode / "剪辑单.md")
+        findings = check_cuts(episode, cuts, root, probe=False)
+        require(any("[画面文字]" in item for item in findings), f"编造的画面文字没抓到: {findings}")
+
+
 def main() -> int:
     with tempfile.TemporaryDirectory() as scratch:
         root = Path(scratch)
@@ -507,6 +546,7 @@ def main() -> int:
     check_shot_match()
     check_ass_escaping()
     check_multi_subtitle()
+    check_screen_text_and_effects()
     check_stale_window()
     check_missing_shots_are_reported()
     check_grain_is_a_delivery_wide_decision()

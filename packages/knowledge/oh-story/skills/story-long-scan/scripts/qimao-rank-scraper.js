@@ -4,7 +4,7 @@
  *
  * 配合 browser-cdp skill 使用。先启动 Chrome CDP 环境，再运行本脚本。
  * 采集策略：tab 切换男生榜/女生榜和榜单类型，滚动加载后从页面文本解析结构化数据。
- * 输出 Markdown 格式匹配 scan-output-format.md 规范。
+ * 输出 Markdown 格式见 references/platform-qimao.md；aggregate-rank.js 按此格式聚合。
  *
  * 用法：
  *   node qimao-rank-scraper.js --channel male --type hot --period day    # 男生大热榜日榜

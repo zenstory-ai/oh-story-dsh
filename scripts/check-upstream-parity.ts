@@ -15,6 +15,8 @@ const forbiddenPortableAssets = manifest.files.filter(({ path }) =>
     || path === "skills/story-setup/scripts/copy-path-safety.py"
     || path === "skills/story/scripts/dashboard-server.mjs"
     || path.startsWith("skills/story-setup/references/antigravity/")
+    // Oh Story 0.8.2 per-host deploy steps; DSH replaces story-setup's deployment entirely.
+    || /^skills\/story-setup\/references\/deploy-[a-z-]+\.md$/u.test(path)
     || path === "skills/story-setup/scripts/deploy-antigravity-skills.py"
     || path === "skills/story-setup/scripts/generate-antigravity-agents.mjs"
     || path === "skills/story-setup/scripts/merge-antigravity-hooks.py");

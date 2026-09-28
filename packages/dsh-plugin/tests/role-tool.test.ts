@@ -67,7 +67,7 @@ describe("native Oh Story Role tool", () => {
     expect(tool.parameters).toMatchObject({
       properties: { role: { enum: expect.arrayContaining(["chapter-extractor", "story-researcher"]) } }
     });
-    expect(roleToolFilter("story-explorer")).toEqual({ allow: ["read", "glob", "grep"] });
+    expect(roleToolFilter("story-explorer")).toEqual({ allow: [OH_STORY_REFERENCE_TOOL_NAME, "read", "glob", "grep"] });
     expect(roleToolFilter("narrative-writer")).toEqual({
       allow: [OH_STORY_REFERENCE_TOOL_NAME, "read", "glob", "grep", "write", "edit", "bash"]
     });

@@ -37,7 +37,7 @@
 
 ### 题材正文提示卡模板
 
-项目可在 Phase 2 生成 `设定/题材正文提示卡.md`。没有该文件时，Phase 4 写前先用 `设定/题材定位.md` 匹配 `genre-prose-cards.md` 索引并读取 `genre-prose-cards/{题材}.md` 单卡；仍无匹配再从本文件即时抽取一张轻量卡。卡片保持短，给 `narrative-writer` 传摘要，不把参考文件整段复制进 prompt。
+项目在写第 1 章前生成 `设定/题材正文提示卡.md`。没有该文件时，Phase 4 写前先用 `设定/题材定位.md` 匹配 `genre-prose-cards.md` 索引并读取 `genre-prose-cards/{题材}.md` 单卡；仍无匹配再从本文件即时抽取一张轻量卡。卡片保持短，给 `narrative-writer` 传摘要，不把参考文件整段复制进 prompt。
 
 ```markdown
 ## 题材正文提示卡

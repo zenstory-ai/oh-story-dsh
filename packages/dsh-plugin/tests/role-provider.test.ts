@@ -26,9 +26,12 @@ describe("bundled Oh Story roles", () => {
   });
 
   it("keeps the updated benchmark-book failure distinction", async () => {
+    // Oh Story 0.8.2 moved the procedure out of the persona into a bundled agent reference.
     const persona = await loadBundledRole("story-explorer", resolve(import.meta.dirname, "../../knowledge/oh-story/roles"), "native-tools");
-    expect(persona).toContain("benchmark_book_missing: true");
-    expect(persona).toContain("profile_missing: true");
-    expect(persona).toContain("expected_path");
+    expect(persona).toContain("story-setup/references/agent-references/benchmark-style-load.md");
+    const procedure = await readFile(resolve(import.meta.dirname, "../../knowledge/oh-story/skills/story-setup/references/agent-references/benchmark-style-load.md"), "utf8");
+    expect(procedure).toContain("benchmark_book_missing: true");
+    expect(procedure).toContain("profile_missing: true");
+    expect(procedure).toContain("expected_path");
   });
 });

@@ -10,6 +10,64 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-09-27
+
+三条主线：资源库与模板（登记与校验、项目绑定、每次运行的资源记录、字体文件、静态包装图层）；只读的本机剪辑台 dashboard；以及 skill 层分包、去内容哈希、测试审计后的架构梳理。
+
+### Added
+
+- **只读 dashboard（剪辑台）。** `video-recap/scripts/dashboard_server.py --root <目录>` 在本机回环地址启动标准库 HTTP 服务，按 `library.json` / `recap_project.json` / `recap_run_manifest.json` 发现资源库、项目与运行：总览给出下一步（QC 阻断、等 Agent 写的产物、授权与库错误），运行按阶段栏显示理解、剪辑节奏条、旁白、成片播放器与四轨时间线、QC 和 `resource_lock.json`，资源库分资源 / 模板 / 样片并附预览（模板参数按中文表列出来源，字幕样式与包装各有一块示意画布），项目页列出每个绑定解析到什么及运行时会下发的设置，⌘K 服务端搜索；只有阻断项与不会生效的绑定用红色，授权类提醒用警示色。严格只读：只允许 GET / HEAD，校验 Host / Origin，路径限定在 `--root` 内，媒体按白名单与 Range 提供；需要改动时只复制一句话给助手。视觉沿用 ZenStory 共用的 `tokens.css`。
+- **静态包装图层。** video-assemble 读取 `work_dir/packaging_layers.json`，把包框、标题条、角标等图片按画布坐标叠到成片（遮原字幕之后、画面文字与字幕之前），并在 `timeline.json` 写出位置一致的 image 轨供剪映编辑；`--project` 绑定的 `packaging` 模板自动写出该文件，`resource_lock.json` 记录每个图层图片。
+- **项目绑定 `--project recap_project.json`。** 把资源库里已采用的字幕样式模板、音色与 BGM 绑定到一次运行，解析为各阶段已有的 `SUBTITLE_*` / `BGM_PATH` / 音色参数；与显式设置冲突或模板画布与成片不符时在开始前停止。video-assemble 新增 `SUBTITLE_FONT_FILE`：烧录字幕经 `fontsdir`、画面文字经 `fontfile` 使用指定字体文件。示例项目在 `examples/demo-project/`。
+- **运行资源记录 `resource_lock.json`。** full / cut 合成后汇总本次用到的原片、音色、BGM 与字幕字体，配置资源库时对上登记与授权状态，并在结束时打印需要人确认的项；`tts_meta.json` 新增 `voice`，记录实际使用的 provider、模型、音色或参考音频。
+- **资源库格式与只读校验。** 素材库根目录下可登记资源（BGM、音效、音色、字体、图片）、带版本与采用记录的模板（字幕样式、包装图层）和样片；`video-recap/scripts/library.py check|list|show` 只读校验授权、声音授权、路径越界与引用完整性。格式见 `video-recap/references/resource-library.md`，合成示例在 `examples/resource-library/`。本期渲染不读取资源库。
+- **video-cut `clip_plan.required_evidence`。** Agent 声明必保源片刻（节点、来源、原片秒、轨道、先后关系），工具在句界/画面吸附之后、渲染之前核对；缺段、错序或无效声明写入 `clip_plan_validated.json.qc.required_evidence` 并阻断，缓存复用同样重检。
+- **宣发文案修订工作流。** `video-script/references/promotional-copy.md`：不重跑故事链，只修改已完成短片的文字层。
+- **公共环境变量清单。** `tests/orchestrator/env-inventory-v1.json` 列出六个 skill 读取的全部环境变量及分类，配套测试对源码做 AST 扫描，未登记或疑似凭证的读取会失败。
+- **video-cut `--review-shots`。** 扫描实际渲染文件内部的短镜与密集切点（只召回、不修复），结果写入 `shot_review.json` 并绑定计划/源/成片指纹；`--shot-roi` 可按实测画窗扫描。短镜阈值按实测帧率推导，不再固定 24 帧。
+- **ASR 时序证据 sidecar。** `asr_timing_evidence.json` 记录来源指纹、可用性状态与词级对齐是否执行，词表修正与原始转写分列，粗窗不再被当作精字幕；brief 显示经验证的状态与指纹，缺失或陈旧时显示 `MISSING_OR_STALE`。
+- **自托管 TTS 端点。** `--tts-provider index-tts` 通过 `INDEX_TTS_ENDPOINT` / `INDEX_TTS_VOICE` 接入 index-tts 协议的 JSON→WAV 服务；端点只以 sha256 落盘，拒绝带凭证的 URL 与重定向，`doctor` 离线校验配置而不探测连通性。每段 TTS 缓存与结果记录 provider receipt 与处理后 WAV 的 sha256。
+- **最终 QC 可选阻断。** `--require-final-qc` 开启后，`final_qc.json` 与 `golden_eval.json` 摘要必须均为 `ok: true` 且 `blocker_count: 0`，否则不打印完成、非零退出；续跑命令保留该选项，不影响缓存指纹；不支持 dub 模式。
+- **声音路径显式化（assemble）。** `assemble.py --audio-mode {narration,source-mix,adopted-packet-copy}` 与 `--audio-stream-index`：`source-mix` 不读 `tts_meta.json`、只对所选原声流做音量/BGM/响度处理；`adopted-packet-copy` 复用已采用的完整混音并按 AAC 包逐包比对，不重编码、不裁尾。`assembly_qc.json` / `assembly_manifest.json` 记录 `audio_mode` 与实际执行的音频操作；`pair_media.py` 可把独立画面与已采用音轨按流复制配对并证明包身份。
+- **批准稿保护。** `--preserve-approved-text` 贯穿 full / 单源 cut / 多源 cut 的校验器再到 TTS：文本装不下窗口时列出具体段落与时长，不自动缩稿、不静默变速；失败不沿用旧的 `tts_meta.json`，成功元数据原子写入。
+- **独立字幕轨。** `subtitle_track.json` 以整数 tick 绑定当前音画（仅 `adopted-packet-copy` 模式），标注估计 / 校准 / 强对齐精度，渲染前核对陈旧轨与不可显示短 cue；投影到 ASS 厘秒时保证在同一帧翻转，`assembly_manifest.json` 只引用当前绑定的轨。
+- **前景合成。** `compose_foreground.py` 把调用方渲染好的 RGBA PNG 序列（可选片尾卡）叠加到锁定母版，音频按包复制并逐包核对不变，输出帧钟与解码元数据核对后才写入新目录。
+- **声音路径显式化（recap）。** `recap.py --audio-mode {narration,source-mix,adopted-packet-copy}` 把声音策略与 `--edit-mode` 解耦：`source-mix` / `adopted-packet-copy` 不跑校验、评审和 TTS，full 直接合成，cut 剪完不再等 `narration.json`；运行清单记录音频策略，错配或含未绑定 `narration.json` 的 work-dir 被拒绝，续跑命令保留选择。
+- **配音采用绑定（assemble）。** `--tts-meta` + `--narration-adoption` 把已采用的文字、处理后 WAV 指纹、请求的引擎/声线与速度策略绑定到实际混音：输入快照、派生 WAV 封存、隐藏候选渲染后经 QC 再与 `narration_input_binding.json` 一起发布或一起放弃；采用的速度策略按形状与范围校验，不再只接受全 1.0；旧入口保持兼容并标记为未核验。
+- **显式完整混音（assemble）。** `source_score.py` 从原片声音流按精确帧区间重建原声轨、连续音乐轨与 `prepared_bed.wav` 并出具回执；`--audio-mix-adoption` 把已采用的底轨、逐段 48 kHz 配音落点与固定 master gain 渲染成最终音轨，跳过环境 BGM/duck/loudnorm/tempo，与 `narration_input_binding.json` 一起以 `audio_mix_binding.json` 事务发布；29.97/59.94 fps 画面按精确分数投影到采样钟。剪映时间线导出时，跳过的旁白段不再让其后段落的增益与采样落点错位。
+- **已采用配音的本地复用（recap）。** `--tts-meta` + `--narration-adoption` + `--audio-mix-adoption` 三件套走严格 assembly-only 路径：只接受单视频、full、narration、音轨 0、新工作目录和未存在的交付文件；全有或全无、显式 TTS/评审/QC/导出参数一律拒绝；运行清单以 sha256 封存三件套，子进程 binding 与清单不符或交付文件非本次产出时不删除、非零退出，清理以 `assembly_manifest.json` 的实际输出为准。
+- **批准稿保护与自托管 TTS 贯通编排器。** `recap.py --preserve-approved-text` 在 full / 单源 cut / 多源 cut 的 TTS 前把保护参数交给真实校验器与配音器，续跑命令保留；`--tts-provider index-tts` 显式透传，不能与 MiMo 声线参数或 dub 同用；`source-mix` 拒绝含显式 `subtitle_track.json` 的 work-dir。
+
+### Changed
+
+- **编排路径梳理。** video-recap SKILL.md 增加 `--edit-mode × --audio-mode` 路径表；编排器单视频与多视频流程共用同一段收尾（评审 → TTS → 合成 → QC），不改行为；新增 `docs/architecture.md`。
+- **skill 脚本按功能族分包。** video-assemble 新增 `scripts/adoption/`（narration_binding、audio_mix_binding、strict_inputs、strict_publish、frozen_audio）、`scripts/jianying/`（原 `jianying_*`）、`scripts/subtitles/`（原 `subtitle_*`；引用方改为 `subtitles.track` / `subtitles.track_binding`）；video-recap 新增 `scripts/qc/`（原 `mimo_qc_*`）；video-understanding 新增 `scripts/briefing/`（原 `agent_brief` / `brief_*`）；video-voiceover 新增 `scripts/providers/`（fish_audio、index_tts）。公开入口脚本仍在各 skill 的 `scripts/` 顶层；`recap.py --help` 按功能族分组显示参数。
+- **第二轮去防御：消费方不再重验生产方契约。** 沿用 0.5.0 的"在边界校验一次，之后信任契约"：`validate.py` 不再复刻 `narration_lint` 的形状检查（lint 补上有限值与时间顺序检查，`invalid_approved_shape` 改为常规 lint 错误码）；review/brief 对自建 bundle、review、clip_plan_validated 直接取字段；assemble 对 tts_meta / assembly_qc / timeline 直接取字段，剪映 builder 不再重检 contract 已保证的字段，CLI 组合检查只在 API 层做一次；recap 的 final_qc / recap_review / recap_inspect / mimo_qc 不再为不存在的产物形态兜底；understanding 的 `get_video_duration` 在 ffprobe 失败时抛错而不是返回 0.0，损坏的自产 JSON 一律抛错而不是当作"缺失"或"缓存未命中"；voiceover dub 的 ffmpeg 失败、畸形 ASR 响应、损坏缓存 sidecar 不再被吞成空行或静默重合成。`CONFIG.get(key, default)` 对已声明的键改为 `CONFIG[key]`，删除过期默认值。SKILL.md 去掉跨技能复述的免责与禁令，共享规则只在拥有它的技能里写一次。
+- **skill 层瘦身。** SKILL.md 去掉跨技能重复的创作模式定义、密集切点规则和 TTS 供应商细节，各自只在拥有它的技能里写一次；recap 的参数清单改为指向 `--help`。长段落下沉到 `video-voiceover/references/index-tts.md`、`video-assemble/references/packaging.md`、`source-score.md` 与 `video-cut/references/shot-review.md`。`timeline-and-jianying.md` 移到 `docs/`，`env-inventory-v1.json` 移到 `tests/orchestrator/`。
+- **同一句源字幕跨同源连续剪点时先合并再筛短片段**，不再把一句话切碎；不同源、真实删段、输出空隙不合并。`SUBTITLE_RENDER_VERSION` 提升到 9。
+- **SRT 毫秒改为向下量化**，避免帧边界时间被四舍五入后延迟一帧；负值钳到零。
+- 剪辑手法与审稿提示补充：保住动机与接受条件、反打是否新增信息、跨场镜头不得拼成虚假因果、只写证据已呈现的结果、REVISION 只提可定位的局部修法；brief 不再把 ASR 行尾当作安全剪点，改为听审后再定。
+- **`recap.py` 关闭 argparse 前缀缩写**（`allow_abbrev=False`），显式选项由 parser 记录到 `args._explicit_options`，后续守卫不再靠扫描 `sys.argv`。
+- **理解缓存不再把全空转写当作有效命中**（`EMPTY_UNKNOWN` 与 `UNAVAILABLE_NO_DURATION` 同样视为 MISS）；没有 sidecar 的旧缓存以 `LEGACY_UNVERIFIED` 复用。ASR 音频提取或 provider 失败时清理陈旧的 `audio.wav` 与 `asr_result.json`，时长改从提取后的 `audio.wav` 读取。
+- **批准稿结构校验拒绝 `end <= start`**、乱序与空文本，结构错误以清晰的 `SystemExit` 报出并写入 `narration_lint.json`；cut_output 模式下 `--output-duration` 缺失或越界同样记录到 lint 文件，不再留下过期的 PASS。
+
+### Removed
+
+- 入口模块不再再导出内部函数：`mimo_qc.build_report` / `sample_video_frames` / `write_report`、`cut.load_clip_plan` 等四个、`brief.lint_narration` / `validate_narration_or_raise`、`assemble.assembly_settings_payload` / `final_loudnorm_filter`；请从所属模块导入。`recap_inspect --json` 不再输出恒为空的 `forward_state_files`。剪映导出删除无法到达的 `material_category_registry` 与未知轨道分支（未知类型本来就由时间线契约拒绝）。
+- video-script 删除无人调用的 brief 生成链（narration.py / agent_brief.py / brief_*.py，约 1,300 行）及其专属 CONFIG 键，brief 行为测试移到 understanding 组；video-recap 删除与 video-script 字节相同的 creative-editing-playbook.md 副本与和 video-understanding 近重复的 research-guide.md，README / data-schema 改指拥有它们的技能。
+- `video-understanding/references/data-schema.md` 只保留本技能产出的产物（vlm、asr、asr_timing_evidence、asr_writing_chunks、silence、timeline_fusion、deslop_qc_requirements）与输入 `background_research.json`；narration / clip_plan / style_card / deslop_qc 等段落改由 video-recap 的完整契约与创作简报说明，减少约 135 行重复。
+- **video-cut 旧版单阶段旁白映射路径。** `cut.py` 不再读取 `narration.json`、不再把原片时间的旁白映射为 `narration_mapped.json`，`--narration` / `--no-narration-map` / `--allow-sparse-cut` 参数随之删除；`recap.py --allow-sparse-cut` 同步移除。唯一支持的 cut 流程是先剪后配：Agent 对着 `edited_source.mp4` 按输出时间线写 `narration.json`。
+
+### Fixed
+
+- **brief 永远拒收 `asr_clean.json` / 曾拒收 `understanding_index.json`。** `brief_context.py` 手抄的清洗 prompt 与 `consolidate.py` 漂移后指纹永不匹配；消费方不再重算生产方的 `prompt_md5`，只核对 `source_md5` 与 `model`。
+- **`recap_inspect.py state` 单源 cut 的来源总是 `unknown`。** 它读取的 `source_video_fingerprint` 从未被 video-cut 写出；改读 sidecar 实际记录的 `source_fingerprints`。
+- **显式混音路径的 `assembly_manifest.json` 被第二次写入覆盖为 `audio_mix_binding: null`。** 删除 try 块外重复的 manifest 构建，最终 MP4 也少哈希四次。
+- `timeline.json` 的旁白起点改为向下取整到 1e-4 秒网格，序列化后不再截掉已放置音频的首个采样。
+- 已放置的旁白 WAV 若为 IEEE float 格式（Python `wave` 不支持），改用 ffprobe 读取时长，不再在装配和一致性检查时报错。
+- **ffmpeg 9 上长剪辑、长旁白渲染失败。** FFmpeg 9 删除了 `-filter_complex_script` / `-filter_script`：片段多的 cut、段落多或遮罩长的最终合成在渲染时报 `Unrecognized option`，loudnorm 首遍测量每次失败并静默降级为单遍 loudnorm 目标 + limiter。现在按本机 ffmpeg 实际支持的写法传参（7.0 起用 `-/filter_complex 文件`，更早版本用旧选项）。
+- **dub 模式在没有 libass 的 ffmpeg 上无法启动。** dub 不烧录字幕，却被字幕烧录预检拦下（Homebrew 的 ffmpeg 自 2026-01 起不含 libass）；现在 dub 跳过该预检，显式传 `--burn-subtitles` 时直接报参数错误。
+
 ## [0.5.0] - 2026-09-05
 
 两条主线：新增 Fish Audio TTS 通道与《锅火》60 秒案例；以及一次以「在边界校验一次，之后信任契约」为原则的全量瘦身——删除约 2,600 行防御式代码，把校验集中到真正的输入边界，并修复审查过程中发现的三处真实缺陷。行为收紧之处见 `Changed`。
@@ -299,7 +357,8 @@ recap feels like a recap, not captions over a clip.
   MiMo API key. Five independent skills (understanding, script, cut, voiceover, assemble)
   plus a thin orchestrator; optional 剪映 draft export.
 
-[Unreleased]: https://github.com/zenstory-ai/video-recap-skills/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/zenstory-ai/video-recap-skills/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/zenstory-ai/video-recap-skills/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/zenstory-ai/video-recap-skills/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/zenstory-ai/video-recap-skills/compare/v0.3.3...v0.4.0
 [0.3.3]: https://github.com/zenstory-ai/video-recap-skills/compare/v0.3.2...v0.3.3

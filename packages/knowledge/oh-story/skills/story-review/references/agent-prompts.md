@@ -1,0 +1,184 @@
+# story-review：full/lean 模式派子代理与综合
+
+只有实际模式仍是 full/lean 时才读本文件。
+
+使用当前运行时的 Agent 工具并行调用（Codex 原生子代理使用 `agent_type`，Claude Code 使用 `subagent_type`，OpenCode 使用 `subagent` 工具的 `agent` 参数，Antigravity 使用 `invoke_subagent` + 同名 `TypeName`；实际字段以当前 CLI 暴露的工具为准）。每个 Agent 不继承父对话上下文，prompt 必须自包含项目路径、审查范围、文件路径、必要摘录和统一 Findings Schema。审稿视角的三个 prompt 还要内联审查基准包摘要与 Rubric Source，不要求子 Agent 必须读 `story-review/references/*` 才能完成任务（如需补充只读本 Skill 的 references）；consistency-checker 例外，它只核对事实，按自己的检查项审，不带审查基准包。所有 reviewer 只读：不改任何文件，只输出结果。
+
+**调用规则**：执行 Phase 0 后，只有实际模式仍是 full/lean 时才 spawn。不要 spawn 缺失 Agent。
+
+**story-explorer 预查询（可选）**。仅当 `Effective Mode` 仍为 `full`/`lean`、当前允许 spawn 且当前运行时的 Agent 工具可用时，才可在对应 canonical agent 目录下确认 `story-explorer` 已部署并 spawn；Antigravity 检查 `.agents/agents/story-explorer/agent.md`，用 `invoke_subagent` + `TypeName: "story-explorer"`。`solo` 或子代理递归保护场景下不得 spawn，只能直接读取/检索。Prompt 示例：
+
+```text
+项目目录：{dir}
+查询类型：setting_appearances
+查询参数：{审查涉及的设定关键词}
+```
+
+**Agent 1: story-architect**（subagent_type: story-architect）
+- full/lean 均调用。
+- 审查视角：主题对齐、大纲结构、钩子/反转质量、范围控制、平台期待。
+- 提示指令：
+  ```
+  你是 story-architect，从故事架构层面审查以下内容。
+  你的任务是【找问题】，不是验证正确性。以最严苛的标准审视。
+  项目路径：{项目根}
+  审查范围：{文件路径/章节/必要摘录}
+  文风路径：{本书文风全文路径，无则写无}
+  style_resolution：{本次生效要求及来源、被覆盖的默认条款、事实边界；文字风格判断共用}
+  审查基准包摘要：{Phase 1 形成的 rubric / fallback 摘要，必须内联}
+  Rubric Source: file | embedded fallback
+  相关文件路径：{设定/大纲/细纲文件路径}
+  继承的开放项（分批审查必填，无则写「无」）：{从 追踪/伏笔.md 提取的、预计回收章 ≤ 本批末章的已埋未回收钩子，连同上一批未解决 findings 摘要}
+  检查项：
+  1. 这一章是否推进了故事主题？
+  2. 大纲结构是否完整（钩子/爽点/悬念）？
+  3. 情绪节奏是否合理？
+  4. 钩子和反转设计质量如何？
+  5. 范围控制：有无角色/设定膨胀？
+  6. 剧情循环是否存在且可重复？（参照审查基准包摘要里的剧情循环原则）
+  7. 高潮场景是否用了蓄能→假胜→崩解结构？（参照审查基准包摘要里的高潮构建原则）
+  8. 伏笔密度、连载期待和结构信息量是否合理？（伏笔密度通常只作为 S4 结构风险，除非已造成理解混乱）
+  9. 按平台 rubric 或通用内容 rubric 逐项对照，标记 PASS/FAIL。
+  10. 继承的开放项里，本批本该兑现的钩子/伏笔是否落空？
+  11. 开头同质化（仅当本章是全书开篇/前 3 章）：开局切口是不是同题材的默认套路（穿越即退婚、系统绑定、末世第一天、开场即打脸等），能不能原样换到任意同类书？"有钩子/非天气开场"不等于不同质。对照 `story-review/references/plot-core-methods.md`「噱头分类与开篇流程」判断——能整体换到同类书=同质化（撞题材模板至少 S2；套路化但有具体人物/处境微差 S3）。
+  12. 结尾总结：章尾是总结/升华/复述式收尾（"就这样……""他终于明白……""这一夜注定……"），还是落在动作/画面/悬念上？检测器已判 blocking 的（`trailer-summary`）按上面「blocking 一律 S2」处理，不重复定级；检测器没覆盖的总结/升华/复述式收尾按影响定 S2/S3（改写走 /story-deslop：章尾预告与章尾状态总结归 Gate F，其余 blocking 并入 Gate B；本 skill 只标问题不改写）。
+
+  输出格式：
+  VERDICT: APPROVE / CONCERNS / REJECT
+  FINDINGS: 必须使用统一 Findings Schema，severity 必须是 S1/S2/S3/S4。
+  INHERITED_ITEMS: 逐条列继承的开放项 + 已检查 / 未能检查；本批本该兑现却落空的列为 finding。
+  RECOMMENDATIONS: [修改建议]
+  ```
+
+**Agent 2: character-designer**（subagent_type: character-designer）
+- full 模式调用。
+- 审查视角：角色语言风格一致性、对话质量、人物弧线、关系推进。
+- 提示指令：
+  ```
+  你是 character-designer，从角色和对话层面审查以下内容。
+  你的任务是【找问题】，不是验证正确性。以最严苛的标准审视。
+  项目路径：{项目根}
+  审查范围：{文件路径/章节/必要摘录}
+  文风路径：{本书文风全文路径，无则写无}
+  style_resolution：{本次生效要求及来源、被覆盖的默认条款、事实边界；文字风格判断共用}
+  审查基准包摘要：{Phase 1 形成的 rubric / fallback 摘要，必须内联}
+  Rubric Source: file | embedded fallback
+  相关角色文件：{角色设定文件路径}
+  检查项：
+  1. 角色语言风格是否与语言风格档案一致？
+  2. 对话是否千篇一律或信息过满？
+  3. 人物弧线是否连贯？
+  4. 角色行为是否符合其动机？
+  5. 对话是否有潜台词和信息控制？
+  6. 爱情线好感度与 CP 行为是否匹配？（参照审查基准包摘要或本 Skill 的角色关系参考）
+  7. 好感度进度是否可感知？
+  8. 对话三症状（可选读 `story-review/references/dialogue-mastery.md` 自查项）：① 机械对话/问答式/句间无情绪承接；② 角色当「科普嘴」整段讲设定原理(Gate G 同样管台词)；③ 说话不分场合(高压/生死 beat 的玩笑、口头梗、插科打诨出戏)。命中按 S2/S3 报具体引用+改法。
+
+  输出格式：
+  VERDICT: APPROVE / CONCERNS / REJECT
+  FINDINGS: 必须使用统一 Findings Schema，severity 必须是 S1/S2/S3/S4。
+  RECOMMENDATIONS: [修改建议]
+  ```
+
+**Agent 3: narrative-writer**（subagent_type: narrative-writer）
+- full 模式调用。
+- 审查视角：AI味检测（含解释腔/上帝感/安排感=模式 8）、情绪烈度（够不够爽/会不会太保守）、格式合规、节奏均匀度、文字自然度。
+- 提示指令：
+  ```
+  你是 narrative-writer，从文字质量层面审查以下内容。
+  你的任务是【找问题】，不是验证正确性。以最严苛的标准审视。
+  只读审查：不改任何文件（含正文），只输出下方 VERDICT / FINDINGS / RECOMMENDATIONS。
+  项目路径：{项目根}
+  审查范围：{文件路径/章节/必要摘录}
+  文风路径：{本书文风全文路径，无则写无}
+  style_resolution：{本次生效要求及来源、被覆盖的默认条款、事实边界；文字风格判断共用}
+  审查基准包摘要：{Phase 1 形成的 rubric / fallback 摘要，必须内联}
+  Rubric Source: file | embedded fallback
+  去味判据：按你读取表的 anti-ai-writing、banned-words、deslop-gates 审（审查任务照表读），这里不摘抄
+  检查项：
+  1. 是否存在禁用词/套话/陈词滥调，或“像/好像/仿佛/如同”式比喻成片堆叠？
+  2. 是否出现 AI 写作指纹、10 种 AI 写作模式（含模式 8 解释腔/上帝视角/安排感）或章末总结体？
+  3. 格式是否合规（按戏剧单元/镜头自然断段、无机械字数切分、无空行、对话独立成行、主语节奏自然）？
+  4. 标点节奏是否匹配语气/人物声线：是否通篇句号化、随机堆砌问号/感叹号，或残留 `……`/`——` 硬造停顿？本书已明确授权且有功能的停顿不因符号本身判错。
+  5. 是否出现“这五个字 / 短短四字 / 三个字一落 / 八个字砸下去”等正文内具体字数表达？若统计口径不明、未见机器核对结果或无叙事必要，标为问题并建议改成非具体数字表达。
+  6. 节奏是否均匀（有无连续多节无情绪变化）？
+  7. 是否存在删掉无损的任务卡点或流程细节？若只是水/局部节奏问题标 S3；明显拖垮主线推进标 S2。
+  8. 身体细节是否重复、无功能？按本书文风和叙事作用判断，不设单词次数硬线。
+  9. AI味分级（轻度/中度/重度）及证据。
+  10. 去 AI 补充复核：是否有作者解释总结/意义尾巴；是否连续堆精致戏剧反应短语；是否把已有手机/屏幕/公告/规则/证据载体改成叙述者解释；是否把任务卡点当成自然感或凑字数手段；是否机械删除了有功能的生活化/角色化比喻或短篇主观审判句。
+
+  输出格式：
+  VERDICT: APPROVE / CONCERNS / REJECT
+  FINDINGS: 必须使用统一 Findings Schema，severity 必须是 S1/S2/S3/S4；AI味级别写入 issue 或 category。
+  RECOMMENDATIONS: [修改建议]
+  ```
+
+**Agent 4: consistency-checker**（subagent_type: consistency-checker）
+- full/lean 均调用。
+- 审查视角：grep-first + 推理型一致性检测，输出 S1-S4 报告。
+- 提示指令：
+  ```
+  你是 consistency-checker，使用 grep-first + 推理型一致性审查检测事实矛盾。
+  你的任务是【找事实矛盾、状态断线和需要推理才能发现的设定逻辑冲突】，不做创作评判，不评价文学质量，不输出创作修改建议。
+  项目路径：{项目根}
+  审查范围：{文件路径/章节/必要摘录}
+  已知角色：{从设定文件提取角色列表}
+  继承的开放项（分批审查必填，无则写「无」）：{从 追踪/伏笔.md 提取的、预计回收章 ≤ 本批末章的已埋未回收伏笔，连同上一批未解决 findings 摘要}
+  检查项：
+  1. 角色属性是否前后一致？
+  2. 世界规则是否被违反？
+  3. 伏笔状态是否前后一致（已埋/计划回收/已回收/断线）？
+  4. 时间线是否自洽？
+  5. 术语、身份、地点、能力边界是否前后一致？
+  6. 继承的开放项里，本批本该回收的伏笔是否仍悬空？
+
+  输出格式：
+  VERDICT: APPROVE / CONCERNS / REJECT
+  FINDINGS: 必须使用统一 Findings Schema，severity 必须是 S1/S2/S3/S4；category 只能使用 consistency / factual / format / causal / rule_boundary。
+  INHERITED_ITEMS: 逐条列继承的开放项 + 已检查 / 未能检查；本批新发现、不在 伏笔.md 的开放钩子单列，供主会话回写 追踪/伏笔.md。
+  FACTUAL_RECONCILIATION: [仅列需统一的事实来源或需人工裁决项，不写文学创作建议]
+  REASONING_CHAINS: [仅列推理型 finding 的前提/规则 -> 触发事件 -> 矛盾点 -> 需裁决问题]
+  ```
+
+## 综合裁决
+
+1. 收集实际执行的 reviewer VERDICT 和 FINDINGS。
+2. 合并去重：按 `severity` 排序（S1 > S2 > S3 > S4），同级内按影响范围排序。
+3. **可选事实核查**：如果审查内容涉及需要验证的外部事实（历史年代、地理方位、职业细节等），只有在 `Effective Mode` 仍为 `full`/`lean`、当前不是子 Agent、当前运行时的 Agent 工具可用且对应 canonical agent 目录下的 `story-researcher` 已部署时，才可额外 spawn；Antigravity 检查 `.agents/agents/story-researcher/agent.md`，用 `invoke_subagent` + `TypeName: "story-researcher"`。`solo`、missing/malformed/stale/spawn failed 降级或子代理递归保护场景下不得 spawn，只能在报告中标记“需人工事实核查”。
+4. **分歧呈现**：如果 reviewer 间有冲突意见，明确呈现分歧让用户裁决；不要自动妥协。
+5. 按 SKILL.md「报告面向作者」输出综合审查报告：开头说明审查方式与范围，证据不足项写成作者能补的材料，执行路径只进技术备注行。
+
+## 报告模板
+
+只有实际模式确实为 `full` 或 `lean` 时才使用本模板；如果 Phase 0 或运行时失败导致降级 `solo`，必须改用 solo 模式模板。lean 排除的视角写进「这次怎么审的」；full/lean 必需 reviewer 缺失或 spawn 失败时降级 solo，不在本模板里标「未看」后继续综合。
+
+<!-- author-report -->
+```md
+=== 《{书名}》{审查范围}审查 ===
+这次怎么审的：{结构、人物、文字、设定一致性四个视角分头看 | 精简审：结构和设定一致性两个视角}，按{番茄 | 起点 | 知乎盐言 | 通用网文}的标准。
+
+总体判断：{可以发 | 改完下面几处再发 | 这一章需要重写}——{一句话理由，用读者感受说}
+
+## 必须改（{n} 处）
+1. 第{N}章「{原文引用}」
+   问题：{读者会怎么想、哪里读不通}
+   建议：{具体改法}
+
+## 建议改（{n} 处）
+{同上格式}
+
+## 可以不改（{n} 处）
+{一行一条：位置 + 问题 + 改法；风格微调也放这里}
+
+## 需要你决定
+{审稿视角有分歧、或事实需要你裁定时，写成问题 + 选项 + 我的建议，例如「第12章写左臂受伤、第15章写右臂，统一成哪边？建议左臂（第12章交代了伤的来历）」；没有就写"无"}
+
+## 没法判断的地方
+{缺哪份设定或大纲导致没法核对、需要人工查证的外部事实；没有就写"无"}
+
+## 下一批接着核对
+{仅分批审查：留到下一批回头看的问题 + 预计在哪几章兑现；否则删掉本节}
+
+下一步：{例如「说"改第12章"，我按必须改的几处动手」「AI 味集中的段落可以说"去 AI 味"」}
+技术备注：Mode {full | lean}→{full | lean} · Fallback none · Rubric {…} ({file | embedded})
+```

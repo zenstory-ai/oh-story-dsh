@@ -2,7 +2,6 @@
 
 import json
 import math
-import os
 import shlex
 import shutil
 import subprocess
@@ -11,7 +10,8 @@ from pathlib import Path
 
 import materials as material_lib
 from doctor import ffmpeg_has_subtitles_filter
-from lib import env_bool, load_json
+from lib import env_bool, env_int, load_json
+from recap_source import audio_binding
 
 BUNDLE = Path(__file__).resolve().parents[2]  # the skills/ directory
 
@@ -29,13 +29,8 @@ def _run(skill, script, *cli_args):
 
 
 def _optional_env_int(name):
-    raw = os.environ.get(name)
-    if raw is None or raw.strip() == "":
-        return None
-    try:
-        value = int(raw)
-    except ValueError as exc:
-        raise ValueError(f"{name} must be an integer; got {raw!r}") from exc
+    """lib.env_int with -1 as the documented "unset" sentinel."""
+    value = env_int(name, None)
     return None if value == -1 else value
 
 
@@ -67,6 +62,11 @@ def _read_video_duration_or_raise(path):
 
 def _probe_display_height_or_raise(path, *, require_square_pixels=False):
     """Return ffmpeg's display-coordinate height, accounting for rotation and SAR."""
+    return _probe_display_size_or_raise(path, require_square_pixels=require_square_pixels)[1]
+
+
+def _probe_display_size_or_raise(path, *, require_square_pixels=False):
+    """Return ffmpeg's display-coordinate (width, height), accounting for rotation and SAR."""
     cmd = [
         "ffprobe",
         "-v",
@@ -107,7 +107,7 @@ def _probe_display_height_or_raise(path, *, require_square_pixels=False):
         (int(round(float(value))) % 360 for value in rotation_values if value not in (None, "")),
         0,
     )
-    return display_width if rotation in {90, 270} else height
+    return (height, display_width) if rotation in {90, 270} else (display_width, height)
 
 
 def _analysis_settings(args):
@@ -124,10 +124,6 @@ def _analysis_settings(args):
     }
 
 
-def _material_settings_fingerprint(args):
-    return material_lib.settings_fingerprint(_analysis_settings(args))
-
-
 def _coerce_videos(video_or_videos):
     if isinstance(video_or_videos, (list, tuple)):
         return [Path(v).resolve() for v in video_or_videos]
@@ -138,8 +134,9 @@ def _run_manifest_payload(video, args):
     return {
         "schema_version": 1,
         "source_video": str(Path(video).resolve()),
-        "source_video_fingerprint": material_lib.file_fingerprint(video),
+        "source_video_identity": material_lib.file_identity(video),
         "settings": _analysis_settings(args),
+        "audio": audio_binding(args),
     }
 
 
@@ -148,19 +145,20 @@ def _write_run_manifest(work_dir, video, args):
     (work_dir / RUN_MANIFEST).write_text(
         json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
     )
+    return payload
 
 
 def _build_multi_source_records(videos, args):
     records = []
     for video in _coerce_videos(videos):
-        fp = material_lib.file_fingerprint(video)
+        identity = material_lib.file_identity(video)
         records.append(
             {
                 "source_path": str(video),
                 "source_name": video.name,
-                "source_video_fingerprint": fp,
-                "settings_fingerprint": _material_settings_fingerprint(args),
-                "material_id": material_lib.material_id_for(video, fp),
+                "source_video_identity": identity,
+                "settings": _analysis_settings(args),
+                "material_id": material_lib.material_id_for(video, identity),
             }
         )
     records = material_lib.assign_source_ids(records)
@@ -177,7 +175,7 @@ def _multi_run_manifest_payload(videos, args, source_records):
             {
                 "source_id": s["source_id"],
                 "source_path": s["source_path"],
-                "source_video_fingerprint": s["source_video_fingerprint"],
+                "source_video_identity": s["source_video_identity"],
                 "source_work_dir": s["source_work_dir"],
                 "material_id": s["material_id"],
             }
@@ -185,6 +183,7 @@ def _multi_run_manifest_payload(videos, args, source_records):
         ],
         "source_videos": [str(v) for v in _coerce_videos(videos)],
         "settings": _analysis_settings(args),
+        "audio": audio_binding(args),
     }
 
 
@@ -204,7 +203,7 @@ def _write_multi_source_manifest(work_dir, source_records):
                 "source_id": s["source_id"],
                 "source_path": s["source_path"],
                 "source_name": s["source_name"],
-                "source_video_fingerprint": s["source_video_fingerprint"],
+                "source_video_identity": s["source_video_identity"],
                 "source_work_dir": s["source_work_dir"],
                 "material_id": s["material_id"],
             }
@@ -244,8 +243,9 @@ def _ffmpeg_present_but_cannot_burn():
 def _preflight_burn_subtitles(args):
     """Fail fast BEFORE any understanding/VLM/ASR/TTS spend when subtitle burn-in is on but
     this ffmpeg can't burn it. Without it the run only dies at the final assemble
-    `-vf subtitles=` step — after the whole expensive pipeline has run."""
-    if not _burn_subtitles_intended(args):
+    `-vf subtitles=` step — after the whole expensive pipeline has run. Dub renders through
+    dub.py, which never burns subtitles, so it is exempt."""
+    if args.edit_mode == "dub" or not _burn_subtitles_intended(args):
         return
     if _ffmpeg_present_but_cannot_burn():
         raise SystemExit(

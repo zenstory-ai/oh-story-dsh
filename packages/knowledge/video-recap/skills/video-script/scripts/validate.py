@@ -2,8 +2,9 @@
 """video-script validation entrypoint.
 
 Validate an agent-written narration.json against the local understanding index.
-Writes narration_lint.json and, in full mode, rewrites only normalized fields plus
-the measured overlaps_speech flag; authored start/end timing is preserved exactly.
+Legacy full mode performs budget cleanup/deduplication and derives speech ownership.
+Protected mode keeps the approved timeline and metadata exact except for measured
+``overlaps_speech`` ownership.
 """
 
 import argparse
@@ -11,7 +12,7 @@ import json
 import math
 from pathlib import Path
 
-from lib import CONFIG, log, stable_hash
+from lib import CONFIG, log
 from narration_lint import (
     _validate_narration_budget,
     validate_narration_or_raise,
@@ -33,47 +34,27 @@ def _load_cut_clip_plan(work_dir):
     if not raw_plan.exists():
         return _load(validated_plan)
 
-    raw = _load(raw_plan)
-    validated = _load(validated_plan)
-    if isinstance(validated, dict) and validated.get(
-        "raw_plan_fingerprint"
-    ) == stable_hash(raw):
-        return validated
-    # Validation may run before the cut stage refreshes clip_plan_validated.json.
-    # Without a matching raw-plan provenance fingerprint, lint against the current
-    # raw plan even when mtimes are equal or misleading.
-    return raw
+    # Validation may run before the cut stage refreshes clip_plan_validated.json;
+    # a validated plan older than the raw plan is stale, so lint against the raw plan.
+    if validated_plan.stat().st_mtime_ns >= raw_plan.stat().st_mtime_ns:
+        return _load(validated_plan)
+    return _load(raw_plan)
 
 
-def _validate_output_timeline_bounds(narration, output_duration, tolerance=0.05):
-    """Hard-gate cut_output narration against the rendered output timeline.
+def _validate_output_timeline_bounds(narration, duration, tolerance=0.05):
+    """Hard-gate lint-validated cut_output narration against the rendered output timeline.
 
     cut_output narration is authored in edited_source.mp4 time. If any segment falls outside
     that media duration, fail before TTS/render instead of spending time on unusable audio.
     """
-    try:
-        duration = float(output_duration)
-    except (TypeError, ValueError):
-        raise SystemExit(f"output_duration must be numeric, got {output_duration!r}")
     if not math.isfinite(duration) or duration <= 0:
         raise SystemExit(
             f"output_duration must be finite and positive, got output_duration={duration:.3f}"
         )
-    if not isinstance(narration, list):
-        return
 
     problems = []
     for idx, seg in enumerate(narration):
-        if not isinstance(seg, dict):
-            continue
-        try:
-            start = float(seg.get("start"))
-            end = float(seg.get("end"))
-        except (TypeError, ValueError):
-            continue
-        if not math.isfinite(start) or not math.isfinite(end):
-            problems.append(f"segment {idx} has non-finite time [{start!r},{end!r}]")
-            continue
+        start, end = seg["start"], seg["end"]
         if end <= -tolerance or start >= duration + tolerance:
             problems.append(
                 f"segment {idx} [{start:.3f},{end:.3f}] fully outside output_duration={duration:.3f}"
@@ -106,6 +87,11 @@ def main():
         default=None,
         help="cut_output: rendered edited_source.mp4 duration in seconds",
     )
+    ap.add_argument(
+        "--preserve-approved-text",
+        action="store_true",
+        help="validate approved narration without rewriting, truncating, merging, or reordering it",
+    )
     args = ap.parse_args()
 
     work_dir = Path(args.work_dir)
@@ -118,17 +104,33 @@ def main():
     silence_periods = _load(work_dir / "silence_periods.json") or []
     if args.mode == "cut_output":
         # Two-pass cut: narration is authored in OUTPUT time against edited_source.mp4 — there is
-        # no source-time clip membership check. Derive speech ownership from the mapped output
-        # evidence, then persist that measured flag for voiceover/assemble instead of trusting JSON.
+        # no source-time clip membership check. Lint the authored shape first, then derive speech
+        # ownership from the mapped output evidence and persist that measured flag for
+        # voiceover/assemble instead of trusting JSON.
+        report = validate_narration_or_raise(
+            narration, None, clip_plan=None, mode="cut_output", work_dir=work_dir,
+            require_chronological=args.preserve_approved_text,
+        )
         narration = measure_narration_speech_ownership(
             narration, work_dir, mode="cut_output"
         )
-        validate_narration_or_raise(
-            narration, None, clip_plan=None, mode="cut_output", work_dir=work_dir
-        )
-        if args.output_duration is None:
-            raise SystemExit("--output-duration is required when --mode cut_output")
-        _validate_output_timeline_bounds(narration, args.output_duration)
+        try:
+            if args.output_duration is None:
+                raise SystemExit("--output-duration is required when --mode cut_output")
+            _validate_output_timeline_bounds(narration, args.output_duration)
+        except SystemExit as exc:
+            report["errors"].append({
+                "level": "error",
+                "index": None,
+                "code": "invalid_output_timeline",
+                "message": str(exc),
+            })
+            report["ok"] = False
+            report["error_count"] = len(report["errors"])
+            (work_dir / "narration_lint.json").write_text(
+                json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+            raise
         narration_path.write_text(
             json.dumps(narration, ensure_ascii=False, indent=2), encoding="utf-8"
         )
@@ -137,12 +139,21 @@ def main():
         validate_narration_or_raise(
             narration, vlm_analysis, clip_plan=clip_plan, mode="cut", work_dir=work_dir
         )
-        narration = _validate_narration_budget(narration, vlm_analysis)
+        if not args.preserve_approved_text:
+            narration = _validate_narration_budget(narration, vlm_analysis)
     else:
         validate_narration_or_raise(
-            narration, vlm_analysis, clip_plan=None, mode="full", work_dir=work_dir
+            narration, vlm_analysis, clip_plan=None, mode="full", work_dir=work_dir,
+            require_chronological=args.preserve_approved_text,
         )
-        narration = _align_narration_to_quiet(narration, vlm_analysis, silence_periods)
+        if args.preserve_approved_text:
+            narration = measure_narration_speech_ownership(
+                narration, work_dir, mode="full"
+            )
+        else:
+            narration = _align_narration_to_quiet(
+                narration, vlm_analysis, silence_periods
+            )
         narration_path.write_text(
             json.dumps(narration, ensure_ascii=False, indent=2), encoding="utf-8"
         )

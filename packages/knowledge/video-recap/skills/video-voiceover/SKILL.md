@@ -3,9 +3,9 @@ name: video-voiceover
 user-invocable: false
 description: >
  把带时间戳的 narration.json 合成为中文解说音频。使用 MiMo TTS（mimo-v2.5-tts）或
- Fish Audio（s2.1-pro-free）逐段生成语音，
+ Fish Audio（s2.1-pro-free）或显式配置的通用 IndexTTS HTTP 服务逐段生成语音，
  按时间窗动态适配语速并处理响度；输入输出时间线上的旁白，产出 tts_segments 与 tts_meta.json。
- 旧版直接剪辑路径也可显式传入 narration_mapped.json。触发词：配音、语音合成、TTS、解说配音、
+ 触发词：配音、语音合成、TTS、解说配音、
  voiceover、text to speech、旁白配音。
 ---
 
@@ -23,51 +23,61 @@ export MIMO_API_KEY=***  # 也可使用仅供 TTS 的 MIMO_TTS_API_KEY
 export TTS_PROVIDER=fish-audio
 export FISH_API_KEY=***
 export FISH_TTS_REFERENCE_ID=<voice-model-id>  # 可选；覆盖内置“娱乐扒妹”音色
+
+# 或显式选择自托管 index-tts 端点，配置见 references/index-tts.md
+export TTS_PROVIDER=index-tts
 ```
 
 下面的 `scripts/...` 均相对于本技能目录。若执行器从仓库根目录启动，请给脚本路径加上本技能的绝对目录。
-脚本不从其他技能目录读取文件；外部输入仅限命令显式传入的稿件、音频、参数与 `work_dir` 产物。
 
 ## 3. 输入契约
 
 默认输入为 `work_dir/narration.json`。每段必须包含 `start`、`end` 与 `narration`，可选字段包括
 `pause_after_ms` 和 `overlaps_speech`。时间统一表示音频最终放置的**输出时间线秒数**。
 
-编排式 cut 流程直接使用输出时间的 `narration.json`。只有旧版直接剪辑路径需要显式传入
-`narration_mapped.json`。
+cut 流程先剪后配：`narration.json` 本身就是按剪后成片的输出时间写的，不存在另一份映射稿。
 
 ## 4. 运行命令
 
 ```bash
 python3 scripts/voiceover.py --work-dir <work_dir> --narration <narration.json> \
-  [--tts-provider auto|mimo-tts|fish-audio] \
-  [--mimo-voice 冰糖 | --voice-ref <reference-audio>]
+  [--tts-provider auto|mimo-tts|fish-audio|index-tts] \
+  [--mimo-voice 冰糖 | --voice-ref <reference-audio>] \
+  [--preserve-approved-text]
 ```
 
-单独运行且省略 `--narration` 时，默认读取 `work_dir/narration.json`。旧版路径如需映射后的稿件，必须显式传入：
-
-```bash
-python3 scripts/voiceover.py --work-dir <work_dir> \
-  --narration <work_dir/narration_mapped.json>
-```
+单独运行且省略 `--narration` 时，默认读取 `work_dir/narration.json`；`--narration` 只用于指定其他路径的同格式稿件。
 
 ## 5. 输出契约
 
 - `tts_segments/*.wav`：每段旁白对应一个音频文件。
-- `tts_meta.json`：包含 `segments`、`engine` 与 `narration`。每段记录 `audio_path`、时间、
+- `tts_meta.json`：包含 `segments`、`engine`、`voice`（实际使用的 provider、模型、音色或参考音频）与 `narration`。每段记录 `audio_path`、时间、
   `pause_after_ms` 和放置字段。
 - 干净运行写入 `partial: false` 与 `failures: []`。
 - 使用 `--allow-partial-tts` 跳过失败段时，写入 `partial: true` 和
   `failures: [{index,start,end,text,error}]`，让缺失语音保持可见。
+- `--preserve-approved-text` 是显式的批准稿保护策略。每段保留原始 `authored_text`
+  证据；TTS 实际读取的 `spoken_text` 只经过既有的格式/舞台提示清理。若完整语音超过时间窗及
+  累计语速预算，命令失败并报告段序号、原稿、实读文本、语音时长和窗口证据，不写成功的
+  `tts_meta.json`。严格模式下任何必需段失败（包括供应商失败）都不能被
+  `--allow-partial-tts` 降级为可交付的部分成功；异常记录标为 `required: true` 并带策略 ID。
+  仅含 `[停顿]` 等清理标记、清理后无实读文本的作者段也属于必需段错误。
 
 ## 6. 运行规则
 
-- 重跑只复用内容与 TTS 设置均匹配的分段音频；修改旁白或合成参数后，只重生成受影响的 WAV。
+- 重跑只复用分段 sidecar 中记录的文本、TTS 设置与该 WAV 的 `size`/`mtime_ns` 均与当前相等的分段音频；
+  修改旁白或合成参数后，只重生成受影响的 WAV。
+- 批准稿保护策略属于缓存设置：严格模式不会命中旧的自动缩稿缓存；只有同一严格策略下、
+  `spoken_text` 完整匹配且 WAV 存在非空的缓存才可离线复用。
+- 严格 CLI 在本轮合成前把旧 `tts_meta.json` 按时间戳归档至 `tts_meta.history/`，因此失败时
+  当前路径不会继续冒充本轮成功；成功元数据通过同目录临时文件原子替换。
 - `auto` 优先使用已配置的 MiMo，MiMo key 缺失且设置了 `FISH_API_KEY` 时使用 Fish Audio；需要可复现的 provider 选择时显式传 `--tts-provider`。
+- 自托管 index-tts 端点只能由 `--tts-provider index-tts` 或 `TTS_PROVIDER=index-tts` 显式选择，`auto`
+  永不兜底选择它。协议、请求体、receipt 语义与缓存失效规则见 `references/index-tts.md`。
 - Fish Audio 直接请求 WAV；默认使用“娱乐扒妹”音色（`5653cea4ac83480aaf2bf45406556185`），`FISH_TTS_REFERENCE_ID` 可覆盖。模型、音色 ID、API URL、动态语速或归一化设置变化时会重新生成缓存。当前免费模型无 SLA，受 Fair Use 和官方免费期限约束。
 - `--voice-ref` 仅用于 full/cut 解说克隆，切换到 `mimo-v2.5-tts-voiceclone`。仅在确需新合成时惰性规范化一次；
-- dub voiceclone 原始 WAV 也会用模型、提示、台词和参考音频指纹缓存；匹配重跑不再重复请求或计费，`dub_manifest.json` 逐行记录 `tts_cache=hit|miss`；
-  参考音频内容或预处理指纹变化会使旧缓存失效。仅在获得授权后使用，参考音频会发送到 MiMo。
+- dub voiceclone 原始 WAV 也会按模型、提示、台词和参考音频的 `size`/`mtime_ns` 缓存；匹配重跑不再重复请求或计费，`dub_manifest.json` 逐行记录 `tts_cache=hit|miss`；
+  参考音频文件变化会使旧缓存失效。仅在获得授权后使用，参考音频会发送到 MiMo。
 - `TTS_WORKERS`、`TTS_TIMEOUT`、`TTS_RETRIES`、`ALLOW_PARTIAL_TTS` 用于调整并发、超时、重试与部分成功策略。
 - dub 模式有独立的确定性门禁：`dub_lint.json` 会在语音克隆前阻止空行、重叠或越界译文；
   `dub_review.json` 用于记录忠实度、语气、时长和平台适配复核。可通过
@@ -75,7 +85,7 @@ python3 scripts/voiceover.py --work-dir <work_dir> \
 
 ## 7. 能力边界
 
-- 不撰写或修改旁白文本。
+- 超窗时默认在句界自动缩稿并在 `spoken_text/truncated` 留痕；批准稿加 `--preserve-approved-text`。
 - 不混流、不压低原声、不渲染字幕。
 - 不分析视频，也不选择时间点；只为输入稿件中的既定分段配音。
-- Fish Audio 路径不接受本地 `--voice-ref`；使用已创建的 `FISH_TTS_REFERENCE_ID` 选择音色。
+- Fish Audio 与 IndexTTS 路径都不接受本地 `--voice-ref`；前者用已创建的 `FISH_TTS_REFERENCE_ID` 选择音色。

@@ -18,7 +18,7 @@
 const fs = require('fs')
 const path = require('path')
 
-// 权威模板：references/workflow-setup.md「排纲自查与细纲」里的细纲模板
+// 权威模板：references/workflow-outline.md 的细纲模板
 // 必填只留有证据或事故撑腰的核心字段；阶段位置、章节定位、结构公式、本章标价、闭环状态、
 // 写手自由区、契约风险、镜头准入、信息差触发点与「分辨率」列是可选的阅读体验字段——
 // 写了照样消费，没写不拦（#383 隔离实验：只补目标情绪与主角目标就复现了补满全部字段的收益）。
@@ -32,6 +32,69 @@ const PLOT_HEADER_FIRST = /^(?:#|序号)$/
 // 这两个字段实测直接影响正文质量，必须有实际内容
 const INTENT_FIELDS = ['目标情绪', '主角目标/关键选择']
 const CALIBER = 'visible_chars_v1'
+// 可选字段「契约风险」只收三档；值未知可写 [待补充]。旧稿里的「风险等级」按同一字段认（旧名）。
+const CONTRACT_RISK_LEVELS = ['契约安全', '需补强', '契约破坏']
+
+// 「字数目标」「字数范围」「字数口径」的写法语法与 wordcount_core.py 逐字同构（scripts/test-storyctl.py 双跑同一批写法），
+// 细纲验收通过的写法，storyctl chapter check 不能再拒。值里一个数字都没有的目标/范围行是说明文字，不参与取值。
+const NUMBER = '([1-9][0-9]{0,2}(?:[,，][0-9]{3})+|[1-9][0-9]*)'
+const NOTE = '(?:[（(][^（）()]*[）)])?'
+const TARGET_VALUE = new RegExp(`^(?:约|大约)?[ \\t]*${NUMBER}[ \\t]*字?(?:左右)?[ \\t]*${NOTE}$`)
+const RANGE_VALUE = new RegExp(`^${NUMBER}[ \\t]*字?[ \\t]*(?:-|~|～|—|–|－|至|到)[ \\t]*${NUMBER}[ \\t]*字?[ \\t]*${NOTE}$`)
+const METRIC_VALUE = new RegExp(`^([A-Za-z0-9_-]+)[ \\t]*${NOTE}$`)
+const HAS_DIGIT = /[0-9０-９]/
+
+function fieldValues(text, label) {
+  const pattern = new RegExp(`^[ \\t>]*(?:[-*+][ \\t]*)?(?:\\*\\*)?${label}(?:\\*\\*)?[ \\t]*[:：][ \\t]*(.*?)[ \\t]*$`, 'gm')
+  const values = []
+  let match
+  const normalized = text.replace(/\r\n?/g, '\n').replace(/^\uFEFF/, '')
+  while ((match = pattern.exec(normalized)) !== null) values.push(match[1].replace(/\*\*/g, '').trim())
+  return values
+}
+
+const numericFieldValues = (text, label) => fieldValues(text, label).filter((value) => HAS_DIGIT.test(value))
+const toNumber = (raw) => Number(raw.replace(/[,，]/g, ''))
+
+function parseWordcountTarget(text) {
+  const raw = numericFieldValues(text, '字数目标')
+  if (!raw.length) return { status: 'missing', value: null, raw }
+  const matches = raw.map((value) => value.match(TARGET_VALUE))
+  if (!matches.every(Boolean)) return { status: 'invalid', value: null, raw }
+  const values = [...new Set(matches.map((match) => toNumber(match[1])))]
+  if (values.length !== 1) return { status: 'conflict', value: null, raw }
+  return { status: 'ok', value: values[0], raw }
+}
+
+function parseWordcountRange(text) {
+  const raw = numericFieldValues(text, '字数范围')
+  if (!raw.length) return { status: 'missing', value: null, raw }
+  const matches = raw.map((value) => value.match(RANGE_VALUE))
+  if (!matches.every(Boolean)) return { status: 'invalid', value: null, raw }
+  const pairs = [...new Set(matches.map((match) => `${toNumber(match[1])}-${toNumber(match[2])}`))]
+  if (pairs.length !== 1) return { status: 'invalid', value: null, raw }
+  const [min, max] = pairs[0].split('-').map(Number)
+  if (min > max) return { status: 'invalid', value: null, raw }
+  return { status: 'ok', value: { min, max }, raw }
+}
+
+function parseWordcountCaliber(text) {
+  const raw = fieldValues(text, '字数口径')
+  const matches = raw.map((value) => value.match(METRIC_VALUE))
+  return raw.length > 0 && matches.every(Boolean) && new Set(matches.map((match) => match[1])).size === 1 && matches[0][1] === CALIBER
+}
+
+function parseContractRisk(text) {
+  let raw = fieldValues(text, '契约风险')
+  if (!raw.length) raw = fieldValues(text, '风险等级')
+  if (!raw.length) return null
+  const value = raw[raw.length - 1].replace(/`/g, '')
+  if (/^\[待补充\]$/.test(value)) return { status: 'unknown', level: null, detail: '', raw: value }
+  const level = CONTRACT_RISK_LEVELS.find((name) => value.startsWith(name))
+  if (!level) return { status: 'invalid', level: null, detail: '', raw: value }
+  const detail = value.slice(level.length).replace(/^[\s；;，,。：:—\-（(]+/, '').replace(/[）)]$/, '').trim()
+  return { status: 'ok', level, detail, raw: value }
+}
 
 function fieldPattern(name) {
   // 允许 -/*/+ 项目符号、可选 ** 加粗、全角或半角冒号
@@ -56,7 +119,7 @@ function makeCheck(id, ok, file, evidence, expected, repair, severity = 'blockin
     file,
     evidence,
     expected,
-    references: ['references/workflow-setup.md', 'references/artifact-protocols.md'],
+    references: ['references/workflow-outline.md'],
     repair,
   }
 }
@@ -251,22 +314,45 @@ function verify(file, projectRoot = null) {
 
   checks.push(checkSettingRefs(text, name, file, projectRoot))
 
-  const targetMatch = text.match(/字数目标\s*[：:]\s*(?:约\s*)?([\d,，]+)/)
-  const target = targetMatch ? Number(targetMatch[1].replace(/[,，]/g, '')) : null
-  const caliberOk = new RegExp(`字数口径\\s*[：:]\\s*${CALIBER}`).test(text)
+  const targetParse = parseWordcountTarget(text)
+  const rangeParse = parseWordcountRange(text)
+  const target = targetParse.value
+  const caliberOk = parseWordcountCaliber(text)
+  const targetLabel = { ok: target, missing: '未识别', invalid: `写法认不出（${targetParse.raw.join('、')}）`, conflict: `多个不同的值（${targetParse.raw.join('、')}）` }[targetParse.status]
+  const rangeLabel = rangeParse.status === 'invalid' ? `；字数范围写法不对（${rangeParse.raw.join('、')}）` : (rangeParse.value ? `；字数范围：${rangeParse.value.min}-${rangeParse.value.max}` : '')
   checks.push(makeCheck(
     'outline.wordcount-target',
-    Boolean(target) && Number.isFinite(target) && target >= 500 && target <= 20000 && caliberOk,
+    targetParse.status === 'ok' && target >= 500 && target <= 20000 && caliberOk && rangeParse.status !== 'invalid',
     name,
-    `字数目标：${target === null ? '未识别' : target}；字数口径 ${CALIBER}：${caliberOk}`,
-    `字数目标为 500-20000 的正整数，并声明 字数口径：${CALIBER}`,
-    '只补字数目标或字数口径行，不调整情节安排。'
+    `字数目标：${targetLabel}；字数口径 ${CALIBER}：${caliberOk}${rangeLabel}`,
+    `字数目标为 500-20000 的正整数（可写「2300 字」「约 2300」「2,300」，可带括号备注），并声明 字数口径：${CALIBER}；作者给了上下限时另写一行「字数范围：2000-2600」`,
+    '只补字数目标、字数范围或字数口径行，不调整情节安排。'
   ))
 
-  return report(file, checks)
+  const risk = parseContractRisk(text)
+  if (risk) {
+    checks.push(makeCheck(
+      'outline.contract-risk',
+      risk.status !== 'invalid',
+      name,
+      risk.status === 'invalid' ? `契约风险写的是「${risk.raw}」` : `契约风险：${risk.level || '[待补充]'}`,
+      `契约风险只写 ${CONTRACT_RISK_LEVELS.join(' / ')} 三档之一（需补强时后面写补强方式），未定写 [待补充]`,
+      '只把契约风险改成三档之一，不改其他字段。'
+    ))
+  }
+
+  return report(file, checks, {
+    wordcount: {
+      target,
+      target_status: targetParse.status,
+      range: rangeParse.value,
+      range_status: rangeParse.status,
+    },
+    contract_risk: risk ? { level: risk.level, detail: risk.detail, status: risk.status } : null,
+  })
 }
 
-function report(file, checks) {
+function report(file, checks, extra = {}) {
   const failures = checks.filter((check) => !check.ok && check.severity === 'blocking')
   const advisories = checks.filter((check) => !check.ok && check.severity === 'advisory')
   return {
@@ -274,6 +360,7 @@ function report(file, checks) {
     verifier: 'story-long-write.outline-contract',
     file: path.resolve(file),
     ok: failures.length === 0,
+    ...extra,
     checks,
     failures,
     advisories,
@@ -320,7 +407,7 @@ function verifySupply(volumeFile, unitId) {
     const ok = hasSupplyHeading(draft.text)
     return {
       schema_version: 1, verifier: 'story-long-write.outline-supply', file: path.resolve(draftFile), unit: unitId, ok,
-      evidence: ok ? '排纲底稿含「供给自查」小节' : `${path.basename(draftFile)} 里没有「供给自查」小节——每批出细纲前须做供给自查（含「无缺口」情形），见 workflow-setup.md「排纲自查与细纲」步骤 3`,
+      evidence: ok ? '排纲底稿含「供给自查」小节' : `${path.basename(draftFile)} 里没有「供给自查」小节——每批出细纲前须做供给自查（含「无缺口」情形），见 workflow-outline.md 步骤 3`,
     }
   }
   const read = readUtf8(volumeFile)
@@ -363,7 +450,7 @@ function verifySupply(volumeFile, unitId) {
     file: path.resolve(volumeFile),
     unit: unitId,
     ok,
-    evidence: ok ? '单元卡含「供给自查」小节' : `没有 排纲底稿_${unitId}.md，剧情单元 ${unitId} 的卡内也没有「供给自查」小节——每批出细纲前须做供给自查（含「无缺口」情形），见 workflow-setup.md「排纲自查与细纲」步骤 3`,
+    evidence: ok ? '单元卡含「供给自查」小节' : `没有 排纲底稿_${unitId}.md，剧情单元 ${unitId} 的卡内也没有「供给自查」小节——每批出细纲前须做供给自查（含「无缺口」情形），见 workflow-outline.md 步骤 3`,
   }
 }
 
@@ -430,4 +517,4 @@ function main(argv) {
 
 if (require.main === module) process.exitCode = main(process.argv.slice(2))
 
-module.exports = { verify, FIELDS, SUBSECTIONS, FIVE_ACT }
+module.exports = { verify, parseWordcountTarget, parseWordcountRange, parseContractRisk, FIELDS, SUBSECTIONS, FIVE_ACT }

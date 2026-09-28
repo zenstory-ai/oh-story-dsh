@@ -41,7 +41,7 @@ LEGACY_ASSERTION_MAX_BYTES = 768  # 存量条目的读取上限；强化老条�
 # 是它在 prompt 里的注意力预算，不该放大。防「作者以为载入了、实际被静默
 # 截断挤掉」靠三层：①新建条目的断言限 ASSERTION_MAX_BYTES，从源头短（强化
 # 已有条目不受限，否则存量长断言再也无法被确认，只会派生重复条目）；②写入
-# 端按下列任务组合（与 references/author-memory.md 的映射表同包跟版）估算
+# 端按下列任务组合（与 references/author-memory-maintenance.md 的映射表同包跟版）估算
 # 最坏查询情形——全局条目＋各 scope 维度上最重的单一切片（一次查询只带一
 # 个 book/genre/workflow，不同书的条目不会同现；切片按 casefold 归并，与
 # same_scope_value 同一口径，轻重按 compact 字节＋列表分隔符算，与真实载荷
@@ -150,7 +150,7 @@ def is_item_id(value: object) -> bool:
         isinstance(value, str)
         and len(value) >= 3
         and value[:2] in ID_PREFIXES
-        and value[2:].isdigit()
+        and value[2:].isdecimal()
         and int(value[2:]) >= 1
     )
 
@@ -1414,7 +1414,7 @@ def command_query(
     prepare_workspace(workspace, book_root)
     require(
         bool(kinds),
-        "query 必须显式传 --kind（按 references/author-memory.md 的任务映射表选类型），不再默认返回全部类型",
+        "query 必须显式传 --kind（按调用方 skill 写好的 query 命令选类型，映射表见 references/author-memory-maintenance.md），不再默认返回全部类型",
     )
     project_state = load_state(project_store(workspace))
     book_state = load_state(book_store(workspace, book_root, book)) if book_root is not None else None

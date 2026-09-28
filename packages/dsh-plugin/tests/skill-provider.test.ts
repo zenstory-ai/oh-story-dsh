@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import { resolve } from "node:path";
 import { renderSkillContent } from "@deepseek-ai/dsh-skill";
 import { describe, expect, it } from "vitest";
@@ -50,8 +50,9 @@ describe("Oh Story bundled skill provider", () => {
         "When a Skill script fails, stop and show the author the command you ran and its error"
       ]) expect(bridged?.content, candidate.name).toContain(authorRule);
     }
-    const workflowSetup = await readFile(resolve(skillRoot, "story-long-write/references/workflow-setup.md"), "utf8");
-    expect(workflowSetup).toContain("| # | 情节点（谁做了什么） | 功能标签 | 执行边界（禁＋放） |");
+    // Oh Story 0.8.2 moved the 细纲 plot-point table from workflow-setup.md into workflow-outline.md.
+    const workflowOutline = await readFile(resolve(skillRoot, "story-long-write/references/workflow-outline.md"), "utf8");
+    expect(workflowOutline).toContain("| # | 情节点（谁做了什么） | 功能标签 | 执行边界（禁＋放） |");
     expect(skill?.content.startsWith("---")).toBe(false);
     const setupCandidate = candidates.find((candidate) => candidate.name === "story-setup");
     const setup = await provider.get(setupCandidate!, {});
@@ -103,7 +104,12 @@ describe("Oh Story bundled skill provider", () => {
       expect(scan?.content).not.toContain("Bearer token");
       expect(scan?.content).toContain("报告写给作者");
       expect(scan?.content).toContain("结论不含它");
+      expect(scan?.content).toContain("扫榜/{YYYYMMDD}/");
     }
+    // Oh Story 0.8.2: scan conclusions hand off to the writing Skills through files.
+    const longScan = await provider.get(candidates.find((value) => value.name === "story-long-scan")!, {});
+    expect(longScan?.content).toContain("选题决策.md");
+    expect((await provider.get(candidates.find((value) => value.name === "story-short-scan")!, {}))?.content).toContain("短篇扫榜结论.md");
     const shortScan = await provider.get(candidates.find((value) => value.name === "story-short-scan")!, {});
     expect(shortScan?.content).toContain("可信度：样本多少篇、来自哪几个榜");
     for (const name of ["story-long-analyze", "story-import"]) {
@@ -115,23 +121,34 @@ describe("Oh Story bundled skill provider", () => {
         "manage_analysis_run.py commit",
         "needs Python 3",
         "有限并行 tier: three batches per round",
-        "never promise more"
+        "never promise more",
+        "copies this batch's plan fields verbatim",
+        "chapter_chars, min_plot_points",
+        "the plan's handoff_cache when it is not empty",
+        "dispatch the same batch to a chapter-extractor again with every field above plus the error code"
       ]) expect(analysis?.content).toContain(rule);
     }
     const analyzeScripts = resolve(skillRoot, "story-long-analyze/scripts");
     await expect(readFile(resolve(analyzeScripts, "manage_analysis_run.py"), "utf8")).resolves.toContain("\"commit\"");
     const importSkill = await provider.get(candidates.find((value) => value.name === "story-import")!, {});
     for (const importRule of [
-      "Keep upstream's Phase 3-L order: Step 2 copies the manuscript into 正文/, Step 6 writes the 细纲, Step 7 initialises Tracking.",
+      "Keep upstream's order: Phase 3-L Step 2 copies the manuscript into 正文/, Step 10 reverse-builds the 细纲 in batches, and Phase 4 initialises Tracking.",
+      "never offer the author Step 4's choice to install a writing environment with /story-setup",
+      "build_outline_brief.py, tracking_commit.py init and check with Python 3; check-outline-contract.js with Node",
       "mirrors the outline gate of upstream proseBlockReason for books with 大纲/ or 追踪/",
       "open an import window before Step 2 copies any chapter: create .story/work/导入中.md in the book directory",
-      "delete it right after Step 7's tracking_commit.py init and check both succeed",
+      "delete it right after Phase 4's tracking_commit.py init and check both succeed",
       "only holds while 追踪/_tracking-state.json is absent"
     ]) expect(importSkill?.content).toContain(importRule);
     expect(importSkill?.content).not.toContain("before copying that chapter");
-    for (const step of ["#### Step 2：正文标准化", "#### Step 6：大纲生成", "#### Step 7：追踪文件生成", "tracking_commit.py init --project", "tracking_commit.py check --project"]) {
-      expect(importSkill?.content).toContain(step);
-    }
+    // The order the override names must still be upstream's (Oh Story 0.8.2 split import into references).
+    expect(importSkill?.content).toContain("## Phase 4：追踪初始化（仅长篇）");
+    expect(importSkill?.content).toContain("写作环境：");
+    const importReferences = resolve(skillRoot, "story-import/references");
+    const longMapping = await readFile(resolve(importReferences, "structure-mapping-long.md"), "utf8");
+    for (const step of ["### Step 2：正文标准化", "### Step 10：逐批反推细纲"]) expect(longMapping).toContain(step);
+    const importTracking = await readFile(resolve(importReferences, "import-tracking.md"), "utf8");
+    for (const command of ["tracking_commit.py init --project", "tracking_commit.py check --project"]) expect(importTracking).toContain(command);
     const review = await provider.get(candidates.find((value) => value.name === "story-review")!, {});
     for (const reviewRule of [
       "When a review falls back to solo in DSH, the reason is that oh_story_role or DSH's spawn runtime is unavailable in this Session",
@@ -139,8 +156,8 @@ describe("Oh Story bundled skill provider", () => {
       "spawn failed -> solo",
       "Never tell the author that the reviewers are not installed, missing, or outdated, and never tell them to run /story-setup."
     ]) expect(review?.content).toContain(reviewRule);
-    // Upstream's solo template suggests /story-setup, which the override above corrects.
-    expect(review?.content).toContain("运行 /story-setup 后可以四个视角审");
+    // Upstream's solo template (references/solo.md since 0.8.2) suggests /story-setup, which the override above corrects.
+    await expect(readFile(resolve(skillRoot, "story-review/references/solo.md"), "utf8")).resolves.toContain("运行 /story-setup 后可以四个视角审");
   });
 
   it("rejects missing frontmatter", () => {
@@ -215,7 +232,7 @@ describe("Drama Skills bundled provider", () => {
     // oh_story_production's jobKind is image | video | composition: speech and music keep the gate but never reach the task board.
     expect(production?.content).toContain("from this Skill it registers image and video jobs only");
     expect(production?.content).toContain("speech (tts) and music jobs pass through the same prepare → explicit creator confirmation → run gate but are never registered with track_job");
-    expect(production?.content).toContain("In this DSH integration audio is never bound as a video job's reference: upstream's creator-first path has no audio binding (输入参考图 takes png/jpg/webp images only) and documents audio only as an external step, the edit stage's mix.");
+    expect(production?.content).toContain("In this DSH integration audio is never bound as a video job's reference: upstream's creator-first path has no audio binding (输入参考图 takes png/jpg/webp images only) and audio reaches the cut only at the edit stage, as 音效 lines that render mixes in or as an external mix.");
     // The claim above rests on prepare's creator-first declaration grammar.
     const productionTool = await readFile(resolve(dramaRoot, "short-drama-produce/scripts/production_tool.py"), "utf8");
     expect(productionTool).toContain('REFERENCE_SUFFIX_RE = r"(?:png|jpe?g|webp)"');
@@ -232,6 +249,11 @@ describe("Drama Skills bundled provider", () => {
     expect(edit?.content).not.toContain("beside the originals");
     expect(edit?.content).toContain("point 来源 at the new file");
     expect(edit?.content).toContain("The 声音 line in 剪辑单.md is a record, not an instruction the built-in render executes");
+    // Drama Skills 0.8.0: render mixes 音效 lines and overlays 画面文字 through Remotion, which has no ffmpeg fallback.
+    expect(edit?.content).toContain("any `画面文字` line in 剪辑单.md requires it whatever the subtitle route");
+    expect(edit?.content).toContain("Without that approval write no 画面文字 lines");
+    expect(edit?.content).toContain("mixes in the `音效` lines");
+    expect(edit?.content).toContain("`- 接镜匹配：无` in the delivery spec turns it off");
     expect(edit?.content).toContain("ends as render does with whole-film two-pass loudnorm to the declared 交付响度");
     expect(edit?.content).toContain("and only then replaces 剧集/<EP>/制作成果/成片/成片.mp4");
     expect(edit?.content).toContain("Run edit_tool.py verify last, on that delivered file, and report every 未测 item as untested");
@@ -288,11 +310,15 @@ describe("video-recap bundled provider", () => {
     expect(listed.find((candidate) => candidate.name === "video-recap")?.invocation.userInvocable).toBe(true);
     expect(listed.find((candidate) => candidate.name === "video-cut")?.invocation.userInvocable).toBe(false);
     expect(listed.find((candidate) => candidate.name === "video-understanding")?.description).toContain("结构化理解索引");
+    // The bridge names a script that 0.6.0's SKILL.md §6.1 asks the Agent to start; the sync must keep it out.
+    await expect(stat(resolve(videoRoot, "video-recap/scripts/dashboard_server.py"))).rejects.toThrow();
+    await expect(stat(resolve(videoRoot, "video-recap/scripts/library.py"))).resolves.toBeDefined();
     for (const candidate of listed) {
       const skill = await provider.get(candidate, {});
       expect(skill?.content).toContain("The Video Studio is a preview and artifact surface");
       expect(skill?.content).toContain("video-recaps/<project>/");
       expect(skill?.content).toContain("MIMO_API_KEY, FISH_API_KEY");
+      expect(skill?.content).toContain("dashboard_server.py and its dashboard assets are not bundled");
       expect(skill?.resourceBase).toEqual({ kind: "directory", path: resolve(videoRoot, candidate.name) });
     }
   });

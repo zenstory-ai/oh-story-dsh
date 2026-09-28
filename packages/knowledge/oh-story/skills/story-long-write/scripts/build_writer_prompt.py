@@ -16,10 +16,15 @@
 - 脚本做确定性部分：固定首行、定位、标题行字面量、细纲指针、文风全文路径与裁决、
   上一章结尾、降档判定与情绪/节奏槽、固定块指针。
 - 脚本代查作者记忆（prose_style + story_design）并填好 author_preferences。
-- 主会话填八槽：执行安排 / 本章意图 / 参考技法 / 本节速记 / 涉及角色 / genre_prose_card /
-  必读设定 / style_resolution。降档不成立时情绪与节奏槽也归主会话。
-  材料槽对应原流程步骤 3「写前准备」的四项输出（本节速记 / 情绪目标 / 涉及角色 /
-  参考技法）加上题材卡、设定补漏与作者偏好——都是判断，脚本做不了。
+- 脚本注入 `设定/题材定位.md`「作者已定」（本书的偏好、红线与否掉的方案），超过 AUTHOR_DECIDED_CHARS
+  可见字截断并注明去原文看；它是书级设定，优先于作者记忆。
+- 主会话填九个固定槽：执行安排 / 本章意图 / 作者本轮要求 / 本章技法 / 本节速记 / 涉及角色 /
+  genre_prose_card / 必读设定 / style_resolution。另有两个条件槽，出现时同样标［主会话填］：
+  author_preferences 块内的限定范围（--genre／--workflow）作者记忆未代查时，由主会话判断是否适用后补查
+  （脚本查询失败时则整块手查）；降档不成立时「情绪与节奏召回」也归主会话。
+  核对报告末尾的「待填槽位」给出本次实际个数（9-11）。
+  材料槽对应原流程步骤 3「写前准备」的四项输出（本节速记 / 目标情绪 / 涉及角色 /
+  本章技法）加上作者本轮要求、题材卡、设定补漏与作者偏好——都是判断，脚本做不了。
 - 续写状态卡校验后由主会话筛选，在「本节速记」槽内写入本章需要的状态。
 - 可选块缺失留标题并写明原因（「没有」与「漏了」在产物上必须长得不一样）。
   必在块缺失退出码 2 —— 那是数据问题，要修数据后重跑，不是回落手拼的理由。
@@ -39,6 +44,7 @@ from outline_view import parse as parse_volume
 TAIL_CHARS = 400          # 上一章结尾注入的目标字符数（按整行回退，不切半句）
 STATE_SECTIONS = ("当前位置", "长期约束", "核心角色状态", "活跃伏笔", "近三章速记", "下一章承诺", "连贯性风险")
 SLOT_MARK = "［主会话填］"
+AUTHOR_DECIDED_CHARS = 600  # 「作者已定」注入上限（去空白字数）；超了截断，写手按提示回原文看
 WORK_ROOT = (".story", "work")
 
 
@@ -164,13 +170,65 @@ def scoped_memory_values(workspace: Path):
     return values
 
 
-def book_genres(project: Path):
-    """「题材类型」行按分隔符切成词；未填的模板占位（{…}）不算。"""
+def genre_line(project: Path):
+    """「题材类型」行的原文；未填的模板占位（{…}）当没有。"""
     text = read_text(project / "设定" / "题材定位.md") or ""
     match = re.search(r"^[ \t]*[-*+]?[ \t]*\**题材(?:类型)?\**[ \t]*[：:](.*)$", text, re.M)
     if not match or "{" in match.group(1):
-        return set()
-    return {word.casefold() for word in re.split(r"[\W_丨×]+", match.group(1)) if word}
+        return ""
+    return match.group(1).strip()
+
+
+def book_genres(project: Path):
+    """「题材类型」行按分隔符切成词。"""
+    return {word.casefold() for word in re.split(r"[\W_丨×]+", genre_line(project)) if word}
+
+
+GENRE_CARD_DIR = Path(__file__).resolve().parent.parent / "references" / "genre-prose-cards"
+
+
+def match_genre_cards(project: Path):
+    """题材正文提示卡缺失时，按「题材类型」原文匹配题材卡（卡头的 genre 与 aliases），替主会话省掉整读索引。
+
+    按在题材类型里出现得越靠前越优先（主题材在前），同位置按置信度高→低；最多返回主、辅两张：[(路径, 置信度)]。"""
+    raw = genre_line(project).casefold()
+    if not raw or not GENRE_CARD_DIR.is_dir():
+        return []
+    rank = {"high": 0, "medium": 1, "low": 2}
+    hits = []
+    for card in sorted(GENRE_CARD_DIR.glob("*.md")):
+        head = (read_text(card) or "").split("---")
+        meta = head[1] if len(head) > 2 else ""
+        genre = re.search(r"^genre:\s*(.+)$", meta, re.M)
+        aliases = re.search(r"^aliases:\s*\[(.*)\]", meta, re.M)
+        confidence = re.search(r"^confidence:\s*(\w+)", meta, re.M)
+        names = [genre.group(1).strip()] if genre else [card.stem]
+        names += [a.strip() for a in aliases.group(1).split(",")] if aliases else []
+        where = [raw.find(name.casefold()) for name in names if name and name.casefold() in raw]
+        if where:
+            level = confidence.group(1) if confidence else "low"
+            hits.append((min(where), rank.get(level, 2), card, level))
+    hits.sort(key=lambda row: (row[0], row[1], row[2].name))
+    return [(card, level) for _, _, card, level in hits[:2]]
+
+
+def author_decided(project: Path):
+    """`设定/题材定位.md`「## 作者已定」一节：去掉模板占位行；返回 (正文, 是否截断)。没有这一节返回 (None, False)。"""
+    text = read_text(project / "设定" / "题材定位.md") or ""
+    match = re.search(r"^##[ \t]*作者已定[^\n]*\n(.*?)(?=^#{1,2}[ \t]|\Z)", text, re.M | re.S)
+    if not match:
+        return None, False
+    lines = [line.rstrip() for line in match.group(1).splitlines()
+             if line.strip() and not re.fullmatch(r"\s*[-*+]?\s*\{.*\}\s*", line)]
+    kept, used, cut = [], 0, False
+    for line in lines:
+        size = len(re.sub(r"\s", "", line))
+        if used + size > AUTHOR_DECIDED_CHARS:
+            cut = True
+            break
+        kept.append(line)
+        used += size
+    return "\n".join(kept), cut
 
 
 def query_author_memory(project: Path):
@@ -369,7 +427,10 @@ def build(project: Path, chapter: int, report: list):
     needs = {"题材正文提示卡": card_text, "目标情绪": target_emotion,
              "单元情绪引擎": engine, "单元节拍/章功能分配": tempo}
     why = [name + "缺有效内容" for name, value in needs.items() if not substantive(value)]
-    if not custom_style:
+    # 无对标（项目与工作区都没有对标书）时文风本就没有对标可召回：不因 custom_style 缺失拒绝降档
+    no_benchmark = not any(d.is_dir() for base in (project / "对标", project / "拆文库", project.parent / "拆文库")
+                           if base.is_dir() for d in base.iterdir())
+    if not custom_style and not no_benchmark:
         why.append("custom_style=false")
     downgrade = not why
 
@@ -384,7 +445,7 @@ def build(project: Path, chapter: int, report: list):
         if tempo:
             lines.append(f"  {tempo}")
         slot_recall = "——— 情绪与节奏召回 ———\n" + "\n".join(lines)
-        report.append(f"召回降档：成立，文风、题材卡、目标情绪和单元 {unit_id} 情绪/节拍均可用")
+        report.append(f"召回降档：成立，{'无对标，' if no_benchmark and not custom_style else '文风、'}题材卡、目标情绪和单元 {unit_id} 情绪/节拍均可用")
     else:
         slot_recall = ("——— 情绪与节奏召回 ———\n"
                        f"{SLOT_MARK} 降档不成立（" + "、".join(why) +
@@ -396,19 +457,21 @@ def build(project: Path, chapter: int, report: list):
     parts.append(
         "——— 执行安排 ———\n"
         f"{SLOT_MARK} 全章细纲用于整体编排。默认按自然转场或因果停顿分前后两组，"
-        "填写当前组的情节点/片段；先只写前组，父流程测一次 checkpoint 后"
+        "填写当前组的情节点/片段；先只写前组，主会话测一次 checkpoint 后"
         "再给后组和机器剩余区间。只有用户明确要求一次成文时才填「全章，直接写最终路径」。\n"
         f"分组临时文件：前组 {work_dir / '前组.md'}，后组 {work_dir / '后组.md'}"
         "（只写这里，不写 /tmp 或 正文/）。")
     parts.append(f"——— 本章意图（一句话）———\n{SLOT_MARK}")
+    parts.append("——— 作者本轮要求 ———\n"
+                 f"{SLOT_MARK} 作者这次明确说的：字数范围、必须发生、不许发生、写到哪里停、章尾要留什么；没有写「无」。")
     parts.append(slot_recall)
     # 伏笔与卷级禁忌走「主会话筛选后写进速记」这条原设计路线（步骤 3 状态筛选），
     # 不由脚本整栏注入——筛选是判断，而整栏注入还会把伏笔栏里的作者侧真相一并下放。
     # 代价是它依赖主会话逐章想起来，所以这里把提示语写成写死的三问清单。
     parts.append(
-        "——— 参考技法 ———\n"
-        f"{SLOT_MARK} 借鉴哪个参考文件的哪个技法、用在哪些段落；没有就写「无」。"
-        "按 reference 表的任务条件读取；本书文风只覆盖冲突表达条款，不停读整份文件。")
+        "——— 本章技法 ———\n"
+        f"{SLOT_MARK} 按细纲主功能填 打脸／反转／感情／悬疑／日常／无 之一（对照 SKILL.md「本章技法」），"
+        "再写一句用在哪几段；写手按自己的读取表读对应文件，这里不摘技法。本书文风只覆盖冲突表达条款，不停读整份文件。")
     parts.append(
         "——— 本节速记 ———\n"
         f"{SLOT_MARK} 按 workflow-chapter 步骤 3「状态筛选」产出（`追踪/上下文.md` 不注入"
@@ -420,9 +483,26 @@ def build(project: Path, chapter: int, report: list):
         "——— 涉及角色 ———\n"
         f"{SLOT_MARK} 按细纲「人物出场顺序」与「镜头准入」的台词位／动作位分配，"
         "列出本章要读的角色卡；本节速记已给全状态的不必再列。")
+    if not substantive(card_text):
+        cards = match_genre_cards(project)
+        if cards:
+            named = "；".join(f"{'主' if i == 0 else '辅'}题材 {card}（置信度 {level}）" for i, (card, level) in enumerate(cards))
+            report.append(f"题材卡：本书还没有题材正文提示卡，按「题材类型」匹配到 {named}；生成后落盘，后续章直接读")
+        else:
+            report.append("题材卡：本书还没有题材正文提示卡，题材卡无匹配——读 style-genre-modules.md"
+                          "「题材正文提示卡」一节与最接近的流派一节生成后落盘")
     parts.append("——— 题材正文提示卡（genre_prose_card，只含本章相关条目）———\n"
                  f"{SLOT_MARK} 主题材抽 3-5 条、辅题材 1-2 条；只作内部校准，不进正文")
     parts.append(slot_setting)
+    decided, cut = author_decided(project)
+    if decided:
+        note = (f"\n（超过 {AUTHOR_DECIDED_CHARS} 字已截断，其余见 {project / '设定' / '题材定位.md'}「作者已定」，动笔前读完）"
+                if cut else "")
+        parts.append("——— 作者已定（本书的决定，高于作者记忆，与细纲冲突以细纲为准并在交付摘要里说明）———\n"
+                     + decided + note)
+        report.append("作者已定：已注入" + ("（超长截断，写手需回原文读完）" if cut else ""))
+    else:
+        report.append("作者已定：题材定位里没有或为空，未注入")
     items, omitted, skipped, memory_error = query_author_memory(project)
     if memory_error:
         memory_block = (f"{SLOT_MARK} 组装脚本查询作者记忆失败（{memory_error}），"
@@ -438,14 +518,14 @@ def build(project: Path, chapter: int, report: list):
     if skipped and not memory_error:
         named = "；".join(f"{'题材' if k == 'genre' else '流程'}：{'、'.join(v)}" for k, v in skipped.items())
         memory_block += (f"\n{SLOT_MARK} 另有限定范围的作者记忆未代查（{named}）：本书适用的，"
-                         "按 author-memory.md 带 --genre／--workflow 查询后补进本块")
+                         "带 --genre／--workflow 跑 SKILL.md「核心方法」的 query 命令（--kind prose_style --kind story_design）后补进本块")
         report.append(f"作者记忆：限定范围未代查（{named}），归主会话判断是否适用")
     parts.append("——— author_preferences（作者记忆，低优先级倾向，不逐条追求命中）———\n" + memory_block)
     parts.append("——— style_resolution ———\n"
                  f"{SLOT_MARK} 本轮请求里作者对表达的明确要求及其覆盖的默认条款（没有写「无」）；"
                  "本书文风与作者记忆的裁决见上方各块，同一裁决传去味与审稿。")
 
-    parts.append("检查分工：写手负责编排、内容覆盖和格式自检；父流程质量阶段负责语义去味及最终文件扫描。写手不提前重复整轮去味或相同检查链，保留情节点落点、新增申报与原定交付。")
+    parts.append("检查分工：写手负责编排、内容覆盖和格式自检；主会话质量阶段负责语义去味及最终文件扫描。写手不提前重复整轮去味或相同检查链，保留情节点落点、新增申报与原定交付。")
 
     # ---- 固定块：压成指针，不重述 agent 定义 ----
     parts.append(

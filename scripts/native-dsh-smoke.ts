@@ -638,7 +638,7 @@ async function main(): Promise<void> {
     await Promise.all(dramaCreatorFiles.map(async (name) => {
       const path = join(secondEpisode, name);
       const source = await readFile(path, "utf8");
-      await writeFile(path, source.replaceAll("EP001", "EP002").replaceAll("空白账号", "百万倒计时"));
+      await writeFile(path, source.replaceAll("EP001", "EP002").replaceAll("四个号，四个粉", "百万倒计时"));
     }));
     runPnpm(["--filter", "@oh-story/dsh", "build"]);
     runPnpm(["--filter", "@oh-story/dsh", "pack", "--pack-destination", packDirectory]);
@@ -685,6 +685,8 @@ async function main(): Promise<void> {
         || /(?:^|\/)\.omc(?:\/|$)/u.test(entry)
         || /copy-path-safety\.py$/u.test(entry)
         || /dashboard_server\.py$/u.test(entry)
+        || /drama\/skills\/short-drama\/scripts\/creator_views\.py$/u.test(entry)
+        || /video-recap\/skills\/video-recap\/(?:scripts\/dashboard_[a-z]+\.py|assets\/dashboard\/)/u.test(entry)
         || /drama\/skills\/short-drama\/references\/lifecycle-commands\.md$/u.test(entry)) {
         throw new Error(`Plugin tarball retained forbidden content: ${entry}`);
       }
@@ -1893,7 +1895,7 @@ async function main(): Promise<void> {
       await productionTab.click();
       const productionTabs = page.getByRole("tablist", { name: "短剧生产视图" });
       await productionTabs.waitFor({ state: "visible", timeout: 10_000 });
-      if (await page.locator(".oh-story-shot-card").count() !== 8
+      if (await page.locator(".oh-story-shot-card").count() !== 22
         || await page.locator(".oh-story-shot-card img.oh-story-media-preview").count() < 1
         || await page.locator(".oh-story-shot-card video.oh-story-media-preview").count() < 1
         || await productionTabs.getByRole("tab").allTextContents().then((labels) => JSON.stringify(labels) !== JSON.stringify(["镜头", "素材", "任务", "成片", "画布"]))) {
@@ -1902,7 +1904,7 @@ async function main(): Promise<void> {
       if (!useRealDeepSeek && await page.locator(".oh-story-shot-card").filter({ hasText: productionIntentArgs.targetId }).first().getAttribute("data-selected") === null) {
         throw new Error("Agent production intent did not focus the requested semantic shot target.");
       }
-      // The Agent intent above focuses SHOT-EP001-008, so the board is scrolled to the last shot and
+      // The Agent intent above focuses SHOT-EP001-008, so the board is scrolled well past the first shot and
       // the first card's loading="lazy" keyframe is deliberately still unloaded. Bring it into view and
       // await decode before measuring, so this asserts fixture realism rather than scroll position.
       const keyframePreview = page.locator(".oh-story-shot-card img.oh-story-media-preview").first();
@@ -1945,8 +1947,8 @@ async function main(): Promise<void> {
       if (await reusableReference.getAttribute("aria-pressed") !== "true") throw new Error("Project media could not be attached as an explicit shot reference.");
       await page.locator(".oh-story-media-library").scrollIntoViewIfNeeded();
       await productionTabs.getByRole("tab", { name: "成片", exact: true }).click();
-      if (await page.locator(".oh-story-sequence > ol > li").count() !== 8
-        || await page.locator(".oh-story-sequence-summary").getByText("7 个阻塞项", { exact: true }).count() !== 1
+      if (await page.locator(".oh-story-sequence > ol > li").count() !== 22
+        || await page.locator(".oh-story-sequence-summary").getByText("21 个阻塞项", { exact: true }).count() !== 1
         || await page.locator(".oh-story-sequence-issues li").count() !== 4
         || await page.getByRole("button", { name: "合成成片", exact: true }).isEnabled()) {
         throw new Error("Production sequence did not expose shot order and missing-video blockers.");
@@ -1969,7 +1971,7 @@ async function main(): Promise<void> {
         throw new Error("Production canvas did not expose keyboard-operable Session layout controls.");
       }
       await productionTabs.getByRole("tab", { name: "镜头", exact: true }).click();
-      await page.locator(".oh-story-shot-card").first().getByRole("button", { name: "IMG-JIANGCHEN-SHEET", exact: true }).click();
+      await page.locator(".oh-story-shot-card").first().getByRole("button", { name: "IMG-ZHOUBOSEN-SHEET", exact: true }).click();
       await page.getByRole("textbox", { name: "剧集/EP001/图片提示词.md" }).waitFor({ state: "visible", timeout: 10_000 });
       await selectFile(page, "剧集/EP001/分镜.md");
       await productionTab.click();
@@ -2041,7 +2043,7 @@ async function main(): Promise<void> {
         }
         await page.getByRole("button", { name: "刷新", exact: true }).click();
         try {
-          await batchTask.getByText("1/8 项成果", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+          await batchTask.getByText("1/22 项成果", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
         } catch (error) {
           const batchTaskCount = await batchTask.count();
           const productionSummary = page.locator(".oh-story-production-summary");
@@ -2061,10 +2063,10 @@ async function main(): Promise<void> {
           };
           throw new Error(`Partial batch output did not reconcile in the Browser projection: ${JSON.stringify(diagnostic)}`, { cause: error });
         }
-        await batchTask.getByText("DSH Turn 已结束，已发现 1/8 项成果；请刷新核对剩余输出。", { exact: true })
+        await batchTask.getByText("DSH Turn 已结束，已发现 1/22 项成果；请刷新核对剩余输出。", { exact: true })
           .waitFor({ state: "visible", timeout: 15_000 });
 
-        const readyVideoPaths = Array.from({ length: 8 }, (_, index) => {
+        const readyVideoPaths = Array.from({ length: 22 }, (_, index) => {
           const shotId = `SHOT-EP001-${String(index + 1).padStart(3, "0")}`;
           return `剧集/EP001/制作成果/${shotId}/${shotId}-ready-smoke.mp4`;
         });
@@ -2104,10 +2106,10 @@ async function main(): Promise<void> {
       await productionTab.click();
       await productionTabs.getByRole("tab", { name: "镜头", exact: true }).click();
       await page.locator(".oh-story-shot-card").first().waitFor({ state: "visible", timeout: 10_000 });
-      if (await page.locator(".oh-story-shot-card").count() !== 8
+      if (await page.locator(".oh-story-shot-card").count() !== 22
         || await page.locator(".oh-story-shot-card").first().getByRole("button", { name: "SHOT-EP002-001", exact: true }).count() !== 1
         || await page.locator(".oh-story-shot-card .oh-story-media-preview").count() !== 0
-        || await page.locator(".oh-story-production-summary").textContent() !== "8 镜 · 10 素材 · 0 任务") {
+        || await page.locator(".oh-story-production-summary").textContent() !== "22 镜 · 11 素材 · 0 任务") {
         throw new Error("EP002 production projection leaked EP001 media or task state.");
       }
       await page.locator(".oh-story-shot-card").first().locator("h3").click();
