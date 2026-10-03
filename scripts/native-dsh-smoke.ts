@@ -1555,7 +1555,20 @@ async function main(): Promise<void> {
       });
       const generatedInputState = async () => {
         const frame = page.frames().find((candidate) => candidate.url().includes("/oh-story/game-preview/workspace/"));
+        const button = await generatedFrame.locator("#play").boundingBox();
         return {
+          browserVersion: browser.version(),
+          button,
+          parentHit: button === null ? null : await page.evaluate(({ x, y, width, height }) => {
+            const point = { x: x + width / 2, y: y + height / 2 };
+            return {
+              point,
+              elements: document.elementsFromPoint(point.x, point.y).slice(0, 6).map((element) => ({
+                tag: element.tagName, id: element.id, class: element.className,
+                title: element.getAttribute("title"), bounds: element.getBoundingClientRect().toJSON()
+              }))
+            };
+          }, button),
           project: await projectSelect.inputValue(),
           tabs: await gameTabs.getByRole("tab", { selected: true }).allTextContents(),
           anchors: await page.locator('[data-slot="conversation.session"]').evaluateAll((elements) => elements.map((element) => element.getAttribute("data-e2e-anchor"))),
