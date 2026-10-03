@@ -604,7 +604,9 @@ async function main(): Promise<void> {
     await Promise.all([
       writeFile(join(generatedGameRoot, "PRODUCT_BRIEF.md"), "# PRODUCT_BRIEF · DSH Game Studio Smoke\n\ntargetFinish: playable-prototype\n"),
       writeFile(join(generatedGameRoot, "_progress.md"), "# Progress\n\n- playable: complete\n"),
-      writeFile(join(generatedGameRoot, "build", "app", "index.html"), "<!doctype html><html lang=zh-CN><meta charset=utf-8><title>DSH Game Smoke</title><button id=play>试玩成功</button><script>document.querySelector('#play').addEventListener('click',event=>event.currentTarget.textContent='输入已验证')</script></html>"),
+      // Expose an actionable button only after its input listener is attached;
+      // a streamed HTML response can make it visible before the script arrives.
+      writeFile(join(generatedGameRoot, "build", "app", "index.html"), "<!doctype html><html lang=zh-CN><meta charset=utf-8><title>DSH Game Smoke</title><button id=play disabled>试玩成功</button><script>const play=document.querySelector('#play');play.addEventListener('click',event=>event.currentTarget.textContent='输入已验证');play.disabled=false</script></html>"),
       writeFile(join(generatedGameRoot, "qa", "verification.json"), `${JSON.stringify({
         schemaVersion: 3,
         status: "PASS",
