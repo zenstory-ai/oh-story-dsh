@@ -604,7 +604,9 @@ async function main(): Promise<void> {
     await Promise.all([
       writeFile(join(generatedGameRoot, "PRODUCT_BRIEF.md"), "# PRODUCT_BRIEF · DSH Game Studio Smoke\n\ntargetFinish: playable-prototype\n"),
       writeFile(join(generatedGameRoot, "_progress.md"), "# Progress\n\n- playable: complete\n"),
-      writeFile(join(generatedGameRoot, "build", "app", "index.html"), "<!doctype html><html lang=zh-CN><meta charset=utf-8><title>DSH Game Smoke</title><button id=play>试玩成功</button><script>document.querySelector('#play').addEventListener('click',event=>event.currentTarget.textContent='输入已验证')</script></html>"),
+      // Expose an actionable button only after its input listener is attached;
+      // a streamed HTML response can make it visible before the script arrives.
+      writeFile(join(generatedGameRoot, "build", "app", "index.html"), "<!doctype html><html lang=zh-CN><meta charset=utf-8><title>DSH Game Smoke</title><button id=play disabled>试玩成功</button><script>const play=document.querySelector('#play');play.addEventListener('click',event=>event.currentTarget.textContent='输入已验证');play.disabled=false</script></html>"),
       writeFile(join(generatedGameRoot, "qa", "verification.json"), `${JSON.stringify({
         schemaVersion: 3,
         status: "PASS",
@@ -2005,6 +2007,7 @@ async function main(): Promise<void> {
       await productionTab.click();
       await page.locator(".oh-story-shot-card").first().waitFor({ state: "visible", timeout: 10_000 });
       if (!useRealDeepSeek) {
+        const beforeShotOne = (await sessionEvents(origin, dramaSession.sessionId)).at(-1)?.seq ?? -1;
         await page.locator(".oh-story-shot-card").first().getByRole("button", { name: "准备关键帧", exact: true }).click();
         await productionTabs.getByRole("tab", { name: "任务", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
         await page.locator(".oh-story-task-board article").first().waitFor({ state: "visible", timeout: 10_000 });
@@ -2012,10 +2015,12 @@ async function main(): Promise<void> {
           .waitFor({ state: "visible", timeout: 20_000 });
         await page.getByText("等待确认", { exact: true })
           .waitFor({ state: "visible", timeout: 10_000 });
+        await waitForCompletedTurn(origin, dramaSession.sessionId, beforeShotOne);
 
         const taskFor = (targetId: string) => page.locator(".oh-story-task-board article").filter({ hasText: targetId }).first();
         const shotCards = page.locator(".oh-story-shot-card");
 
+        const beforeShotTwo = (await sessionEvents(origin, dramaSession.sessionId)).at(-1)?.seq ?? -1;
         await productionTabs.getByRole("tab", { name: "镜头", exact: true }).click();
         await shotCards.nth(1).getByRole("button", { name: "准备关键帧", exact: true }).click();
         const runningQueueRemovalTask = taskFor("SHOT-EP001-002");
@@ -2030,6 +2035,8 @@ async function main(): Promise<void> {
         await removedQueuedTask.getByText("已取消", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
         await runningQueueRemovalTask.getByText("等待确认", { exact: true })
           .waitFor({ state: "visible", timeout: 10_000 });
+        // Business confirmation state is not a host Turn-completion barrier.
+        await waitForCompletedTurn(origin, dramaSession.sessionId, beforeShotTwo);
 
         const productionRequestsBeforeCancel = mockDeepSeek?.requests.filter((request) => request === "production").length ?? 0;
         await productionTabs.getByRole("tab", { name: "镜头", exact: true }).click();
