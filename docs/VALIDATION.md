@@ -1,6 +1,6 @@
 # Validation
 
-Release candidate: `@oh-story/dsh` 0.1.13 on DeepSeek Harness `0.2.0-rc.2`, with explicit `0.2.1-alpha.1` coverage. Local aggregate acceptance and credentialed browser demos passed on 2026-10-03; public-channel validation remains **POST-TAG**.
+Released: `@oh-story/dsh` 0.1.13 on DeepSeek Harness `0.2.0-rc.2`, with explicit `0.2.1-alpha.1` coverage. Local aggregate acceptance, credentialed browser demos and public-channel validation passed on 2026-10-03.
 
 ## 0.1.13 release evidence
 
@@ -16,11 +16,27 @@ The following evidence has been reproduced while preparing the pinned asset upda
 - A paid DSH `0.2.1-alpha.1` observation with `deepseek-official/deepseek-flash` passes both review flows: 2 required Role calls, 86 durable story events, 64 durable drama events, and an unchanged combined project digest. This observation does not claim to be a paid rerun of the exact final release source.
 - A separate paid DSH `0.2.1-alpha.1` browser run with `deepseek-official` passed on 2026-10-03 and rendered all four Story, Drama, Game and Video GIFs. It exercised the ADV quick save/load path, the compact 500 px game view and the 20-writer CAS race. The paid path intentionally reports `mixedStaticComposition`, `agentWriteStreaming` and `roleToolE2e` as false; those contracts are covered by the fresh final-source fixture run and the independent paid provider review above, not attributed to this demo. The paid browser package predates the final compact-CSS adjustment, so it is provider-plus-four-workbench compatibility evidence rather than exact-final-CSS verification.
 
-### Remaining release gates
+### Release gates
 
 - **Local aggregate acceptance — PASSED 2026-10-03:** `pnpm verify:release` completed with both alpha and rc.2 result JSON reporting `"ok": true` after all deterministic checks.
 - **Credentialed browser demos — PASSED 2026-10-03:** the paid all-workbench run returned `"ok": true` and rendered all four GIFs, subject to the coverage and final-CSS boundary stated above.
-- **Public channels — POST-TAG:** the release workflow must run `verify-public` against the immutable GitHub Release and npm bytes after publication. No pre-release local check can claim this result.
+- **Public channels — PASSED 2026-10-03:** [source-bound recovery attempt 2](https://github.com/zenstory-ai/oh-story-dsh/actions/runs/37141721746/attempts/2) completed `verify-public` with `{"github":"SUCCESS","npm":"SUCCESS","version":"0.1.13"}` after anonymous byte comparisons, npm integrity verification and an isolated public install. An independent local invocation returned the same result.
+
+The original tag workflow passed the full release suite and published GitHub
+assets, but its relative npm tarball argument failed. The recovery reused that
+same producer artifact; neither the tag nor public assets were changed. npm
+accepted the package on recovery attempt 1; its metadata was briefly unavailable
+while processing, exposing a verifier null-handling bug. After the exact public
+integrity became available, attempt 2 reported `skip-exact` rather than publishing
+again and passed the complete public verification. The main verifier now rejects
+missing metadata into its existing bounded wait, with a red/green regression.
+
+The [public manifest](https://github.com/zenstory-ai/oh-story-dsh/releases/download/v0.1.13/RELEASE-MANIFEST.json)
+binds the unchanged package to source
+`f207fa92863bd3626b8ee6bd7b5ad30762ef205c`. npm provenance identifies the recovery
+workflow/main invocation, not the original tag-build invocation; the manifest,
+original producer proofs and exact protected-main CI independently bind package
+source. See [the recovery process](RELEASING.md#one-time-0113-npm-recovery).
 
 ## Test architecture
 

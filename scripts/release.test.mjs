@@ -11,6 +11,7 @@ import {
   createReleaseManifest,
   npmPublicationDecision,
   npmPublishArguments,
+  requirePublishedNpmMetadata,
   selectCiProof,
   validateReleaseMetadata,
   verifyFinalCiSnapshot,
@@ -395,6 +396,23 @@ test("npm publish receives a local absolute tarball, never a GitHub shorthand", 
     assert.ok(path.isAbsolute(args[1]));
     assert.deepEqual(args.slice(2), ["--access", "public", "--provenance", "--ignore-scripts"]);
   }
+});
+
+test("public npm verification retries missing metadata instead of accepting a null result", () => {
+  assert.throws(
+    () => requirePublishedNpmMetadata({ status: 404, metadata: null, integrity: "sha512-a" }),
+    /not yet publicly available/,
+  );
+  const metadata = { dist: { integrity: "sha512-a" } };
+  assert.equal(requirePublishedNpmMetadata({ status: 200, metadata, integrity: "sha512-a" }), metadata);
+  assert.throws(
+    () => requirePublishedNpmMetadata({ status: 401, metadata: null, integrity: "sha512-a" }),
+    /registry lookup failed/,
+  );
+  assert.throws(
+    () => requirePublishedNpmMetadata({ status: 200, metadata, integrity: "sha512-b" }),
+    /different bytes/,
+  );
 });
 
 test("all local actions are immutable and the release workflow has isolated publishers", async () => {

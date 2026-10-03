@@ -58,6 +58,16 @@ export function npmPublishArguments(directory, filename) {
   return ["publish", path.resolve(directory, filename), "--access", "public", "--provenance", "--ignore-scripts"];
 }
 
+export function requirePublishedNpmMetadata({ status, metadata, integrity }) {
+  const decision = npmPublicationDecision({
+    status,
+    remoteIntegrity: metadata?.dist?.integrity,
+    localIntegrity: integrity,
+  });
+  invariant(decision === "skip-exact", "npm version is not yet publicly available");
+  return metadata;
+}
+
 function normalizeWorkflowPath(value) {
   return String(value ?? "").replace(/^\//, "");
 }
@@ -656,12 +666,7 @@ async function commandVerifyPublic(args) {
 
   const metadata = await retry("npm registry propagation", async () => {
     const result = await registryMetadata(manifest.package, manifest.version);
-    npmPublicationDecision({
-      status: result.status,
-      remoteIntegrity: result.metadata?.dist?.integrity,
-      localIntegrity: tarball.integrity,
-    });
-    return result.metadata;
+    return requirePublishedNpmMetadata({ ...result, integrity: tarball.integrity });
   });
   invariant(metadata.dist.integrity === tarball.integrity, "npm integrity differs from the manifest");
 

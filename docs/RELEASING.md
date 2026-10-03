@@ -120,6 +120,15 @@ producer proofs and protected-main CI. The original artifact has a 14-day
 retention window; this recovery requires it to remain available. The normal
 `release.yml` manual dispatch remains a nonpublishing dry-run.
 
+[Recovery attempt 2](https://github.com/zenstory-ai/oh-story-dsh/actions/runs/37141721746/attempts/2)
+completed on 2026-10-03 with npm `skip-exact` and both public channels reporting
+`SUCCESS`, including isolated anonymous installation. Attempt 1 had already
+submitted the original package, but npm was still processing its public metadata.
+The original verifier accepted a 404 as a null result instead of waiting; that
+contract now has a regression fix on main. The old tag source is unchanged, so
+any repeat of this one-time workflow must first confirm the public exact-version
+metadata and manifest integrity rather than resubmit while processing.
+
 Do not announce a release until the registry reports the exact version:
 
 ```bash
