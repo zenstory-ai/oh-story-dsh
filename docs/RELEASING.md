@@ -93,6 +93,33 @@ failure and needs investigation rather than a retry that mutates public bytes.
 
 ## Verify the public installation
 
+### One-time 0.1.13 npm recovery
+
+The original [0.1.13 tag run](https://github.com/zenstory-ai/oh-story-dsh/actions/runs/37139595180)
+passed verification and published GitHub assets, but npm interpreted its bare
+relative tarball path as a GitHub package shorthand. The generic publisher now
+passes an absolute local path, with a regression test. Do not move the tag,
+replace public assets, or rerun that old tag workflow: its source still has the
+relative-path bug.
+
+`recover-v0.1.13.yml` is a narrowly bound manual recovery, not a new generic
+publishing entry point. Dispatch it on protected `main` only after that exact
+recovery commit passes all four main CI jobs. It reuses original artifact ID
+`11279574541` from run `37139595180`, attempt `1`, and independently recorded
+manifest/promotion/CI-proof digests. Before exposing npm credentials it proves
+both CI sources, re-resolves the original tag, and anonymously compares the
+tarball, manifest and checksums with the existing GitHub assets. It does not
+rebuild or write GitHub state. It invokes the original tag's publisher with an
+absolute directory, retains npm integrity idempotency, and finishes with
+anonymous public-channel and isolated-install verification.
+
+The recovery's npm provenance identifies the recovery workflow/main invocation,
+not the original tag-build invocation. The unchanged package source remains
+bound to `f207fa92863bd3626b8ee6bd7b5ad30762ef205c` by the original manifest,
+producer proofs and protected-main CI. The original artifact has a 14-day
+retention window; this recovery requires it to remain available. The normal
+`release.yml` manual dispatch remains a nonpublishing dry-run.
+
 Do not announce a release until the registry reports the exact version:
 
 ```bash

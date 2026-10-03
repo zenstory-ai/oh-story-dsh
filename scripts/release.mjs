@@ -54,6 +54,10 @@ export function npmPublicationDecision({ status, remoteIntegrity, localIntegrity
   return "skip-exact";
 }
 
+export function npmPublishArguments(directory, filename) {
+  return ["publish", path.resolve(directory, filename), "--access", "public", "--provenance", "--ignore-scripts"];
+}
+
 function normalizeWorkflowPath(value) {
   return String(value ?? "").replace(/^\//, "");
 }
@@ -615,7 +619,7 @@ async function commandNpmPublish(args) {
   });
   if (decision === "publish") {
     await createCiProof({ repository: args.repository, sha: args.sha, tag: args.tag });
-    await run("npm", ["publish", path.join(args.directory, manifest.files[0].name), "--access", "public", "--provenance", "--ignore-scripts"]);
+    await run("npm", npmPublishArguments(args.directory, manifest.files[0].name));
   }
   process.stdout.write(`${JSON.stringify({ package: manifest.package, version: manifest.version, decision })}\n`);
 }

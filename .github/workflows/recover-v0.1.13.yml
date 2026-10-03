@@ -1,0 +1,98 @@
+name: Recover v0.1.13 npm publication
+
+on:
+  workflow_dispatch:
+
+# Share the original tag workflow's lock; never race its append-only publishers.
+concurrency:
+  group: release-refs/tags/v0.1.13
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  SOURCE_SHA: f207fa92863bd3626b8ee6bd7b5ad30762ef205c
+  RELEASE_TAG: v0.1.13
+
+jobs:
+  recover:
+    name: Recover immutable npm artifact and verify public channels
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      actions: read
+      checks: read
+      contents: read
+      id-token: write
+    steps:
+      - name: Require canonical protected-main dispatch
+        shell: bash
+        run: |
+          test "$GITHUB_EVENT_NAME" = workflow_dispatch
+          test "$GITHUB_REF" = refs/heads/main
+          test "$GITHUB_REPOSITORY" = zenstory-ai/oh-story-dsh
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+      - name: Prove the recovery workflow source passed newest main CI
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/release.mjs ci-proof --repository "$GITHUB_REPOSITORY" --sha "$GITHUB_SHA" --output "$RUNNER_TEMP/recovery-ci-proof.json"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: f207fa92863bd3626b8ee6bd7b5ad30762ef205c
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          artifact-ids: 11279574541
+          run-id: 37139595180
+          github-token: ${{ github.token }}
+          path: release
+      - name: Verify independently recorded original producer bindings
+        run: |
+          node scripts/release.mjs verify-manifest \
+            --manifest release/RELEASE-MANIFEST.json \
+            --promotion-proof release/PROMOTION-PROOF.json \
+            --ci-proof release/ci-proof.json \
+            --manifest-sha256 393f36282b67e8037d9b89b1eb46d0efc3aad42d8e8f39ff9ede73a6516df150 \
+            --promotion-proof-sha256 b261ec652a80a85475aa9386326bebecb57318fc27828f28f9fc95c4d957d548 \
+            --ci-proof-sha256 7f9dbd1c3fd4765afe4469c2912dc3c5824cb19f23a199af6b03fd2c54538d8d \
+            --directory release --sha "$SOURCE_SHA" \
+            --run-id 37139595180 --run-attempt 1 \
+            --artifact-name oh-story-dsh-v0.1.13-37139595180-1
+      - name: Require anonymous byte equality with the existing GitHub release
+        shell: bash
+        run: |
+          mkdir "$RUNNER_TEMP/public-v0.1.13"
+          for file in oh-story-dsh-0.1.13.tgz RELEASE-MANIFEST.json SHA256SUMS; do
+            curl --fail --location --silent --show-error \
+              "https://github.com/zenstory-ai/oh-story-dsh/releases/download/v0.1.13/$file" \
+              --output "$RUNNER_TEMP/public-v0.1.13/$file"
+            cmp "release/$file" "$RUNNER_TEMP/public-v0.1.13/$file"
+          done
+      - name: Re-prove the immutable tag and original protected-main source
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/release.mjs ci-proof --repository "$GITHUB_REPOSITORY" --sha "$SOURCE_SHA" --tag "$RELEASE_TAG" --output "$RUNNER_TEMP/original-ci-proof.json"
+      - name: Publish only the original tarball using an absolute local path
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_USERCONFIG: ${{ runner.temp }}/oh-story-dsh-recovery.npmrc
+        shell: bash
+        run: |
+          test -n "$NODE_AUTH_TOKEN"
+          trap 'rm -f "$NPM_CONFIG_USERCONFIG"' EXIT
+          printf '//registry.npmjs.org/:_authToken=%s\n' "$NODE_AUTH_TOKEN" > "$NPM_CONFIG_USERCONFIG"
+          chmod 600 "$NPM_CONFIG_USERCONFIG"
+          node scripts/release.mjs npm-publish --manifest release/RELEASE-MANIFEST.json --directory "$GITHUB_WORKSPACE/release" --sha "$SOURCE_SHA" --repository "$GITHUB_REPOSITORY" --tag "$RELEASE_TAG"
+      - name: Verify anonymous bytes, npm integrity, and isolated install
+        env:
+          NODE_AUTH_TOKEN: ""
+        run: node scripts/release.mjs verify-public --manifest release/RELEASE-MANIFEST.json --directory release --sha "$SOURCE_SHA" --repository "$GITHUB_REPOSITORY"
