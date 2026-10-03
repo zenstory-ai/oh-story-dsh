@@ -11,6 +11,14 @@
 
 ## [Unreleased]
 
+### Changed
+
+- 发布流水线改为先验证稳定 Tag、版本、变更记录、`main` 祖先关系与同一提交的完整 CI，再只打包一次并按 run/attempt、源码提交与 SHA-256/SHA-512 清单提升同一份产物。GitHub Release 和 npm 分到最小权限 Job；重跑只接受完全相同的既有公开字节，不再覆盖资产或把鉴权、限流、网络错误误当成「尚未发布」。正式发布后还会匿名核对 GitHub 下载、npm `dist.integrity` 与隔离安装。手动触发只允许 `main`，仍是不会发布的演练。
+
+### Fixed
+
+- 打包器只按知识资产根目录内的相对路径排除 `.omx` / `.omc` 本地状态；仓库本身放在 `.omx/worktrees/` 等父目录时，不再误删全部随包 Skills。
+
 ## [0.1.12] - 2026-09-28
 
 ### Changed

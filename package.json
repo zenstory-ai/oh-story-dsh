@@ -21,6 +21,7 @@
     "test:dsh": "pnpm test:dsh:native",
     "test:dsh:native": "tsx scripts/native-dsh-smoke.ts",
     "test:dsh:real": "tsx scripts/native-dsh-real.ts",
+    "test:release": "node --test scripts/release.test.mjs",
     "demo": "tsx scripts/render-workbench-demo.ts all",
     "demo:story": "tsx scripts/render-workbench-demo.ts story",
     "demo:drama": "tsx scripts/render-workbench-demo.ts drama",
@@ -33,8 +34,8 @@
     "assets:sync:video": "tsx scripts/sync-video-recap-assets.ts",
     "assets:check": "tsx scripts/check-upstream-parity.ts && tsx scripts/check-drama-parity.ts && tsx scripts/check-novel-to-game-parity.ts && tsx scripts/check-video-recap-parity.ts",
     "dsh:boundary": "tsx scripts/check-dsh-boundary.ts",
-    "verify": "pnpm lint && pnpm typecheck && pnpm assets:check && pnpm dsh:boundary && pnpm test:unit && pnpm build",
-    "verify:portable": "pnpm typecheck && pnpm assets:check && pnpm test:unit && pnpm build",
+    "verify": "pnpm lint && pnpm typecheck && pnpm assets:check && pnpm dsh:boundary && pnpm test:release && pnpm test:unit && pnpm build",
+    "verify:portable": "pnpm typecheck && pnpm assets:check && pnpm test:release && pnpm test:unit && pnpm build",
     "verify:release": "pnpm verify && pnpm test:dsh",
     "pack:release": "pnpm --filter @oh-story/dsh pack --pack-destination release"
   },

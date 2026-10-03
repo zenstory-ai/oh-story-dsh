@@ -35,8 +35,50 @@ The release workflow then:
 4. uploads the tarball and SHA-256 checksum to a GitHub Release;
 5. publishes the identical tarball to npm with provenance.
 
-The GitHub Release and npm steps are idempotent so a failed workflow can be
-safely re-run.
+The deterministic public manifest records the source commit, tool versions,
+tarball size, SHA-256, and npm-compatible SHA-512 integrity. Separate CI and
+promotion proofs bind the CI run/attempt and release run/attempt to the exact
+manifest and artifact name without making public release bytes change on a
+retry. GitHub and npm publishers download the exact artifact ID produced by
+that run and verify all three records independently before using their narrowly
+scoped credentials.
+
+GitHub assets are append-only under workflow control: an absent asset is
+uploaded, an existing byte-identical asset is accepted, and an existing asset
+with different bytes fails the run. The workflow never uses `--clobber` and it
+does not delete a partial release. npm follows the same rule: an absent version
+is published, the same version and `dist.integrity` is accepted on a retry, and
+a different integrity fails. HTTP 401/403/429/5xx and network failures are
+errors, not evidence that a release or version is absent.
+
+This is workflow-enforced append-only behavior, not a claim that GitHub makes a
+tag or release immutable against repository administrators. Every retry
+re-resolves the tag and rejects a source commit that differs from the manifest.
+
+After both publishers finish, the workflow anonymously downloads the GitHub
+tarball, waits a bounded time for npm registry propagation, compares
+`dist.integrity`, and installs the exact public npm version with lifecycle
+scripts disabled. A timeout or channel mismatch leaves the workflow red.
+
+## Dry-run and failure outcomes
+
+Manual dispatch is accepted only on `main`. It performs the source/CI checks,
+the complete deterministic release suite, and package/manifest upload, but the
+GitHub and npm publisher jobs do not run. Pull requests never receive release
+write or OIDC permissions.
+
+Tag publication requires all of the following before dependency installation
+or package construction: a stable `vX.Y.Z` tag; matching root and plugin
+versions; a dated changelog heading; the tag commit on `main`; and the newest
+GitHub Actions `CI` main-push run for that exact SHA, latest attempt, expected
+workflow path/application, and all four named jobs successful.
+
+If GitHub succeeds and npm fails (or the reverse), do not overwrite or delete
+the successful channel. Fix the credential or transient failure and rerun the
+same workflow: the successful channel must verify as byte-identical and skip,
+while the incomplete channel resumes. A moved tag, changed asset, changed npm
+integrity, missing required CI job, or older successful attempt is a hard
+failure and needs investigation rather than a retry that mutates public bytes.
 
 ## Verify the public installation
 

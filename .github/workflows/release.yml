@@ -10,69 +10,179 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: write
-  id-token: write
+  contents: read
+
+env:
+  ARTIFACT_NAME: oh-story-dsh-${{ github.ref_name }}-${{ github.run_id }}-${{ github.run_attempt }}
 
 jobs:
-  release:
-    name: Verify, package and publish
+  verify:
+    name: Verify and package
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 35
+    permissions:
+      actions: read
+      checks: read
+      contents: read
+    outputs:
+      artifact-id: ${{ steps.upload.outputs.artifact-id }}
     steps:
-      - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+      - name: Require stable tag or a nonpublishing main dry-run
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          SOURCE_REF: ${{ github.ref }}
+        shell: bash
+        run: |
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            test "$SOURCE_REF" = "refs/heads/main" || {
+              echo "Manual release checks are nonpublishing dry-runs and must select main." >&2
+              exit 1
+            }
+          elif [[ "$SOURCE_REF" != refs/tags/v* ]]; then
+            echo "Release publication requires a vX.Y.Z tag." >&2
+            exit 1
+          fi
+      - name: Validate version and changelog before build
+        env:
+          RELEASE_TAG: ${{ github.event_name == 'push' && github.ref_name || '' }}
+        run: node scripts/release.mjs check --tag "${RELEASE_TAG:-v$(node -p "require('./packages/dsh-plugin/package.json').version")}"
+      - name: Prove exact source passed the newest main CI attempt
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event_name == 'push' && github.ref_name || '' }}
+        run: |
+          args=(--repository "$GITHUB_REPOSITORY" --sha "$GITHUB_SHA" --output release/ci-proof.json)
+          if [[ -n "$RELEASE_TAG" ]]; then args+=(--tag "$RELEASE_TAG"); fi
+          mkdir -p release
+          node scripts/release.mjs ci-proof "${args[@]}"
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
         with:
           version: 11.7.0
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 24
           cache: pnpm
-          registry-url: https://registry.npmjs.org
       - run: pnpm install --frozen-lockfile
       - name: Install Chrome for the official DSH Web smoke
         run: pnpm exec playwright install --with-deps chrome
       - run: pnpm verify:release
       - run: pnpm pack:release
-      - name: Verify tag matches package version
-        if: startsWith(github.ref, 'refs/tags/')
-        env:
-          RELEASE_TAG: ${{ github.ref_name }}
+      - name: Create source-bound release manifest
         run: |
-          PACKAGE_VERSION="$(node -p "require('./packages/dsh-plugin/package.json').version")"
-          test "$RELEASE_TAG" = "v$PACKAGE_VERSION" || {
-            echo "Tag $RELEASE_TAG does not match @oh-story/dsh@$PACKAGE_VERSION" >&2
-            exit 1
-          }
-      - name: Generate checksums
-        run: cd release && sha256sum *.tgz > SHA256SUMS
-      - uses: actions/upload-artifact@v7
+          version="$(node -p "require('./packages/dsh-plugin/package.json').version")"
+          node scripts/release.mjs manifest \
+            --tarball "release/oh-story-dsh-$version.tgz" \
+            --sha "$GITHUB_SHA" \
+            --version "$version" \
+            --run-id "$GITHUB_RUN_ID" \
+            --run-attempt "$GITHUB_RUN_ATTEMPT" \
+            --artifact-name "$ARTIFACT_NAME" \
+            --output release/RELEASE-MANIFEST.json
+      - name: Upload the only promotable artifact
+        id: upload
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
-          name: oh-story-dsh-${{ github.ref_name }}
+          name: ${{ env.ARTIFACT_NAME }}
           path: |
             release/*.tgz
             release/SHA256SUMS
+            release/RELEASE-MANIFEST.json
+            release/PROMOTION-PROOF.json
+            release/ci-proof.json
           if-no-files-found: error
-      - name: Create or update GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
+          retention-days: 14
+
+  github-release:
+    name: Publish GitHub Release
+    needs: verify
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          artifact-ids: ${{ needs.verify.outputs.artifact-id }}
+          path: release
+      - name: Revalidate exact artifact and publish append-only assets
         env:
-          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
-          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" release/*.tgz release/SHA256SUMS --clobber
+          node scripts/release.mjs verify-manifest --manifest release/RELEASE-MANIFEST.json --promotion-proof release/PROMOTION-PROOF.json --ci-proof release/ci-proof.json --directory release --sha "$GITHUB_SHA" --run-id "$GITHUB_RUN_ID" --run-attempt "$GITHUB_RUN_ATTEMPT" --artifact-name "$ARTIFACT_NAME"
+          node scripts/release.mjs github-publish --manifest release/RELEASE-MANIFEST.json --directory release --sha "$GITHUB_SHA" --repository "$GITHUB_REPOSITORY" --tag "$GITHUB_REF_NAME"
+
+  npm:
+    name: Publish npm package
+    needs: verify
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          artifact-ids: ${{ needs.verify.outputs.artifact-id }}
+          path: release
+      - name: Revalidate the exact tarball
+        run: node scripts/release.mjs verify-manifest --manifest release/RELEASE-MANIFEST.json --promotion-proof release/PROMOTION-PROOF.json --ci-proof release/ci-proof.json --directory release --sha "$GITHUB_SHA" --run-id "$GITHUB_RUN_ID" --run-attempt "$GITHUB_RUN_ATTEMPT" --artifact-name "$ARTIFACT_NAME"
+      - name: Detect the existing token fallback
+        id: npm-auth
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        shell: bash
+        run: |
+          if [[ -n "$NPM_TOKEN" ]]; then
+            echo "token=true" >> "$GITHUB_OUTPUT"
           else
-            gh release create "$GITHUB_REF_NAME" release/*.tgz release/SHA256SUMS \
-              --verify-tag \
-              --generate-notes \
-              --title "oh-story-dsh $GITHUB_REF_NAME"
+            echo "token=false" >> "$GITHUB_OUTPUT"
           fi
-      - name: Publish npm package
-        if: startsWith(github.ref, 'refs/tags/')
+      - name: Publish with the existing token fallback
+        if: steps.npm-auth.outputs.token == 'true'
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_USERCONFIG: ${{ runner.temp }}/oh-story-dsh-npmrc
         run: |
-          PACKAGE_VERSION="$(node -p "require('./packages/dsh-plugin/package.json').version")"
-          if npm view "@oh-story/dsh@$PACKAGE_VERSION" version >/dev/null 2>&1; then
-            echo "@oh-story/dsh@$PACKAGE_VERSION is already published"
-          else
-            npm publish "./release/oh-story-dsh-$PACKAGE_VERSION.tgz" --access public --provenance
-          fi
+          printf '//registry.npmjs.org/:_authToken=%s\n' "$NODE_AUTH_TOKEN" > "$NPM_CONFIG_USERCONFIG"
+          chmod 600 "$NPM_CONFIG_USERCONFIG"
+          node scripts/release.mjs npm-publish --manifest release/RELEASE-MANIFEST.json --directory release --sha "$GITHUB_SHA"
+      - name: Publish with npm Trusted Publishing
+        if: steps.npm-auth.outputs.token == 'false'
+        run: node scripts/release.mjs npm-publish --manifest release/RELEASE-MANIFEST.json --directory release --sha "$GITHUB_SHA"
+
+  verify-public:
+    name: Verify public channels
+    needs: [verify, github-release, npm]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          artifact-ids: ${{ needs.verify.outputs.artifact-id }}
+          path: release
+      - name: Verify anonymous bytes, npm integrity, and isolated install
+        env:
+          NODE_AUTH_TOKEN: ""
+        run: node scripts/release.mjs verify-public --manifest release/RELEASE-MANIFEST.json --directory release --sha "$GITHUB_SHA" --repository "$GITHUB_REPOSITORY"
