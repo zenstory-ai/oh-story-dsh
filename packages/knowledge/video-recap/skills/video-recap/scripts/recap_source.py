@@ -24,8 +24,6 @@ _LOCAL_ADOPTION_OPTIONS = (
 )
 
 _LOCAL_ADOPTION_CONFLICTS = _TTS_OPTIONS | frozenset({
-    "--mimo-qc",
-    "--mimo-qc-refresh",
     "--export-jianying",
     "--jianying-bundle-media",
     "--jianying-no-bundle-media",
@@ -106,7 +104,6 @@ def validate_local_adoption(parser, args):
     args.tts_provider = "auto"
     args.mimo_tts_voice = None
     args.voice_ref = None
-    args.mimo_qc = "off"
 
 
 def load_local_assembly_evidence(work_dir):
@@ -215,8 +212,6 @@ def validate_audio_routing(parser, args):
     if conflicts:
         detail = ", ".join(conflicts)
         parser.error(f"--audio-mode {mode} cannot use TTS/strict narration options: {detail}")
-    if args.mimo_qc != "off":
-        parser.error(f"--audio-mode {mode} currently requires --mimo-qc off")
     if args.edit_mode == "cut" and stream != 0:
         parser.error("cut audio modes currently require --audio-stream-index 0")
     if args.export_jianying and stream != 0:
@@ -242,37 +237,3 @@ def reject_unsupported_subtitle_track(work_dir, args):
             "source-mix 当前不能绑定显式 subtitle_track.json；请使用新的 work_dir，"
             "或选择 adopted-packet-copy"
         )
-
-
-def begin_non_narration_qc(work_dir, args, write_stage):
-    """Start a clean run-local QC ledger without reading or deleting old TTS."""
-    (Path(work_dir) / "preflight_qc.json").unlink(missing_ok=True)
-    return write_stage(
-        work_dir,
-        "pre_assemble",
-        metadata={
-            "audio_mode": args.audio_mode,
-            "selected_audio_stream_index": args.audio_stream_index,
-            "tts": "not_applicable",
-            "narration_validation": "not_applicable",
-            "narration_review": "not_applicable",
-            "visual_overlays": "preserved_not_authored_by_this_run",
-        },
-    )
-
-
-def begin_local_adoption_qc(work_dir, write_stage):
-    """Record that authoring was intentionally skipped for adopted local assets."""
-    return write_stage(
-        work_dir,
-        "pre_assemble",
-        metadata={
-            "audio_mode": "narration",
-            "selected_audio_stream_index": 0,
-            "tts": "adopted_local_not_generated",
-            "narration_validation": "not_run",
-            "narration_review": "not_run",
-            "semantic_validation": "video-assemble",
-            "visual_overlays": "not_authored_not_present",
-        },
-    )

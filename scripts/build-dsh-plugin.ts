@@ -134,6 +134,7 @@ for (const excluded of [
   "video-recap/skills/video-recap/scripts/dashboard_io.py",
   "video-recap/skills/video-recap/scripts/dashboard_runs.py",
   "video-recap/skills/video-recap/scripts/dashboard_templates.py",
+  "video-recap/skills/video-recap/scripts/dashboard",
   "video-recap/skills/video-recap/assets/dashboard"
 ]) {
   const present = await access(resolve(outputRoot, excluded)).then(() => true, () => false);

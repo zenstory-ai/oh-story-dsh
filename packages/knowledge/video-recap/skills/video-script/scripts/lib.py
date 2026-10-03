@@ -73,11 +73,6 @@ def _env_number(name, default, cast, minimum):
     return value
 
 
-def env_int(name, default, *, minimum=None):
-    """Read an integer env var, rejecting malformed or below-minimum values."""
-    return _env_number(name, default, int, minimum)
-
-
 def env_bool(name, default=False):
     """Read common boolean env var forms."""
     raw = os.environ.get(name)
@@ -120,9 +115,6 @@ CONFIG = {
     "quiet_overlap_min_ratio": 0.8,  # 解说段至少多少比例落在安静窗口内才标记为非对白重叠
     "visual_beat_max_seconds": 18.0,  # 单段解说超过该时长且跨多个帧锚点时给 lint 提醒
     "visual_beat_max_facts": 3,  # 单段解说最多建议覆盖的 frame_facts 锚点数量
-    "asr_chunk_min_chars": env_int("ASR_CHUNK_MIN_CHARS", 500, minimum=1),  # brief 中 ASR 写作分块最小字数/词数
-    "asr_chunk_max_chars": env_int("ASR_CHUNK_MAX_CHARS", 800, minimum=1),  # brief 中 ASR 写作分块最大字数/词数
-    "edit_mode": os.environ.get("EDIT_MODE", "full"),  # full | cut
 }
 
 def log(msg):
@@ -165,9 +157,8 @@ def _sanitize_api_error(value, limit=500):
     text = _ERROR_KEY_RE.sub("<redacted-key>", text)
     return text[:limit]
 
-def _api_headers(api_provider=None, api_url=None, api_key=None):
+def _api_headers(api_key=None):
     """Build MiMo auth headers (OpenAI-compatible chat/completions with an api-key header)."""
-    del api_provider, api_url  # MiMo is the only provider; signature kept for call sites
     key = CONFIG["api_key"] if api_key is None else api_key
     return {
         "Content-Type": "application/json",
@@ -175,9 +166,8 @@ def _api_headers(api_provider=None, api_url=None, api_key=None):
         "api-key": key,
     }
 
-def _prepare_api_payload(payload, api_provider=None, api_url=None):
+def _prepare_api_payload(payload):
     """Normalize payload fields for MiMo's OpenAI-compatible chat/completions API."""
-    del api_provider, api_url
     normalized = dict(payload)
     if "max_tokens" in normalized and "max_completion_tokens" not in normalized:
         normalized["max_completion_tokens"] = normalized.pop("max_tokens")
@@ -192,15 +182,15 @@ def _prepare_api_payload(payload, api_provider=None, api_url=None):
         normalized["thinking"] = {"type": "disabled"}
     return normalized
 
-def api_call(payload, max_retries=8, *, api_provider=None, api_url=None, api_key=None, api_env_var=None):
+def api_call(payload, max_retries=8, *, api_url=None, api_key=None, api_env_var=None):
     """调用 OpenAI-compatible API，带重试。
 
     集群的 429 限流是常态而非错误，所以重试更耐心（更多次数 + 退避封顶 60s + 遵从 Retry-After），
     避免一次瞬时限流就中止整个阶段。配额窗口常以分钟计，所以 429 在没有 Retry-After 时也至少等 10s。
     """
     endpoint = normalize_api_url(api_url if api_url is not None else CONFIG["api_url"])
-    headers = _api_headers(api_provider=api_provider, api_url=endpoint, api_key=api_key)
-    data = json.dumps(_prepare_api_payload(payload, api_provider=api_provider, api_url=endpoint)).encode("utf-8")
+    headers = _api_headers(api_key=api_key)
+    data = json.dumps(_prepare_api_payload(payload)).encode("utf-8")
 
     for attempt in range(max_retries):
         try:

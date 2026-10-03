@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import { chromium, type Locator, type Page } from "@playwright/test";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const dshVersion = "0.2.0-rc.1";
+const dshVersion = process.env.DSH_TEST_VERSION ?? process.argv[2] ?? "0.2.1-alpha.1";
 /** Exact WebSocket route carrying every Typert Remote stream. */
 const REMOTE_STREAM_MUX_PATH = "/api/remote.mux";
 const demoFramesDirectory = process.env.OH_STORY_DEMO_FRAMES_DIR;
@@ -630,6 +630,7 @@ async function main(): Promise<void> {
       }, null, 2)}\n`),
       writeFile(join(videoProjectRoot, "work", "clip_plan.json"), `${JSON.stringify({ clips: [{ source_start: 0, source_end: 5 }] }, null, 2)}\n`),
       writeFile(join(videoProjectRoot, "work", "narration.json"), `${JSON.stringify([{ start: 0, end: 2, text: "视频工作台烟测" }], null, 2)}\n`),
+      writeFile(join(videoProjectRoot, "work", "production_reference.json"), `${JSON.stringify({ profile: { provenance: "measured" }, methods: [] }, null, 2)}\n`),
       writeFile(join(videoProjectRoot, "work", "assembly_manifest.json"), `${JSON.stringify({ final_output: "video-recaps/smoke-recap/outputs/recap_smoke.mp4" }, null, 2)}\n`)
     ]);
 
@@ -670,7 +671,8 @@ async function main(): Promise<void> {
       "package/lib/novel-to-game/examples/jin-ping-mei/build/app/index.html",
       "package/lib/novel-to-game/examples/jin-ping-mei/qa/verification.json",
       "package/lib/video-recap/skills/video-recap/scripts/recap.py",
-      "package/lib/video-recap/skills/video-recap/scripts/recap_inspect.py"
+      "package/lib/video-recap/skills/video-recap/scripts/recap_inspect.py",
+      "package/lib/video-recap/skills/video-reference/scripts/reference.py"
     ]) {
       if (!entries.has(required)) throw new Error(`Plugin tarball is missing ${required}.`);
     }
@@ -686,7 +688,7 @@ async function main(): Promise<void> {
         || /copy-path-safety\.py$/u.test(entry)
         || /dashboard_server\.py$/u.test(entry)
         || /drama\/skills\/short-drama\/scripts\/creator_views\.py$/u.test(entry)
-        || /video-recap\/skills\/video-recap\/(?:scripts\/dashboard_[a-z]+\.py|assets\/dashboard\/)/u.test(entry)
+        || /video-recap\/skills\/video-recap\/(?:scripts\/dashboard_[a-z]+\.py|scripts\/dashboard\/|assets\/dashboard\/)/u.test(entry)
         || /drama\/skills\/short-drama\/references\/lifecycle-commands\.md$/u.test(entry)) {
         throw new Error(`Plugin tarball retained forbidden content: ${entry}`);
       }
@@ -767,13 +769,13 @@ async function main(): Promise<void> {
       "novel-to-game", "novel-game-analyze", "game-concept", "game-world-design", "game-art-direction", "game-build", "game-qa"
     ].includes(skill.name));
     const videoSkills = catalog.skills.filter((skill) => [
-      "video-recap", "video-understanding", "video-script", "video-cut", "video-voiceover", "video-assemble"
+      "video-recap", "video-reference", "video-understanding", "video-script", "video-cut", "video-voiceover", "video-assemble"
     ].includes(skill.name));
     if (ohStorySkills.length !== 13) throw new Error(`Expected 13 Oh Story Skills, found ${String(ohStorySkills.length)}.`);
     if (dramaSkills.length !== 11) throw new Error(`Expected 11 Drama Skills, found ${String(dramaSkills.length)}.`);
     if (gameSkills.length !== 7) throw new Error(`Expected 7 NovelToGame Skills, found ${String(gameSkills.length)}.`);
-    if (JSON.stringify(videoSkills.map((skill) => skill.name).sort()) !== JSON.stringify(["video-recap", "video-script"])) {
-      throw new Error(`Expected the two user-invocable video-recap entries, found ${videoSkills.map((skill) => skill.name).join(", ")}.`);
+    if (JSON.stringify(videoSkills.map((skill) => skill.name).sort()) !== JSON.stringify(["video-recap", "video-reference", "video-script"])) {
+      throw new Error(`Expected the three user-invocable video-recap entries, found ${videoSkills.map((skill) => skill.name).join(", ")}.`);
     }
     // Names alone cannot tell the plugin's bridged Skills from same-named copies found elsewhere.
     const foreignSkills = [...ohStorySkills, ...dramaSkills, ...gameSkills, ...videoSkills]
@@ -897,6 +899,7 @@ async function main(): Promise<void> {
       || bundledGame.verification.binding !== "PINNED"
       || bundledGame.previewUrl === undefined || generatedGame?.source !== "workspace" || generatedGame.previewUrl === undefined
       || generatedGame.verification?.status !== "PASS" || generatedGame.verification.binding !== "UNBOUND"
+      || !storyWorkspacePayload.files?.some((file) => file.path.endsWith("/production_reference.json"))
       || generatedVideo?.title !== "DSH Video Recap Smoke" || generatedVideo.state !== "ready"
       || JSON.stringify(generatedVideo.previews.map((preview) => preview.role)) !== JSON.stringify(["source", "edited", "final"])) {
       throw new Error(`Story Session workspace route failed: ${JSON.stringify(storyWorkspacePayload)}`);
@@ -1566,7 +1569,7 @@ async function main(): Promise<void> {
         throw new Error("Game Studio did not select the bundled Jin Ping Mei example.");
       }
       const gameFrame = page.frameLocator('iframe[title="《金瓶梅 · 风月总账》可试玩预览"]');
-      const ageGate = gameFrame.getByRole("button", { name: "我已成年", exact: true });
+      const ageGate = gameFrame.getByRole("button", { name: "我已成年，进入", exact: true });
       await ageGate.waitFor({ state: "visible", timeout: 30_000 });
       const gameScroller = page.locator("[data-conversation-scroll]");
       const gameChat = page.locator('[data-slot="conversation.session"] > :not(.oh-story-split-surface)');
@@ -1580,16 +1583,25 @@ async function main(): Promise<void> {
       await prepareDemoSurface(page);
       await captureGameEvidence(page, "game-studio-age-gate");
       await captureDemoFrame(page, "game", 1);
+      if (gamePreviewResponses.some(({ url }) => /\/(?:explicit|prelude)(?:\/|\.)/u.test(url))) {
+        throw new Error("Bundled ADV preloaded adult media before age confirmation.");
+      }
       await ageGate.click();
-      const enterGame = gameFrame.getByRole("button", { name: "进宅", exact: true });
+      const enterGame = gameFrame.getByRole("button", { name: "开始游戏", exact: true });
       await enterGame.waitFor({ state: "visible", timeout: 10_000 });
       await captureGameEvidence(page, "game-studio-title");
       await captureDemoFrame(page, "game", 2);
       await enterGame.click();
-      // The opening scene's heading. It is upstream copy (NovelToGame 0.4 rewrote it), so every
-      // wait on the opening goes through this one locator.
-      const gameOpening = gameFrame.getByRole("heading", { name: "账上空了五十两", exact: true });
-      await gameOpening.waitFor({ state: "visible", timeout: 10_000 });
+      // NovelToGame 0.5 replaces the ledger with a route-based ADV. Dismiss its
+      // chapter card, then exercise real input and its new save/backlog controls.
+      await gameFrame.locator("#card").click();
+      const gameOpening = gameFrame.locator("#text");
+      await gameOpening.filter({ hasText: "清河县的春天" }).waitFor({ state: "visible", timeout: 10_000 });
+      await gameFrame.getByRole("button", { name: "快存", exact: true }).click();
+      await gameOpening.click();
+      await gameOpening.click();
+      await gameFrame.getByRole("button", { name: "快读", exact: true }).click();
+      await gameOpening.filter({ hasText: "清河县的春天" }).waitFor({ state: "visible", timeout: 10_000 });
       const gameIframe = page.locator('iframe[title="《金瓶梅 · 风月总账》可试玩预览"]');
       await gameIframe.evaluate((element) => { element.setAttribute("data-e2e-instance", "jin-ping-mei-preserved"); });
       await captureGameEvidence(page, "game-studio-playable");
@@ -1730,6 +1742,8 @@ async function main(): Promise<void> {
       await storyTree.waitFor({ state: "visible", timeout: 10_000 });
 
       await selectSession(page, dramaWorkspace.workspace.title, dramaSessionTitle);
+      // Reading drama files with a real model does not select a UI workbench.
+      await page.getByRole("tablist", { name: "创作工作台" }).getByRole("tab", { name: "短剧", exact: true }).click();
       const dramaTree = page.getByRole("navigation", { name: "短剧项目文件" });
       await dramaTree.waitFor({ state: "visible", timeout: 10_000 });
       const dramaKind = page.locator(".oh-story-kind");
@@ -1948,10 +1962,24 @@ async function main(): Promise<void> {
       await page.locator(".oh-story-media-library").scrollIntoViewIfNeeded();
       await productionTabs.getByRole("tab", { name: "成片", exact: true }).click();
       if (await page.locator(".oh-story-sequence > ol > li").count() !== 22
-        || await page.locator(".oh-story-sequence-summary").getByText("21 个阻塞项", { exact: true }).count() !== 1
+        || await page.locator(".oh-story-sequence-summary").getByText("20 个阻塞项", { exact: true }).count() !== 1
         || await page.locator(".oh-story-sequence-issues li").count() !== 4
         || await page.getByRole("button", { name: "合成成片", exact: true }).isEnabled()) {
-        throw new Error("Production sequence did not expose shot order and missing-video blockers.");
+        throw new Error("Production sequence did not expose shot order and missing-media blockers.");
+      }
+      const explicitStillPath = "交付/EP001/IMG-ZHOUBOSEN-SHEET-select-smoke.png";
+      await mkdir(dirname(join(dramaRoot, explicitStillPath)), { recursive: true });
+      await cp(keyframeV2MediaFixture, join(dramaRoot, explicitStillPath));
+      await page.getByRole("button", { name: "刷新", exact: true }).click();
+      const stillSelector = page.getByRole("combobox", { name: "选择 SHOT-EP001-001 成片素材", exact: true });
+      const stillOption = stillSelector.getByRole("option", { name: /IMG-ZHOUBOSEN-SHEET · 静帧/u });
+      await stillOption.waitFor({ state: "attached", timeout: 10_000 });
+      const stillVersionId = await stillOption.getAttribute("value");
+      if (stillVersionId === null) throw new Error("Sequence did not expose the same-episode delivery IMG source.");
+      await stillSelector.selectOption(stillVersionId);
+      const selectedStill = page.locator(".oh-story-sequence > ol > li").first().locator("img");
+      if (new URL((await selectedStill.getAttribute("src")) ?? "", origin).searchParams.get("path") !== explicitStillPath) {
+        throw new Error("Explicit IMG composition source did not replace its automatic shot keyframe.");
       }
       await page.getByRole("button", { name: "下移 SHOT-EP001-001", exact: true }).click();
       if (await page.locator(".oh-story-sequence > ol > li strong").first().textContent() !== "SHOT-EP001-002") {
@@ -2066,6 +2094,8 @@ async function main(): Promise<void> {
         await batchTask.getByText("DSH Turn 已结束，已发现 1/22 项成果；请刷新核对剩余输出。", { exact: true })
           .waitFor({ state: "visible", timeout: 15_000 });
 
+        // Fill all videos; the explicitly selected delivery IMG must still win
+        // over shot one's new video and dispatch a genuine mixed sequence.
         const readyVideoPaths = Array.from({ length: 22 }, (_, index) => {
           const shotId = `SHOT-EP001-${String(index + 1).padStart(3, "0")}`;
           return `剧集/EP001/制作成果/${shotId}/${shotId}-ready-smoke.mp4`;
@@ -2078,8 +2108,28 @@ async function main(): Promise<void> {
         await productionTabs.getByRole("tab", { name: "成片", exact: true }).click();
         await page.getByText("已可合成", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
         const composeButton = page.getByRole("button", { name: "合成成片", exact: true });
-        if (!await composeButton.isEnabled()) throw new Error("A complete video sequence still blocked composition.");
+        if (!await composeButton.isEnabled()) throw new Error("A complete mixed sequence still blocked composition.");
+        const sequenceRows = page.locator(".oh-story-sequence > ol > li");
+        if (await sequenceRows.first().locator("img").count() !== 1 || await sequenceRows.nth(1).locator("video").count() !== 1) {
+          throw new Error("Mixed composition did not preview its actual image and video source types.");
+        }
+        if (new URL((await sequenceRows.first().locator("img").getAttribute("src")) ?? "", origin).searchParams.get("path") !== explicitStillPath) {
+          throw new Error("A new video silently replaced the creator's explicit static IMG source.");
+        }
+        await page.setViewportSize({ width: 500, height: 900 });
+        await page.waitForTimeout(150);
+        const sequenceOverflow = await page.locator(".oh-story-sequence").evaluate((element) => element.scrollWidth - element.clientWidth);
+        if (sequenceOverflow > 1) throw new Error(`500px sequence source controls overflowed by ${String(sequenceOverflow)}px.`);
+        const compactSourcePicker = page.getByRole("combobox", { name: "选择 SHOT-EP001-001 成片素材" });
+        await compactSourcePicker.scrollIntoViewIfNeeded();
+        const compactSourcePickerBox = await compactSourcePicker.boundingBox();
+        if (!await compactSourcePicker.isVisible() || compactSourcePickerBox === null || compactSourcePickerBox.width < 100 || compactSourcePickerBox.height < 20) {
+          throw new Error(`500px sequence source selector is not usable: ${JSON.stringify(compactSourcePickerBox)}`);
+        }
+        await page.setViewportSize({ width: 1_440, height: 900 });
         await composeButton.click();
+        await page.locator('[data-slot="conversation.session"]').getByText("IMG-ZHOUBOSEN-SHEET · 静帧", { exact: false }).last()
+          .waitFor({ state: "visible", timeout: 10_000 });
         const compositionTask = page.locator(".oh-story-task-board article").filter({ hasText: "成片" }).first();
         await compositionTask.getByRole("button", { name: "停止当前 DSH Turn", exact: true })
           .waitFor({ state: "visible", timeout: 10_000 });
@@ -2299,6 +2349,8 @@ async function main(): Promise<void> {
       videoStudio: "preview-left-chat-right",
       videoPreviewRoles: ["source", "edited", "final"],
       playableIframe: true,
+      gameAdvSaveRestore: true,
+      mixedStaticComposition: !useRealDeepSeek,
       previewCsp: "asset-prefix-only",
       gameModeExit: true,
       gameModeState: "preserved",
@@ -2315,7 +2367,8 @@ async function main(): Promise<void> {
   } catch (error) {
     const apiKey = process.env.DEEPSEEK_API_KEY;
     const redact = (value: string): string => apiKey === undefined ? value : value.replaceAll(apiKey, "[REDACTED]");
-    throw new Error(`${redact(String(error))}\nMock requests: ${JSON.stringify(mockDeepSeek?.requests ?? [])}\nDSH logs:\n${redact(logs.join("").slice(-16_000))}`, { cause: error });
+    // eslint-disable-next-line preserve-caught-error -- The original cause may contain credentials; retain only redacted diagnostics.
+    throw new Error(`${redact(String(error))}\nMock requests: ${JSON.stringify(mockDeepSeek?.requests ?? [])}\nDSH logs:\n${redact(logs.join("").slice(-16_000))}`);
   } finally {
     if (firstRunBrowser !== undefined) await firstRunBrowser.close();
     if (child !== undefined) await stop(child);

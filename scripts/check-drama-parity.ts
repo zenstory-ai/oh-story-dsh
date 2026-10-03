@@ -38,6 +38,7 @@ for (const required of [
   "skills/short-drama/references/creator-documents.md",
   "skills/short-drama-storyboard/references/comic-keyframe-lexicon.md",
   "skills/short-drama-edit/scripts/edit_tool.py",
+  "skills/short-drama-edit/references/still-cuts.md",
   "skills/short-drama-edit/references/delivery-verify.md"
 ]) {
   if (!paths.has(required)) throw new Error(`Bundled Drama Skills are missing the contract asset ${required}.`);
@@ -62,10 +63,24 @@ for (const document of ["剧本.md", "视觉设定.md", "分镜.md", "图片提�
 if (!routeSkill.includes("剪辑单.md")) throw new Error("Drama v0.7 route no longer declares the 剪辑单.md assembly stage.");
 const editSkill = await readFile(join(dramaRoot, "skills/short-drama-edit/SKILL.md"), "utf8");
 if (!editSkill.includes("剧集/<EP>/剪辑单.md")) throw new Error("Drama v0.7 assembly document contract is missing.");
+if (!editSkill.includes("SHOT-...") || !editSkill.includes("IMG-...") || !editSkill.includes("- 配音 N：")) {
+  throw new Error("Drama v0.8.1 static-frame assembly contract is missing.");
+}
 const reviewSkill = await readFile(join(dramaRoot, "skills/short-drama-review/SKILL.md"), "utf8");
 if (!reviewSkill.includes("审查/EP001-审查.md")) throw new Error("Drama v0.6 review Markdown contract is missing.");
 const produceSkill = await readFile(join(dramaRoot, "skills/short-drama-produce/SKILL.md"), "utf8");
 if (!produceSkill.includes("剧集/<EP>/制作成果/")) throw new Error("Drama v0.6 production output contract is missing.");
+if (!produceSkill.includes("reference_audio") || !produceSkill.includes("character")) {
+  throw new Error("Drama v0.8.1 reference-audio production contract is missing.");
+}
+const productionTool = await readFile(join(dramaRoot, "skills/short-drama-produce/scripts/production_tool.py"), "utf8");
+if (!productionTool.includes('AUDIO_REFERENCE_ROLE = "reference_audio"') || !productionTool.includes('"reference_roles"')) {
+  throw new Error("Drama v0.8.1 reference-audio enforcement is missing.");
+}
+const creatorCheck = await readFile(join(dramaRoot, "skills/short-drama/scripts/creator_markdown_check.py"), "utf8");
+if (!creatorCheck.includes("参考音频不得控制至少包含台词、语气、情绪") || !creatorCheck.includes("声音参考重复")) {
+  throw new Error("Drama v0.8.1 voice identity and control checks are missing.");
+}
 const fixtureSources = JSON.parse(await readFile(join(import.meta.dirname, "demo-fixtures/sources.json"), "utf8")) as {
   readonly fixtures: readonly {
     readonly kind: string;

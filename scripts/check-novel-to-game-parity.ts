@@ -41,6 +41,10 @@ for (const required of [
   "skills/game-qa/references/qa-contract.md",
   "examples/jin-ping-mei/example.json",
   "examples/jin-ping-mei/build/app/index.html",
+  "examples/jin-ping-mei/build/app/js/adv.js",
+  "examples/jin-ping-mei/build/app/js/stage.js",
+  "examples/jin-ping-mei/build/app/js/store.js",
+  "examples/jin-ping-mei/build/app/js/story/index.js",
   "examples/jin-ping-mei/qa/verification.json"
 ]) {
   if (!manifest.files.some((entry) => entry.path === required)) throw new Error(`Bundled NovelToGame asset is missing ${required}.`);
@@ -55,15 +59,32 @@ if (authoringOnly.length > 0) {
 if (manifest.files.some(({ path }) => path.includes("/__pycache__/") || path.endsWith(".pyc") || path.endsWith("/.DS_Store") || /(?:^|\/)\.omc\//u.test(path))) {
   throw new Error("Bundled NovelToGame assets retained upstream workspace artifacts.");
 }
+const gameIndex = await readFile(join(novelToGameRoot, "examples/jin-ping-mei/build/app/index.html"), "utf8");
+const gameStore = await readFile(join(novelToGameRoot, "examples/jin-ping-mei/build/app/js/store.js"), "utf8");
+const gameStage = await readFile(join(novelToGameRoot, "examples/jin-ping-mei/build/app/js/stage.js"), "utf8");
+if (!gameIndex.includes('id="gate"') || !gameIndex.includes('id="btn-age-yes"') || !gameIndex.includes("18+")) {
+  throw new Error("Bundled Jin Ping Mei ADV no longer carries its 18+ entry gate.");
+}
+if (!gameStore.includes("ageConfirmed") || !gameStage.includes("!CG[id].adult || (config.adult && ageConfirmed())")) {
+  throw new Error("Bundled Jin Ping Mei ADV no longer gates adult CG assets behind age confirmation and the adult-content setting.");
+}
 const verification = JSON.parse(await readFile(join(novelToGameRoot, "examples/jin-ping-mei/qa/verification.json"), "utf8")) as {
+  readonly schemaVersion?: number;
   readonly status?: string;
+  readonly verify?: { readonly exitCode?: number };
+  readonly completeRun?: { readonly cleanContext?: boolean; readonly terminal?: string; readonly restart?: string };
   readonly checks?: Record<string, string>;
 };
 const checkNames = Object.keys(verification.checks ?? {}).sort();
-if (verification.status !== "PASS"
+if (verification.schemaVersion !== 3
+  || verification.status !== "PASS"
+  || verification.verify?.exitCode !== 0
+  || verification.completeRun?.cleanContext !== true
+  || verification.completeRun.terminal !== "yue_good"
+  || verification.completeRun.restart !== "prologue-first-line"
   || JSON.stringify(checkNames) !== JSON.stringify(["coreLoop", "input", "launch", "outcome", "render", "restart"])
   || Object.values(verification.checks ?? {}).some((status) => status !== "PASS")) {
-  throw new Error("Bundled Jin Ping Mei example no longer carries the six-item PASS verification contract.");
+  throw new Error("Bundled Jin Ping Mei ADV no longer carries its schema 3 clean-run and six-item PASS verification contract.");
 }
 
 const source = novelToGameUpstreamRoot();

@@ -30,7 +30,7 @@ const VIDEO_EDITABLE_EXTENSIONS = new Set([...EDITABLE_EXTENSIONS, ".srt", ".ass
 const MEDIA_TYPES: ReadonlyMap<string, string> = new Map([
   [".png", "image/png"], [".jpg", "image/jpeg"], [".jpeg", "image/jpeg"], [".webp", "image/webp"], [".gif", "image/gif"],
   [".mp4", "video/mp4"], [".webm", "video/webm"], [".mov", "video/quicktime"], [".mkv", "video/x-matroska"],
-  [".mp3", "audio/mpeg"], [".wav", "audio/wav"], [".m4a", "audio/mp4"]
+  [".mp3", "audio/mpeg"], [".wav", "audio/wav"], [".m4a", "audio/mp4"], [".aac", "audio/aac"], [".flac", "audio/flac"]
 ]);
 const MEDIA_MAX_BYTES = 256 * 1_024 * 1_024;
 const FILE_LIMIT = 1_000;

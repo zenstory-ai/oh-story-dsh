@@ -79,11 +79,9 @@ ASR 的独立证据 sidecar，不改变 `asr_result.json` 的既有数组结构�
 ```
 
 `status` 可为 `AVAILABLE_COARSE`、`EXPLICITLY_SKIPPED`、`UNAVAILABLE_NO_KEY`、
-`UNAVAILABLE_NO_DURATION`、`FAILED_AUDIO_EXTRACTION`、`FAILED_PROVIDER`、`EMPTY_UNKNOWN`
-或 `LEGACY_UNVERIFIED`。`LEGACY_UNVERIFIED` 标记没有旧 sidecar 的兼容缓存，可离线复用但
-`observed_text`/`glossary_modified` 为 `null`，且始终保持 legacy 身份；非 legacy sidecar 记录
-当时参与修正的人名/别名列表（`glossary.names`），人名表变化或所描述的文件被重写（size/mtime 不再
-一致）都会使 ASR 缓存失效。
+`UNAVAILABLE_NO_DURATION`、`FAILED_AUDIO_EXTRACTION`、`FAILED_PROVIDER` 或 `EMPTY_UNKNOWN`。
+sidecar 记录当时参与修正的人名/别名列表（`glossary.names`），人名表变化、所描述的文件被重写
+（size/mtime 不再一致）或 sidecar 缺失，都会使 ASR 缓存失效并重跑 ASR。
 `UNAVAILABLE_NO_DURATION` 与 `EMPTY_UNKNOWN` 是可重试的不可用结果，不作为缓存命中；写作
 brief 会校验 sidecar 并打印当前状态，缺失或与当前文件不一致时显示 `MISSING_OR_STALE`。
 
@@ -143,22 +141,7 @@ brief 会校验 sidecar 并打印当前状态，缺失或与当前文件不一�
 ]
 ```
 
-## deslop_qc_requirements.json（工具/brief 生成的运行契约）
-
-`deslop_qc_requirements.json` 是 tool/brief generated run contract：工具或 brief 生成本次运行的 QC 要求，供 `deslop_qc` 读取，不由 Agent 手写。字段为 `schema_version` 与 `style_card_required`。
-
-`style_card_required` 默认 `false`（advisory）：缺少 `style_card.json` 只是 warning，不阻断出片。将来的 opt-in 运行可把它设为 `true`，让 `style_card.json` 成为硬性要求——`deslop_qc` 只读这个字段判断缺少 `style_card.json` 是否是 blocker，不扫描 `agent_narration_brief.md` 的 prompt wording 来推断。如果 requirements 文件缺失或损坏，按 legacy/migration advisory 处理，不作为 hard failure。
-
-该契约不改变 `--style`：`--style` 仍是 freeform verbatim guidance，不增加固定风格档位。它也不改变 `deslop_qc` 边界：仍然是 report-only，不是 AIGC detector，不自动改写。
-
-最小示例：
-
-```json
-{
-  "schema_version": 1,
-  "style_card_required": false
-}
-```
+cut 第二轮（已有 `edited_source.mp4`）时本文件与 `asr_writing_chunks.json` 都在 OUTPUT 时间轴上：被拆到多个片段的场景 `scene_id` 写作 `"3.1"`（0 起的原场景号加片段序号）；VLM 文字里落在场景原片区间内的时间改写成输出时间，落在被剪掉部分的写 `[cut-away moment]`；只被剪进一部分的 ASR 窗口文字换成 `[partial ASR window: only part of it is in the cut, text withheld]`。`scene_id` 一律 0 起，brief 里给人看的场景号从 1 数。
 
 ## background_research.json
 
@@ -190,4 +173,4 @@ brief 会校验 sidecar 并打印当前状态，缺失或与当前文件不一�
 
 ## 其他产物
 
-`narration.json`、`narration_lint.json`、`style_card.json`、`packaging_plan.json`、`deslop_qc.json`、`clip_plan.json`、`clip_plan_validated.json` 由后续的写稿与剪辑阶段读写，本技能既不生成也不校验它们；其格式以本技能生成的 `agent_narration_brief.md` 和编排器的中间产物契约为准。
+`narration.json`、`narration_lint.json`、`style_card.json`、`packaging_plan.json`、`clip_plan.json`、`clip_plan_validated.json` 由后续的写稿与剪辑阶段读写，本技能既不生成也不校验它们；其格式以本技能生成的 `agent_narration_brief.md` 和编排器的中间产物契约为准。

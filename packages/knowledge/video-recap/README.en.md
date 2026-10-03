@@ -7,7 +7,7 @@
 <h1 align="center">Video Recap Skills</h1>
 
 <p align="center">
-  <b>Turn one or several videos into a Chinese-narration recap: six skills inside the coding agent you already use, ffmpeg locally, one Xiaomi MiMo key remotely, and an optional JianYing/CapCut draft to keep editing by hand.</b>
+  <b>Turn one or several videos into a Chinese-narration recap: seven skills (six for production plus one on-demand reference skill) inside the coding agent you already use, ffmpeg locally, one Xiaomi MiMo key remotely, and an optional JianYing/CapCut draft to keep editing by hand.</b>
 </p>
 
 <p align="center">
@@ -40,17 +40,22 @@ The 59-second landscape recap above, *Guohuo (这一秒过火)*, is the final de
 
 ## What it is
 
-Six skills install into Claude Code, Codex CLI, OpenCode, or OpenClaw. You give the video paths and the recap you want in plain language; the agent understands picture and dialogue, decides the story and audiovisual plan, cuts, writes, voices, mixes, and subtitles. Supported inputs: `.mp4 / .mov / .mkv / .webm`.
+Seven skills (six for production plus one on-demand reference skill) install into Claude Code, Codex CLI, OpenCode, or OpenClaw. You give the video paths and the recap you want in plain language; the agent understands picture and dialogue, decides the story and audiovisual plan, cuts, writes, voices, mixes, and subtitles. Supported inputs: `.mp4 / .mov / .mkv / .webm`.
 
 - **One key, ffmpeg locally.** ASR, VLM, and TTS all go through [Xiaomi MiMo](https://platform.xiaomimimo.com); the local runtime is Python's standard library plus `ffmpeg`, with no GPU, no `pip install`, and no model downloads. Voiceover can switch to Fish Audio, which replaces only that stage.
 - **The editorial decision comes before the sound allocation.** The agent compares edit hypotheses first, writes the viewer promise, POV, dramatic question, and change-based beats into `recap_story_plan.json`, then assigns each beat a picture job and an audio owner: narration is voiced as a block only when it has a defined job, and strong dialogue, action sound, or silence may own an entire beat.
 - **Cut first, narrate second, so the timeline is aligned by construction.** Cut mode renders the shortened video first and writes narration against that output timeline; feed several videos at once and pick ranges by `source_id` to cut one story spine; each video's analysis is saved to a filesystem material library for reuse.
 - **Keep editing after the render.** The multi-track `timeline.json` exports to a JianYing draft with editable source clips, narration, BGM, subtitles, and image overlays; drop in an accurate subtitle file and it becomes the preferred source for original-dialogue captions.
-- **Every step leaves a record you can check.** Narration lint, assembly QC, delivery QC, and the revision log are machine-readable files; the optional MiMo adviser only suggests, and a missing key, rate limit, or timeout never blocks the render.
+- **Every step leaves a record you can check.** Narration lint, assembly QC, delivery QC, and the revision log are machine-readable files.
 
 ## Install
 
-Prerequisites: Python 3.10 or newer, `ffmpeg` with libass on `PATH` (subtitles are burned in by default), and one [Xiaomi MiMo](https://platform.xiaomimimo.com) API key.
+### ClawHub
+
+ClawHub distribution is governed by the repository's [explicit publish inventory](.clawhub/publish.json), with discovery through [ClawHub](https://clawhub.ai/). A skill-specific link is added here only after its publisher, version, and anonymous accessibility are verified, so this README never presents a nonexistent listing as live.
+
+
+Prerequisites: Python 3.10 or newer, `ffmpeg` on `PATH`, and one [Xiaomi MiMo](https://platform.xiaomimimo.com) API key. Subtitles are burned in by default, which needs an ffmpeg with libass. Homebrew's stock `ffmpeg` has no libass: the default run then skips the burn, ships a same-name `.srt` sidecar next to the recap, and records a warning in `final_qc.json` (an explicit `--burn-subtitles` stops before the run starts instead). Narration that adds on-screen text overlays (`visual_overlays`) also needs an ffmpeg with drawtext, and stops before voiceover without it. To burn subtitles on macOS, use `brew install ffmpeg-full` (keg-only: put its `bin` first on `PATH`).
 
 ```bash
 brew install ffmpeg                        # macOS; apt on Debian/Ubuntu, choco / scoop / winget on Windows
@@ -90,7 +95,7 @@ git clone https://github.com/zenstory-ai/video-recap-skills.git
 cd video-recap-skills
 mkdir -p .opencode
 ln -s ../skills .opencode/skills             # on Windows, copy skills\* into .opencode\skills\
-opencode debug skill                         # should list all 6 skills
+opencode debug skill                         # should list all 7 skills
 ```
 
 **OpenClaw**: after cloning, import the Claude plugin bundle:
@@ -276,7 +281,7 @@ The case went through four revision rounds, each written into [`revision-log.jso
 },
 ```
 
-The mechanical pre-delivery checks are in [`assembly_qc.json`](examples/guohuo-60s/assembly_qc.json) (loudness, subtitle overflow, release gate) and [`delivery-qc.json`](examples/guohuo-60s/delivery-qc.json):
+The mechanical pre-delivery checks are in [`assembly_qc.json`](examples/guohuo-60s/assembly_qc.json) (loudness, per-segment narration integrity, `verdict` / `blocking_codes`) and [`delivery-qc.json`](examples/guohuo-60s/delivery-qc.json):
 
 ```json
 "checks": {
@@ -326,7 +331,7 @@ Use /path/to/ep1.mp4 and /path/to/ep2.mp4 to make one ten-minute recap with a sh
 
 The agent handles understanding, story and audiovisual planning, cutting, scripting, voiceover, and assembly. In cut mode it first chooses the footage, renders the shortened video, and only then writes narration on the output timeline; the internal pauses and resumes are the agent's job too.
 
-## Workflow and the six skills
+## Workflow and the seven skills
 
 ```mermaid
 flowchart LR
@@ -342,7 +347,7 @@ flowchart LR
     class research,cut opt;
 ```
 
-The six skills hand off through the JSON / MP4 artifacts in `work_dir`:
+The seven skills (six for production plus one on-demand reference skill) hand off through the JSON / MP4 artifacts in `work_dir`:
 
 | Skill | Responsibility | In → Out |
 |---|---|---|
@@ -352,6 +357,7 @@ The six skills hand off through the JSON / MP4 artifacts in `work_dir`:
 | [`video-cut`](skills/video-cut/) | Clip plan → rendered cut; cut first, narrate second on the output timeline | `clip_plan.json + video` → `edited_source.mp4` |
 | [`video-voiceover`](skills/video-voiceover/) | Synthesise narration audio (MiMo `mimo-v2.5-tts` / Fish Audio `s2.1-pro-free`) | `narration.json` → `tts_segments/ + tts_meta.json` |
 | [`video-assemble`](skills/video-assemble/) | Mix · duck original audio · render subtitles · multi-track timeline · optional JianYing export | `video + tts_meta` → `recap_<name>.mp4 + subtitles.srt/.ass + timeline.json` |
+| [`video-reference`](skills/video-reference/) | On demand, off the production path: break a finished video down into a reusable production reference (structure, pacing, shots, narration/subtitles, sound-picture handoff); source facts stay local, the export holds only methods and numbers | `finished video + understanding artifacts` → `production_reference.json` |
 
 The recap is always written to `recap_<name>.mp4` alongside `subtitles.srt/.ass`; all intermediate artifacts live in `work_dir/`, with the field contracts in the [data schema](skills/video-recap/references/data-schema.md).
 
@@ -365,13 +371,11 @@ Analyze /path/to/ep1.mp4 and save reusable understanding artifacts under /path/t
 
 The library holds JSON, Markdown, and an index only; it copies no media, builds no database, and uses no embeddings. The agent simply `grep`s the filesystem.
 
-**Run an advisory MiMo review before and after assembly, and export a JianYing draft:**
+**Export a JianYing draft:**
 
 ```text
-Make a recap of /path/to/video.mp4, run MiMo quality review before assembly and after rendering, and export an editable JianYing draft.
+Make a recap of /path/to/video.mp4 and export an editable JianYing draft.
 ```
-
-MiMo review makes at most one request per stage, only suggests, and never blocks the render if it fails.
 
 **Align recap subtitles with the source's burned-in subtitle band:**
 
@@ -379,7 +383,7 @@ MiMo review makes at most one request per stage, only suggests, and never blocks
 Detect the source subtitle band in /path/to/video.mp4 and let me confirm the preview before rendering recap subtitles in the same region.
 ```
 
-The preview is stored under `.subtitle_measure/`; it currently requires square-pixel video and bottom-aligned source subtitles.
+The preview is stored under `.subtitle_measure/`; it currently requires square or near-square pixels (SAR within 2% of 1:1) and bottom-aligned source subtitles.
 
 **Voice with an authorised reference voice:**
 
@@ -428,7 +432,7 @@ Yes. Understanding relies on the VLM reading the picture and does not require ex
 
 ### A long video hit a 429 or was interrupted halfway. Do I start over?
 
-No. VLM scene analysis resumes from where it stopped and recovers from rate limits; once `narration.json` is written, repeating the same command continues, cut mode records cut/narrate progress in `recap_phase.json`, and a resume only continues a work directory for the same source video and parameters.
+No. VLM scene analysis resumes from where it stopped and recovers from rate limits; once `narration.json` is written, repeating the same command continues, cut mode records in `recap_phase.json` which clip plan the narration was written for (changing the plan asks for a new narration), and a resume only continues a work directory for the same source video and parameters.
 
 ### The VLM can't tell who is who and the narration is all "a man in black"?
 

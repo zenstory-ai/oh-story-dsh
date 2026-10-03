@@ -10,7 +10,8 @@ Optional, synchronous, in-pipeline. Two independent LLM passes over the video's 
     cleanup pass can never shift the timing-bearing spans downstream chunking depends on.
 
 Both passes are idempotent (a fresh artifact is reused); a failure raises and the runner
-records it in consolidation.status.json. Mirrors review.py's pure-seam + thin-driver shape so it is
+records it in consolidation.status.json. A cut-off or non-JSON model reply is a failure too
+(ConsolidateIncomplete), never an empty artifact reported as done. Mirrors review.py's pure-seam + thin-driver shape so it is
 unit-testable with a mocked api_call. NON-required: the pipeline runs unchanged without it.
 """
 
@@ -20,6 +21,7 @@ import re
 from pathlib import Path
 
 from lib import CONFIG, log, api_call, file_identity, load_background_research
+from index_normalize import coerce_character_aliases, normalize_index, scenes_end
 from understanding_cache import _fresh
 
 # Shared tolerance for the per-segment span check. The brief-side gate inlines the SAME
@@ -27,6 +29,29 @@ from understanding_cache import _fresh
 # Keep both in sync. Consolidate preserves spans exactly, so this only guards hand-edited files.
 _ASR_SPAN_TOL = 0.05
 ASR_CLEAN_POSTPROCESS_VERSION = 2
+
+# Output budgets. A 5-min recap's index ran past 3000 tokens and came back cut off
+# (finish_reason=length); a cut-off reply parses to nothing, so it must never be written as
+# a finished artifact. One retry doubles the budget; a second cut-off raises.
+_CLEAN_MAX_TOKENS = 8000
+_INDEX_MAX_TOKENS = 8000
+_RETRY_BUDGET_FACTOR = 2
+
+
+class ConsolidateIncomplete(RuntimeError):
+    """The model reply was cut off or is not JSON; nothing was written for that pass."""
+
+
+class ConsolidateNoKey(RuntimeError):
+    """A pass needs the model but no API key is set; nothing was sent or written."""
+
+
+def _require_api_key(label):
+    """Offline runs reuse fresh artifacts; a pass that would call the model skips instead of
+    sending an unauthenticated request that can only 401."""
+    if not CONFIG["api_key"]:
+        log(f"consolidate({label}): 未设置 {CONFIG['api_env_var']}，跳过（不发送请求）")
+        raise ConsolidateNoKey(label)
 
 CLEAN_PROMPT = """你在清洗中文视频的 ASR 逐段转写。对【每一段】做：补标点、修明显同音/错别字、（能判断时）在句首轻标说话人，让长段连读文本变成清晰可读的句子。
 铁律：
@@ -44,6 +69,7 @@ INDEX_PROMPT = """你在根据逐场景画面分析、ASR对白、background_res
 - visual/asr 是当前视频事实证据；每个人物、关系、剧情节点、物件尽量给 evidence_ids。
 - background_research 只能用于人名/别名/术语/身份消歧，默认 support=context_only；不能把后续剧情或未出现关系升级为当前画面事实。
 - ASR 中出现但画面描述未命名的人名，应进入 characters[*].asr_mentions。
+- 输出要紧凑、必须是完整 JSON：只收对解说有用的角色/关系/节点；description/relation/text 每条不超过 40 字；visual_descriptions 最多 3 条；每项 evidence_ids 最多 6 个；plot_points 最多 20 条。
 只返回 JSON：
 {"characters":[{"name":"角色名或外观指代","description":"身份/特征","aliases":[],"visual_descriptions":[],"asr_mentions":[],"research_role":"","evidence_ids":[],"confidence":"high|medium|low"}],
  "relationships":[{"a":"角色","b":"角色","relation":"关系","evidence_ids":[],"support":"direct|indirect|context_only"}],
@@ -339,6 +365,7 @@ def parse_index_response(text):
     ):
         val = data.get(key)
         out[key] = val if isinstance(val, list) else []
+    out["characters"] = coerce_character_aliases(out["characters"])
     for item in out["research_glossary"]:
         if isinstance(item, dict):
             item["support"] = "context_only"
@@ -479,15 +506,10 @@ def consolidate_transcript(work_dir):
         ):
             log("consolidate(asr): asr_clean.json 已最新，跳过")
             return existing
-    resp = api_call(
-        {
-            "model": CONFIG["vlm_model"],
-            "messages": build_clean_messages(asr_result),
-            "max_tokens": 4000,
-            "temperature": 0.2,
-        }
+    _require_api_key("asr")
+    content = _complete_json_reply(
+        "asr", build_clean_messages(asr_result), _CLEAN_MAX_TOKENS
     )
-    content = _response_text(resp)
     segments = parse_clean_response(content, asr_result)
     payload = {
         "source": _input_identity(work_dir, "asr_result.json"),
@@ -513,62 +535,124 @@ def consolidate_index(work_dir):
     if _fresh(out_path, work_dir / "vlm_analysis.json") and _index_cache_matches(
         work_dir, vlm_analysis
     ):
+        cached = _load(work_dir, "understanding_index.json")
+        repaired = _normalized_index(cached, vlm_analysis) if isinstance(cached, dict) else cached
+        if repaired != cached:
+            # An index written before the deterministic repairs existed: fix it in place
+            # instead of paying for a new model call.
+            _store_index(work_dir, repaired, vlm_analysis)
         log("consolidate(index): understanding_index.json 已最新，跳过")
-        return _load(work_dir, "understanding_index.json")
+        return repaired
+    _require_api_key("index")
     asr_result = _load(work_dir, "asr_result.json") or []
     asr_clean = _load(work_dir, "asr_clean.json") or {}
     background_research = load_background_research(work_dir)
-    resp = api_call(
-        {
-            "model": CONFIG["vlm_model"],
-            "messages": build_index_messages(
-                vlm_analysis,
-                asr_result=asr_result,
-                asr_clean=asr_clean,
-                background_research=background_research,
-            ),
-            "max_tokens": 3000,
-            "temperature": 0.2,
-        }
+    content = _complete_json_reply(
+        "index",
+        build_index_messages(
+            vlm_analysis,
+            asr_result=asr_result,
+            asr_clean=asr_clean,
+            background_research=background_research,
+        ),
+        _INDEX_MAX_TOKENS,
     )
-    index = parse_index_response(_response_text(resp))
+    index = parse_index_response(content)
     index = _apply_deterministic_asr_research_fallback(
         index,
         asr_result=asr_result,
         asr_clean=asr_clean,
         background_research=background_research,
     )
-    out_path.write_text(
-        json.dumps(index, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
-    _write_index_meta(work_dir, vlm_analysis)
-    (work_dir / "understanding_index.md").write_text(
-        format_index_md(index), encoding="utf-8"
-    )
+    index = _normalized_index(index, vlm_analysis)
+    _store_index(work_dir, index, vlm_analysis)
     log(
         f"consolidate(index): 写出 understanding_index.json（角色 {len(index['characters'])}）"
     )
     return index
 
 
+def _normalized_index(index, vlm_analysis):
+    """Merge split characters and canonicalize plot times (index_normalize)."""
+    index, repairs = normalize_index(index, duration=scenes_end(vlm_analysis))
+    if repairs["merged_characters"] or repairs["dropped_plot_times"]:
+        log(
+            f"consolidate(index): 合并重复角色 {repairs['merged_characters']} 个，"
+            f"丢弃无效剧情时间 {repairs['dropped_plot_times']} 个"
+        )
+    return index
+
+
+def _store_index(work_dir, index, vlm_analysis):
+    (work_dir / "understanding_index.json").write_text(
+        json.dumps(index, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    _write_index_meta(work_dir, vlm_analysis)
+    (work_dir / "understanding_index.md").write_text(
+        format_index_md(index), encoding="utf-8"
+    )
+
+
 def consolidate(work_dir, do_asr=False, do_index=True):
     """Default = index-only (Pass B, zero timing risk). Pass A (asr) is opt-in.
 
-    Failures propagate; understanding_runner catches them and writes the "failed" status."""
-    result = {}
-    if do_asr:
-        result["asr_clean"] = consolidate_transcript(work_dir)
+    Failures propagate; understanding_runner catches them and writes the "failed" status.
+    A pass that needs the model while no key is set is listed under "skipped_no_key"."""
+    result = {"skipped_no_key": []}
+    passes = [("asr", "asr_clean", consolidate_transcript)] if do_asr else []
     if do_index:
-        result["index"] = consolidate_index(work_dir)
+        passes.append(("index", "index", consolidate_index))
+    for label, key, run in passes:
+        try:
+            result[key] = run(work_dir)
+        except ConsolidateNoKey:
+            result[key] = None
+            result["skipped_no_key"].append(label)
     return result
 
 
 def _response_text(resp):
+    """(content, finish_reason) of the first choice; ("", None) on a malformed response."""
     try:
-        return resp["choices"][0]["message"]["content"]
-    except (KeyError, IndexError, TypeError):
+        choice = resp["choices"][0]
+        return choice["message"]["content"] or "", choice.get("finish_reason")
+    except (KeyError, IndexError, TypeError, AttributeError):
         log("consolidate: API 返回结构异常")
-        return ""
+        return "", None
+
+
+def _complete_json_reply(label, messages, max_tokens):
+    """Call the model and return a reply that is complete JSON, or raise ConsolidateIncomplete.
+
+    A cut-off reply (finish_reason=length) is retried once with a larger budget; an
+    unparseable reply is not retried (a bigger budget would not fix it)."""
+    budget = max_tokens
+    for attempt in range(2):
+        content, finish = _response_text(
+            api_call(
+                {
+                    "model": CONFIG["vlm_model"],
+                    "messages": messages,
+                    "max_tokens": budget,
+                    "temperature": 0.2,
+                }
+            )
+        )
+        if finish == "length":
+            if attempt == 0:
+                log(f"consolidate({label}): 输出被截断（max_tokens={budget}），加大预算重试一次")
+                budget *= _RETRY_BUDGET_FACTOR
+                continue
+            raise ConsolidateIncomplete(
+                f"consolidate({label}): 输出被截断（finish_reason=length，"
+                f"max_tokens={budget}），未写出结果"
+            )
+        if not isinstance(_extract_json(content), dict):
+            raise ConsolidateIncomplete(
+                f"consolidate({label}): 模型返回的不是可解析的 JSON"
+                f"（finish_reason={finish}），未写出结果"
+            )
+        return content
 
 
 def main():
@@ -583,7 +667,7 @@ def main():
     print(
         json.dumps(
             {
-                "status": "consolidated",
+                "status": "skipped_no_key" if res["skipped_no_key"] else "consolidated",
                 "index": bool(res.get("index")),
                 "asr_clean": bool(res.get("asr_clean")),
             },

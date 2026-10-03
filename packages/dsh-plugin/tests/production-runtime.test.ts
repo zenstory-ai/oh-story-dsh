@@ -154,9 +154,105 @@ describe("production runtime", () => {
     const sequence = reconcileSequence(["SHOT-EP001-001", "SHOT-EP001-002"], [], versions, { "SHOT-EP001-001": "image-v1" });
     expect(sequence[0]?.versionId).toBe("video-v1");
     expect(sequence.map((item) => item.shotId)).toEqual(["SHOT-EP001-001", "SHOT-EP001-002"]);
-    expect(sequenceIssues(sequence, versions)).toEqual(["SHOT-EP001-002 缺少已选视频版本"]);
+    expect(sequenceIssues(sequence, versions)).toEqual(["SHOT-EP001-002 缺少已选视频或关键帧素材"]);
     expect(reorderSequence(sequence, 1, 0).map((item) => item.shotId)).toEqual(["SHOT-EP001-002", "SHOT-EP001-001"]);
     expect(reorderSequence(sequence, 0, 9).map((item) => item.shotId)).toEqual(["SHOT-EP001-001", "SHOT-EP001-002"]);
+  });
+
+  it("prefers the explicitly selected video, then any available video, before a selected keyframe", () => {
+    const versions: ProductionMediaVersion[] = [
+      { id: "image", targetId: "SHOT-EP001-001", kind: "image", url: "/image", path: "剧集/EP001/制作成果/SHOT-EP001-001/key.png" },
+      { id: "video-old", targetId: "SHOT-EP001-001", kind: "video", url: "/old", path: "剧集/EP001/制作成果/SHOT-EP001-001/old.mp4" },
+      { id: "video-new", targetId: "SHOT-EP001-001", kind: "video", url: "/new", path: "剧集/EP001/制作成果/SHOT-EP001-001/new.mp4" }
+    ];
+    expect(reconcileSequence(["SHOT-EP001-001"], [], versions, { "SHOT-EP001-001": "video-old" })[0]?.versionId).toBe("video-old");
+    expect(reconcileSequence(["SHOT-EP001-001"], [], versions, { "SHOT-EP001-001": "image" })[0]?.versionId).toBe("video-new");
+  });
+
+  it("lets a per-sequence explicit static source override an available video", () => {
+    const versions: ProductionMediaVersion[] = [
+      { id: "still", targetId: "IMG-EP001-DOOR", kind: "image", url: "/still", path: "剧集/EP001/制作成果/IMG-EP001-DOOR/door.png" },
+      { id: "video", targetId: "SHOT-EP001-001", kind: "video", url: "/video", path: "剧集/EP001/制作成果/SHOT-EP001-001/video.mp4" }
+    ];
+    expect(reconcileSequence(
+      ["SHOT-EP001-001"],
+      [{ shotId: "SHOT-EP001-001", sourceVersionId: "still", versionId: "still" }],
+      versions,
+      {},
+      "剧集/EP001"
+    )).toEqual([{ shotId: "SHOT-EP001-001", sourceVersionId: "still", versionId: "still" }]);
+  });
+
+  it("uses an accepted SHOT keyframe or an explicitly selected IMG keyframe when no video exists", () => {
+    const versions: ProductionMediaVersion[] = [
+      { id: "unselected", targetId: "SHOT-EP001-001", kind: "image", url: "/first", path: "剧集/EP001/制作成果/SHOT-EP001-001/first.png" },
+      { id: "selected-img", targetId: "IMG-EP001-DOOR", kind: "image", url: "/door", path: "剧集/EP001/制作成果/IMG-EP001-DOOR/door.png" }
+    ];
+    expect(reconcileSequence(["SHOT-EP001-001"], [], versions, {})[0]?.versionId).toBe("unselected");
+    const staticSequence = reconcileSequence(["SHOT-EP001-001"], [], versions, { "SHOT-EP001-001": "selected-img" });
+    expect(staticSequence).toEqual([{ shotId: "SHOT-EP001-001", versionId: "selected-img" }]);
+    expect(sequenceIssues(staticSequence, versions)).toEqual([]);
+  });
+
+  it("preserves mixed static/video ordering and blocks missing or unreadable material", () => {
+    const versions: ProductionMediaVersion[] = [
+      { id: "still", targetId: "SHOT-EP001-001", kind: "image", url: "/still", path: "剧集/EP001/制作成果/SHOT-EP001-001/still.png" },
+      { id: "video", targetId: "SHOT-EP001-002", kind: "video", url: "/video", path: "剧集/EP001/制作成果/SHOT-EP001-002/video.mp4" },
+      { id: "unreadable", targetId: "SHOT-EP001-003", kind: "image", url: "/missing" }
+    ];
+    const sequence = reconcileSequence(
+      ["SHOT-EP001-001", "SHOT-EP001-002", "SHOT-EP001-003", "SHOT-EP001-004"],
+      [{ shotId: "SHOT-EP001-002" }, { shotId: "SHOT-EP001-001" }],
+      versions,
+      { "SHOT-EP001-001": "still", "SHOT-EP001-003": "unreadable" }
+    );
+    expect(sequence.map((item) => [item.shotId, item.versionId])).toEqual([
+      ["SHOT-EP001-002", "video"], ["SHOT-EP001-001", "still"], ["SHOT-EP001-003", "unreadable"], ["SHOT-EP001-004", undefined]
+    ]);
+    expect(sequenceIssues(sequence, versions)).toEqual([
+      "SHOT-EP001-003 的关键帧没有可供 DSH 读取的工作区路径",
+      "SHOT-EP001-004 缺少已选视频或关键帧素材"
+    ]);
+  });
+
+  it("does not reuse a same-named version from another episode", () => {
+    const otherEpisode: ProductionMediaVersion = {
+      id: "ep2-video", targetId: "SHOT-EP001-001", kind: "video", url: "/ep2", path: "剧集/EP002/制作成果/SHOT-EP001-001/take.mp4"
+    };
+    const sequence = reconcileSequence(["SHOT-EP001-001"], [], [otherEpisode], {}, "剧集/EP001");
+    expect(sequence).toEqual([{ shotId: "SHOT-EP001-001", versionId: undefined }]);
+    expect(sequenceIssues([{ shotId: "SHOT-EP001-001", versionId: otherEpisode.id }], [otherEpisode], "剧集/EP001"))
+      .toEqual(["SHOT-EP001-001 缺少已选视频或关键帧素材"]);
+  });
+
+  it("accepts this episode's delivery media, rejects another delivery, and migrates old sequence state", () => {
+    const delivered: ProductionMediaVersion = {
+      id: "delivery-1", targetId: "SHOT-EP001-001", kind: "video", url: "/delivery", path: "交付/EP001/SHOT-EP001-001/take.mp4"
+    };
+    const other: ProductionMediaVersion = {
+      ...delivered, id: "delivery-2", url: "/other", path: "交付/EP002/SHOT-EP001-001/take.mp4"
+    };
+    // Old Session rows have only versionId; reconciliation keeps their order and adopts the
+    // current automatic result without inventing an explicit source choice.
+    expect(reconcileSequence(
+      ["SHOT-EP001-001"], [{ shotId: "SHOT-EP001-001", versionId: "stale" }], [other, delivered], {}, "剧集/EP001"
+    )).toEqual([{ shotId: "SHOT-EP001-001", versionId: "delivery-1" }]);
+    expect(sequenceIssues([{ shotId: "SHOT-EP001-001", versionId: "delivery-1" }], [other, delivered], "剧集/EP001")).toEqual([]);
+  });
+
+  it("blocks instead of substituting when an explicit sequence source disappears", () => {
+    const available: ProductionMediaVersion = {
+      id: "video", targetId: "SHOT-EP001-001", kind: "video", url: "/video", path: "剧集/EP001/制作成果/SHOT-EP001-001/video.mp4"
+    };
+    const sequence = reconcileSequence(
+      ["SHOT-EP001-001"],
+      [{ shotId: "SHOT-EP001-001", sourceVersionId: "deleted-still", versionId: "deleted-still" }],
+      [available],
+      {},
+      "剧集/EP001"
+    );
+    expect(sequence).toEqual([{ shotId: "SHOT-EP001-001", sourceVersionId: "deleted-still", versionId: undefined }]);
+    expect(sequenceIssues(sequence, [available], "剧集/EP001")).toEqual(["SHOT-EP001-001 显式选择的成片素材已不可用"]);
   });
 
   it("does not turn an ended paid dispatch into an automatically retryable failure", () => {
@@ -258,4 +354,3 @@ describe("paid-job reconciliation regressions", () => {
     expect(next.error).toBeUndefined();
   });
 });
-

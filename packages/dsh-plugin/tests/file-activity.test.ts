@@ -1,6 +1,7 @@
 import type { ChatSnapshot } from "@deepseek-ai/dsh-client-ui-chat/client";
 import type { ConversationTimelineSnapshot, RunningToolCall } from "@deepseek-ai/dsh-client-ui-conversation/client";
 import { describe, expect, it } from "vitest";
+import { PartialArguments } from "@deepseek-ai/dsh-util-values";
 import {
   creativeRelativePath,
   fileMutations,
@@ -79,6 +80,7 @@ describe("official DSH file activity", () => {
   it("uses the executing DSH call and previews targeted edits", () => {
     const running = [{
       phase: "start",
+      args: PartialArguments.EMPTY,
 
       callId: "edit-1",
       name: "edit",
@@ -96,6 +98,7 @@ describe("official DSH file activity", () => {
   it("walks nested calls and preserves concurrent mutations", () => {
     const child = (callId: string, path: string): RunningToolCall => ({
       phase: "start",
+      args: PartialArguments.EMPTY,
       callId,
       name: "write",
       argsRaw: JSON.stringify({ file_path: path, content: callId }),
@@ -106,6 +109,7 @@ describe("official DSH file activity", () => {
     });
     const running: RunningToolCall[] = [{
       phase: "start",
+      args: PartialArguments.EMPTY,
 
       callId: "code-1",
       name: "run_code",
@@ -120,9 +124,39 @@ describe("official DSH file activity", () => {
   });
 
   it("waits for a preparing DSH call to receive its arguments", () => {
-    const preparing: RunningToolCall[] = [{ phase: "preparing", callId: "write-next", name: "write", turn: 1, step: 1, time: 1, subCalls: [] }];
+    const preparing: RunningToolCall[] = [{ phase: "preparing", args: PartialArguments.EMPTY, callId: "write-next", name: "write", turn: 1, step: 1, time: 1, subCalls: [] }];
     expect(fileMutations(preparing)).toEqual([]);
     expect([...mutatingCallIds(preparing)]).toEqual(["write-next"]);
+  });
+
+  it("follows alpha preparing arguments as their view grows in place", () => {
+    const args = new PartialArguments();
+    args.append('{"file_path":"正文/新章.md","content":"雨声');
+    const call: RunningToolCall = { phase: "preparing", args, callId: "alpha-write", name: "write", turn: 1, step: 1, time: 1, subCalls: [] };
+    expect(fileMutations([call]).at(-1)).toMatchObject({ stage: "streaming", path: "正文/新章.md", newText: "雨声" });
+    args.append('越来越近"}');
+    expect(args.refresh()).toBe(true);
+    expect(fileMutations([call]).at(-1)?.newText).toBe("雨声越来越近");
+  });
+
+  it("does not apply an edit until its old-string argument is complete", () => {
+    const args = new PartialArguments();
+    args.append('{"file_path":"正文/新章.md","new_string":"新句","old_string":"旧');
+    const call: RunningToolCall = { phase: "preparing", args, callId: "alpha-edit", name: "edit", turn: 1, step: 1, time: 1, subCalls: [] };
+    expect(previewMutation(fileMutations([call])[0]!, "旧句")).toBeUndefined();
+    args.append('句"}');
+    expect(previewMutation(fileMutations([call])[0]!, "旧句")).toBe("新句");
+  });
+
+  it("does not preview a deletion while str_replace arguments are still open", () => {
+    const args = new PartialArguments();
+    args.append('{"command":"str_replace","path":"正文/新章.md","old_str":"旧句"');
+    const call: RunningToolCall = { phase: "preparing", args, callId: "alpha-replace", name: "str_replace_editor", turn: 1, step: 1, time: 1, subCalls: [] };
+    expect(previewMutation(fileMutations([call])[0]!, "旧句")).toBeUndefined();
+    args.append(',"new_str":"新');
+    expect(previewMutation(fileMutations([call])[0]!, "旧句")).toBe("新");
+    const deletion = { ...call, args: PartialArguments.fromText('{"command":"str_replace","path":"正文/新章.md","old_str":"旧句"}') };
+    expect(previewMutation(fileMutations([deletion])[0]!, "旧句")).toBe("");
   });
 
   it("keeps a streamed write visible while DSH holds it before dispatch", () => {
@@ -146,7 +180,7 @@ describe("official DSH file activity", () => {
     expect(held).toEqual([{ callId: "write-held", name: "write", argsRaw: write.argsRaw }]);
     expect(fileMutations([], null, held).at(-1)).toMatchObject({ callId: "write-held", stage: "running", path: "设定/角色/新人物.md", newText: "完整内容" });
     // A preparing row DSH still lists adds nothing on its own and does not duplicate the held call.
-    const preparing: RunningToolCall[] = [{ phase: "preparing", callId: "write-held", name: "write", turn: 3, step: 2, time: 1, subCalls: [] }];
+    const preparing: RunningToolCall[] = [{ phase: "preparing", args: PartialArguments.EMPTY, callId: "write-held", name: "write", turn: 3, step: 2, time: 1, subCalls: [] }];
     expect(fileMutations(preparing, null, held)).toHaveLength(1);
     // Streaming steps belong to `partial`; settled calls and closed Turns are no longer pending.
     expect(undispatchedCalls(chat("running", "open"))).toEqual([]);
@@ -200,6 +234,7 @@ describe("official DSH file activity", () => {
   it("supports replace-all and deletion", () => {
     const replaceAll = fileMutations([{
       phase: "start",
+      args: PartialArguments.EMPTY,
 
       callId: "edit-all",
       name: "edit",
@@ -213,6 +248,7 @@ describe("official DSH file activity", () => {
 
     const deletion = fileMutations([{
       phase: "start",
+      args: PartialArguments.EMPTY,
 
       callId: "delete-text",
       name: "str_replace_editor",

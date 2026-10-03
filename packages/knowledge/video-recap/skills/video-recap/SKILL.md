@@ -15,8 +15,13 @@ description: >
 video-understanding ─▶ Agent 按 video-script 制定方案并写稿 ─▶ [video-cut] ─▶ video-voiceover ─▶ video-assemble
 ```
 
+把成片拆成制作参考不是生产路径。用户要求时：对成片跑 video-understanding（建议 `ASR_SEGMENT_SECONDS=5`），
+再用 video-reference 做 measure、标注、check、export，把导出的 `production_reference.json` 复制进下一次运行的
+`work_dir`，或登记成资源库的 `production_reference` 模板、采纳后经 `--project` 绑定。recap 不会自动运行它，也不拿新成片与参考做比对。
+
 流程支持断点续跑：写好 `narration.json` 后重复同一条命令即可继续。第二阶段会比对
 `recap_run_manifest.json` 记录的源视频路径、文件大小/修改时间与运行参数，拒绝复用来自其他源视频或其他参数的旧工作目录；视频理解产物也只在来源一致时复用。
+暂停时打印的续跑命令就是原命令：保留原来的写法，视频与路径参数转成绝对路径，补上 `--work-dir` 和来自环境变量的设置，从任何目录都能直接运行；同一份参数写在 manifest 的 `argv`。
 
 画面流程 `--edit-mode full|cut|dub` 与声音策略 `--audio-mode` 是两个独立开关；
 `narration` 保留上述解说流程，`source-mix` 不做配音，`adopted-packet-copy` 冻结当前输入的已采用 AAC 音轨。
@@ -46,7 +51,7 @@ python3 scripts/recap.py picture.mp4 --edit-mode full --work-dir NEW_WORK \
 ```
 
 三个 JSON 参数必须同时出现。该入口只接受单视频、full、narration、音轨 0、新工作目录和未存在的
-交付文件；不运行理解、写稿、解说评审、TTS、cut、MiMo QC 或剪映导出。语义与媒体形状仍由
+交付文件；不运行理解、写稿、解说评审、TTS、cut 或剪映导出。语义与媒体形状仍由
 video-assemble 严格验证，recap 只核对子技能绑定记录引用的是同一批采用文件与母版路径，不把调用方
 采用的声音或混音声明成自动创作或发布批准。详见 `references/audio-routing.md`。
 
@@ -85,9 +90,8 @@ TTS 供应商由 `--tts-provider mimo-tts|fish-audio|index-tts`（或 `TTS_PROVI
 可选能力：
 
 - `--mimo-video-overview`：按场景块补充 MiMo 视频理解。
-- `--mimo-qc pre-assemble|post-render|both`：在合成前、成片后或两个阶段给出建议型复核。
 
-MiMo QC 默认关闭；每个选定阶段最多请求一次，写入 `mimo_qc.json`。任何凭证缺失、限流、超时、格式错误或采样失败都只记录状态，不阻断流程。可覆盖配置见 `references/config-playbook.md`，QC 报告的最小契约见 `references/shift-left-qc-schema.md`。
+可覆盖配置见 `references/config-playbook.md`，`final_qc.json` 的字段见 `references/data-schema.md`。
 
 下面的 `scripts/...` 均相对于本技能目录。若执行器从仓库根目录启动，请给脚本路径加上本技能的绝对目录。脚本启动后会自行定位兄弟技能和资源。
 
@@ -97,6 +101,7 @@ MiMo QC 默认关闭；每个选定阶段最多请求一次，写入 `mimo_qc.js
 
 若能识别影片、剧集或主题，先按 video-understanding 技能的调研指南 `research-guide.md` 调研并写入
 `work_dir/background_research.json`。视频理解会把人物名和剧情背景折入 VLM 上下文，避免只得到“黑衣男子”一类模糊描述。无法识别来源时可跳过。
+多视频运行同样写在项目 `work_dir` 下：recap 在每个来源理解前把它复制到 `sources/<source_id>/`（来源目录里没有、或比项目文件旧时才复制，所以某一集需要单独的调研时，在项目文件之后写入该来源目录即可）。
 
 ### 4.2 分析并暂停创作
 
@@ -116,7 +121,8 @@ python3 scripts/recap.py <video> --work-dir <work_dir> --context "背景"
 时间线有两条不可降级的硬约束：原声只能在可靠句末/静音边界被切入、切出或恢复；旁白必须使用
 完整逐段音频，任何 clip 映射裁段、TTS 裁尾或剪映引用更长的加速前素材都阻断。Agent 收到
 `interrupts_source_sentence` / `unsafe_clip_sentence_boundary` / `no_safe_fit` /
-`timeline_audio_mismatch` 时，应移动边界、缩短整句或删除该块，而不是增加抢断 override。
+`timeline_audio_mismatch` 时，应移动边界、缩短整句或删除该块，而不是增加抢断 override；
+`unsafe_clip_sentence_boundary` 附带的 `nearest_safe` 给出前后最近的安全边界时间。
 
 ### 4.3 多视频与素材库
 
@@ -125,6 +131,8 @@ python3 scripts/recap.py <video> --work-dir <work_dir> --context "背景"
 ```bash
 python3 scripts/recap.py ep1.mp4 ep2.mp4 --edit-mode cut --target-duration 10m --work-dir work_dir_multi_ep
 ```
+
+第二阶段与单视频一样生成剪后故事板 `storyboard/edited_storyboard.*`，取自各来源 `sources/<source_id>/frames/`，brief 顶部列出 `S1`/`S2`… 对应的 `source_id`；素材库恢复的来源没有抽帧，这些片段不出现在故事板里，用 `inspect clip-map` 核对。
 
 可选文件系统素材库：
 
@@ -135,8 +143,8 @@ python3 scripts/recap.py ep1.mp4 ep2.mp4 --edit-mode cut --material-library-dir 
 
 素材检索只是对 JSON / MD / JSONL 做 grep，例如 `grep -R "keyword" .video-materials`。当前版本不复制原始媒体，也不提供数据库、向量或语义搜索。
 
-同一根目录还可以登记可复用的资源（BGM、音效、音色、字体、图片）、带版本与采用记录的模板（字幕样式、包装图层）和样片。
-格式与 `scripts/library.py check|list|show` 只读工具见 `references/resource-library.md`。用 `--project recap_project.json` 把已采用的字幕样式、音色与 BGM 绑定到这次运行；
+同一根目录还可以登记可复用的资源（BGM、音效、音色、字体、图片）、带版本与采用记录的模板（字幕样式、包装图层、制作参考）和样片。
+格式与 `scripts/library.py check|list|show` 只读工具见 `references/resource-library.md`。用 `--project recap_project.json` 把已采用的字幕样式、包装、制作参考、音色与 BGM 绑定到这次运行；
 每次 full / cut 合成后 `work_dir/resource_lock.json` 记下实际用到的资源与授权状态。
 
 ### 4.4 继续生成成片
@@ -149,15 +157,7 @@ python3 scripts/recap.py <video> --work-dir <work_dir>  # 可追加 --edit-mode 
 
 流程会校验当前阶段的硬输入（`clip_plan.json` / `narration.json`）；两份创作计划仍是 Agent 与建议型评审使用的工作记录，不是渲染门禁。cut 模式随后生成 `edited_source.mp4`，再合成旁白并输出 `recap_<name>.mp4`。
 
-若需要建议型 MiMo 复核：
-
-```bash
-python3 scripts/recap.py <video> --work-dir <work_dir> --mimo-qc both
-```
-
-合成前复核会读取脚本、计划和 TTS 元数据；成片后还会读取最多六张临时 JPEG。输入文件的大小/修改时间、模型与提示都未变时直接复用上次报告，`--mimo-qc-refresh` 可强制刷新。帧的 base64 与凭证不会写入磁盘。
-
-已有批准解说稿时加 `--preserve-approved-text`：校验与 TTS 原样保留批准稿（只更新 `overlaps_speech`），装不下时间窗即失败，不缩稿、不降级为部分成功。
+校验从不改写解说稿（只更新实测的 `overlaps_speech`）；full 模式下文本装不下时间窗会以 `over_budget` error 退回给 Agent。已有批准解说稿时加 `--preserve-approved-text`，TTS 也原样保留批准稿，装不下时间窗即失败，不缩稿、不降级为部分成功。
 
 ### 4.5 字幕与克隆旁白
 
@@ -184,10 +184,15 @@ python3 tools/measure_subtitle.py <video>
 scene score、亮度统计、contact sheet 与自动 QC 只负责定位候选问题；最终判断以真实播放为准。密集切点的来源判断与处理规则按剪辑技能执行。修复失败时回到剪点、声音或文案层，不用更多包装掩盖。
 
 full/cut 交付如需让确定性的最终检查影响命令退出状态，显式传
-`--require-final-qc`。只有 `final_qc.json` 与 `golden_eval.json` 的摘要均为
-`ok: true` 且整数 `blocker_count: 0` 才打印完成并返回成功；缺失、畸形或 blocker
+`--require-final-qc`。只有 `final_qc.json` 的摘要为 `ok: true` 且整数
+`blocker_count: 0` 才打印完成并返回成功；缺失、畸形或 blocker
 会保留报告和已渲染诊断媒体，但命令非零退出且不打印完成。默认仍是仅报告、不阻断。
 该参数不支持 `--edit-mode dub`；dub 未传该参数时的准备和渲染行为不变。
+
+交付时读 `final_qc.json` 的 `metadata.warnings`，有内容就原样告诉用户，不能只报“完成”。`subtitle_burn_degraded`
+表示 ffmpeg 缺 libass、默认烧录被降级：成片里没有字幕，字幕在成片旁的同名 `.srt`。用户要烧录字幕，就请他装带 libass 的
+ffmpeg 后重跑；显式传 `--burn-subtitles` 时缺 libass 会在开跑前报错。旁白里写了 `visual_overlays` 而 ffmpeg 缺
+drawtext 时，流程在配音前停下，按报错删掉叠加或换 ffmpeg 后续跑。
 
 ### 4.7 不需要解说的片子
 
@@ -211,19 +216,13 @@ python3 scripts/recap.py adopted.mp4 --work-dir packaging_work --audio-mode adop
 python3 scripts/recap.py <video> --edit-mode dub --work-dir <work_dir>
 ```
 
-准备阶段会转写英文、提取一段参考音频，并写出 `dub_brief.md` 与 `dub_transcript.json`。Agent 随后写：
+准备阶段会转写英文、提取一段参考音频，并写出 `dub_brief.md` 与 `dub_transcript.json`。Agent 按 `dub_brief.md` 里的翻译要求（逐句忠实、时间窗、语速）写 `dub_script.json`：
 
 ```json
 [{"start": 0.0, "end": 2.0, "zh": "中文译文"}]
 ```
 
-要求：
-
-- 逐句忠实翻译，不删钩子、不合并、不擅自压缩；原文重复，译文也按时间重复。
-- 每句沿用原声 `[start, end]`，相邻句不重叠。
-- 译文尽量控制在约 5 字/秒，使其能在原时间窗内说完。
-
-重复同一命令后输出 `dub_<name>.mp4`。每句单独克隆并贴回原时间线；只有即将覆盖下一句时才局部加速。当前版本只支持单说话者、整轨替换，不分离背景音乐。
+重复同一命令后先做确定性 lint（`dub_lint.json`，空行、重叠、越界即中止），再输出 `dub_<name>.mp4`。每句单独克隆并贴回原时间线；只有即将覆盖下一句时才局部加速。当前版本只支持单说话者、整轨替换，不分离背景音乐。
 
 ## 6. 自检与只读 dashboard
 
@@ -249,12 +248,10 @@ python3 scripts/dashboard_server.py --root <目录> [--port 0] [--open]
 - `subtitles.srt` / `subtitles.ass`：字幕。
 - `work_dir/`：全部中间产物，契约见 `references/data-schema.md`。
 - `work_dir/recap_story_plan.json` / `visual_audio_board.json`：Agent 创作意图与剪辑决定。
-- `work_dir/mimo_qc.json`：可选的建议型复核，不作为发布门禁。
 
 完整参数列表以 `python3 scripts/recap.py --help` 为准。`--style` 是原样传给 Agent 的自由文本指导，不是 preset、枚举、开关或有限风格分类。
 
 ## 8. 能力边界
 
 - 语义评审默认建议型、失败开放；只有调用方显式启用严格解说评审时，事实矛盾、残句或评审不可用才会在 TTS 前阻断。确定性校验阶段始终负责硬校验。
-- MiMo QC 不能阻断、自动修复或改变退出状态，只提供定位建议。
 - 宣发标题、花字或外部文案回填见 `video-script` 的 references/promotional-copy.md。

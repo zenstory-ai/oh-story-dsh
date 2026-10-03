@@ -9,10 +9,12 @@ from briefing.context import (
     _format_asr_chunks_for_brief,
     _format_background_research,
     _format_consolidation,
+    _format_moderation_refusals,
     _format_substrate_warning,
     _format_timeline_fusion_for_brief,
     _load_background_research,
     _load_consolidation,
+    _scene_number,
     _write_json_artifact,
     assess_understanding_substrate,
 )
@@ -28,13 +30,30 @@ from briefing.timeline import (
     _load_cut_output_spans_for_brief,
     _parse_target_seconds,
     _remap_brief_evidence_to_output_timeline,
-    _write_deslop_qc_requirements,
 )
 from timeline_fusion import (
     _build_timeline_fusion,
     _quiet_windows_for_scene,
     _scene_asr_lines,
 )
+
+
+def _duration_label(seconds):
+    """'45s' / '2min' / '1m42s' / '2h' / '2h01m' / '2h01m05s', rounded to whole seconds;
+    a unit is dropped only when it and everything below it are zero.
+
+    A minute-rounded label hid the real length: a 90 s target read '~2min'."""
+    whole = int(seconds + 0.5)
+    if whole < 60:
+        return f"{whole}s"
+    minutes, secs = divmod(whole, 60)
+    if minutes < 60:
+        return f"{minutes}min" if secs == 0 else f"{minutes}m{secs:02d}s"
+    hours, minutes = divmod(minutes, 60)
+    if minutes == 0 and secs == 0:
+        return f"{hours}h"
+    return f"{hours}h{minutes:02d}m" if secs == 0 else f"{hours}h{minutes:02d}m{secs:02d}s"
+
 
 def build_agent_brief(
     scenes_analysis,
@@ -87,16 +106,8 @@ def build_agent_brief(
     beat_count_phrase = (
         f"at most ~{target_count}" if thin_substrate else f"roughly {target_count}"
     )
-    output_label = (
-        f"{output_seconds / 60:.0f}min"
-        if output_seconds >= 60
-        else f"{output_seconds:.0f}s"
-    )
-    source_label = (
-        f"{video_duration / 60:.0f}min"
-        if video_duration >= 60
-        else f"{video_duration:.0f}s"
-    )
+    output_label = _duration_label(output_seconds)
+    source_label = _duration_label(video_duration)
 
     lines = [
         "# Agent Narration Brief",
@@ -111,8 +122,7 @@ def build_agent_brief(
         f"- Target duration (cut mode): {target_duration}",
         f"- Effective speech budget: {effective_rate:.2f} Chinese chars/sec after {breath_sec:.2f}s pause allowance",
     ]
-    # Understanding validates evidence before calling; the standalone script skill
-    # has no producer dependency and must not invent an available ASR status.
+    # A caller that passes no ASR evidence must not get an invented available status.
     if asr_evidence is None:
         asr_evidence = {"status": "MISSING_OR_STALE", "glossary_modifications": None}
 
@@ -173,7 +183,7 @@ def build_agent_brief(
             "- `visual_audio_board.json` owns the exact picture/performance/reaction, entry/exit reason, original-audio anchor, `audio_owner`, and `narration_job` for each beat.",
             "- Only after the story/edit decisions are coherent, author `style_card.json` from `--style`, evidence, and user preference. It owns voice and pacing, not story structure, and is not a preset enum, fixed taxonomy, title plan, or packaging promise.",
             "- `packaging_plan.json` is optional and deferred until content lock unless the user explicitly asks for packaging. It must express the story's truthful promise, never drive or distort it.",
-            "- `deslop_qc.json` is deterministic report-only tool QC: do not hand-author it, do not treat it as an AIGC detector, and do not auto-rewrite from it. Corrections remain human/agent rewrite work guided by objective blockers and advisory readability signals.",
+            "- `narration_lint.json.deslop_qc` is deterministic report-only tool QC written by validation: do not treat it as an AIGC detector, and do not auto-rewrite from it. Corrections remain human/agent rewrite work guided by objective blockers and advisory readability signals.",
             "",
         ]
     )
@@ -194,6 +204,7 @@ def build_agent_brief(
         )
     )
     lines.extend(_format_substrate_warning(substrate))
+    lines.extend(_format_moderation_refusals(scenes_analysis))
     lines.extend(_format_research_directive(work_dir, substrate))
     lines.extend(_format_background_research(_load_background_research(work_dir)))
     lines.extend(_format_consolidation(consolidation_index))
@@ -205,7 +216,8 @@ def build_agent_brief(
         asr_result,
         silence_periods,
     )
-    if edit_mode == "cut" and (Path(work_dir) / "edited_source.mp4").exists():
+    cut_pass2 = edit_mode == "cut" and (Path(work_dir) / "edited_source.mp4").exists()
+    if cut_pass2:
         chunk_scenes, chunk_asr, _ = _remap_brief_evidence_to_output_timeline(
             work_dir, scenes_analysis, asr_for_chunks, [], required=True
         )
@@ -237,7 +249,7 @@ def build_agent_brief(
         cut_target_example = (
             target_duration if target_duration != "(not set)" else "30m"
         )
-        if not (Path(work_dir) / "edited_source.mp4").exists():
+        if not cut_pass2:
             # PASS 1 of 2 (cut-first): pick the footage. Narration comes AFTER the cut is
             # rendered, so it can be written against the real OUTPUT timeline — no source->output
             # mapping, no silent drop/clamp, no desync.
@@ -259,7 +271,7 @@ def build_agent_brief(
                     "- Clip length follows the moment. Vary pace; after any cold-open, order clips by causality so the cut reads as one coherent story, not a flat highlights reel.",
                     "- Inspect dense scene-change candidates before locking boundaries. For source-authored cuts, delete irrelevant short shots and extend relevant shots to a complete action/reaction; for edit-created joins, move boundaries, restore same-source motion, or merge clips so the artificial cut disappears where possible. Do not hide a bad join with a transition.",
                     "- Preserve complete spoken lines, but do not infer completeness from ASR window ends or quiet-window suggestions. Directly listen and inspect picture around each proposed boundary, then place the cut after the verified utterance/reaction; automatic snapping is only an advisory candidate.",
-                    "- Advisory does not mean absent: the cut CLI still snaps clip ends to sentence boundaries by default and blocks a cut that lands mid-sentence, using `silence_periods.json` and `speech_boundary_anchors.json` as the executable safety net under your listening.",
+                    "- Advisory does not mean absent: the cut CLI still snaps clip ends to sentence boundaries by default and blocks a cut inside ASR-detected speech unless it lands in a quiet window or a sentence-end pause estimate, using `silence_periods.json` and `speech_boundary_anchors.json` as the executable safety net under your listening.",
                     "",
                     "### clip_plan.json shape (original source timestamps)",
                     "",
@@ -366,22 +378,45 @@ def build_agent_brief(
             '- ✗ "一个蒙眼的男人抱着一个篮子走在雨里。"  (just describes the frame)',
             '- ✓ "护送者本可以独自离开，却为了保护那个孩子，主动把追兵引向自己。"  (who, why, stakes)',
             "",
-            "## Scene timing guide",
-            "",
         ]
     )
-
-    for scene in scenes_analysis:
-        duration = scene["end"] - scene["start"]
-        max_chars = max(5, int(max(1.0, duration - breath_sec) * effective_rate))
-        quiets = _quiet_windows_for_scene(silence_periods, scene)
-        quiet_text = ", ".join(f"{s:.1f}-{e:.1f}s" for s, e in quiets) or "none"
+    # Cut pass 2 narrates edited_source.mp4, so its guide lists only the kept footage on the
+    # OUTPUT clock; the source-time guide (cut-away scenes, credits) belongs to pass 1.
+    if cut_pass2:
+        guide_scenes, guide_asr, guide_silence = fusion_scenes, fusion_asr, fusion_silence
         lines.extend(
             [
-                f"### Scene {scene['scene_id'] + 1}: {scene['start']:.1f}-{scene['end']:.1f}s",
+                "## Scene timing guide (OUTPUT time)",
+                "",
+                "Only footage kept in `edited_source.mp4`, timed on its OUTPUT timeline (0 .. total); "
+                "scenes the cut left out are not listed.",
+                "",
+            ]
+        )
+    else:
+        guide_scenes, guide_asr, guide_silence = scenes_analysis, asr_result, silence_periods
+        lines.extend(["## Scene timing guide", ""])
+
+    for scene in guide_scenes:
+        duration = scene["end"] - scene["start"]
+        max_chars = max(5, int(max(1.0, duration - breath_sec) * effective_rate))
+        quiets = _quiet_windows_for_scene(guide_silence, scene)
+        quiet_text = ", ".join(f"{s:.1f}-{e:.1f}s" for s, e in quiets) or "none"
+        span = f"{scene['start']:.1f}-{scene['end']:.1f}s"
+        lines.extend(
+            [
+                f"### OUTPUT {span} (source scene {_scene_number(scene['scene_id'])})"
+                if cut_pass2
+                else f"### Scene {_scene_number(scene['scene_id'])}: {span}",
                 f"- Duration: {duration:.1f}s; max budget if fully narrated: {max_chars} chars",
                 f"- Quiet windows: {quiet_text}",
-                f"- Description: {scene.get('description', '')}",
+                f"- Description: {scene.get('description', '')}"
+                + (
+                    " [moderation_refused]"
+                    if scene.get("analysis_status") == "moderation_refused"
+                    and scene.get("description_source") != "mimo_video_overview"
+                    else ""
+                ),
             ]
         )
         if scene.get("depth_analysis"):
@@ -389,7 +424,7 @@ def build_agent_brief(
         facts = _format_frame_facts(scene)
         if facts:
             lines.append(facts.rstrip())
-        asr_lines = _scene_asr_lines(asr_result, scene)
+        asr_lines = _scene_asr_lines(guide_asr, scene)
         if asr_lines:
             lines.append("- ASR overlap:")
             lines.extend(asr_lines[:8])
@@ -397,6 +432,5 @@ def build_agent_brief(
 
     brief_path = Path(work_dir) / "agent_narration_brief.md"
     brief_path.write_text("\n".join(lines), encoding="utf-8")
-    _write_deslop_qc_requirements(work_dir)
     log(f"已写入 Agent 解说写作 brief: {brief_path}")
     return brief_path

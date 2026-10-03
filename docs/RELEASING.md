@@ -23,9 +23,14 @@ removed.
 
 1. Update the root and package versions, installation examples, and
    `CHANGELOG.md` for the intended release.
-2. Run `pnpm verify:release` locally.
-3. Commit and push `main`.
-4. Create and push the matching `v<package-version>` tag.
+2. Run `pnpm verify:release` locally. For 0.1.13 and later, retain fresh packaged
+   Chrome E2E evidence on both the default DSH `0.2.0-rc.2` line and the explicit
+   `0.2.1-alpha.1` opt-in line; alpha support must not be announced from peer
+   metadata or unit tests alone.
+3. Merge the release branch through a protected Pull Request after all four
+   required CI checks pass, then wait for the newest main-push CI run for that
+   exact merge commit to pass all four jobs.
+4. Create and push the matching `v<package-version>` tag at that verified commit.
 
 The release workflow then:
 
@@ -91,13 +96,18 @@ failure and needs investigation rather than a retry that mutates public bytes.
 Do not announce a release until the registry reports the exact version:
 
 ```bash
-VERSION=0.1.12
+VERSION=0.1.13
 npm view "@oh-story/dsh@$VERSION" version dist.integrity
-npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.0-rc.1 dsh plugin --profile web add "@oh-story/dsh@$VERSION"
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.0-rc.2 dsh plugin --profile web add "@oh-story/dsh@$VERSION"
 ```
+
+The default public smoke uses npm `latest` (`0.2.0-rc.2`). After it passes,
+repeat the isolated install/start/browser smoke with
+`@deepseek-ai/dsh@0.2.1-alpha.1`; never mix host versions within one profile or
+describe the alpha line as supported before its Chrome run passes.
 
 The GitHub Release tarball remains a registry-independent installation path:
 
 ```bash
-npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.0-rc.1 dsh plugin --profile web add "https://github.com/zenstory-ai/oh-story-dsh/releases/download/v$VERSION/oh-story-dsh-$VERSION.tgz"
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.0-rc.2 dsh plugin --profile web add "https://github.com/zenstory-ai/oh-story-dsh/releases/download/v$VERSION/oh-story-dsh-$VERSION.tgz"
 ```

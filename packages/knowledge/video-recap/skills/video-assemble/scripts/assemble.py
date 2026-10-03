@@ -2,6 +2,7 @@
 
 import json
 import os
+import shutil
 from pathlib import Path
 
 import artifacts
@@ -9,12 +10,14 @@ import assemble_constants as constants
 import assembly_contract
 import assembly_settings
 import audio_mix
+import codec_peak
 import adoption.audio_mix_binding as audio_mix_binding
+import adoption.av_clock as av_clock
 import adoption.frozen_audio as frozen_audio
+import loudness
 import media
 import narration_audio
 import adoption.narration_binding as narration_binding
-import pair_media
 import render_preflight
 import adoption.strict_publish as strict_publish
 import subtitles.render as subtitle_render
@@ -75,6 +78,7 @@ def assemble_video(input_video, tts_segments, work_dir, output_path, *,
         audio_mode != "narration" or narration_adoption_path is None or tts_meta_path is None
     ):
         raise RuntimeError("audio mix adoption 要求 narration 模式及显式 narration adoption/tts_meta")
+    media._plan_clip_spans(work_dir)  # a stale cut plan fails here, not after the render
 
     published_output = Path(output_path)
     if audio_mix_adoption_path is not None and published_output.exists():
@@ -129,6 +133,7 @@ def assemble_video(input_video, tts_segments, work_dir, output_path, *,
             explicit_mix, binding, tts_segments, work_dir
         )
         narration_wav = Path(explicit_runtime["voice_bus"]["path"])
+        _block_before_render(tts_segments, video_duration, work_dir, output_path, audio_mode)
     elif audio_mode == "narration":
         if binding["tempo_policy"]:
             narration_audio._apply_narration_speed(
@@ -142,13 +147,6 @@ def assemble_video(input_video, tts_segments, work_dir, output_path, *,
                 tts_segments, narration_wav, video_duration, work_dir,
                 tempo_policy=binding["tempo_policy"],
             )
-            if any(
-                segment.get("blocking") or segment.get("fit_status") == "no_safe_fit"
-                for segment in tts_segments
-            ):
-                raise RuntimeError(
-                    "严格 narration adoption 存在 no_safe_fit，禁止提速或裁尾渲染"
-                )
         else:
             narration_audio._build_timed_narration(
                 tts_segments, narration_wav, video_duration, work_dir
@@ -162,6 +160,7 @@ def assemble_video(input_video, tts_segments, work_dir, output_path, *,
                     for item in handoffs
                 )
             )
+        _block_before_render(tts_segments, video_duration, work_dir, output_path, audio_mode)
         narration_binding.seal_render_inputs(binding, tts_segments, narration_wav)
 
     # 始终生成 SRT 字幕文件（原声留白处补烧原声字幕，传入成片时长以计算留白区间）
@@ -212,6 +211,9 @@ def assemble_video(input_video, tts_segments, work_dir, output_path, *,
     source_has_audio = media._has_audio_stream(input_video)
     adopted_audio = None
     loudnorm_measurement = None
+    peak_limiter = None
+    peak_target = loudness.first_render_peak_target()
+    mix_graph = None  # the mix before the final loudness stage ([aout]); None: no stage
     original_audio_input = []
     bgm_input = []
     filter_complex = None
@@ -232,9 +234,10 @@ def assemble_video(input_video, tts_segments, work_dir, output_path, *,
             )
         else:
             filter_complex += ";[source]anull[aout]"
-        final_ln = audio_mix.final_loudnorm_filter()
-        filter_complex += f";[aout]{final_ln}[aoutln]"
-        lib.log(f"source-mix 音频处理: source volume + {final_ln}")
+        mix_graph = filter_complex
+
+        def plan_loudness(_target, _measured=None):
+            return None, None
     elif explicit_mix is not None:
         audio_map = "1:a:0"
         audio_input_args = ["-i", explicit_mix["runtime"]["master"]["path"]]
@@ -251,7 +254,7 @@ def assemble_video(input_video, tts_segments, work_dir, output_path, *,
             ]
             original_audio_label = "2:a"
             bgm_audio_label = "3:a"
-        filter_complex = audio_mix._build_audio_filter_complex(
+        mix_graph = audio_mix._build_audio_filter_complex(
             tts_segments,
             has_bgm,
             original_audio_label=original_audio_label,
@@ -260,20 +263,22 @@ def assemble_video(input_video, tts_segments, work_dir, output_path, *,
         # BGM is input [2:a]; -stream_loop -1 loops it to cover the whole timeline (amix
         # duration=first + -t trim it back to the video length).
         bgm_input = ["-stream_loop", "-1", "-i", str(bgm_path)] if has_bgm else []
-        # 末端整体响度归一：ducking 只管相对平衡，这一步统一成片绝对响度
-        loudnorm_measurement = audio_mix._run_loudnorm_first_pass(
-            input_video,
-            narration_wav,
-            original_audio_input,
-            bgm_input,
-            filter_complex,
-            work_dir,
-        )
-        final_ln = audio_mix.final_loudnorm_filter(loudnorm_measurement)
-        filter_complex += f";[aout]{final_ln}[aoutln]"
-        lib.log(f"成片响度归一: {final_ln}")
+
+        def plan_loudness(target, measured=None):
+            return loudness.plan_final_loudness(
+                input_video, narration_wav, original_audio_input, bgm_input, mix_graph,
+                work_dir, peak_target=target, measured=measured,
+            )
+
         audio_map = "[aoutln]"
         audio_input_args = ["-i", str(narration_wav), *original_audio_input]
+    if mix_graph is not None:
+        # 末端整体响度归一：ducking 只管相对平衡，这一步统一成片绝对响度
+        loudnorm_measurement, peak_limiter = plan_loudness(peak_target)
+        final_ln = loudness.final_loudnorm_filter(loudnorm_measurement, peak_limiter,
+                                                  peak_target)
+        filter_complex = f"{mix_graph};[aout]{final_ln}[aoutln]"
+        lib.log(f"成片响度归一 ({audio_mode}): {final_ln}")
 
     # 对于超长 volume 表达式（多段解说），从脚本文件读取 filter_complex 避免命令行溢出
     if filter_complex is not None:
@@ -318,12 +323,21 @@ def assemble_video(input_video, tts_segments, work_dir, output_path, *,
     # needs EVEN width AND height, so normalize odd dims (4:2:2/4:4:4 permit them) before the
     # encode — otherwise libx264 aborts to a 0-byte file. The downscale helper already evens out.
     even = "scale=trunc(iw/2)*2:trunc(ih/2)*2"
-    reencode = bool(vf_chain or packaging_layers) or lib.CONFIG["force_video_reencode"]
+    # A stream copy only stays when the source already is what a re-encode would deliver
+    # (H.264 8-bit 4:2:0, even size); otherwise a filter-free render re-encodes too, so the
+    # yuv420p guarantee holds on every path, including no-burn and degraded-burn runs.
+    source_format = media._probe_video_format(input_video)
+    color_tags = media._output_color_tags(source_format)
+    copy_unsafe = not media._video_copy_safe(source_format)
+    reencode = (
+        bool(vf_chain or packaging_layers) or lib.CONFIG["force_video_reencode"] or copy_unsafe
+    )
     notes = []
     video_filter_script = None
     if vf_chain or packaging_layers:
         if max_h <= 0:  # no downscale in the chain to force even dims
             vf_chain.append(even)
+        vf_chain.append(media._color_tag_filter(color_tags))
         video_filter = packaging.compose_video_filter(
             vf_chain, packaging_layers, mask_first=bool(mask_filter)
         )
@@ -345,10 +359,24 @@ def assemble_video(input_video, tts_segments, work_dir, output_path, *,
                  + ([f"缩放≤{max_h}p"] if max_h > 0 else []))
         lib.log(f"视频重编码: {' + '.join(notes)} (crf={crf}, preset={preset})")
     elif reencode:
-        notes = ["force_video_reencode"]
-        cmd += ["-vf", even, "-c:v", "libx264", "-preset", preset, "-crf", crf, "-pix_fmt", "yuv420p"]
+        notes = (
+            ["force_video_reencode"] if lib.CONFIG["force_video_reencode"]
+            else ["normalize_source_format"]
+        )
+        cmd += ["-vf", f"{even},{media._color_tag_filter(color_tags)}",
+                "-c:v", "libx264", "-preset", preset, "-crf", crf, "-pix_fmt", "yuv420p"]
+        if not lib.CONFIG["force_video_reencode"]:
+            lib.log(
+                "视频重编码: 源画面不是 H.264 yuv420p "
+                f"(codec={source_format.get('codec_name')}, pix_fmt={source_format.get('pix_fmt')})"
+            )
     else:
         cmd += ["-c:v", "copy"]
+    # Container (and, on a re-encode, bitstream) colour tags; see media._output_color_tags.
+    cmd += media._color_tag_args(color_tags)
+    # Never inherit the source's container/stream tags (a scraper's title, comment or URL)
+    # or its chapters, whose times no longer match an edit; every audio path muxes here.
+    cmd += ["-map_metadata", "-1", "-map_chapters", "-1"]
 
     # +faststart relocates the moov atom to the front so web/social players can start
     # before the full file downloads; valid (and beneficial) on the copy path too.
@@ -375,13 +403,32 @@ def assemble_video(input_video, tts_segments, work_dir, output_path, *,
         if video_filter_script is not None:
             video_filter_script.unlink(missing_ok=True)
 
+    loudness_stderr = result.stderr
+    delivered_peak = None
+    if mix_graph is not None and lib.CONFIG["final_loudnorm"]:
+        def reencode_audio(target):
+            measured, limiter = plan_loudness(target, loudnorm_measurement)
+            graph = (f"{mix_graph};[aout]"
+                     f"{loudness.final_loudnorm_filter(measured, limiter, target)}[aoutln]")
+            stderr = codec_peak.reencode_audio_track(
+                output_path, ["-i", str(input_video), *audio_input_args, *bgm_input],
+                graph, audio_map, video_duration, work_dir,
+            )
+            return stderr, measured, limiter
+
+        delivered_peak, corrected = codec_peak.deliver_under_true_peak(
+            output_path, peak_target, reencode_audio
+        )
+        if corrected is not None:
+            loudness_stderr, loudnorm_measurement, peak_limiter = corrected
+            peak_target = delivered_peak["peak_target_dbtp"]
     if audio_mode == "adopted-packet-copy":
         # Either check failing means the file at the final path is unverified: never leave it.
         try:
             adopted_audio = frozen_audio.verify_adopted_audio(
                 input_video, output_path, audio_stream_index
             )
-            pair_media.validate_aac_packet_interval(adopted_audio["output"])
+            av_clock.validate_aac_packet_interval(adopted_audio["output"])
         except (RuntimeError, ValueError):
             output_path.unlink(missing_ok=True)
             raise
@@ -408,14 +455,27 @@ def assemble_video(input_video, tts_segments, work_dir, output_path, *,
         "audio_sample_rate": (
             adopted_audio["output"]["sample_rate"] if adopted_audio else 48000
         ),
+        "color_tags": color_tags,
         "final_compat_notes": (
             (["yuv420p"] if reencode else ["video_copy"])
             + (["aac_packet_copy", "faststart"] if adopted_audio else ["aac_48000", "faststart"])
         ),
     }
+    loudnorm_final = None
+    if audio_mode != "adopted-packet-copy" and explicit_mix is None and lib.CONFIG["final_loudnorm"]:
+        loudnorm_final = loudness.loudnorm_final_pass(
+            loudness_stderr, loudnorm_measurement, peak_limiter, peak_target
+        )
+        loudnorm_final["delivered"] = delivered_peak
+        if loudnorm_measurement and loudnorm_final["normalization_type"] == "dynamic":
+            lib.log("  ⚠️ loudnorm 第二遍退回动态模式（测得的响度范围或峰值超出线性条件）")
     loudness_mode = (
         "not_run" if audio_mode == "adopted-packet-copy" else
-        "fixed_master_gain_no_loudnorm" if explicit_mix is not None else None
+        "fixed_master_gain_no_loudnorm" if explicit_mix is not None else
+        loudness._loudness_mode(
+            loudnorm_measurement, (loudnorm_final or {}).get("normalization_type"),
+            peak_limiter,
+        )
     )
     source_audio_status = "prepared_bed_adopted" if explicit_mix is not None else None
     render_output = strict_publish.publish_render(
@@ -424,7 +484,8 @@ def assemble_video(input_video, tts_segments, work_dir, output_path, *,
         render_output=render_output, published_output=published_output,
         audio_mode=audio_mode, audio_operations=audio_operations,
         adopted_audio=adopted_audio, loudness_mode=loudness_mode,
-        loudnorm_measurement=loudnorm_measurement, visual_qc=visual_qc,
+        loudnorm_measurement=loudnorm_measurement, loudnorm_final_pass=loudnorm_final,
+        visual_qc=visual_qc,
         source_has_audio=source_has_audio, video_duration=video_duration,
         render_delivery=render_delivery, source_audio_status=source_audio_status,
     )
@@ -432,9 +493,55 @@ def assemble_video(input_video, tts_segments, work_dir, output_path, *,
     return render_output
 
 
+class AssemblyBlockedBeforeRender(RuntimeError):
+    """Narration can never pass assembly QC; raised before the video encode."""
+
+
+def _block_before_render(tts_segments, video_duration, work_dir, output_path, audio_mode):
+    """Fail before the video encode when the narration track can already never pass QC.
+
+    The segment-level codes (no_safe_fit, skipped_segments, unsafe_source_handoff, ...) are
+    final once narration is placed; `main` would block the same codes after a full render.
+    """
+    qc = assembly_contract._build_assembly_qc(
+        tts_segments, video_duration, audio_operations={},
+        render_delivery={
+            "video_encode_passes": 0, "reencode_reason": ["blocked_before_render"],
+            "audio_sample_rate": None, "final_compat_notes": [],
+        },
+        audio_mode=audio_mode,
+    )
+    if not qc["blocking"]:
+        return
+    # Never leave an earlier render or its timeline beside a FAIL for these placements.
+    Path(output_path).unlink(missing_ok=True)
+    (Path(work_dir) / "timeline.json").unlink(missing_ok=True)
+    assembly_contract._write_assembly_qc(work_dir, qc)
+    summary = qc["summary"]
+    blocked = sorted(set(
+        summary["no_safe_fit_segments"] + summary["skipped_segments"]
+        + summary["tempo_exceeded_segments"] + summary["truncated_segments"]
+        + summary["unsafe_source_handoff_segments"]
+        + summary["timeline_audio_mismatch_segments"]
+    ))
+    needed = {
+        seg["index"]: seg["needed_tempo_factor"]
+        for seg in tts_segments if seg.get("needed_tempo_factor") is not None
+    }
+    detail = ", ".join(
+        f"段 {index + 1}"
+        + (f" needed_tempo_factor={needed[index]:.2f}" if index in needed else "")
+        for index in blocked
+    )
+    raise AssemblyBlockedBeforeRender(
+        f"组装 QC 在渲染前阻断: {', '.join(qc['blocking_codes'])}"
+        + (f"（{detail}）" if detail else "")
+        + f"；详见 {Path(work_dir) / constants.ASSEMBLY_QC}"
+    )
+
+
 def main():
     import argparse
-    import shutil
     ap = argparse.ArgumentParser(
         description="video-assemble: mux narration audio over the video, duck the original, render subtitles.")
     ap.add_argument("video", help="source video (edited_source.mp4 in cut mode, else the original)")
@@ -455,7 +562,9 @@ def main():
     ap.add_argument("--recap-stem", default=None, help="final recap filename stem (default: video stem)")
     ap.add_argument("--output-dir", default=None)
     ap.add_argument("--burn-subtitles", action=argparse.BooleanOptionalAction, default=None,
-                    help="burn narration subtitles into the video (default on; --no-burn-subtitles to disable)")
+                    help="burn narration subtitles into the video (default on; without libass the default "
+                         "delivers a .srt sidecar instead, while an explicit --burn-subtitles fails; "
+                         "--no-burn-subtitles to disable)")
     ap.add_argument("--subtitle-y-top", type=int, default=None,
                     help="inclusive top of a measured subtitle band in display-frame pixels")
     ap.add_argument("--subtitle-y-bot", type=int, default=None,
@@ -475,6 +584,7 @@ def main():
     work_dir = Path(args.work_dir)
     if args.burn_subtitles is not None:
         lib.CONFIG["burn_subtitles"] = args.burn_subtitles
+        lib.CONFIG["burn_subtitles_explicit"] = True
     if (args.subtitle_y_top is None) != (args.subtitle_y_bot is None):
         ap.error("--subtitle-y-top and --subtitle-y-bot must be provided together")
     if args.subtitle_y_top is not None:
@@ -491,22 +601,17 @@ def main():
         # chose a different opacity through the existing environment override.
         if "SUBTITLE_MASK_OPACITY" not in os.environ:
             lib.CONFIG["subtitle_mask_opacity"] = 1.0
-    if args.source_video:
-        if not os.path.exists(args.source_video):
-            ap.error(f"--source-video does not exist: {args.source_video}")
-        lib.CONFIG["source_video"] = args.source_video
-        lib.CONFIG["source_video_explicit"] = True
-    else:
-        # SOURCE_VIDEO is an ambient env var in lib.CONFIG. Do not let a stale
-        # shell value silently bind full-mode/direct timeline.json or JianYing
-        # exports to an unrelated original; cut mode must pass --source-video.
-        lib.CONFIG["source_video"] = ""
-        lib.CONFIG["source_video_explicit"] = False
+    if args.source_video and not os.path.exists(args.source_video):
+        ap.error(f"--source-video does not exist: {args.source_video}")
+    lib.CONFIG["source_video"] = args.source_video or ""
     if args.export_jianying:
         lib.CONFIG["export_jianying"] = True
     if args.jianying_bundle_media is not None:
         lib.CONFIG["jianying_bundle_media"] = args.jianying_bundle_media
-    render_preflight._preflight_burn_subtitles()  # fail before the render if burn-in is on but ffmpeg lacks libass
+    # Before the render: an explicit burn without libass fails, the default degrades to the
+    # .srt sidecar; drawtext overlays without drawtext fail.
+    render_preflight._preflight_burn_subtitles()
+    render_preflight._preflight_visual_overlays(work_dir)
     # Argument combinations are validated once, by assemble_video.
     tts_meta = Path(args.tts_meta) if args.tts_meta else None
     tts_segments = []
@@ -520,14 +625,18 @@ def main():
         ap.error("explicit audio mix requires a new final delivery path")
     delivery_stage = None
     owned_alias = None
+    sidecar = None
     output_path = work_dir / "output.mp4"
     try:
-        assemble_video(
-            args.video, tts_segments, work_dir, output_path,
-            audio_mode=args.audio_mode, audio_stream_index=args.audio_stream_index,
-            narration_adoption_path=args.narration_adoption, tts_meta_path=tts_meta,
-            audio_mix_adoption_path=args.audio_mix_adoption,
-        )
+        try:
+            assemble_video(
+                args.video, tts_segments, work_dir, output_path,
+                audio_mode=args.audio_mode, audio_stream_index=args.audio_stream_index,
+                narration_adoption_path=args.narration_adoption, tts_meta_path=tts_meta,
+                audio_mix_adoption_path=args.audio_mix_adoption,
+            )
+        except AssemblyBlockedBeforeRender as exc:
+            raise SystemExit(str(exc)) from None
         assembly_qc = artifacts._load_work_json(work_dir, constants.ASSEMBLY_QC)
         if assembly_qc["blocking"]:
             codes = ", ".join(assembly_qc["blocking_codes"])
@@ -556,6 +665,7 @@ def main():
             delivery_stage = None
         else:
             shutil.copy2(str(output_path), str(final_output))
+        sidecar = _publish_subtitle_sidecar(work_dir, final_output)
         manifest = assembly_contract._assembly_manifest_payload(
             args.video, tts_segments, work_dir, output_path,
             tts_meta_path=tts_meta,
@@ -566,8 +676,14 @@ def main():
             audio_mode=args.audio_mode,
             audio_stream_index=args.audio_stream_index,
         )
+        visual_qc = artifacts._load_work_json(work_dir, constants.VISUAL_QC) or {}
+        warnings = visual_qc.get("warnings", [])
+        manifest["subtitle_sidecar"] = str(sidecar) if sidecar else None
+        manifest["warnings"] = warnings
         assembly_contract._write_assembly_manifest(work_dir, manifest)
     except BaseException:
+        if sidecar is not None:
+            sidecar.unlink(missing_ok=True)
         if delivery_stage is not None:
             delivery_stage.unlink(missing_ok=True)
         if owned_alias is not None and final_output.exists():
@@ -583,8 +699,29 @@ def main():
         from jianying.optional import maybe_export_jianying
         maybe_export_jianying(work_dir, args.jianying_out, stem)
 
-    print(json.dumps({"status": "assembled", "output": str(final_output), "work_dir": str(work_dir)},
+    for warning in warnings:
+        lib.log(f"⚠️ {warning['code']}: {warning['message']}（外挂字幕: {sidecar}）")
+    print(json.dumps({"status": "assembled", "output": str(final_output), "work_dir": str(work_dir),
+                      "subtitle_sidecar": str(sidecar) if sidecar else None,
+                      "warnings": [warning["code"] for warning in warnings]},
                      ensure_ascii=False))
+
+
+def _publish_subtitle_sidecar(work_dir, final_output):
+    """Ship subtitles.srt next to the recap when the subtitles are not burned in.
+
+    The pair shares the stable recap_<stem> alias, so a burned run removes a sidecar left by
+    an earlier unburned run instead of letting players stack it over the burned text. A run
+    with no subtitle cues (e.g. source-mix without user subtitles) ships no empty sidecar.
+    """
+    sidecar = final_output.with_suffix(".srt")
+    srt = work_dir / "subtitles.srt"
+    has_cues = srt.is_file() and bool(srt.read_text(encoding="utf-8").strip())
+    if lib.CONFIG["burn_subtitles"] or not has_cues:
+        sidecar.unlink(missing_ok=True)
+        return None
+    shutil.copy2(srt, sidecar)
+    return sidecar
 
 
 if __name__ == "__main__":

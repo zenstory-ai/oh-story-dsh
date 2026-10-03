@@ -13,9 +13,24 @@ from extract import (
     parse_frame_number,
 )
 from lib import CONFIG
-from lib import log, api_call, load_prompt, mimo_video_api_call, run_cmd, file_identity
+from lib import (
+    log, api_call, load_prompt, mimo_video_api_call, run_cmd, file_identity, is_moderation_refusal,
+    is_usable_overview_chunk, offline_ignored_settings, settings_match,
+)
 
 # ── Step 4: VLM 视觉分析 ─────────────────────────────────────────────
+
+def vlm_prompt_payload():
+    """The exact prompt/context text the VLM stage sends; the VLM cache key compares it by
+    equality, so the prompt that is sent and the one that is keyed are built in one place."""
+    prompt = load_prompt("VLM_DEPTH_PROMPT")
+    if not prompt:
+        raise RuntimeError("references/prompt-templates.md 缺少 VLM_DEPTH_PROMPT 模板")
+    context = CONFIG.get("context_info", "")
+    if context:
+        prompt = f"已知信息：{context}\n\n{prompt}"
+    return {"prompt_text": prompt, "context_info": context}
+
 
 def _parse_vlm_depth_response(raw_text):
     """解析 VLM 深度分析响应，提取【描述】、【帧标签】和【深层分析】"""
@@ -119,13 +134,7 @@ def analyze_scenes(scenes, frames, work_dir, *, resume=True):
     if fps <= 0:
         raise ValueError("CONFIG['fps'] 必须大于 0；请先运行完整 pipeline 或指定 --fps")
 
-    vlm_prompt = load_prompt("VLM_DEPTH_PROMPT")
-    if not vlm_prompt:
-        vlm_prompt = "仔细观察这些视频帧。分两部分输出：\n【描述】不超过80字，描述画面中正在发生什么。\n【深层分析】不超过120字，分析角色情绪、关系动态、潜台词。"
-
-    ctx = CONFIG["context_info"]
-    if ctx:
-        vlm_prompt = f"已知信息：{ctx}\n\n{vlm_prompt}"
+    vlm_prompt = vlm_prompt_payload()["prompt_text"]
 
     # 构建帧时间映射 (frame_NNNNN.jpg -> time in seconds)。换算规则由 extract.py 独家定义：
     # ffmpeg 首帧在 t=0 而文件编号从 1 起，所以是 (n-1)/fps，不是 n/fps。
@@ -223,8 +232,14 @@ def analyze_scenes(scenes, frames, work_dir, *, resume=True):
         if not raw_response.strip():
             raise RuntimeError("VLM 连续 3 次返回空内容")
 
+        refused = is_moderation_refusal(raw_response)
+        if refused:
+            # A moderation refusal is not a scene description; record the scene as unreadable.
+            log(f"  场景 {i+1} 被 MiMo 内容审核拒绝，记为无法识别")
         # 解析 【描述】、【帧标签】和【深层分析】
-        description, depth_analysis, frame_facts = _parse_vlm_depth_response(raw_response)
+        description, depth_analysis, frame_facts = _parse_vlm_depth_response(
+            "" if refused else raw_response
+        )
 
         result = {
             "scene_id": i,
@@ -235,6 +250,8 @@ def analyze_scenes(scenes, frames, work_dir, *, resume=True):
         }
         if frame_facts:
             result["frame_facts"] = frame_facts
+        if refused:
+            result["analysis_status"] = "moderation_refused"
 
         return i, result
 
@@ -511,11 +528,12 @@ def mimo_video_overview_cache_fresh(overview_path, video_path, scenes):
         return False
     if not isinstance(overview, dict) or overview.get("input") != "scene_chunks":
         return False
-    if overview.get("settings") != mimo_video_settings():
+    ignored = offline_ignored_settings(CONFIG.get("mimo_video_api_key"), "mimo_video_api_url")
+    if not settings_match(overview.get("settings"), mimo_video_settings(), ignored):
         return False
     chunks = overview.get("chunks")
     if not isinstance(chunks, list) or not all(
-        isinstance(chunk, dict) and _is_mimo_chunk_usable(chunk.get("content"))
+        isinstance(chunk, dict) and is_usable_overview_chunk(chunk.get("content"))
         for chunk in chunks
     ):
         return False  # a moderation-rejected chunk is retried, never served from cache
@@ -566,21 +584,6 @@ def _analyze_mimo_video_chunk(chunk_path, chunk):
     }
 
 
-_MIMO_REJECTION_MARKERS = (
-    "request was rejected", "considered high risk", "high risk",
-    "content policy", "cannot process", "无法处理", "内容审核", "违规",
-)
-
-
-def _is_mimo_chunk_usable(content):
-    """A chunk is usable only if MiMo returned real analysis (not empty / a moderation refusal)."""
-    text = str(content or "").strip()
-    if not text:
-        return False
-    low = text.lower()
-    return not any(marker in low for marker in _MIMO_REJECTION_MARKERS)
-
-
 def analyze_video_overview(video_path, work_dir, scenes=None):
     """Use MiMo video understanding over local ffmpeg scene chunks."""
     if not CONFIG["mimo_video_overview"]:
@@ -620,7 +623,7 @@ def analyze_video_overview(video_path, work_dir, scenes=None):
             f"{chunk['start']:.1f}-{chunk['end']:.1f}s"
         )
         chunk_result = _analyze_mimo_video_chunk(chunk_path, chunk)
-        if _is_mimo_chunk_usable(chunk_result["content"]):
+        if is_usable_overview_chunk(chunk_result["content"]):
             chunk_results.append(chunk_result)
             done[cache_key] = chunk_result
             _save_mimo_partial(partial_path, done, video_path, scenes)

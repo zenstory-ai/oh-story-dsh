@@ -2,11 +2,11 @@
 
 import argparse
 import os
+import sys
+from pathlib import Path
 
-from lib import env_bool
+from lib import TTS_PROVIDERS
 from recap_source import AUDIO_MODES
-
-TTS_PROVIDERS = ("auto", "mimo-tts", "fish-audio", "index-tts")
 
 
 class _RecordExplicit:
@@ -33,6 +33,46 @@ def _record_explicit_options(parser):
             action.__class__ = tracked.setdefault(
                 base, type(base.__name__, (_RecordExplicit, base), {})
             )
+
+
+# Options whose value names a file or directory; the resume command makes them absolute.
+_PATH_DESTS = frozenset({
+    "work_dir", "output_dir", "voice_ref", "material_library_dir", "project",
+    "tts_meta", "narration_adoption", "audio_mix_adoption",
+})
+
+
+def _absolute(value):
+    return str(Path(value).expanduser().resolve()) if value else value
+
+
+def _replayable_argv(parser, argv):
+    """The argv as typed, with videos and path values made absolute so it replays from any cwd.
+
+    Runs only after a successful parse, so every option token is an exact option string
+    (allow_abbrev=False) and every value-taking option is followed by its value.
+    """
+    options = {name: action for action in parser._actions for name in action.option_strings}
+    out, tokens, positional_only = [], iter(argv), False
+    for token in tokens:
+        if positional_only or not token.startswith("-"):
+            out.append(_absolute(token))
+            continue
+        if token == "--":
+            positional_only = True
+            out.append(token)
+            continue
+        name, inline, value = token.partition("=")
+        action = options[name]
+        if action.nargs == 0:
+            out.append(token)
+            continue
+        fix = _absolute if action.dest in _PATH_DESTS else str
+        if inline:
+            out.append(f"{name}={fix(value)}")
+        else:
+            out += [token, fix(next(tokens))]
+    return out
 
 
 def parse_args(argv=None):
@@ -102,7 +142,9 @@ def parse_args(argv=None):
         "--burn-subtitles",
         action=argparse.BooleanOptionalAction,
         default=None,
-        help="burn narration subtitles into the video (default on; --no-burn-subtitles to disable)",
+        help="burn narration subtitles into the video (default on; without libass the default "
+             "delivers a .srt sidecar instead, while an explicit --burn-subtitles fails; "
+             "--no-burn-subtitles to disable)",
     )
     voice.add_argument(
         "--subtitle-y-top",
@@ -144,21 +186,9 @@ def parse_args(argv=None):
         help="make narration review a strict pre-TTS gate (also REQUIRE_NARRATION_REVIEW=1)",
     )
     review.add_argument(
-        "--mimo-qc",
-        default=os.environ.get("MIMO_QC", "off"),
-        choices=["off", "pre-assemble", "post-render", "both"],
-        help="optional advisory MiMo QC stage(s); never blocks the pipeline",
-    )
-    review.add_argument(
-        "--mimo-qc-refresh",
-        action="store_true",
-        default=env_bool("MIMO_QC_REFRESH", False),
-        help="ignore a matching MiMo QC stage cache",
-    )
-    review.add_argument(
         "--require-final-qc",
         action="store_true",
-        help="full/cut: require literal passing final_qc and golden_eval summaries",
+        help="full/cut: require a literal passing final_qc summary",
     )
     review.add_argument(
         "--export-jianying",
@@ -204,6 +234,8 @@ def parse_args(argv=None):
     selfcheck.add_argument("--doctor", action="store_true")
 
     _record_explicit_options(parser)
+    argv = sys.argv[1:] if argv is None else [str(token) for token in argv]
     args = parser.parse_args(argv)
     args._explicit_options = frozenset(getattr(args, "_explicit_options", ()))
+    args._argv = _replayable_argv(parser, argv)
     return parser, args

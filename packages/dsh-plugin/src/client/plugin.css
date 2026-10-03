@@ -776,7 +776,9 @@
 .oh-story-sequence > ol > li .oh-story-media-preview,
 .oh-story-sequence-missing { width: 96px; height: 54px; }
 .oh-story-sequence-missing { display: grid; place-items: center; border-radius: 5px; color: var(--os-muted); background: var(--dsw-alias-button-ghost-active-fill); }
-.oh-story-sequence > ol > li > div:last-child { display: flex; gap: 3px; }
+.oh-story-sequence > ol > li > strong { overflow: hidden; text-overflow: ellipsis; }
+.oh-story-sequence > ol > li > div:last-child { display: grid; width: clamp(160px, 25vw, 260px); min-width: 0; grid-template-columns: minmax(0, 1fr) auto auto; gap: 3px; }
+.oh-story-sequence > ol > li select { width: 100%; min-width: 0; }
 .oh-story-canvas-shell { position: relative; display: flex; height: max(580px, calc(100% - 84px)); min-height: 580px; flex-direction: column; overflow: hidden; }
 .oh-story-canvas-shell > .oh-story-projection-note { z-index: 3; flex: none; margin: 8px 168px 8px 8px; }
 .oh-story-canvas-controls { position: absolute; z-index: 4; top: 8px; right: 8px; display: flex; align-items: center; gap: 3px; padding: 3px; border: 1px solid var(--os-border); border-radius: 8px; background: var(--dsw-alias-bg-base); }
@@ -960,7 +962,9 @@
 [data-oh-story-layout="compact"] .oh-story-sequence > ol > li { grid-template-columns: 24px 64px minmax(0, 1fr); gap: 5px; }
 [data-oh-story-layout="compact"] .oh-story-sequence > ol > li .oh-story-media-preview,
 [data-oh-story-layout="compact"] .oh-story-sequence-missing { width: 64px; height: 40px; }
-[data-oh-story-layout="compact"] .oh-story-sequence > ol > li > div:last-child { grid-column: 2 / 4; justify-content: flex-end; }
+[data-oh-story-layout="compact"] .oh-story-sequence > ol > li > div:last-child { grid-column: 1 / -1; width: auto; }
+[data-oh-story-layout="compact"] .oh-story-sequence > ol > li select { grid-column: 1 / -1; }
+[data-oh-story-layout="compact"] .oh-story-sequence > ol > li button:first-of-type { grid-column: 2; }
 [data-oh-story-layout="compact"] .oh-story-canvas-shell > .oh-story-projection-note { overflow: hidden; max-height: 48px; margin: 8px; }
 [data-oh-story-layout="compact"] .oh-story-canvas-controls { position: static; flex: none; align-self: flex-end; margin: 0 8px 8px; }
 

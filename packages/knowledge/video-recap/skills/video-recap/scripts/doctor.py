@@ -10,55 +10,23 @@ import argparse
 import json
 import os
 import shutil
-import subprocess
 import sys
 import urllib.parse
 from pathlib import Path
 
-from lib import CONFIG
+from lib import CONFIG, TTS_PROVIDERS, env_bool, ffmpeg_filters
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-DEGRADED_GROUP = "warnings/degraded"
-TTS_PROVIDERS = ("auto", "mimo-tts", "fish-audio", "index-tts")
+# index-tts is checked as hard failures below; these providers only need a key.
+TTS_KEY_HINTS = {
+    "mimo-tts": "MIMO_TTS_API_KEY or MIMO_API_KEY",
+    "fish-audio": "FISH_API_KEY",
+}
 
 
 def _command_path(name: str) -> str | None:
     return shutil.which(name)
-
-
-def _ffmpeg_filters() -> set[str]:
-    """Filters the installed ffmpeg lists; empty when ffmpeg is absent.
-
-    A present ffmpeg whose `-filters` fails or hangs is an environment fault and raises,
-    so it is never misreported downstream as "filter absent"."""
-    ffmpeg = _command_path("ffmpeg")
-    if not ffmpeg:
-        return set()
-    try:
-        result = subprocess.run(
-            [ffmpeg, "-hide_banner", "-filters"], text=True, capture_output=True, timeout=20
-        )
-    except (OSError, subprocess.SubprocessError) as exc:
-        raise RuntimeError(f"`ffmpeg -filters` failed or hung: {exc}") from exc
-    if result.returncode != 0:
-        detail = (result.stderr or result.stdout or "").strip()[:300]
-        raise RuntimeError(f"`ffmpeg -filters` failed (exit {result.returncode}): {detail}")
-    filters = set()
-    for line in result.stdout.splitlines():
-        parts = line.split()
-        if len(parts) >= 2 and parts[0] and parts[0][0] in ".TSCAPN|":
-            filters.add(parts[1])
-    return filters
-
-
-def ffmpeg_has_subtitles_filter() -> bool:
-    """True when this ffmpeg can burn subtitles — its filter list includes the libass
-    `subtitles` filter. The render burns even the .ass file through `subtitles=` (see
-    video-assemble assemble.py:_subtitle_burn_filter), so this — not the `ass` filter — is
-    the exact capability `--burn-subtitles` needs. Reused by the orchestrator preflight
-    (recap.py) to fail fast before any API spend."""
-    return "subtitles" in _ffmpeg_filters()
 
 
 def _asr_status() -> dict[str, object]:
@@ -108,218 +76,8 @@ def _index_tts_status() -> dict[str, object]:
     }
 
 
-def _capability(name: str, summary: str, *, detail: str = "", action: str = "") -> dict[str, str]:
-    item = {"name": name, "summary": summary}
-    if detail:
-        item["detail"] = detail
-    if action:
-        item["action"] = action
-    return item
-
-
-def _build_capability_menu(checks: dict) -> dict[str, list[dict[str, str]]]:
-    """Human-ready preflight summary grouped by what can run, what blocks, and what degrades.
-
-    This is intentionally a small rollup over the existing `checks` tree. It does not replace
-    the raw machine checks, install anything, or introduce provider ranking.
-    """
-    system = checks["system_tools"]
-    api = checks["api_config"]
-    asr = checks["asr"]
-    tts = checks["tts"]
-
-    menu: dict[str, list[dict[str, str]]] = {
-        "ready": [],
-        "blocked": [],
-        DEGRADED_GROUP: [],
-        "optional_upgrades": [],
-    }
-
-    ffmpeg_ready = system["ffmpeg"]
-    ffprobe_ready = system["ffprobe"]
-    subtitles_ready = system["burn_subtitles_ready"]
-    api_key_set = api["api_key_set"]
-    asr_ready = asr["available"]
-    tts_ready = tts["available"]
-    vlm_ready = api["mimo_video_configured"]
-    normal_core_ready = ffmpeg_ready and ffprobe_ready and api_key_set and vlm_ready and tts_ready
-
-    if ffmpeg_ready and ffprobe_ready:
-        menu["ready"].append(
-            _capability(
-                "core_media_tools",
-                "ffmpeg and ffprobe are available",
-                detail="Local probing, cutting, rendering, and duration checks can run.",
-            )
-        )
-    else:
-        if not ffmpeg_ready:
-            menu["blocked"].append(
-                _capability("ffmpeg", "Missing ffmpeg", action="Install ffmpeg before running the recap pipeline.")
-            )
-        if not ffprobe_ready:
-            menu["blocked"].append(
-                _capability("ffprobe", "Missing ffprobe", action="Install ffprobe before running media probing/export.")
-            )
-
-    if api_key_set:
-        menu["ready"].append(
-            _capability(
-                "mimo_credentials",
-                "MiMo API key is configured",
-                detail=f"Source: {api['api_env_var']}",
-            )
-        )
-    else:
-        menu["blocked"].append(
-            _capability(
-                "mimo_credentials",
-                "Missing MIMO_API_KEY",
-                action="Set MIMO_API_KEY; the default ASR / VLM / TTS path depends on it.",
-            )
-        )
-
-    if vlm_ready:
-        menu["ready"].append(
-            _capability(
-                "mimo_vlm",
-                "MiMo VLM/video understanding is configured",
-                detail=f"Model: {api['vlm_model']}",
-            )
-        )
-    elif api_key_set:
-        menu["blocked"].append(
-            _capability(
-                "mimo_vlm",
-                "MiMo VLM/video understanding is not configured",
-                action="Set MIMO_VIDEO_API_KEY or the shared MIMO_API_KEY before video understanding.",
-            )
-        )
-
-    tts_provider = tts["provider"]
-    if tts_provider == "index-tts":
-        capability_name = "index_tts_configuration"
-        action = "Set valid INDEX_TTS_ENDPOINT and INDEX_TTS_VOICE values before voiceover."
-    elif tts_provider == "fish-audio":
-        capability_name = "fish_audio_tts"
-        action = "Set FISH_API_KEY before voiceover."
-    else:
-        capability_name = "mimo_tts"
-        action = "Set MIMO_TTS_API_KEY or the shared MIMO_API_KEY before voiceover."
-    if tts_ready:
-        menu["ready"].append(
-            _capability(
-                capability_name,
-                (
-                    "index-tts configuration is present"
-                    if tts_provider == "index-tts"
-                    else f"{tts_provider} is configured"
-                ),
-                detail=(
-                    tts["validation_scope"]
-                    if tts_provider == "index-tts"
-                    else f"Model: {tts['model']}"
-                ),
-            )
-        )
-    elif api_key_set:
-        menu["blocked"].append(
-            _capability(
-                capability_name,
-                f"{tts_provider} is not configured",
-                action=action,
-            )
-        )
-
-    if asr_ready:
-        menu["ready"].append(
-            _capability(
-                "mimo_asr",
-                "MiMo ASR is configured",
-                detail=f"Language: {asr['mimo_asr_language']}; model: {asr['mimo_asr_model']}",
-            )
-        )
-    else:
-        menu[DEGRADED_GROUP].append(
-            _capability(
-                "mimo_asr",
-                "ASR is unavailable; run only with --skip-asr",
-                action=asr["note"],
-            )
-        )
-
-    if subtitles_ready:
-        menu["ready"].append(
-            _capability("subtitle_burn", "Subtitle burn-in is available", detail="ffmpeg has the subtitles/libass filter.")
-        )
-    elif ffmpeg_ready:
-        menu[DEGRADED_GROUP].append(
-            _capability(
-                "subtitle_burn",
-                "Subtitle burn-in is unavailable",
-                action="Use --no-burn-subtitles or install an ffmpeg build with the subtitles/libass filter.",
-            )
-        )
-
-    if not normal_core_ready:
-        menu["blocked"].append(
-            _capability(
-                "default_recap_pipeline",
-                "Default recap run is blocked",
-                detail="Resolve the blocking items above before a normal run.",
-            )
-        )
-    elif asr_ready and subtitles_ready:
-        menu["ready"].append(
-            _capability(
-                "default_recap_pipeline",
-                (
-                    "Recap prerequisites are configured"
-                    if tts_provider == "index-tts"
-                    else "Default recap run is ready"
-                ),
-                detail=(
-                    "ASR, VLM, and media tools are configured; Index TTS passed offline configuration checks only."
-                    if tts_provider == "index-tts"
-                    else "ASR, VLM, TTS, and media tools are configured."
-                ),
-            )
-        )
-    else:
-        actions = []
-        if not asr_ready:
-            actions.append("run with --skip-asr")
-        if not subtitles_ready:
-            actions.append("run with --no-burn-subtitles")
-        menu[DEGRADED_GROUP].append(
-            _capability(
-                "recap_degraded_mode",
-                "Recap can run only in an explicit degraded mode",
-                detail="; ".join(actions),
-            )
-        )
-
-    menu["optional_upgrades"].append(
-        _capability(
-            "jianying_export",
-            "Editable JianYing draft export can be requested with --export-jianying",
-            detail="No JianYing install is required to write the draft; ffprobe improves media metadata.",
-        )
-    )
-    if subtitles_ready:
-        menu["optional_upgrades"].append(
-            _capability(
-                "burned_subtitles",
-                "Burned subtitles are available and enabled by default",
-                action="Use --no-burn-subtitles if you prefer external subtitle files.",
-            )
-        )
-
-    return menu
-
-
 def build_report(*, tts_provider: str | None = None) -> dict[str, object]:
-    filters = _ffmpeg_filters()
+    filters = ffmpeg_filters()
     ffmpeg_path = _command_path("ffmpeg") or ""
     ffprobe_path = _command_path("ffprobe") or ""
     mimo_video_configured = bool(CONFIG["mimo_video_api_key"])
@@ -345,6 +103,15 @@ def build_report(*, tts_provider: str | None = None) -> dict[str, object]:
     else:
         tts_model = CONFIG["mimo_tts_model"]
     subtitle_filter = "subtitles" in filters
+    drawtext_filter = "drawtext" in filters
+    burn_explicit = "BURN_SUBTITLES" in os.environ and env_bool("BURN_SUBTITLES", True)
+    if not ffmpeg_path:
+        subtitle_delivery = "unavailable"
+    elif subtitle_filter:
+        subtitle_delivery = "burned"
+    else:
+        # The default burn degrades to the .srt sidecar; an explicit request fails fast.
+        subtitle_delivery = "fails_explicit_burn" if burn_explicit else "sidecar_srt"
     checks = {
         "system_tools": {
             "ffmpeg": bool(ffmpeg_path),
@@ -354,6 +121,9 @@ def build_report(*, tts_provider: str | None = None) -> dict[str, object]:
             "ffmpeg_subtitles_filter": subtitle_filter,
             "ffmpeg_ass_filter": "ass" in filters,
             "burn_subtitles_ready": bool(ffmpeg_path and subtitle_filter),
+            "subtitle_delivery": subtitle_delivery,
+            "ffmpeg_drawtext_filter": drawtext_filter,
+            "visual_overlays_ready": bool(ffmpeg_path and drawtext_filter),
         },
         "tts": {
             "provider": effective_tts_provider,
@@ -414,17 +184,40 @@ def build_report(*, tts_provider: str | None = None) -> dict[str, object]:
             )
         if not index_tts["index_tts_voice_set"]:
             failures.append("INDEX_TTS_VOICE is not set")
-    if tools["ffmpeg"] and not tools["ffmpeg_subtitles_filter"]:
-        warnings.append("ffmpeg lacks subtitles/libass filter; --burn-subtitles will fail")
+    if subtitle_delivery == "sidecar_srt":
+        warnings.append(
+            "ffmpeg lacks subtitles/libass filter; the default run will not burn subtitles and "
+            "delivers a .srt sidecar instead (explicit --burn-subtitles fails): "
+            "install an ffmpeg build with libass to burn them"
+        )
+    elif subtitle_delivery == "fails_explicit_burn":
+        warnings.append(
+            "ffmpeg lacks subtitles/libass filter and BURN_SUBTITLES asks for burn-in, so runs "
+            "will stop at preflight: unset BURN_SUBTITLES to get a .srt sidecar, pass "
+            "--no-burn-subtitles, or install an ffmpeg build with libass"
+        )
+    if tools["ffmpeg"] and not drawtext_filter:
+        warnings.append(
+            "ffmpeg lacks the drawtext filter (libfreetype); narration visual_overlays will stop "
+            "the run before TTS: remove them or install an ffmpeg build with drawtext"
+        )
     if not checks["api_config"]["api_key_set"]:
         failures.append("MIMO_API_KEY is not set; the default ASR / VLM path requires MiMo")
+    if not mimo_video_configured:
+        warnings.append(
+            "MiMo VLM not configured: set MIMO_VIDEO_API_KEY or MIMO_API_KEY before video understanding"
+        )
+    if not tts_configured and effective_tts_provider in TTS_KEY_HINTS:
+        warnings.append(
+            f"TTS provider {effective_tts_provider} not configured: "
+            f"set {TTS_KEY_HINTS[effective_tts_provider]} before voiceover"
+        )
     if not checks["asr"]["available"]:
         warnings.append("ASR not configured (MIMO_API_KEY); pipeline can run with --skip-asr")
     return {
         "ok": not failures,
         "repo_root": str(SCRIPT_DIR.parents[2]),
         "checks": checks,
-        "capability_menu": _build_capability_menu(checks),
         "failures": failures,
         "warnings": warnings,
     }
@@ -449,6 +242,12 @@ def _print_human(report: dict) -> None:
         f"{_status_icon(system['ffmpeg_subtitles_filter'], warning=True)} "
         f"ffmpeg subtitles/libass filter: "
         f"{'available' if system['ffmpeg_subtitles_filter'] else 'missing'}"
+        f" (subtitles: {system['subtitle_delivery']})"
+    )
+    print(
+        f"{_status_icon(system['ffmpeg_drawtext_filter'], warning=True)} "
+        f"ffmpeg drawtext filter (visual_overlays): "
+        f"{'available' if system['ffmpeg_drawtext_filter'] else 'missing'}"
     )
 
     api = checks["api_config"]
@@ -503,22 +302,6 @@ def _print_human(report: dict) -> None:
     else:
         print(f"✓ TTS voice: {tts['mimo_tts_voice']} (source: {tts['mimo_tts_voice_source']})")
         print(f"✓ TTS API URL: {tts['mimo_tts_api_url']} (source: {tts['mimo_tts_api_url_source']})")
-
-    menu = report["capability_menu"]
-    print("\n[capability menu]")
-    for group in ("ready", "blocked", DEGRADED_GROUP, "optional_upgrades"):
-        print(f"{group}:")
-        items = menu[group]
-        if not items:
-            print("  - none")
-            continue
-        for item in items:
-            line = f"  - {item['name']}: {item['summary']}"
-            if "detail" in item:
-                line += f" ({item['detail']})"
-            print(line)
-            if "action" in item:
-                print(f"    action: {item['action']}")
 
     if report["warnings"]:
         print("\nWarnings:")

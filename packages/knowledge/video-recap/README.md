@@ -5,7 +5,7 @@
 <h1 align="center">Video Recap Skills</h1>
 
 <p align="center">
-  <b>把一段或几段视频做成中文解说成片：六个技能装进你正在用的编程 Agent，本地只要 ffmpeg，远程只要一个小米 MiMo key，成片还能一键导成剪映草稿接着改。</b>
+  <b>把一段或几段视频做成中文解说成片：七个技能（六个生产 + 一个按需参考）装进你正在用的编程 Agent，本地只要 ffmpeg，远程只要一个小米 MiMo key，成片还能一键导成剪映草稿接着改。</b>
 </p>
 
 <p align="center">
@@ -40,18 +40,23 @@
 
 ## 这是什么
 
-六个技能装进 Claude Code、Codex CLI、OpenCode 或 OpenClaw，你用自然语言给出视频路径和想要的成片，Agent 负责理解画面与对白、
+七个技能（六个生产 + 一个按需参考）装进 Claude Code、Codex CLI、OpenCode 或 OpenClaw，你用自然语言给出视频路径和想要的成片，Agent 负责理解画面与对白、
 决定故事与视听方案、剪辑、写稿、配音、混音和字幕。支持 `.mp4 / .mov / .mkv / .webm`。
 
 - **一个 key，本地只要 ffmpeg。** ASR、VLM、TTS 都走[小米 MiMo](https://platform.xiaomimimo.com)，本地只用 Python 标准库和 `ffmpeg`，不需要 GPU，不需要 `pip install`，也不下载模型。配音可以换成 Fish Audio，只替换配音这一段。
 - **先做创作决定，再分配声音。** Agent 先比较剪辑假设，把观众承诺、POV、戏剧问题和"发生了什么变化"的 beat 写进 `recap_story_plan.json`，再给每一拍指定画面任务和声音归属：旁白只在有明确任务时整块配音，强对白、动作声或沉默可以完整主导一拍。
 - **先剪后配，时间轴天然对齐。** 剪辑模式先把长视频剪成成片，再对着成片写解说；一次可以传多个视频，按 `source_id` 选段剪成一条主线；每个视频的分析沉淀成文件系统素材库，下次直接复用。
 - **成片之外还能继续改。** 多轨时间线 `timeline.json` 可一键导出剪映草稿，原片、解说、BGM、字幕、图片叠层都可编辑；自带一份准确字幕文件就会被当作原声字幕的首选来源。
-- **每一步都留下可核对的记录。** 旁白 lint、组装 QC、交付 QC 和看片修改日志都是机器可读文件；可选的 MiMo 成片顾问只给建议，缺 key、限流或超时都不会阻断出片。
+- **每一步都留下可核对的记录。** 旁白 lint、组装 QC、交付 QC 和看片修改日志都是机器可读文件。
 
 ## 安装
 
-前提：Python 3.10 或更新版本，`PATH` 上有带 libass 的 `ffmpeg`（默认烧录字幕），以及一个[小米 MiMo](https://platform.xiaomimimo.com) API Key。
+### ClawHub
+
+ClawHub 分发由仓库中的 [显式发布清单](.clawhub/publish.json) 管理，并通过 [ClawHub](https://clawhub.ai/) 提供发现入口。具体 skill 链接只有在发布者、版本和匿名访问均验证后才会写入本文档，避免把尚不存在的条目当成已上架。
+
+
+前提：Python 3.10 或更新版本，`PATH` 上有 `ffmpeg`，以及一个[小米 MiMo](https://platform.xiaomimimo.com) API Key。默认把字幕烧录进画面，这需要带 libass 的 ffmpeg；Homebrew 自带的 `ffmpeg` 没有 libass，这时默认运行不烧录，在成片旁输出同名 `.srt` 外挂字幕并在 `final_qc.json` 里记一条警告（显式传 `--burn-subtitles` 则在开跑前报错）。旁白里写了画面文字叠加（`visual_overlays`）时还需要带 drawtext 的 ffmpeg，缺了会在配音前报错。要在 macOS 上烧录字幕，可用 `brew install ffmpeg-full`（keg-only，需把它的 `bin` 放到 `PATH` 前面）。
 
 ```bash
 brew install ffmpeg                        # macOS；Debian/Ubuntu 用 apt，Windows 用 choco / scoop / winget
@@ -91,7 +96,7 @@ git clone https://github.com/zenstory-ai/video-recap-skills.git
 cd video-recap-skills
 mkdir -p .opencode
 ln -s ../skills .opencode/skills             # Windows 把 skills\* 复制到 .opencode\skills\
-opencode debug skill                         # 应列出全部 6 个技能
+opencode debug skill                         # 应列出全部 7 个技能
 ```
 
 **OpenClaw**：克隆后导入 Claude 插件包：
@@ -267,7 +272,7 @@ Agent 在剪任何一刀之前先写 [`recap_story_plan.json`](examples/guohuo-6
 },
 ```
 
-交付前的机械检查写在 [`assembly_qc.json`](examples/guohuo-60s/assembly_qc.json)（响度、字幕溢出、发布门禁）和 [`delivery-qc.json`](examples/guohuo-60s/delivery-qc.json)：
+交付前的机械检查写在 [`assembly_qc.json`](examples/guohuo-60s/assembly_qc.json)（响度、逐段旁白完整性、`verdict` / `blocking_codes`）和 [`delivery-qc.json`](examples/guohuo-60s/delivery-qc.json)：
 
 ```json
 "checks": {
@@ -315,7 +320,7 @@ Agent 在剪任何一刀之前先写 [`recap_story_plan.json`](examples/guohuo-6
 
 Agent 会自动完成理解、故事与视听规划、剪辑、写稿、配音和合成。剪辑模式内部会先确定保留片段、生成剪后成片，再按输出时间轴写旁白；这些暂停和续跑也由 Agent 处理。
 
-## 流程与六个技能
+## 流程与七个技能
 
 ```mermaid
 flowchart LR
@@ -331,7 +336,7 @@ flowchart LR
     class research,cut opt;
 ```
 
-六个技能通过 `work_dir` 里的 JSON / MP4 产物衔接：
+七个技能（六个生产 + 一个按需参考）通过 `work_dir` 里的 JSON / MP4 产物衔接：
 
 | 技能 | 职责 | 输入 → 输出 |
 |---|---|---|
@@ -341,6 +346,7 @@ flowchart LR
 | [`video-cut`](skills/video-cut/) | 片段计划 → 拼剪成片；剪辑模式先剪后配，解说按成片时间轴写 | `clip_plan.json + 视频` → `edited_source.mp4` |
 | [`video-voiceover`](skills/video-voiceover/) | 合成解说音频（MiMo `mimo-v2.5-tts` / Fish Audio `s2.1-pro-free`） | `narration.json` → `tts_segments/ + tts_meta.json` |
 | [`video-assemble`](skills/video-assemble/) | 混音 · 压低原声 · 渲染字幕 · 多轨时间线 · 可选导出剪映 | `视频 + tts_meta` → `recap_<名>.mp4 + subtitles.srt/.ass + timeline.json` |
+| [`video-reference`](skills/video-reference/) | 按需拆片，不在生产路径上：把一部成片拆成可复用的制作参考（结构、节奏、镜头、旁白字幕、音画分工），原片事实只留本地，导出物只含方法与数值 | `成片 + 理解产物` → `production_reference.json` |
 
 成片固定输出为 `recap_<名>.mp4`，同时产出 `subtitles.srt/.ass`；全部中间产物在 `work_dir/`，字段契约见[数据结构](skills/video-recap/references/data-schema.md)。
 
@@ -354,13 +360,11 @@ flowchart LR
 
 素材库只保存 JSON / Markdown 和索引，不复制原始媒体、不建数据库、不做 embedding；Agent 直接在文件系统里 `grep`。
 
-**合成前后各做一次 MiMo 质量复核，并导出剪映草稿：**
+**导出剪映草稿：**
 
 ```text
-给 /path/to/video.mp4 做解说，合成前和成片后都做 MiMo 质量复核，并导出可继续编辑的剪映草稿。
+给 /path/to/video.mp4 做解说，并导出可继续编辑的剪映草稿。
 ```
-
-MiMo 复核每个阶段最多一次请求，只给建议，失败也不阻断出片。
 
 **让解说字幕贴合原片硬字幕的位置：**
 
@@ -368,7 +372,7 @@ MiMo 复核每个阶段最多一次请求，只给建议，失败也不阻断出
 先检测 /path/to/video.mp4 的原片字幕区域并让我确认预览，再把解说字幕贴到同一区域生成成片。
 ```
 
-检测预览保存在 `.subtitle_measure/`；当前要求方形像素视频和底部对齐字幕。
+检测预览保存在 `.subtitle_measure/`；当前要求方形或近方形像素视频（SAR 与 1:1 相差不超过 2%）和底部对齐字幕。
 
 **用有授权的参考音色配音：**
 
@@ -418,7 +422,7 @@ MiMo 复核每个阶段最多一次请求，只给建议，失败也不阻断出
 
 ### 长视频跑到一半报 429 或中断了，要从头再来吗？
 
-不用。VLM 场景分析可断点续传，限流会自愈；写好 `narration.json` 后重复同一条命令即可继续，剪辑模式的剪 / 配进度记录在 `recap_phase.json`，续跑只会接同一个源视频、同一组参数的工作目录。
+不用。VLM 场景分析可断点续传，限流会自愈；写好 `narration.json` 后重复同一条命令即可继续，剪辑模式在 `recap_phase.json` 记下解说对应的剪辑计划（改了计划会要求重写解说），续跑只会接同一个源视频、同一组参数的工作目录。
 
 ### VLM 认不出谁是谁，解说里全是"黑衣男子"？
 

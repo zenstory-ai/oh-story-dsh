@@ -4,6 +4,7 @@ import os
 import wave
 from pathlib import Path
 
+from audio_mix import _dialogue_free_pull_start, _paragraph_pull_evidence
 from lib import CONFIG, get_video_duration, log, narration_tempo_budget, run_cmd
 
 def _apply_narration_speed(
@@ -44,6 +45,7 @@ def _adjust_tts_speed(
     tts_rate_offset=0.0,
     *,
     tempo_policy=None,
+    segment_index=None,
 ):
     """Fit overlong TTS with bounded atempo; never time-trim speech in assemble.
 
@@ -98,8 +100,9 @@ def _adjust_tts_speed(
             "placed_audio_duration": 0.0,
             "needed_tempo_factor": ratio,
         })
+        label = "" if segment_index is None else f"段 {segment_index + 1} "
         log(
-            f"  TTS 无安全放置: {current_dur:.1f}s 需 x{ratio:.2f}，"
+            f"  TTS 无安全放置: {label}{current_dur:.1f}s 需 x{ratio:.2f}，"
             f"超过段内预算 x{effective_max:.2f}（assemble 不按时间硬切）"
         )
         return (str(audio_path), current_dur, meta)
@@ -196,18 +199,16 @@ def _build_timed_narration(
     no_safe_fit_count = 0  # 超预算但不能安全截断；交由 QC/manifest 阻断
     prev_authored_end = None  # 上一段作者标注的结束时间，用于判断"段落"边界
     run_gap = CONFIG["narration_run_gap_seconds"]   # 作者留白 > 此值 = 新段落
-    tighten = CONFIG["narration_tighten"]
     tight_pause_samples = int(CONFIG["narration_tight_pause_seconds"] * sample_rate)
     # 漂移上限：收紧时一句最多比作者标注的时间提前 max_pull 秒，避免整段解说被全部压到前面、与画面脱节
     max_pull_samples = int(CONFIG["narration_max_pull_seconds"] * sample_rate)
-    configured_delay = CONFIG["narration_delay_seconds"]
-    tail_pad = CONFIG["narration_tail_pad_seconds"]
+    pull_evidence = None  # (dialogue, quiet)，第一次真的要提前时才读
 
     for seg in tts_segments:
         wav_path = seg["audio_path"]
         pause_samples = int(seg["pause_after_ms"] * sample_rate / 1000)
         # 段落收紧：同一段落内（与上一句作者留白 <= run_gap）把这一句紧贴上一句的实际收尾播放，
-        # 句间间隔固定为 tight_pause，不受 slot 内居中延迟 / TTS 时长波动影响。段落之间（作者特意留
+        # 句间间隔固定为 tight_pause，不受 slot 余量 / TTS 时长波动影响。段落之间（作者特意留
         # 的大留白，让精彩原声透出）才放回原声。这样句间间隔稳定、不会出现"一句解说一段空白"。
         cur_authored_start = float(seg["start"])
         is_run_start = (placed_count == 0 or prev_authored_end is None
@@ -234,21 +235,26 @@ def _build_timed_narration(
         tts_rate_offset = seg["tts_rate_offset"]
         tts_dur = seg["audio_duration"]
 
-        slot_duration = max(0.0, float(seg["end"]) - float(seg["start"]))
-        max_delay = max(0.0, slot_duration - tts_dur - tail_pad)
-        narration_delay = min(configured_delay, max_delay)
-        start_sample = int((seg["start"] + narration_delay) * sample_rate)
+        start_sample = int(seg["start"] * sample_rate)
         end_boundary = int(min(seg["end"], video_duration) * sample_rate)
 
         # 段间间隔：使用前一段的 pause_after_ms（来自 narration.json）
         min_start_with_pause = last_written_end + prev_pause_samples
-        if tighten and not is_run_start:
-            # 段落内：紧贴上一句的实际收尾播放，句间间隔固定为 tight_pause（不被 slot 内居中延迟撑大），
+        if not is_run_start:
+            # 段落内：紧贴上一句的实际收尾播放，句间间隔固定为 tight_pause（不被 slot 余量撑大），
             # 但不早于"作者标注起始 - max_pull"，防止整段被压到前面与画面脱节。
             drift_floor = int(cur_authored_start * sample_rate) - max_pull_samples
             actual_start = max(last_written_end + tight_pause_samples, drift_floor)
+            if actual_start < start_sample:
+                # 校验只检查过写的 start；提前的这一段不能进入原声对白，否则停在最后一段对白结束处
+                if pull_evidence is None:
+                    pull_evidence = _paragraph_pull_evidence(work_dir)
+                safe_start = _dialogue_free_pull_start(
+                    actual_start / sample_rate, cur_authored_start, *pull_evidence
+                )
+                actual_start = min(start_sample, max(actual_start, int(round(safe_start * sample_rate))))
         else:
-            # 段落起点（或关闭收紧）：尊重作者标注的起始 + 入场延迟，让画面/原声先立住
+            # 段落起点：采用作者标注的起始，让画面/原声先立住；上一块超时则顺延到它结尾 + pause_after_ms
             actual_start = max(start_sample, min_start_with_pause)
         actual_start = min(actual_start, end_boundary)  # 不超出 slot 边界
 
@@ -259,11 +265,12 @@ def _build_timed_narration(
             if tempo_policy:
                 wav_path, _actual_dur, fit_meta = _adjust_tts_speed(
                     wav_path, available_duration, tts_rate_offset,
-                    tempo_policy=tempo_policy,
+                    tempo_policy=tempo_policy, segment_index=seg["index"],
                 )
             else:
                 wav_path, _actual_dur, fit_meta = _adjust_tts_speed(
-                    wav_path, available_duration, tts_rate_offset
+                    wav_path, available_duration, tts_rate_offset,
+                    segment_index=seg["index"],
                 )
             seg.update({
                 "fit_status": fit_meta["fit_status"],
@@ -273,6 +280,8 @@ def _build_timed_narration(
                 "blocking": fit_meta["blocking"],
             })
             if fit_meta["fit_status"] == "no_safe_fit":
+                if "needed_tempo_factor" in fit_meta:
+                    seg["needed_tempo_factor"] = round(fit_meta["needed_tempo_factor"], 4)
                 _unplaced(seg, actual_start / sample_rate, "no_safe_fit",
                           fit_meta["truncate_reason"], blocking=True)
                 prev_pause_samples = pause_samples
@@ -331,7 +340,7 @@ def _build_timed_narration(
             # consonant/vowel release. _adjust_tts_speed must produce a complete file
             # that fits; otherwise block and ask the Agent to shorten/move the block.
             over = (audio_samples - available) / sample_rate
-            log(f"  TTS 无安全放置: 段 {seg['index']} 超出可用窗口 {over:.3f}s；禁止裁尾，交由 QC 阻断")
+            log(f"  TTS 无安全放置: 段 {seg['index'] + 1} 超出可用窗口 {over:.3f}s；禁止裁尾，交由 QC 阻断")
             _unplaced(seg, actual_start / sample_rate, "no_safe_fit", "no_safe_boundary", blocking=True)
             prev_pause_samples = pause_samples
             skipped_count += 1
@@ -342,7 +351,7 @@ def _build_timed_narration(
         if actual_start < last_written_end:
             overlap_ms = (last_written_end - actual_start) * 1000 / sample_rate
             if last_written_end >= actual_start + write_samples:
-                log(f"  跳过重叠段: {actual_start/sample_rate:.1f}s "
+                log(f"  跳过重叠段: 段 {seg['index'] + 1} {actual_start/sample_rate:.1f}s "
                        f"(与前段重叠 {overlap_ms:.0f}ms)")
                 _unplaced(seg, seg["start"], "no_safe_fit", "no_room", blocking=True)
                 prev_pause_samples = pause_samples
@@ -391,6 +400,11 @@ def _build_timed_narration(
         buffer[actual_start * 2: actual_start * 2 + write_samples * 2] = wf_data
         seg["actual_place_start"] = actual_start / sample_rate
         seg["actual_place_end"] = (actual_start + write_samples) / sample_rate
+        if actual_start < start_sample:
+            # 段落收紧把这一块提前到写的 start 之前；若它成为新压低段的首块，
+            # 原声交接会用自己的入口判定覆盖这个状态
+            seg["source_entry_status"] = "paragraph_tightened"
+            seg["written_start"] = cur_authored_start
         seg["placed_audio_duration"] = write_samples / sample_rate
         last_written_end = actual_start + write_samples
         prev_pause_samples = pause_samples

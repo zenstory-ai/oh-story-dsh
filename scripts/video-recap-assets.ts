@@ -67,6 +67,7 @@ function isPortableSourceAsset(path: string): boolean {
 // imported by recap_runner.py and belong to the pipeline.
 export const videoRecapPlatformGlue: readonly string[] = [
   "video-recap/scripts/dashboard_server.py",
+  "video-recap/scripts/dashboard/",
   "video-recap/scripts/dashboard_data.py",
   "video-recap/scripts/dashboard_io.py",
   "video-recap/scripts/dashboard_runs.py",

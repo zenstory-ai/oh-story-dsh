@@ -4,7 +4,15 @@ import json
 import re
 from pathlib import Path
 
+from index_normalize import normalize_index
 from lib import CONFIG, file_identity
+
+
+def _scene_number(scene_id):
+    """1-based scene number for every human-facing label in the brief (JSON keeps the
+    0-based `scene_id`); a scene split across kept clips ("3.1") reads "4 part 2"."""
+    base, _, part = str(scene_id).partition(".")
+    return f"{int(base) + 1} part {int(part) + 1}" if part else str(int(base) + 1)
 
 
 def _load_background_research(work_dir):
@@ -158,6 +166,31 @@ def _format_substrate_warning(assessment):
     ]
 
 
+def _format_moderation_refusals(scenes_analysis):
+    """One brief line naming the scenes MiMo moderation refused, so blank descriptions read as
+    refusals (vlm.analyze_scenes sets analysis_status), not as empty footage."""
+    refused = [
+        scene for scene in scenes_analysis or []
+        if isinstance(scene, dict) and scene.get("analysis_status") == "moderation_refused"
+    ]
+    if not refused:
+        return []
+    labels = ", ".join(_scene_number(scene["scene_id"]) for scene in refused[:12])
+    more = f" …(+{len(refused) - 12})" if len(refused) > 12 else ""
+    covered = sum(
+        1 for scene in refused if scene.get("description_source") == "mimo_video_overview"
+    )
+    overview_note = f"; {covered} of them are described by the MiMo overview instead" if covered else ""
+    return [
+        f"- Moderation-refused scenes: {len(refused)}/{len(scenes_analysis)} "
+        f"(Scene {labels}{more}) — MiMo refused the frame VLM request, so their frame "
+        f"description is blank and they carry no frame_facts{overview_note}. This is a "
+        "content-moderation refusal, not empty footage: ground them in ASR, burned-in "
+        "subtitles, or background research, or skip them in cut mode.",
+        "",
+    ]
+
+
 def _write_json_artifact(work_dir, name, payload):
     path = Path(work_dir) / name
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -175,7 +208,7 @@ def _format_asr_chunks_for_brief(chunks, max_chunks=24):
         "",
     ]
     for chunk in chunks[:max_chunks]:
-        scene_ids = ",".join(str(sid) for sid in chunk["scene_ids"]) or "n/a"
+        scene_ids = ", ".join(_scene_number(sid) for sid in chunk["scene_ids"]) or "n/a"
         text = chunk["text"]
         if len(text) > 900:
             text = text[:897] + "..."
@@ -223,7 +256,7 @@ def _format_timeline_fusion_for_brief(fusion, max_items=40):
         )
         lines.extend(
             [
-                f"### Fusion scene {item['scene_id']}: {start:.1f}-{end:.1f}s ({item['recommended_mode']})",
+                f"### Fusion scene {_scene_number(item['scene_id'])}: {start:.1f}-{end:.1f}s ({item['recommended_mode']})",
                 f"- Visual: {item['visual_description']}",
                 f"- Dialogue overlap: {item['dialogue_overlap_seconds']:.1f}s | {dialogue_text}",
                 f"- Narration slots: {slot_text}",
@@ -278,7 +311,10 @@ def _load_consolidation(work_dir, scenes_analysis):
         return {}
     if not all(isinstance(item, dict) for item in index["relationships"]):
         return {}
-    return index
+    # An index written before the deterministic repairs existed is repaired here too, so a
+    # --brief-only run does not wait for the next full understand.py run (pure, no model call).
+    # No duration cap: the brief's scenes may be an edited timeline, plot times are source times.
+    return normalize_index(index)[0]
 
 
 def _format_consolidation(index):

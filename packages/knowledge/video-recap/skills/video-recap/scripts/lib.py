@@ -1,9 +1,9 @@
-"""Self-contained config and MiMo client for the video-recap orchestrator."""
+"""Self-contained config, JSON, file-identity and ffmpeg-capability helpers for the video-recap orchestrator."""
 import json
 import os
-import socket
-import urllib.error
-import urllib.request
+import re
+import shutil
+import subprocess
 from pathlib import Path
 
 
@@ -22,6 +22,8 @@ DEFAULT_MIMO_TTS_MODEL = "mimo-v2.5-tts"  # text-to-speech
 DEFAULT_FISH_TTS_API_URL = "https://api.fish.audio/v1/tts"
 DEFAULT_FISH_TTS_MODEL = "s2.1-pro-free"
 DEFAULT_FISH_TTS_REFERENCE_ID = "5653cea4ac83480aaf2bf45406556185"
+# Accepted values of TTS_PROVIDER / --tts-provider, shared by recap.py and doctor.py.
+TTS_PROVIDERS = ("auto", "mimo-tts", "fish-audio", "index-tts")
 
 
 def normalize_api_url(raw_url):
@@ -83,6 +85,81 @@ def load_json(path):
     return json.loads(Path(path).read_text(encoding="utf-8"))
 
 
+def read_json_object(path):
+    """A JSON object file as a dict, or None when it is unreadable, malformed or not an object."""
+    try:
+        data = load_json(path)
+    except (OSError, ValueError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+# ── 文件身份与 id ─────────────────────────────────────────────────────
+
+def file_identity(path):
+    """``{size, mtime_ns}`` of a file: the identity recap records and compares for a source
+    video or adopted artifact. A file rewritten in place gets a new mtime_ns."""
+    st = os.stat(os.fspath(path))
+    return {"size": st.st_size, "mtime_ns": st.st_mtime_ns}
+
+
+def _slug(text, max_len=48):
+    raw = Path(text).stem.lower()
+    raw = re.sub(r"[^a-z0-9\u4e00-\u9fff._-]+", "-", raw).strip("-._")
+    return (raw or "material")[:max_len].strip("-._") or "material"
+
+
+def _id_stem(source_path, max_len=32):
+    raw = re.sub(r"[^a-z0-9]+", "-", Path(source_path).stem.lower()).strip("-")
+    return (raw or "source")[:max_len].strip("-") or "source"
+
+
+def source_id_for(source_path):
+    """``src_<stem>_<size>``: readable, stable across runs, and distinct for a different cut
+    of the same title (the size changes)."""
+    return f"src_{_id_stem(source_path)}_{os.stat(os.fspath(source_path)).st_size}"
+
+
+def material_id_for(source_path, source_identity):
+    return f"{_slug(str(source_path))}-{source_identity['size']}"
+
+
+# ── ffmpeg 能力 ───────────────────────────────────────────────────────
+
+def ffmpeg_filters():
+    """Filters the installed ffmpeg lists; empty when ffmpeg is absent.
+
+    A present ffmpeg whose `-filters` fails or hangs is an environment fault and raises,
+    so it is never misreported downstream as "filter absent"."""
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        return set()
+    try:
+        result = subprocess.run(
+            [ffmpeg, "-hide_banner", "-filters"], text=True, capture_output=True, timeout=20
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise RuntimeError(f"`ffmpeg -filters` failed or hung: {exc}") from exc
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout or "").strip()[:300]
+        raise RuntimeError(f"`ffmpeg -filters` failed (exit {result.returncode}): {detail}")
+    filters = set()
+    for line in result.stdout.splitlines():
+        parts = line.split()
+        if len(parts) >= 2 and parts[0] and parts[0][0] in ".TSCAPN|":
+            filters.add(parts[1])
+    return filters
+
+
+def ffmpeg_has_subtitles_filter():
+    """True when this ffmpeg can burn subtitles — its filter list includes the libass
+    `subtitles` filter. The render burns even the .ass file through `subtitles=` (see
+    video-assemble assemble.py:_subtitle_burn_filter), so this — not the `ass` filter — is
+    the exact capability `--burn-subtitles` needs. The orchestrator preflight
+    (recap_runtime.py) uses it to fail fast before any API spend; doctor.py reports it."""
+    return "subtitles" in ffmpeg_filters()
+
+
 # Single MiMo credential powers ASR + VLM + TTS. Per-capability overrides
 # (MIMO_VIDEO_API_KEY / MIMO_TTS_API_KEY / MIMO_ASR_API_KEY and their *_API_URL forms)
 # are optional and fall back to MIMO_API_KEY / MIMO_API_URL. Token-Plan keys (tp-*) auto-
@@ -114,24 +191,6 @@ CONFIG = {
     "api_url_source": "env" if os.environ.get("MIMO_API_URL") else "default",
     "api_key": _mimo_api_key,
     "api_env_var": "MIMO_API_KEY",
-    # Read through a COPY of CONFIG by qc.mimo_evidence._effective_config /
-    # safe_mimo_config, which is why neither a `CONFIG.get(...)` grep nor live-dict
-    # instrumentation sees them. They drive the QC model fallback chain and the
-    # provenance recorded in the QC report.
-    "mimo_qc_model": os.environ.get("MIMO_QC_MODEL") or os.environ.get("MIMO_VIDEO_MODEL")
-    or os.environ.get("MIMO_MODEL", DEFAULT_MIMO_MODEL),
-    "mimo_qc_model_source": "env" if os.environ.get("MIMO_QC_MODEL") else "fallback",
-    "mimo_model": os.environ.get("MIMO_MODEL", DEFAULT_MIMO_MODEL),
-    "mimo_model_source": "env" if os.environ.get("MIMO_MODEL") else "default",
-    "mimo_api_url": normalize_api_url(_raw_api_url),
-    "mimo_api_url_source": "env" if os.environ.get("MIMO_API_URL") else "default",
-    "mimo_video_api_url_source": "env" if (
-        os.environ.get("MIMO_VIDEO_API_URL") or os.environ.get("MIMO_API_URL")
-    ) else "default",
-    "mimo_disable_thinking": env_bool("MIMO_DISABLE_THINKING", True),
-    "mimo_disable_thinking_source": "env" if os.environ.get("MIMO_DISABLE_THINKING") else "default",
-    "mimo_media_resolution": os.environ.get("MIMO_MEDIA_RESOLUTION", "default"),
-    "mimo_media_resolution_source": "env" if os.environ.get("MIMO_MEDIA_RESOLUTION") else "default",
     "mimo_api_key": _mimo_api_key,
     "mimo_video_api_url": normalize_api_url(_raw_mimo_video_api_url),
     "mimo_video_api_key": _mimo_video_api_key,
@@ -170,51 +229,3 @@ CONFIG = {
     ),
     "vlm_workers": env_int("VLM_WORKERS", 8, minimum=1),  # VLM 并行分析线程数
 }
-
-
-class MiMoQCRequestError(RuntimeError):
-    """Sanitized, fail-open transport error for the advisory QC request."""
-
-
-def mimo_qc_api_call(payload, *, config=None, timeout=60):
-    """Send exactly one OpenAI-compatible MiMo request for one QC stage.
-
-    Deliberately no retries: the QC feature is advisory, and the orchestrator's
-    one-request-per-stage contract is more important than hiding 429/timeout
-    behavior. Callers turn every failure into a non-blocking status report.
-    """
-    cfg = dict(CONFIG)
-    if config:
-        cfg.update(config)
-    api_key = cfg.get("mimo_video_api_key") or cfg.get("mimo_api_key") or cfg.get("api_key")
-    if not api_key:
-        raise MiMoQCRequestError("missing_key")
-    endpoint = normalize_api_url(
-        cfg.get("mimo_video_api_url") or cfg.get("mimo_api_url") or cfg.get("api_url")
-    )
-    request = urllib.request.Request(
-        endpoint,
-        data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-        headers={
-            "Content-Type": "application/json",
-            "User-Agent": "video-recap/mimo-qc",
-            "api-key": api_key,
-        },
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            raw = response.read().decode("utf-8")
-    except urllib.error.HTTPError as exc:
-        raise MiMoQCRequestError(f"http_{exc.code}") from None
-    except (TimeoutError, socket.timeout):
-        raise MiMoQCRequestError("timeout") from None
-    except (urllib.error.URLError, OSError):
-        raise MiMoQCRequestError("network_error") from None
-    try:
-        result = json.loads(raw)
-    except ValueError:
-        raise MiMoQCRequestError("invalid_json") from None
-    if not isinstance(result, dict):
-        raise MiMoQCRequestError("invalid_response")
-    return result

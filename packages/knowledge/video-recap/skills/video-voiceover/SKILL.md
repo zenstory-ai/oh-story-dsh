@@ -43,7 +43,7 @@ cut 流程先剪后配：`narration.json` 本身就是按剪后成片的输出�
 python3 scripts/voiceover.py --work-dir <work_dir> --narration <narration.json> \
   [--tts-provider auto|mimo-tts|fish-audio|index-tts] \
   [--mimo-voice 冰糖 | --voice-ref <reference-audio>] \
-  [--preserve-approved-text]
+  [--preserve-approved-text] [--allow-partial-tts]
 ```
 
 单独运行且省略 `--narration` 时，默认读取 `work_dir/narration.json`；`--narration` 只用于指定其他路径的同格式稿件。
@@ -65,27 +65,34 @@ python3 scripts/voiceover.py --work-dir <work_dir> --narration <narration.json> 
 
 ## 6. 运行规则
 
-- 重跑只复用分段 sidecar 中记录的文本、TTS 设置与该 WAV 的 `size`/`mtime_ns` 均与当前相等的分段音频；
-  修改旁白或合成参数后，只重生成受影响的 WAV。
-- 批准稿保护策略属于缓存设置：严格模式不会命中旧的自动缩稿缓存；只有同一严格策略下、
-  `spoken_text` 完整匹配且 WAV 存在非空的缓存才可离线复用。
+- 分段音频按内容缓存在 `tts_segments/cache/`：键是实读文本、实际发给供应商的语气请求（MiMo 是那句自然语言指令，语速只在 ≥+6% 或 ≤-3% 时改变措辞；Fish Audio 是数值 speed；index-tts 没有段级控制）与 TTS 设置，不含段序号和时间窗；因此段位变化让名义语速从 +5% 变成 -2% 时，MiMo 不重新合成；
+  缓存 WAV 的 `size`/`mtime_ns` 变了即失效。`narr_NNN.wav` 是指向缓存的硬链接（不支持时为副本），`tts_meta.json`
+  照旧引用它。删掉、插入或挪动某段后，只重生成文本或发给供应商的请求变了的段（名义语速随首段、末两段的位置变化）；
+  旧版的 `narr_NNN.wav.cache.json` 不再读取。
+- 批准稿保护策略属于缓存设置：严格模式往缓存键里加入策略与原稿，与默认策略（`report-over-budget-v2`，不进键）互不命中；旧版逐段缓存（含自动缩稿音频）不再读取；只有同一严格策略下、
+  `spoken_text` 完整匹配且 WAV 存在非空的缓存才可离线复用；复用时仍按当前时间窗检查，放不下照样失败。
 - 严格 CLI 在本轮合成前把旧 `tts_meta.json` 按时间戳归档至 `tts_meta.history/`，因此失败时
   当前路径不会继续冒充本轮成功；成功元数据通过同目录临时文件原子替换。
 - `auto` 优先使用已配置的 MiMo，MiMo key 缺失且设置了 `FISH_API_KEY` 时使用 Fish Audio；需要可复现的 provider 选择时显式传 `--tts-provider`。
 - 自托管 index-tts 端点只能由 `--tts-provider index-tts` 或 `TTS_PROVIDER=index-tts` 显式选择，`auto`
   永不兜底选择它。协议、请求体、receipt 语义与缓存失效规则见 `references/index-tts.md`。
-- Fish Audio 直接请求 WAV；默认使用“娱乐扒妹”音色（`5653cea4ac83480aaf2bf45406556185`），`FISH_TTS_REFERENCE_ID` 可覆盖。模型、音色 ID、API URL、动态语速或归一化设置变化时会重新生成缓存。当前免费模型无 SLA，受 Fair Use 和官方免费期限约束。
+- Fish Audio 直接请求 WAV；默认使用“娱乐扒妹”音色（`5653cea4ac83480aaf2bf45406556185`），`FISH_TTS_REFERENCE_ID` 可覆盖。模型、音色 ID、API URL、归一化设置或按内容计算出的语速变化时会重新生成缓存（Fish 不接收音高和情绪，它们变了不重新生成）。当前免费模型无 SLA，受 Fair Use 和官方免费期限约束。
 - `--voice-ref` 仅用于 full/cut 解说克隆，切换到 `mimo-v2.5-tts-voiceclone`。仅在确需新合成时惰性规范化一次；
-- dub voiceclone 原始 WAV 也会按模型、提示、台词和参考音频的 `size`/`mtime_ns` 缓存；匹配重跑不再重复请求或计费，`dub_manifest.json` 逐行记录 `tts_cache=hit|miss`；
-  参考音频文件变化会使旧缓存失效。仅在获得授权后使用，参考音频会发送到 MiMo。
+  参考音频的路径、`size`/`mtime_ns` 或预处理版本变化会使旧缓存失效。仅在获得授权后使用，参考音频会发送到 MiMo。
+- dub voiceclone 原始 WAV 也会按模型、提示、台词和参考音频的 `size`/`mtime_ns` 缓存；匹配重跑不再重复请求或计费，
+  `dub_manifest.json` 逐行记录 `tts_cache=hit|miss`。
+- 合成出的段音频比按 `TTS_MIN_SPEECH_RATE`（默认 2.5 字/秒，英文按每词 1.5 字）读完全文、再加停顿与首尾静音的上限还长时，
+  视为 TTS 幻读（读完原稿后又编出一段话），按失败重试，不缓存也不交给 assemble；重试用尽则该段失败，报错写明时长与上限，
+  最后一次被拒的音频留在 `tts_segments/narr_NNN.rejected.wav` 供试听。数字（半角/全角）逐个计 1 字，`%` 计 3 字（百分之）。
+  dub 的 voiceclone 台词走同一道检查与重试（被拒的留在 `dub_tts/line_NNN_raw.rejected.wav`）。
+  旧版本缓存下的这类 WAV 在重跑时不再复用，会重新合成。设为 `0` 关闭这道检查。
 - `TTS_WORKERS`、`TTS_TIMEOUT`、`TTS_RETRIES`、`ALLOW_PARTIAL_TTS` 用于调整并发、超时、重试与部分成功策略。
-- dub 模式有独立的确定性门禁：`dub_lint.json` 会在语音克隆前阻止空行、重叠或越界译文；
-  `dub_review.json` 用于记录忠实度、语气、时长和平台适配复核。可通过
-  `dub.py --stage lint|review` 或 `dub.py --print-schema` 单独调用。
+- dub 模式有独立的确定性门禁：`dub.py --stage render` 在语音克隆前写 `dub_lint.json`，
+  空行、重叠或越界译文即中止。`dub.py` 只由编排入口的 `--edit-mode dub` 调用，没有单独的手动阶段。
 
 ## 7. 能力边界
 
-- 超窗时默认在句界自动缩稿并在 `spoken_text/truncated` 留痕；批准稿加 `--preserve-approved-text`。
+- 超窗时保留原稿并记录日志；assemble 有界提速放不下则在渲染前以 `no_safe_fit` 阻断。批准稿加 `--preserve-approved-text`，超窗即在 TTS 阶段失败。
 - 不混流、不压低原声、不渲染字幕。
 - 不分析视频，也不选择时间点；只为输入稿件中的既定分段配音。
 - Fish Audio 与 IndexTTS 路径都不接受本地 `--voice-ref`；前者用已创建的 `FISH_TTS_REFERENCE_ID` 选择音色。

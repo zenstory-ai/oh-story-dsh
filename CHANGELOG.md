@@ -11,12 +11,27 @@
 
 ## [Unreleased]
 
+## [0.1.13] - 2026-10-03
+
+### Added
+
+- 同步 [video-recap-skills 0.6.1](https://github.com/zenstory-ai/video-recap-skills/releases/tag/v0.6.1)（`88af4d4f37b09510a1169e945d43d0532770a8e4`）：新增第七个 Skill `video-reference`，用户可调用入口增为 `/video-recap`、`/video-script`、`/video-reference` 三个；视频参考、镜头抽样与契约校验随包交付。
+- 短剧生产视图支持原生静态图与混合素材合成：镜序默认优先视频，也接受关键帧兜底；每个镜头可显式选择同集 SHOT/IMG 静帧（含 `交付/EPxxx/`）或视频，显式选择优先于自动视频，源丢失时阻塞而不静默替换。预览实际选中的源，并把 SHOT/IMG 静态素材与 MOTION 视频的时长身份准确交给装配流程。角色 `reference_audio` 绑定具体人物，严格核对 `reference_roles`、身份与禁控条件；音频仍不进入图片参考选择器。自动生成的通用 profile 默认不声明 `reference_audio`；必须通过 `OH_STORY_DRAMA_ADAPTER_CONFIG` 为已核实支持声音参考的具体模型显式声明，缺失声明时付费提交前拒绝。
+
 ### Changed
 
+- 默认宿主升到 npm `latest` 的 DeepSeek Harness `0.2.0-rc.2`，并单独接受显式试用线 `0.2.1-alpha.1`；peer 范围为 `>=0.2.0-rc.2 <0.2.1-0 || >=0.2.1-alpha.1 <0.2.2-0`。alpha 删除旧 invariant 导出并拆分 Composer stats，插件不再依赖旧导出或注册旧 Slot；工具调用跟随支持参数尚未就绪的 `args-preparing` 阶段。安装与启动必须使用同一条版本线。
+- 同步 [Drama Skills 0.8.1](https://github.com/zenstory-ai/drama-skills/releases/tag/v0.8.1)（`4e48ccbf0f77da757d7cacc6937b1cc59c124845`）。除角色绑定参考音频外，静态与混合素材装配保留 creator-first 文档为权威，生产 UI 只投影选择和实际成果。
+- 同步 [NovelToGame 0.5.0](https://github.com/zenstory-ai/novel-to-game)（`e2695b720591335321738039b869f418593b1985`）：《金瓶梅 · 风月总账》标题不变，示例实现由旧 ledger 换成 ADV；默认截图与演示也改走 ADV。**旧存档不会迁移，升级后请清除该示例的旧站点存储并重新开始。**
+- video-recap 最终质检升到 schema 2，`over_budget` 只由 lint 判定，旧标志和 QC 路径已删除；ffmpeg 没有 libass 时交付外部 SRT。**升级既有视频 `work/` 可能重新生成 ASR、剪辑、TTS 与索引；不得沿用旧 PASS，也不得伪造通过记录。**
+- Oh Story 保持 0.8.4，不改 13 Skills、7 Roles 与既有小说项目协议。
 - 发布流水线改为先验证稳定 Tag、版本、变更记录、受保护 `main` 祖先关系与同一提交的完整 CI，再只打包一次并按 run/attempt、源码提交与 SHA-256/SHA-512 清单提升同一份产物。生产 Job 另把 manifest、promotion proof 与 CI proof 的 SHA-256 交给每个消费 Job，发布前还会重新读取远端 Tag 与 CI 最新 attempt，协同替换 artifact 内文件或移动 Tag 都会失败。GitHub Release 和 npm 分到最小权限 Job；重跑只接受完全相同的既有公开字节，不再覆盖资产或把鉴权、限流、网络错误误当成「尚未发布」。正式发布后还会匿名核对 GitHub 下载、npm `dist.integrity` 与隔离安装。手动触发只允许 `main`，仍是不会发布的演练。
 
 ### Fixed
 
+- 原生 DSH 工具参数跟随不再把 `args-preparing` 当成可解析的完整参数，避免 alpha 宿主在参数真正到达前产生错误预览或丢失后续文件跟随。
+- 500px 紧凑布局中成片来源选择器独占一行，保持可操作且不横向溢出；付费测试失败输出不再附带可能含密钥的原始异常 cause。
+- 发布验证补齐静态 FFmpeg 合成、角色音频引用、ADV 全路径与视频参考/QC 契约；完整上游视频测试用带 freetype、harfbuzz、libass 的 FFmpeg 运行，不把缺少 `drawtext` 的环境失败冒充通过。
 - 打包器只按知识资产根目录内的相对路径排除 `.omx` / `.omc` 本地状态；仓库本身放在 `.omx/worktrees/` 等父目录时，不再误删全部随包 Skills。
 
 ## [0.1.12] - 2026-09-28
@@ -272,7 +287,8 @@
 - 提供 13 个 Oh Story 小说 Skills、7 个专业 Roles 与 10 个 Drama Skills。
 - 提供文件树、Markdown/JSONL 编辑预览与官方 DSH Chat 同屏的三栏工作台。
 
-[Unreleased]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.12...HEAD
+[Unreleased]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.13...HEAD
+[0.1.13]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.12...v0.1.13
 [0.1.12]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.11...v0.1.12
 [0.1.11]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.10...v0.1.11
 [0.1.10]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.9...v0.1.10

@@ -94,8 +94,8 @@ def env_float(name, default, *, minimum=None):
     return _env_number(name, default, float, minimum)
 
 
-# Single MiMo credential powers ASR + VLM + TTS. Per-capability overrides
-# (MIMO_VIDEO_API_KEY / MIMO_TTS_API_KEY / MIMO_ASR_API_KEY and their *_API_URL forms)
+# Single MiMo credential powers ASR + VLM. Per-capability overrides
+# (MIMO_VIDEO_API_KEY / MIMO_ASR_API_KEY and their *_API_URL forms)
 # are optional and fall back to MIMO_API_KEY / MIMO_API_URL. Token-Plan keys (tp-*) auto-
 # route to the Token-Plan cluster base URL; pay-as-you-go keys use api.xiaomimimo.com.
 _mimo_api_key = os.environ.get("MIMO_API_KEY", "")
@@ -121,6 +121,7 @@ CONFIG = {
     "mimo_api_key": _mimo_api_key,
     "mimo_video_api_url": normalize_api_url(_raw_mimo_video_api_url),
     "mimo_video_api_key": _mimo_video_api_key,
+    "mimo_video_env_var": "MIMO_VIDEO_API_KEY" if os.environ.get("MIMO_VIDEO_API_KEY") else "MIMO_API_KEY",
     "mimo_asr_api_url": normalize_api_url(_raw_mimo_asr_api_url),
     "mimo_asr_api_key": _mimo_asr_api_key,
     "mimo_asr_env_var": "MIMO_ASR_API_KEY" if os.environ.get("MIMO_ASR_API_KEY") else "MIMO_API_KEY",
@@ -164,19 +165,12 @@ CONFIG = {
     # 生成解说时使用 speech_rate * safety_margin 作为约束
     "speech_rate": env_float("SPEECH_RATE", 3.9, minimum=0.5),  # 旧值 3.5 系统性偏低 ~10-17%
     "speech_safety_margin": env_float("SPEECH_SAFETY_MARGIN", 0.85, minimum=0.1),  # 保守系数：TTS 实际语速有 ±20% 波动
-    # Block-coverage lint thresholds — promoted from inline .get() literals to real CONFIG keys (tunable; defaults unchanged)
+    # Block-coverage targets the brief derives its first-draft block count from
     "narration_coverage_target": 0.7,   # rough first-draft/diagnostic fallback; content-led audio decisions may differ (not a quota)
-    "narration_coverage_max": 0.85,     # above this coverage → no_original_blocks (narration is wall-to-wall)
-    "narration_coverage_min": 0.5,      # below this coverage → under_narrated
     "narration_block_seconds": 9.0,     # block cadence used to derive target block count
-    "original_block_min_seconds": 2.5,  # a deliberate original-audio gap must be at least this long
-    "narration_block_min_chars": 16,    # below this avg block size → fragmented_beats
     "breath_ms": 250,  # 段间呼吸空间(ms)；block recap 块内连贯、块间留原声呼吸
     "narration_speed": env_float("NARRATION_SPEED", 1.15, minimum=0.5),  # 解说整体提速(atempo)，默认回到可懂区间；长片可设 1.0
     "narration_tail_pad_seconds": 0.1,  # 解说尾部最少留白；短 slot 会自动压低 delay 避免截断
-    "quiet_overlap_min_ratio": 0.8,  # 解说段至少多少比例落在安静窗口内才标记为非对白重叠
-    "visual_beat_max_seconds": 18.0,  # 单段解说超过该时长且跨多个帧锚点时给 lint 提醒
-    "visual_beat_max_facts": 3,  # 单段解说最多建议覆盖的 frame_facts 锚点数量
     "asr_chunk_min_chars": env_int("ASR_CHUNK_MIN_CHARS", 500, minimum=1),  # brief 中 ASR 写作分块最小字数/词数
     "asr_chunk_max_chars": env_int("ASR_CHUNK_MAX_CHARS", 800, minimum=1),  # brief 中 ASR 写作分块最大字数/词数
     "silence_noise_threshold": "-25dB",  # ffmpeg silencedetect 噪声阈值
@@ -250,6 +244,57 @@ def load_background_research(work_dir):
         raise ValueError("background_research.json 顶层必须是 JSON 对象（{...}）")
     return data
 
+# MiMo refusal detection, defined once for this skill. Two deliberately different tests:
+#
+# - Narrow (`is_moderation_refusal`): ASR windows and per-scene VLM replies. MiMo answers a
+#   moderated request with the English sentence "The request was rejected because it was
+#   considered high risk" as the reply content. Only the provider's own wording is matched:
+#   a false positive here blanks real dialogue or a real scene description.
+# - Broad (`is_usable_overview_chunk`): only the optional MiMo video overview. A false
+#   positive there just retries the chunk and falls back to the frame description, so it also
+#   rejects generic refusal phrasing ("违规", "content policy", ...) that would be too
+#   aggressive for transcripts.
+MODERATION_REFUSAL_MARKERS = ("request was rejected", "considered high risk")
+OVERVIEW_REJECTION_MARKERS = MODERATION_REFUSAL_MARKERS + (
+    "high risk", "content policy", "cannot process", "无法处理", "内容审核", "违规",
+)
+
+
+def is_moderation_refusal(text):
+    """True when a MiMo reply is a moderation refusal, not a transcript or description.
+
+    Both markers must appear in a short reply: one of them alone ("my request was rejected")
+    is plausible English dialogue, and a 15 s transcript window must not be blanked for it.
+    """
+    low = " ".join(str(text or "").lower().split())
+    return len(low) <= 200 and all(marker in low for marker in MODERATION_REFUSAL_MARKERS)
+
+
+def is_usable_overview_chunk(content):
+    """A MiMo overview chunk is usable only if it is non-empty and carries no refusal phrasing."""
+    low = str(content or "").strip().lower()
+    return bool(low) and not any(marker in low for marker in OVERVIEW_REJECTION_MARKERS)
+
+
+def offline_ignored_settings(api_key, endpoint_key):
+    """Cache-settings keys not compared when no credential is set.
+
+    The default endpoint URL is derived from the key prefix (tp-* → Token Plan cluster), so
+    unsetting the key changes it although the provider output did not change, and nothing can
+    be recomputed without a key anyway: an offline rerun must reuse the paid artifact, not
+    discard it. With a key every setting is compared."""
+    return () if api_key else (endpoint_key,)
+
+
+def settings_match(cached, current, ignore=()):
+    """True when two cache-settings dicts are equal outside the `ignore` keys."""
+    if not isinstance(cached, dict) or not isinstance(current, dict):
+        return False
+    return {k: v for k, v in cached.items() if k not in ignore} == {
+        k: v for k, v in current.items() if k not in ignore
+    }
+
+
 def file_identity(path):
     """{"size", "mtime_ns"} of a file: the cache identity recorded instead of content hashes."""
     st = os.stat(os.fspath(path))
@@ -286,9 +331,8 @@ def _sanitize_api_error(value, limit=500):
     text = _ERROR_KEY_RE.sub("<redacted-key>", text)
     return text[:limit]
 
-def _api_headers(api_provider=None, api_url=None, api_key=None):
+def _api_headers(api_key=None):
     """Build MiMo auth headers (OpenAI-compatible chat/completions with an api-key header)."""
-    del api_provider, api_url  # MiMo is the only provider; signature kept for call sites
     key = CONFIG["api_key"] if api_key is None else api_key
     return {
         "Content-Type": "application/json",
@@ -296,9 +340,8 @@ def _api_headers(api_provider=None, api_url=None, api_key=None):
         "api-key": key,
     }
 
-def _prepare_api_payload(payload, api_provider=None, api_url=None):
+def _prepare_api_payload(payload):
     """Normalize payload fields for MiMo's OpenAI-compatible chat/completions API."""
-    del api_provider, api_url
     normalized = dict(payload)
     if "max_tokens" in normalized and "max_completion_tokens" not in normalized:
         normalized["max_completion_tokens"] = normalized.pop("max_tokens")
@@ -314,10 +357,9 @@ def _prepare_api_payload(payload, api_provider=None, api_url=None):
     return normalized
 
 def _mimo_endpoint(kind):
-    """Return per-capability MiMo endpoint settings (video understanding / TTS / ASR)."""
+    """Return per-capability MiMo endpoint settings (video understanding / ASR)."""
     by_kind = {
         "video": ("mimo_video_api_url", "mimo_video_api_key", "mimo_video_env_var"),
-        "tts": ("mimo_tts_api_url", "mimo_tts_api_key", "mimo_tts_env_var"),
         "asr": ("mimo_asr_api_url", "mimo_asr_api_key", "mimo_asr_env_var"),
     }
     if kind not in by_kind:
@@ -326,7 +368,7 @@ def _mimo_endpoint(kind):
     return {
         "api_url": CONFIG.get(url_key) or CONFIG.get("mimo_api_url"),
         "api_key": CONFIG.get(key_key) or CONFIG.get("mimo_api_key"),
-        "api_env_var": CONFIG.get(src_key, "MIMO_API_KEY"),
+        "api_env_var": CONFIG[src_key],
     }
 
 def _call_mimo_endpoint(kind, payload, max_retries=10):
@@ -334,7 +376,6 @@ def _call_mimo_endpoint(kind, payload, max_retries=10):
     return api_call(
         payload,
         max_retries=max_retries,
-        api_provider="mimo",
         api_url=settings["api_url"],
         api_key=settings["api_key"],
         api_env_var=settings["api_env_var"],
@@ -348,7 +389,7 @@ def mimo_asr_api_call(payload, max_retries=10):
     """Call the MiMo speech-recognition (ASR) endpoint."""
     return _call_mimo_endpoint("asr", payload, max_retries=max_retries)
 
-def api_call(payload, max_retries=8, *, api_provider=None, api_url=None, api_key=None, api_env_var=None):
+def api_call(payload, max_retries=8, *, api_url=None, api_key=None, api_env_var=None):
     """调用 OpenAI-compatible API，带重试。
 
     长视频理解会发出数百次 VLM/ASR 调用，集群的 429 限流是常态而非错误，所以重试更耐心
@@ -356,8 +397,8 @@ def api_call(payload, max_retries=8, *, api_provider=None, api_url=None, api_key
     集群的配额窗口常以分钟计，所以 429 在没有 Retry-After 时也至少等 10s，给窗口时间复位。
     """
     endpoint = normalize_api_url(api_url if api_url is not None else CONFIG["api_url"])
-    headers = _api_headers(api_provider=api_provider, api_url=endpoint, api_key=api_key)
-    data = json.dumps(_prepare_api_payload(payload, api_provider=api_provider, api_url=endpoint)).encode("utf-8")
+    headers = _api_headers(api_key=api_key)
+    data = json.dumps(_prepare_api_payload(payload)).encode("utf-8")
 
     for attempt in range(max_retries):
         try:

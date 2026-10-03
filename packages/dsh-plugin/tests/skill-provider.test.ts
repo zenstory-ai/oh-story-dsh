@@ -232,7 +232,10 @@ describe("Drama Skills bundled provider", () => {
     // oh_story_production's jobKind is image | video | composition: speech and music keep the gate but never reach the task board.
     expect(production?.content).toContain("from this Skill it registers image and video jobs only");
     expect(production?.content).toContain("speech (tts) and music jobs pass through the same prepare → explicit creator confirmation → run gate but are never registered with track_job");
-    expect(production?.content).toContain("In this DSH integration audio is never bound as a video job's reference: upstream's creator-first path has no audio binding (输入参考图 takes png/jpg/webp images only) and audio reaches the cut only at the edit stage, as 音效 lines that render mixes in or as an external mix.");
+    expect(production?.content).toContain("Compile them as reference_audio bindings, preserve character exactly from 角色");
+    expect(production?.content).toContain("separate 参考音频 line, never in 输入参考图 or the workbench image picker");
+    expect(production?.content).toContain("reject before paid submission, never drop or substitute the binding");
+    expect(production?.content).not.toContain("audio is never bound");
     // The claim above rests on prepare's creator-first declaration grammar.
     const productionTool = await readFile(resolve(dramaRoot, "short-drama-produce/scripts/production_tool.py"), "utf8");
     expect(productionTool).toContain('REFERENCE_SUFFIX_RE = r"(?:png|jpe?g|webp)"');
@@ -242,9 +245,9 @@ describe("Drama Skills bundled provider", () => {
     expect(edit?.content).toContain("剧集/<EP>/制作成果/成片/");
     expect(edit?.content).toContain("The default burned-subtitle route needs an ffmpeg built with libass");
     expect(edit?.content).not.toContain("zero-dependency");
-    expect(edit?.content).toContain("`- 未采用镜头：MOTION-…（理由：…）；MOTION-…（理由：…）`");
-    expect(edit?.content).toContain("names 文件缺失, 质量不可用 or 叙事取舍");
-    expect(edit?.content).toContain("Every cut must share one width, height and frame rate");
+    expect(edit?.content).toContain("`- 未采用镜头：MOTION-…（理由：…）；SHOT-…（理由：…）`");
+    expect(edit?.content).toContain("reasons name 文件缺失, 质量不可用 or 叙事取舍");
+    expect(edit?.content).toContain("Every video cut must share one width, height and frame rate");
     expect(edit?.content).toContain("Write them under 剧集/<EP>/制作成果/成片/规格统一/, an edit-owned intermediate, never beside the produce-stage originals and never over produced footage, and name them without the original's job-id token");
     expect(edit?.content).not.toContain("beside the originals");
     expect(edit?.content).toContain("point 来源 at the new file");
@@ -257,6 +260,9 @@ describe("Drama Skills bundled provider", () => {
     expect(edit?.content).toContain("ends as render does with whole-film two-pass loudnorm to the declared 交付响度");
     expect(edit?.content).toContain("and only then replaces 剧集/<EP>/制作成果/成片/成片.mp4");
     expect(edit?.content).toContain("Run edit_tool.py verify last, on that delivered file, and report every 未测 item as untested");
+    expect(edit?.content).toContain("Static cuts are rendered to the delivery specification");
+    expect(edit?.content).toContain("cross-cut `配音` and looping `环境声`");
+    expect(edit?.content).toContain("The native production sequence accepts video and accepted keyframe images");
     expect(edit?.content).toContain("This stage never generates footage");
   });
 });
@@ -295,7 +301,7 @@ describe("NovelToGame bundled provider", () => {
 });
 
 describe("video-recap bundled provider", () => {
-  it("publishes the complete six-Skill pipeline with native DSH boundaries", async () => {
+  it("publishes the production pipeline and optional video-reference with native DSH boundaries", async () => {
     const provider = createVideoRecapSkillProvider(videoRoot);
     const listed = await provider.list({});
     if (!Array.isArray(listed)) throw new Error("Expected a complete video-recap catalog.");
@@ -303,6 +309,7 @@ describe("video-recap bundled provider", () => {
       "video-assemble",
       "video-cut",
       "video-recap",
+      "video-reference",
       "video-script",
       "video-understanding",
       "video-voiceover"
@@ -317,6 +324,10 @@ describe("video-recap bundled provider", () => {
       const skill = await provider.get(candidate, {});
       expect(skill?.content).toContain("The Video Studio is a preview and artifact surface");
       expect(skill?.content).toContain("video-recaps/<project>/");
+      expect(skill?.content).toContain("on-demand video-reference Skill");
+      expect(skill?.content).toContain("full-mode validation is lint-only");
+      expect(skill?.content).toContain("final_qc.json uses schema 2 findings");
+      expect(skill?.content).toContain("deliver external .srt");
       expect(skill?.content).toContain("MIMO_API_KEY, FISH_API_KEY");
       expect(skill?.content).toContain("dashboard_server.py and its dashboard assets are not bundled");
       expect(skill?.resourceBase).toEqual({ kind: "directory", path: resolve(videoRoot, candidate.name) });

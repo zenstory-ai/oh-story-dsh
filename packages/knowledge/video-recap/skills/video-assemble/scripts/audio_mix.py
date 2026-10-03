@@ -1,6 +1,5 @@
-"""Loudness, source handoffs, ducking envelopes, and audio mix graphs."""
+"""Source handoffs, ducking envelopes, and audio mix graphs."""
 
-import json
 import re
 from pathlib import Path
 
@@ -10,104 +9,7 @@ from audio_automation import (
     ducking_expression,
     release_ducking_expression,
 )
-from lib import CONFIG, filter_file_args, log, run_cmd
-
-def _limiter_filter():
-    return f"alimiter=limit={CONFIG['final_limiter_peak']:.2f}:level=false"
-
-
-def _loudness_mode(measured=None):
-    if not CONFIG["final_loudnorm"]:
-        return "limiter_only"
-    return "two_pass_linear" if measured else "equivalent"
-
-
-def final_loudnorm_filter(measured=None):
-    """Final-mix loudness normalization/limiter filter from CONFIG.
-
-    Ducking branches set only relative balance; this single stage owns the
-    absolute output loudness so the recap is not left too quiet. When `measured`
-    is supplied from a first loudnorm pass, ffmpeg runs the deterministic second
-    pass; without it we still force the same target and peak limiter as a
-    documented equivalent/fallback path.
-    """
-    if not CONFIG["final_loudnorm"]:
-        return _limiter_filter()
-    filt = (
-        f"loudnorm=I={CONFIG['target_lufs']}"
-        f":TP={CONFIG['target_true_peak']}"
-        f":LRA={CONFIG['target_lra']}"
-        f":linear=true"
-    )
-    if measured:
-        for src, dst in (
-            ("input_i", "measured_I"),
-            ("input_tp", "measured_TP"),
-            ("input_lra", "measured_LRA"),
-            ("input_thresh", "measured_thresh"),
-            ("target_offset", "offset"),
-        ):
-            if src in measured:
-                filt += f":{dst}={measured[src]}"
-    filt += ":print_format=summary"
-    return f"{filt},{_limiter_filter()}"
-
-
-def _parse_loudnorm_json(text):
-    """Extract ffmpeg loudnorm JSON from stderr/stdout."""
-    for match in reversed(list(re.finditer(r"\{[\s\S]*?\}", text))):
-        try:
-            data = json.loads(match.group(0))
-        except ValueError:
-            continue
-        if {"input_i", "input_tp", "input_lra", "input_thresh", "target_offset"} <= set(data):
-            return data
-    return None
-
-
-def _loudnorm_first_pass_filter():
-    return (
-        f"loudnorm=I={CONFIG['target_lufs']}"
-        f":TP={CONFIG['target_true_peak']}"
-        f":LRA={CONFIG['target_lra']}"
-        f":print_format=json"
-    )
-
-
-def _run_loudnorm_first_pass(input_video, narration_wav, original_audio_input,
-                             bgm_input, filter_complex, work_dir):
-    """Measure the exact mixed audio graph before final render.
-
-    Returns ffmpeg loudnorm JSON, or None when probing fails. The caller then
-    falls back to the documented equivalent single-pass target+limiter filter.
-    """
-    if not CONFIG["final_loudnorm"]:
-        return None
-    probe_fc = f"{filter_complex};[aout]{_loudnorm_first_pass_filter()}[lnprobe]"
-    probe_script = Path(work_dir) / ".filter_complex_loudnorm_probe.txt"
-    probe_script.write_text(probe_fc, encoding="utf-8")
-    cmd = [
-        "ffmpeg", "-y",
-        "-i", str(input_video),
-        "-i", str(narration_wav),
-        *original_audio_input,
-        *bgm_input,
-        *filter_file_args("filter_complex", probe_script),
-        "-map", "[lnprobe]",
-        "-f", "null", "-",
-    ]
-    try:
-        result = run_cmd(cmd)
-    finally:
-        probe_script.unlink(missing_ok=True)
-    if result.returncode != 0:
-        log(f"  ⚠️ loudnorm 首遍测量失败，降级到目标滤镜+limiter: {result.stderr}")
-        return None
-    measured = _parse_loudnorm_json(result.stdout + "\n" + result.stderr)
-    if not measured:
-        log("  ⚠️ loudnorm 首遍未返回 JSON，降级到目标滤镜+limiter")
-        return None
-    return measured
+from lib import CONFIG, log
 
 
 def _seg_place_window(seg):
@@ -115,8 +17,14 @@ def _seg_place_window(seg):
     return seg["actual_place_start"], seg["actual_place_end"]
 
 
+# After narration ends, original audio may stay ducked this long waiting for a sentence-end
+# anchor. Beyond it the duck releases at the narration end: coarse-ASR anchors are estimates,
+# and holding a duck for tens of seconds buries dialogue the viewer must hear.
+SOURCE_HANDOFF_MAX_HOLD_SECONDS = 3.0
+
+
 def _load_sentence_handoff_anchors(work_dir):
-    """Load high/medium sentence anchors and their measured pause windows."""
+    """Load usable sentence anchors (`boundary_use` verified/unverified) and their pauses."""
     work_dir = Path(work_dir)
     cut_mode = (work_dir / "edited_source.mp4").exists() or (
         work_dir / "clip_plan_validated.json"
@@ -139,16 +47,31 @@ def _load_sentence_handoff_anchors(work_dir):
         payload = {**payload, "require_measured": True}
     anchors = {}
     for item in payload["sentence_anchors"]:
-        if item["confidence"] not in {"high", "medium"}:
+        # Schema-1 anchors (no `boundary_use`) came from the old coarse estimator: high/medium
+        # labels there are usable but unverified.
+        use = item.get("boundary_use") or (
+            "unverified" if item["confidence"] in {"high", "medium"} else "none"
+        )
+        if use == "none":
             continue
         when = float(item["time"])
         pause_start = float(item.get("pause_start", when - 0.12))
         row = {
             "time": round(when, 4),
             "pause_start": round(max(0.0, min(pause_start, when)), 4),
+            "verified": use == "verified",
         }
-        anchors[(row["time"], row["pause_start"])] = row
+        key = (row["time"], row["pause_start"])
+        row["verified"] = row["verified"] or anchors.get(key, {}).get("verified", False)
+        anchors[key] = row
     return sorted(anchors.values(), key=lambda row: row["time"]), artifact, payload
+
+
+def _prefer_verified(matches):
+    """First verified anchor among time-ordered matches, else the first match, else None."""
+    return next((anchor for anchor in matches if anchor["verified"]), None) or (
+        matches[0] if matches else None
+    )
 
 
 def _timed_rows(rows):
@@ -163,17 +86,86 @@ def _asr_segments(work_dir):
     return _load_work_json(work_dir, "asr_result.json") or []
 
 
+# Interjections and common ASR artifacts on screams/music. A window whose text is only these
+# is not dialogue at a clip edge or narration entry; real short lines such as "救我！" still are.
+# Same copy in video-cut, video-script and video-assemble (parity-tested by function).
+_NON_DIALOGUE_TOKENS = frozenset(
+    "啊 嗯 哼 哦 呃 唉 嘿 呦 哈 呀 hi yeah ok okay oh uh ah hmm".split()
+)
+_NON_DIALOGUE_CJK = frozenset("啊嗯哼哦呃唉嘿呦哈呀")
+# Lines cross 15s ASR window edges (a line may run 13.2–15.4 while its window ends at 15.0),
+# so an interjection-only window next to real dialogue keeps this much of its shared edge.
+_INTERJECTION_GUARD_SECONDS = 1.0
+
+
+def _interjection_only(text):
+    tokens = [token for token in re.split(r"[\W_]+", text.lower()) if token]
+    # Punctuation-only rows ("……", "？") are often ASR for unintelligible speech: keep them.
+    return bool(tokens) and all(
+        token in _NON_DIALOGUE_TOKENS or set(token) <= _NON_DIALOGUE_CJK for token in tokens
+    )
+
+
+def _dialogue_speech_spans(rows):
+    """Merged dialogue spans from timed ASR rows.
+
+    A row holding only interjections ("啊！", "Hi.") is not dialogue, except a
+    `_INTERJECTION_GUARD_SECONDS` guard on an edge it shares with a dialogue row. A row
+    whose text is empty or whitespace (ASR heard no words) is timing-only evidence: it is
+    skipped here and guards nothing. A row with no `text` field is measured timing whose
+    words are unknown and counts as dialogue.
+    """
+    rows = sorted(
+        (
+            {
+                "start": row["start"],
+                "end": row["end"],
+                "dialogue": not _interjection_only(row.get("text", "")),
+            }
+            for row in rows
+            if "text" not in row or row["text"].strip()
+        ),
+        key=lambda row: (row["start"], row["end"]),
+    )
+    spans = []
+    for idx, row in enumerate(rows):
+        if row["dialogue"]:
+            spans.append({"start": row["start"], "end": row["end"]})
+            continue
+        before = rows[idx - 1] if idx > 0 else None
+        after = rows[idx + 1] if idx + 1 < len(rows) else None
+        if before and before["dialogue"] and row["start"] - before["end"] <= 0.05:
+            end = min(row["end"], row["start"] + _INTERJECTION_GUARD_SECONDS)
+            spans.append({"start": row["start"], "end": end})
+        if after and after["dialogue"] and after["start"] - row["end"] <= 0.05:
+            start = max(row["start"], row["end"] - _INTERJECTION_GUARD_SECONDS)
+            spans.append({"start": start, "end": row["end"]})
+    spans.sort(key=lambda row: (row["start"], row["end"]))
+    merged = []
+    for span in spans:
+        if merged and span["start"] <= merged[-1]["end"] + 0.05:
+            merged[-1]["end"] = max(merged[-1]["end"], span["end"])
+        else:
+            merged.append(span)
+    return merged
+
+
 def _handoff_speech_evidence(work_dir, payload):
-    speech = _timed_rows(payload.get("speech_spans", []))
+    """(speech, quiet, dialogue) rows; `dialogue` drops interjection-only windows and
+    decides only whether a narration entry interrupts source speech.
+
+    ASR fallback rows with empty text are windows where nothing was recognized, not
+    speech (video-cut and video-script drop them the same way). Output-clock
+    `speech_spans` carry no `text` and stay timing-only dialogue evidence.
+    """
+    rows = payload.get("speech_spans", [])
     quiet = _timed_rows(payload.get("quiet_windows", []))
-    if payload.get("require_measured"):
-        return speech, quiet
-    if not speech:
-        speech = _timed_rows(_asr_segments(work_dir))
-    if not quiet:
-        silence = _load_work_json(work_dir, "silence_periods.json") or []
-        quiet = _timed_rows(row for row in silence if not row["has_speech"])
-    return speech, quiet
+    if not payload.get("require_measured"):
+        rows = rows or [row for row in _asr_segments(work_dir) if row["text"].strip()]
+        if not quiet:
+            silence = _load_work_json(work_dir, "silence_periods.json") or []
+            quiet = _timed_rows(row for row in silence if not row["has_speech"])
+    return _timed_rows(rows), quiet, _timed_rows(_dialogue_speech_spans(rows))
 
 
 def _merged_handoff_intervals(start, end, rows):
@@ -221,15 +213,63 @@ def _measured_speech_owned(
 
 
 def _entry_speech_owned(
-    start, speech, quiet, anchors, authored, require_measured=False, tolerance=0.05
+    start, speech, dialogue, quiet, anchors, authored, require_measured=False, tolerance=0.05
 ):
     if any(row["start"] - tolerance <= start <= row["end"] + tolerance for row in quiet):
         return False
-    if any(row["start"] - tolerance <= start < row["end"] - tolerance for row in speech):
+    if any(row["start"] - tolerance <= start < row["end"] - tolerance for row in dialogue):
         return True
     if speech:
         return False
     return True if anchors or require_measured else bool(authored)
+
+
+def _unowned_entry_status(start, speech, quiet, tolerance=0.05):
+    """Entry status when a narration entry does not interrupt source dialogue.
+
+    `non_dialogue_source` when the entry lands inside measured speech that holds only
+    interjections (a scream, "Hi."); `quiet_source` for measured quiet or no speech.
+    """
+    if any(row["start"] - tolerance <= start <= row["end"] + tolerance for row in quiet):
+        return "quiet_source"
+    if any(row["start"] <= start < row["end"] for row in speech):
+        return "non_dialogue_source"
+    return "quiet_source"
+
+
+def _dialogue_free_pull_start(candidate, written_start, dialogue, quiet, tolerance=0.05):
+    """Earliest start in [candidate, written_start] whose pulled stretch holds no dialogue.
+
+    Paragraph tightening plays a block up to `narration_max_pull_seconds` before its
+    written `start`, after narration lint checked only that written entry. Measured quiet
+    inside a dialogue span is not dialogue. When dialogue remains in the stretch, the
+    block starts no earlier than the end of the last such piece.
+    """
+    safe = candidate
+    quiet_intervals = _merged_handoff_intervals(candidate, written_start, quiet)
+    for left, right in _merged_handoff_intervals(candidate, written_start, dialogue):
+        pieces = [(left, right)]
+        for quiet_left, quiet_right in quiet_intervals:
+            pieces = [
+                part
+                for piece_left, piece_right in pieces
+                for part in (
+                    (piece_left, min(piece_right, quiet_left)),
+                    (max(piece_left, quiet_right), piece_right),
+                )
+                if part[1] - part[0] > 0
+            ]
+        for piece_left, piece_right in pieces:
+            if piece_right - piece_left > tolerance:
+                safe = max(safe, piece_right)
+    return safe
+
+
+def _paragraph_pull_evidence(work_dir):
+    """(dialogue, quiet) rows on the narration clock for `_dialogue_free_pull_start`."""
+    _anchors, _artifact, payload = _load_sentence_handoff_anchors(work_dir)
+    _speech, quiet, dialogue = _handoff_speech_evidence(work_dir, payload)
+    return dialogue, quiet
 
 
 def _work_has_source_speech(work_dir, speech_spans, require_measured):
@@ -239,15 +279,20 @@ def _work_has_source_speech(work_dir, speech_spans, require_measured):
 
 
 def _apply_source_sentence_handoffs(tts_segments, work_dir, video_duration):
-    """Keep source audio ducked until a safe sentence boundary after narration.
+    """Keep source audio ducked until a nearby sentence boundary after narration.
 
     This does not move or trim narration. It only extends the ORIGINAL-audio duck
-    envelope so returning the source track cannot reveal the middle of a sentence.
+    envelope so returning the source track does not reveal the middle of a sentence —
+    for at most SOURCE_HANDOFF_MAX_HOLD_SECONDS. With no anchor in that window the duck
+    releases at the narration end (`bounded_release`) instead of burying source dialogue
+    until a distant anchor.
     """
     fade = CONFIG["duck_fade_seconds"]
     bridge = CONFIG["duck_bridge_seconds"]
     anchors, artifact, evidence_payload = _load_sentence_handoff_anchors(work_dir)
-    speech_spans, quiet_windows = _handoff_speech_evidence(work_dir, evidence_payload)
+    speech_spans, quiet_windows, dialogue_spans = _handoff_speech_evidence(
+        work_dir, evidence_payload
+    )
     require_measured = evidence_payload.get("require_measured", False)
     placed = []
     for seg in tts_segments:
@@ -287,44 +332,66 @@ def _apply_source_sentence_handoffs(tts_segments, work_dir, video_duration):
         entry_owned = _entry_speech_owned(
             run["start"],
             speech_spans,
+            dialogue_spans,
             quiet_windows,
             anchors,
             first["overlaps_speech"],
             require_measured=require_measured,
         )
         speech_owned = entry_owned or any(ownership)
+        if not entry_owned:
+            first["source_entry_status"] = _unowned_entry_status(
+                run["start"], speech_spans, quiet_windows
+            )
         if not speech_owned:
             report.append({"start": run["start"], "end": run["end"], "status": "quiet_source"})
             continue
         last = run["segments"][-1]
-        start_safe = run["start"] <= 0.25 or any(
-            anchor["pause_start"] - 0.05 <= run["start"] <= anchor["time"] + 0.08
+        entry_anchor = _prefer_verified([
+            anchor
             for anchor in anchors
-        )
+            if anchor["pause_start"] - 0.05 <= run["start"] <= anchor["time"] + 0.08
+        ])
+        start_safe = run["start"] <= 0.25 or entry_anchor is not None
         if entry_owned and anchors and not start_safe:
             first["source_handoff_blocking"] = True
             first["source_entry_status"] = "unsafe_entry"
-        elif not entry_owned:
-            first["source_entry_status"] = "quiet_source"
-        else:
-            first["source_entry_status"] = "sentence_boundary" if anchors else "unverified"
+        elif entry_owned and not anchors:
+            first["source_entry_status"] = "unverified"
+        elif entry_owned and entry_anchor is not None and not entry_anchor["verified"]:
+            first["source_entry_status"] = "sentence_boundary_unverified"
+        elif entry_owned:
+            first["source_entry_status"] = "sentence_boundary"
 
-        restore_anchor = next(
-            (anchor for anchor in anchors if anchor["time"] >= run["end"] - 0.01),
-            None,
-        )
+        max_hold = SOURCE_HANDOFF_MAX_HOLD_SECONDS
+        restore_anchor = _prefer_verified([
+            anchor
+            for anchor in anchors
+            if run["end"] - 0.01 <= anchor["time"] <= run["end"] + max_hold
+        ])
         if restore_anchor is not None:
             # Hold the source low through its last spoken sample, then fit the release
             # entirely inside the measured pause. Never begin the ramp `fade` seconds
             # before the anchor when that would expose the final source phoneme.
             duck_end = max(run["end"], restore_anchor["pause_start"])
             restore_at = max(duck_end, restore_anchor["time"])
-            status = "sentence_boundary"
-        elif anchors:
-            # No later complete source sentence: never expose a fragment at the tail.
+            status = (
+                "sentence_boundary"
+                if restore_anchor["verified"]
+                else "sentence_boundary_unverified"
+            )
+        elif anchors and float(video_duration) - run["end"] <= max_hold:
+            # No complete source sentence before a near tail: never expose a fragment there.
             restore_at = float(video_duration)
             duck_end = float(video_duration)
             status = "held_to_timeline_end"
+        elif anchors:
+            # No anchor within the bound: release at the narration end, same values as
+            # `no_source_speech`. Up to the ramp of a source tail is audible; a long duck
+            # would instead bury dialogue that may matter more.
+            restore_at = run["end"] + fade
+            duck_end = run["end"]
+            status = "bounded_release"
         elif source_has_speech:
             first["source_handoff_blocking"] = True
             first["source_entry_status"] = "anchors_unavailable"
@@ -343,6 +410,7 @@ def _apply_source_sentence_handoffs(tts_segments, work_dir, video_duration):
             "start": round(run["start"], 4),
             "end": round(run["end"], 4),
             "restore_at": last["source_restore_at"],
+            "hold_seconds": round(max(0.0, last["source_restore_at"] - run["end"]), 4),
             "status": status,
             "anchor_artifact": artifact,
         })
@@ -404,17 +472,8 @@ def _build_audio_filter_complex(
         the gaps so the recap never drops to dead air between sentences.
       - bgm (input [2:a], optional): a looped music bed, gently ducked under narration.
       - narration (input [1:a]): the TTS, boosted and laid on top.
-    CONFIG["ducking_mode"] (default "fixed") selects the original-track strategy:
-    fixed = the gap-fill envelope above; sidechaincompress = auto-duck keyed off the
-    narration; none = no ducking. Placement comes from actual_place_start/end.
+    Placement comes from actual_place_start/end.
     """
-    ducking_mode = CONFIG["ducking_mode"]
-    if ducking_mode == "sidechaincompress" and any(
-        "source_duck_end" in seg and seg["source_duck_end"] > seg["actual_place_end"] + 1e-6
-        for seg in tts_segments
-    ):
-        log("sidechaincompress 无法保持句末交接窗口，已回退 fixed ducking")
-        ducking_mode = "fixed"
     narr_vol = CONFIG["ducking_narr_weight"]
     fade = CONFIG["duck_fade_seconds"]
     bridge = CONFIG["duck_bridge_seconds"]
@@ -431,25 +490,7 @@ def _build_audio_filter_complex(
         else:
             bgm_chain = f"{bgm_in}volume={base},aresample=48000[bgm];"
 
-    if ducking_mode == "sidechaincompress":
-        # The narration keys the compressor; split it so it can also be mixed in.
-        head = (
-            f"{original_in}aresample=48000[o0];"
-            "[1:a]aresample=48000,asplit=2[sckey][scnarr];"
-            f"[o0][sckey]sidechaincompress="
-            f"threshold={CONFIG['ducking_threshold']}:ratio={CONFIG['ducking_ratio']}"
-            f":attack={CONFIG['ducking_attack']}:release={CONFIG['ducking_release']}"
-            f":knee=2.5:makeup={CONFIG['ducking_makeup']}:level_sc={CONFIG['ducking_level_sc']}[orig];"
-        )
-        narr = f"[scnarr]volume={narr_vol}[narr];"
-        if bgm_chain:
-            return head + bgm_chain + narr + "[orig][bgm][narr]amix=inputs=3:duration=first:dropout_transition=0:normalize=0[aout]"
-        return head + narr + "[orig][narr]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]"
-
-    if ducking_mode == "none":
-        return f"{original_in}aresample=48000[orig];" + _amix_tail(narr_vol, bgm_chain)
-
-    # fixed (default): gap-fill ducking envelope on the original track.
+    # Gap-fill ducking envelope on the original track.
     idle = CONFIG["idle_orig_volume"]
     speech_vol = CONFIG["speech_ducking_volume"]
     quiet_vol = CONFIG["zone_ducking_volume"]

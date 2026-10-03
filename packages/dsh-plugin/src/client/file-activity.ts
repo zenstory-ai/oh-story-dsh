@@ -114,7 +114,7 @@ function parsedArgs(raw: string): Record<string, unknown> | undefined {
   } catch { return undefined; }
 }
 
-function mutationFromArgs(name: string, callId: string, argsRaw: string, stage: FileMutationActivity["stage"]): FileMutationActivity | undefined {
+function mutationFromArgs(name: string, callId: string, argsRaw: string, stage: FileMutationActivity["stage"], argumentsComplete?: boolean): FileMutationActivity | undefined {
   const complete = parsedArgs(argsRaw);
   if (name === "write") {
     return {
@@ -154,7 +154,7 @@ function mutationFromArgs(name: string, callId: string, argsRaw: string, stage: 
       callId, name, argsRaw, stage, path,
       operation: "replace-text",
       oldText: completedString(argsRaw, "old_str"),
-      newText: jsonStringPrefix(argsRaw, "new_str")?.value ?? (complete !== undefined ? "" : undefined),
+      newText: jsonStringPrefix(argsRaw, "new_str")?.value ?? ((argumentsComplete ?? complete !== undefined) ? "" : undefined),
       replaceAll: complete?.replace_all === true
     };
   }
@@ -188,7 +188,7 @@ export interface UndispatchedCall {
  * Calls of the open Turn whose Assistant step has finished streaming but that have no result yet.
  * DSH 0.1.7 hides such a call's tool row until its durable `tool/call` event — through pre-execute
  * hooks and any approval — so it is in neither `partial` nor the running calls, and a call it does
- * list stays `preparing` without arguments. The step's own tool-call block still holds them.
+ * list on rc.2 stays `preparing` without arguments. The step's own tool-call block still holds them.
  */
 export function undispatchedCalls(chat: ChatSnapshot): UndispatchedCall[] {
   const turnNumber = chat.timeline.turnOrder.at(-1);
@@ -227,9 +227,22 @@ export function fileMutations(
 ): FileMutationActivity[] {
   const values: FileMutationActivity[] = [];
   visitRunning(runningCalls, (call) => {
-    // A preparing call has no arguments; they come from `partial` or its finished step below.
-    if (call.phase !== "start") return;
-    const mutation = mutationFromArgs(call.name, call.callId, call.argsRaw, "running");
+    if (call.phase === "start") {
+      const mutation = mutationFromArgs(call.name, call.callId, call.argsRaw, "running");
+      if (mutation !== undefined) values.push(mutation);
+      return;
+    }
+    // Alpha publishes lazy arguments while preparing; rc.2 still relies on the
+    // Assistant block below. Read on every projection, since args grows in place.
+    if (call.args === undefined || !["write", "edit", "str_replace_editor"].includes(call.name)) return;
+    const fields: Record<string, unknown> = {};
+    for (const key of ["file_path", "path", "content", "file_text", "new_string", "new_str", "old_string", "old_str", "command", "insert_line", "replace_all"]) {
+      if (["old_string", "old_str", "command"].includes(key) && !call.args.complete(key)) continue;
+      const value = call.args.text(key) ?? call.args.value(key);
+      if (value !== undefined) fields[key] = value;
+    }
+    if (Object.keys(fields).length === 0) return;
+    const mutation = mutationFromArgs(call.name, call.callId, JSON.stringify(fields), "streaming", call.args.closed());
     if (mutation !== undefined) values.push(mutation);
   });
   for (const call of undispatched) {

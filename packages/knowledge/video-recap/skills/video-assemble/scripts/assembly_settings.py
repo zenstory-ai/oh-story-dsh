@@ -1,10 +1,10 @@
-"""Render-affecting settings payload recorded in the manifest and compared by resume logic."""
+"""Render-affecting settings payload recorded in assembly_manifest.json for audit."""
 
 from pathlib import Path
 
 from artifacts import _artifact_identity
 from assemble_constants import VISUAL_OVERLAYS
-from audio_mix import _loudness_mode, final_loudnorm_filter
+from loudness import _loudness_mode, final_loudnorm_filter
 from lib import CONFIG
 from source_subtitles import _has_user_subtitles, _source_subtitle_mask_policy
 from subtitles.core import _subtitle_style_config
@@ -14,10 +14,10 @@ from packaging import packaging_settings
 
 
 def assembly_settings_payload(work_dir=None, *, audio_mode="narration", audio_stream_index=0):
-    """Settings that affect the rendered video, as a plain nested dict compared with ``==`` by
-    pipeline resume logic. When work_dir is given, a user_subtitles presence flag and the
-    ``{size, mtime_ns}`` identity of the overlay/subtitle-track inputs are included so dropping
-    in or rewriting one of those files rebuilds the cached subtitles."""
+    """Settings that affect the rendered video, as a plain nested dict. assembly_manifest.json
+    records it for audit; nothing compares it to decide a rebuild. When work_dir is given, a
+    user_subtitles presence flag and the ``{size, mtime_ns}`` identity of the overlay and
+    subtitle-track inputs are included."""
     burn_subtitles = CONFIG["burn_subtitles"]
     mask_policy = _source_subtitle_mask_policy(work_dir)
     mask_source_subtitles = mask_policy["active"]
@@ -31,6 +31,7 @@ def assembly_settings_payload(work_dir=None, *, audio_mode="narration", audio_st
     settings = {
         "user_subtitles": _has_user_subtitles(work_dir),
         "burn_subtitles": burn_subtitles,
+        "subtitle_burn_degraded": CONFIG["burn_subtitles_degraded"],
         "force_video_reencode": CONFIG["force_video_reencode"],
         "encode": {
             "output_crf": CONFIG["output_crf"],
@@ -82,8 +83,6 @@ def assembly_settings_payload(work_dir=None, *, audio_mode="narration", audio_st
             narration_binding.get("tempo_policy") if narration_binding else None
         )
         settings["narration_timing"] = {
-            "delay_seconds": 0.0 if explicit_mix else CONFIG["narration_delay_seconds"],
-            "tail_pad_seconds": 0.0 if explicit_mix else CONFIG["narration_tail_pad_seconds"],
             "fade_ms": 0 if explicit_mix else CONFIG["fade_ms"],
             "narration_speed": (
                 1.0 if explicit_mix else
@@ -107,7 +106,6 @@ def assembly_settings_payload(work_dir=None, *, audio_mode="narration", audio_st
     if audio_mode in {"narration", "source-mix"} and not explicit_mix:
         # adopted-packet-copy never decodes or mixes, so mix settings cannot change it.
         settings["audio_mix"] = {
-            "ducking_mode": CONFIG["ducking_mode"],
             "duck_fade_seconds": CONFIG["duck_fade_seconds"],
             "duck_bridge_seconds": CONFIG["duck_bridge_seconds"],
             "ducking_narr_weight": CONFIG["ducking_narr_weight"],
@@ -115,14 +113,9 @@ def assembly_settings_payload(work_dir=None, *, audio_mode="narration", audio_st
             "idle_orig_volume": CONFIG["idle_orig_volume"],
             "speech_ducking_volume": CONFIG["speech_ducking_volume"],
             "zone_ducking_volume": CONFIG["zone_ducking_volume"],
-            "ducking_threshold": CONFIG["ducking_threshold"],
-            "ducking_ratio": CONFIG["ducking_ratio"],
-            "ducking_attack": CONFIG["ducking_attack"],
-            "ducking_release": CONFIG["ducking_release"],
-            "ducking_level_sc": CONFIG["ducking_level_sc"],
-            "ducking_makeup": CONFIG["ducking_makeup"],
             "final_loudnorm": final_loudnorm_filter(),
             "loudness_mode": _loudness_mode(),
+            "loudness_limiter_max_db": CONFIG["loudness_limiter_max_db"],
             "bgm_path": CONFIG["bgm_path"],
             "bgm_volume": CONFIG["bgm_volume"],
             "bgm_ducking_volume": CONFIG["bgm_ducking_volume"],

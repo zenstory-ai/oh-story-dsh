@@ -120,10 +120,7 @@ CONFIG = {
     "mimo_tts_model": os.environ.get("MIMO_TTS_MODEL", DEFAULT_MIMO_TTS_MODEL),
     "mimo_tts_voice": os.environ.get("MIMO_TTS_VOICE", "冰糖"),
     "voice_ref": os.environ.get("VOICE_REF", "").strip(),  # optional arbitrary reference audio for narration voice clone
-    "mimo_tts_style": os.environ.get(
-        "MIMO_TTS_STYLE",
-        "自然、清晰、有感染力，像在给观众讲故事；随剧情起伏，该紧张时紧张、该动情时动情，不平铺直叙。",
-    ),
+    "mimo_tts_style": "自然、清晰、有感染力，像在给观众讲故事；随剧情起伏，该紧张时紧张、该动情时动情，不平铺直叙。",
     "tts_provider": os.environ.get("TTS_PROVIDER", "auto").strip().lower(),
     "tts_timeout": env_int("TTS_TIMEOUT", 300, minimum=1),
     "fish_api_key": os.environ.get("FISH_API_KEY", ""),
@@ -135,16 +132,17 @@ CONFIG = {
     "mimo_disable_thinking": env_bool("MIMO_DISABLE_THINKING", True),
     "breath_ms": 250,  # 段间呼吸空间(ms)；block recap 块内连贯、块间留原声呼吸
     "narration_speed": env_float("NARRATION_SPEED", 1.15, minimum=0.5),  # 解说整体提速(atempo)，默认回到可懂区间；长片可设 1.0
-    "narration_cumulative_tempo_max": env_float("NARRATION_CUMULATIVE_TEMPO_MAX", 1.35, minimum=1.0),  # TTS rate × 全局 atempo × 段内 atempo 的累计上限
-    "narration_cumulative_tempo_hard_max": env_float("NARRATION_CUMULATIVE_TEMPO_HARD_MAX", 1.40, minimum=1.0),  # QC/阻断硬上限
-    "tts_segment_tempo_max": env_float("TTS_SEGMENT_TEMPO_MAX", 1.20, minimum=1.0),  # 兼容旧段内 atempo 上限；实际会被累计预算收紧
-    "tts_dynamic_params": True,  # 启用动态语速调节
+    "narration_cumulative_tempo_max": 1.35,  # TTS rate × 全局 atempo × 段内 atempo 的累计上限
+    "narration_cumulative_tempo_hard_max": 1.40,  # QC/阻断硬上限
+    "tts_segment_tempo_max": 1.20,  # 兼容旧段内 atempo 上限；实际会被累计预算收紧
     "tts_workers": env_int("TTS_WORKERS", 4, minimum=1),  # TTS 并行合成线程数
     "tts_retries": env_int("TTS_RETRIES", 3, minimum=1),  # 单段 TTS 失败重试次数
+    # 段音频时长合理性下限语速（字/秒，拉丁词按 1.5）：比它还慢说明 TTS 多读了内容，按失败重试；0 关闭
+    "tts_min_speech_rate": env_float("TTS_MIN_SPEECH_RATE", 2.5, minimum=0.0),
     "allow_partial_tts": env_bool("ALLOW_PARTIAL_TTS", False),
-    "tts_segment_normalize": env_bool("TTS_SEGMENT_NORMALIZE", True),  # 单段 TTS RMS 归一，降低段间忽大忽小
-    "tts_segment_target_rms_dbfs": env_float("TTS_SEGMENT_TARGET_RMS_DBFS", -20.0),
-    "tts_segment_peak_limit": env_float("TTS_SEGMENT_PEAK_LIMIT", 0.98, minimum=0.1),
+    "tts_segment_normalize": True,  # 单段 TTS RMS 归一，降低段间忽大忽小
+    "tts_segment_target_rms_dbfs": -20.0,
+    "tts_segment_peak_limit": 0.98,
 }
 
 
@@ -327,26 +325,3 @@ def api_call(payload, *, api_url, api_key, api_env_var, max_retries=8):
                 raise RuntimeError(f"API 调用失败 {max_retries} 次: {safe_error}")
 
 
-def _text_char_count(text):
-    """计算文本的有效字数（去除标点和空白，这些不占 TTS 朗读时间）。"""
-    return len(re.sub(r'[，。！？、；：…“”‘’《》〈〉\s"\'「」『』（）()【】\[\]—～·,.!?;:\\-]', '', text))
-
-
-def _truncate_at_sentence(text, max_chars):
-    """在句子边界截断，不产生残句。max_chars 按有效字符计（不含标点空白）。"""
-    if _text_char_count(text) <= max_chars:
-        return text
-    eff = 0
-    cutoff = len(text)
-    for i, ch in enumerate(text):
-        eff += 1 if _text_char_count(ch) else 0
-        if eff > max_chars:
-            cutoff = i + 1
-            break
-    idx = max(text[:cutoff].rfind(sep) for sep in ['。', '！', '？', '!', '?'])
-    if idx > 0:
-        return text[:idx + 1]
-    idx = max(text[:cutoff].rfind(sep) for sep in ['，', '、', '；', ','])
-    if idx > 3:
-        return text[:idx] + '。'
-    return ""

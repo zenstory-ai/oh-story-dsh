@@ -2,9 +2,9 @@
 """video-script validation entrypoint.
 
 Validate an agent-written narration.json against the local understanding index.
-Legacy full mode performs budget cleanup/deduplication and derives speech ownership.
-Protected mode keeps the approved timeline and metadata exact except for measured
-``overlaps_speech`` ownership.
+Validation never rewrites the agent's text, timing, order or metadata. Full-mode text
+that does not fit its window fails lint and goes back to the author. full and cut_output
+persist only the measured ``overlaps_speech`` ownership.
 """
 
 import argparse
@@ -12,13 +12,9 @@ import json
 import math
 from pathlib import Path
 
-from lib import CONFIG, log
-from narration_lint import (
-    _validate_narration_budget,
-    validate_narration_or_raise,
-)
+from lib import log
+from narration_lint import NarrationLintError, validate_narration_or_raise
 from speech_ownership import measure_narration_speech_ownership
-from timeline_fusion import _align_narration_to_quiet
 
 
 def _load(path):
@@ -57,16 +53,16 @@ def _validate_output_timeline_bounds(narration, duration, tolerance=0.05):
         start, end = seg["start"], seg["end"]
         if end <= -tolerance or start >= duration + tolerance:
             problems.append(
-                f"segment {idx} [{start:.3f},{end:.3f}] fully outside output_duration={duration:.3f}"
+                f"段 {idx + 1} [{start:.3f},{end:.3f}] fully outside output_duration={duration:.3f}"
             )
             continue
         if start < -tolerance:
             problems.append(
-                f"segment {idx} start={start:.3f} before output timeline (output_duration={duration:.3f})"
+                f"段 {idx + 1} start={start:.3f} before output timeline (output_duration={duration:.3f})"
             )
         if end > duration + tolerance:
             problems.append(
-                f"segment {idx} end={end:.3f} exceeds output_duration={duration:.3f}"
+                f"段 {idx + 1} end={end:.3f} exceeds output_duration={duration:.3f}"
             )
     if problems:
         raise SystemExit(
@@ -76,8 +72,17 @@ def _validate_output_timeline_bounds(narration, duration, tolerance=0.05):
 
 
 def main():
+    try:
+        _validate(_parse_args())
+    except NarrationLintError as exc:
+        # A lint failure is an ordinary result the author fixes from the summary,
+        # not a crash: exit non-zero with the summary only, no traceback.
+        raise SystemExit(str(exc)) from None
+
+
+def _parse_args():
     ap = argparse.ArgumentParser(
-        description="Validate + align agent-written narration.json."
+        description="Validate agent-written narration.json and measure speech ownership."
     )
     ap.add_argument("--work-dir", required=True)
     ap.add_argument("--mode", default="full", choices=["full", "cut", "cut_output"])
@@ -87,21 +92,16 @@ def main():
         default=None,
         help="cut_output: rendered edited_source.mp4 duration in seconds",
     )
-    ap.add_argument(
-        "--preserve-approved-text",
-        action="store_true",
-        help="validate approved narration without rewriting, truncating, merging, or reordering it",
-    )
-    args = ap.parse_args()
+    return ap.parse_args()
 
+
+def _validate(args):
     work_dir = Path(args.work_dir)
-    CONFIG["edit_mode"] = args.mode
     narration_path = work_dir / "narration.json"
     narration = _load(narration_path)
     if narration is None:
         raise SystemExit(f"缺少 {narration_path}；请先按 video-script 规则写解说词")
     vlm_analysis = _load(work_dir / "vlm_analysis.json")
-    silence_periods = _load(work_dir / "silence_periods.json") or []
     if args.mode == "cut_output":
         # Two-pass cut: narration is authored in OUTPUT time against edited_source.mp4 — there is
         # no source-time clip membership check. Lint the authored shape first, then derive speech
@@ -109,7 +109,7 @@ def main():
         # voiceover/assemble instead of trusting JSON.
         report = validate_narration_or_raise(
             narration, None, clip_plan=None, mode="cut_output", work_dir=work_dir,
-            require_chronological=args.preserve_approved_text,
+            output_duration=args.output_duration,
         )
         narration = measure_narration_speech_ownership(
             narration, work_dir, mode="cut_output"
@@ -139,21 +139,13 @@ def main():
         validate_narration_or_raise(
             narration, vlm_analysis, clip_plan=clip_plan, mode="cut", work_dir=work_dir
         )
-        if not args.preserve_approved_text:
-            narration = _validate_narration_budget(narration, vlm_analysis)
     else:
+        # Same contract as cut_output: lint the authored shape, then persist only the
+        # measured speech ownership (speech spans minus quiet windows).
         validate_narration_or_raise(
-            narration, vlm_analysis, clip_plan=None, mode="full", work_dir=work_dir,
-            require_chronological=args.preserve_approved_text,
+            narration, vlm_analysis, clip_plan=None, mode="full", work_dir=work_dir
         )
-        if args.preserve_approved_text:
-            narration = measure_narration_speech_ownership(
-                narration, work_dir, mode="full"
-            )
-        else:
-            narration = _align_narration_to_quiet(
-                narration, vlm_analysis, silence_periods
-            )
+        narration = measure_narration_speech_ownership(narration, work_dir, mode="full")
         narration_path.write_text(
             json.dumps(narration, ensure_ascii=False, indent=2), encoding="utf-8"
         )

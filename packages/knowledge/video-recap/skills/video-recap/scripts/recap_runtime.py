@@ -2,6 +2,7 @@
 
 import json
 import math
+import os
 import shlex
 import shutil
 import subprocess
@@ -9,8 +10,7 @@ import sys
 from pathlib import Path
 
 import materials as material_lib
-from doctor import ffmpeg_has_subtitles_filter
-from lib import env_bool, env_int, load_json
+from lib import env_bool, env_int, ffmpeg_has_subtitles_filter, file_identity, load_json, material_id_for
 from recap_source import audio_binding
 
 BUNDLE = Path(__file__).resolve().parents[2]  # the skills/ directory
@@ -23,7 +23,9 @@ MULTI_SOURCE_MANIFEST = "multi_source_manifest.json"
 def _run(skill, script, *cli_args):
     cmd = [sys.executable, str(_entry(skill, script)), *map(str, cli_args)]
     print(f"[video-recap] ▶ {skill}/{script}", flush=True)
-    res = subprocess.run(cmd)
+    # Stage scripts log Chinese; on Windows a piped stdout defaults to cp1252 and the
+    # first log line would crash the child with UnicodeEncodeError.
+    res = subprocess.run(cmd, env={**os.environ, "PYTHONIOENCODING": "utf-8"})
     if res.returncode != 0:
         raise SystemExit(f"{skill}/{script} 失败 (exit {res.returncode})")
 
@@ -60,12 +62,18 @@ def _read_video_duration_or_raise(path):
     return duration
 
 
-def _probe_display_height_or_raise(path, *, require_square_pixels=False):
+# Subtitle Y coordinates are display-canvas rows; a near-square SAR only changes the canvas
+# width (or, rotated, the row scale the renderer converts exactly). Same value as the
+# renderer's and the measuring tool's copies (parity-tested).
+SUBTITLE_BAND_SAR_TOLERANCE = 0.02
+
+
+def _probe_display_height_or_raise(path, *, require_near_square_pixels=False):
     """Return ffmpeg's display-coordinate height, accounting for rotation and SAR."""
-    return _probe_display_size_or_raise(path, require_square_pixels=require_square_pixels)[1]
+    return _probe_display_size_or_raise(path, require_near_square_pixels=require_near_square_pixels)[1]
 
 
-def _probe_display_size_or_raise(path, *, require_square_pixels=False):
+def _probe_display_size_or_raise(path, *, require_near_square_pixels=False):
     """Return ffmpeg's display-coordinate (width, height), accounting for rotation and SAR."""
     cmd = [
         "ffprobe",
@@ -92,11 +100,14 @@ def _probe_display_size_or_raise(path, *, require_square_pixels=False):
         sar_ratio = float(num) / float(den)
     except (ValueError, ZeroDivisionError):
         sar_ratio = math.nan
-    if require_square_pixels and (
-        not math.isfinite(sar_ratio) or abs(sar_ratio - 1.0) >= 1e-9
+    if sar in {"0:1", "N/A"}:
+        sar_ratio = 1.0  # unspecified SAR: ffmpeg (and the renderer's canvas) treat it as square
+    if require_near_square_pixels and (
+        not math.isfinite(sar_ratio) or abs(sar_ratio - 1.0) > SUBTITLE_BAND_SAR_TOLERANCE + 1e-9
     ):
         raise SystemExit(
-            f"subtitle Y coordinates currently require square-pixel video (SAR 1:1); got {sar}"
+            "subtitle Y coordinates require square or near-square pixels "
+            f"(SAR within {SUBTITLE_BAND_SAR_TOLERANCE:.0%} of 1:1); got {sar}"
         )
     display_width = max(1, round(width * sar_ratio)) if math.isfinite(sar_ratio) else width
     rotation_values = [
@@ -134,14 +145,43 @@ def _run_manifest_payload(video, args):
     return {
         "schema_version": 1,
         "source_video": str(Path(video).resolve()),
-        "source_video_identity": material_lib.file_identity(video),
+        "source_video_identity": file_identity(video),
         "settings": _analysis_settings(args),
         "audio": audio_binding(args),
     }
 
 
+# Settings main() can take from the environment rather than argv, with their no-env value.
+# A resume shell may not carry the same environment, so the resume argv pins them.
+_ENV_FILLED = (
+    ("edit_mode", "full"),
+    ("target_duration", None),
+    ("tts_provider", "auto"),
+    ("voice_ref", None),
+    ("subtitle_y_top", None),
+    ("subtitle_y_bot", None),
+)
+
+
+def _resume_argv(work_dir, args):
+    """The argv that resumes this run: what the user typed (paths made absolute by
+    recap_cli), plus the work dir and any environment-filled setting it did not spell out.
+    Values a --project binding filled in are re-derived from --project on resume."""
+    argv = list(args._argv)
+    explicit = args._explicit_options
+    bound = getattr(args, "_bound_from_project", frozenset())
+    if "--work-dir" not in explicit:
+        argv += ["--work-dir", str(work_dir)]
+    for dest, unset in _ENV_FILLED:
+        flag = "--" + dest.replace("_", "-")
+        value = getattr(args, dest)
+        if flag not in explicit and dest not in bound and value != unset:
+            argv += [flag, str(value)]
+    return argv
+
+
 def _write_run_manifest(work_dir, video, args):
-    payload = _run_manifest_payload(video, args)
+    payload = {**_run_manifest_payload(video, args), "argv": _resume_argv(work_dir, args)}
     (work_dir / RUN_MANIFEST).write_text(
         json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
     )
@@ -151,14 +191,14 @@ def _write_run_manifest(work_dir, video, args):
 def _build_multi_source_records(videos, args):
     records = []
     for video in _coerce_videos(videos):
-        identity = material_lib.file_identity(video)
+        identity = file_identity(video)
         records.append(
             {
                 "source_path": str(video),
                 "source_name": video.name,
                 "source_video_identity": identity,
                 "settings": _analysis_settings(args),
-                "material_id": material_lib.material_id_for(video, identity),
+                "material_id": material_id_for(video, identity),
             }
         )
     records = material_lib.assign_source_ids(records)
@@ -188,7 +228,10 @@ def _multi_run_manifest_payload(videos, args, source_records):
 
 
 def _write_project_run_manifest(work_dir, videos, args, source_records):
-    payload = _multi_run_manifest_payload(videos, args, source_records)
+    payload = {
+        **_multi_run_manifest_payload(videos, args, source_records),
+        "argv": _resume_argv(work_dir, args),
+    }
     (work_dir / RUN_MANIFEST).write_text(
         json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
     )
@@ -240,20 +283,41 @@ def _ffmpeg_present_but_cannot_burn():
     return not ffmpeg_has_subtitles_filter()
 
 
+def _burn_subtitles_explicit(args):
+    """Burn was asked for, not inherited: --burn-subtitles, or a truthy BURN_SUBTITLES."""
+    if args.burn_subtitles is not None:
+        return args.burn_subtitles
+    return "BURN_SUBTITLES" in os.environ and env_bool("BURN_SUBTITLES", True)
+
+
 def _preflight_burn_subtitles(args):
-    """Fail fast BEFORE any understanding/VLM/ASR/TTS spend when subtitle burn-in is on but
-    this ffmpeg can't burn it. Without it the run only dies at the final assemble
-    `-vf subtitles=` step — after the whole expensive pipeline has run. Dub renders through
-    dub.py, which never burns subtitles, so it is exempt."""
+    """Settle subtitle burn-in BEFORE any understanding/VLM/ASR/TTS spend when this ffmpeg
+    lacks libass. An explicit request fails fast here, since otherwise the run only dies at
+    the final assemble `-vf subtitles=` step. The default burn only warns: assemble then
+    delivers the .srt sidecar and records `subtitle_burn_degraded` in visual_qc.json, which
+    final_qc.json carries in metadata.warnings. Dub renders through its own script, which
+    never burns subtitles, so it is exempt."""
     if args.edit_mode == "dub" or not _burn_subtitles_intended(args):
         return
-    if _ffmpeg_present_but_cannot_burn():
+    if not _ffmpeg_present_but_cannot_burn():
+        return
+    doctor = f"python3 {shlex.quote(str(_entry('video-recap', 'doctor.py')))}"
+    if _burn_subtitles_explicit(args):
         raise SystemExit(
-            "字幕烧录已开启，但当前 ffmpeg 不支持 subtitles/libass 滤镜，整条流程会跑到最后渲染才失败。\n"
-            "  解决其一：(1) 安装带 libass 的 ffmpeg；(2) 加 --no-burn-subtitles 关闭烧录"
-            "（仍输出 .srt 外挂字幕）。\n"
-            f"  自检：python3 {shlex.quote(str(_entry('video-recap', 'doctor.py')))}"
+            "已显式要求烧录字幕（--burn-subtitles 或 BURN_SUBTITLES），但当前 ffmpeg 不支持"
+            " subtitles/libass 滤镜，整条流程会跑到最后渲染才失败。\n"
+            "  解决其一：(1) 安装带 libass 的 ffmpeg；(2) 去掉显式烧录要求，默认运行会改为输出"
+            " .srt 外挂字幕；(3) 加 --no-burn-subtitles。\n"
+            f"  自检：{doctor}"
         )
+    print(
+        "[video-recap] ⚠ 当前 ffmpeg 不支持 subtitles/libass 滤镜：本次成片不烧录字幕。"
+        "有字幕条目时改为在成片旁输出同名 .srt 外挂字幕（final_qc.json 的 metadata.warnings"
+        " 会记录 subtitle_burn_degraded）；没有字幕条目的运行（如 source 音频模式且没有"
+        " user_subtitles.*）不输出 .srt，也不记警告。要烧录字幕请安装带 libass 的 ffmpeg；"
+        f"自检：{doctor}",
+        flush=True,
+    )
 
 
 def _entry(skill, script):

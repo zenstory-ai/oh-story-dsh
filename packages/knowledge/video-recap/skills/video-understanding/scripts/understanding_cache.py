@@ -6,12 +6,16 @@ from pathlib import Path
 
 from asr_timing_evidence import EVIDENCE_FILENAME, validate_asr_timing_evidence
 from extract import FRAME_TIME_CONVENTION_VERSION
-from lib import CONFIG, log, file_identity, load_prompt
-
-
-from vlm import (
-    _is_mimo_chunk_usable,
+from lib import (
+    CONFIG,
+    file_identity,
+    is_usable_overview_chunk,
+    log,
+    offline_ignored_settings,
 )
+
+
+from vlm import vlm_prompt_payload
 
 
 def _fresh(out, *inputs):
@@ -45,9 +49,19 @@ def _artifact_identity(path):
     return file_identity(path) if path.exists() else None
 
 
-def _stage_cache_valid(artifact_path, expected_meta):
+def _without_settings(meta, keys):
+    settings = meta.get("settings")
+    if not keys or not isinstance(settings, dict):
+        return meta
+    return {**meta, "settings": {k: v for k, v in settings.items() if k not in keys}}
+
+
+def _stage_cache_valid(artifact_path, expected_meta, *, ignore_settings=()):
     """A stage output is reusable when it exists, is non-empty, its sidecar equals the
-    expected inputs/settings dict, and the output itself is the one the sidecar recorded."""
+    expected inputs/settings dict, and the output itself is the one the sidecar recorded.
+
+    `ignore_settings` names `settings` keys left out of the comparison on both sides (an
+    endpoint URL that only reflects which credential is set, or a retired legacy key)."""
     artifact_path = Path(artifact_path)
     if not artifact_path.exists() or artifact_path.stat().st_size == 0:
         return False
@@ -62,7 +76,9 @@ def _stage_cache_valid(artifact_path, expected_meta):
         return False
     expected = dict(expected_meta)
     expected["artifact"] = meta["artifact"]
-    return meta == expected
+    return _without_settings(meta, ignore_settings) == _without_settings(
+        expected, ignore_settings
+    )
 
 
 def _write_stage_meta(artifact_path, meta):
@@ -129,7 +145,7 @@ def _merge_overview_into_scenes(scenes, overview_path):
     by_scene = {}
     for chunk in overview["chunks"]:
         content = chunk["content"].strip()
-        if _is_mimo_chunk_usable(content):
+        if is_usable_overview_chunk(content):
             by_scene.setdefault(chunk["scene_id"], []).append(content)
     if not by_scene:
         return scenes
@@ -206,7 +222,6 @@ def _asr_cache_payload(video_path, *, skip_asr=False):
         "inputs": {"video": _video_input(video_path)},
         "settings": {
             "skip_asr": bool(skip_asr),
-            "mimo_asr_api_key_present": bool(CONFIG.get("mimo_asr_api_key")),
             "mimo_asr_api_url": CONFIG.get("mimo_asr_api_url"),
             "mimo_asr_model": CONFIG.get("mimo_asr_model"),
             "mimo_asr_language": CONFIG.get("mimo_asr_language"),
@@ -216,21 +231,29 @@ def _asr_cache_payload(video_path, *, skip_asr=False):
     }
 
 
+# Sidecars written before 0.6.1 recorded whether an ASR key was set. Key presence is not an
+# output setting: a missing key only meant the run wrote an UNAVAILABLE_NO_KEY placeholder,
+# which the evidence status below already refuses to reuse.
+_LEGACY_ASR_SETTINGS = ("mimo_asr_api_key_present",)
+
+
 def _asr_cache_state(artifact_path, expected_meta, video_path):
     """Classify an ASR cache without upgrading stale evidence into new authority."""
     artifact_path = Path(artifact_path)
-    if not _stage_cache_valid(artifact_path, expected_meta):
+    ignored = _LEGACY_ASR_SETTINGS + offline_ignored_settings(
+        CONFIG.get("mimo_asr_api_key"), "mimo_asr_api_url"
+    )
+    if not _stage_cache_valid(artifact_path, expected_meta, ignore_settings=ignored):
         return "MISS"
     evidence_path = artifact_path.parent / EVIDENCE_FILENAME
-    if not evidence_path.exists():
-        return "LEGACY_UNVERIFIED"
     if validate_asr_timing_evidence(evidence_path, video_path, artifact_path):
         evidence = _load_json(evidence_path)
-        if evidence.get("status") == "LEGACY_UNVERIFIED":
-            return "LEGACY_UNVERIFIED"
         # An all-empty transcription is an unexplained outcome, not proven silence; treating it
-        # as fresh would make one bad run a permanent cache hit.
-        if evidence.get("status") in {"UNAVAILABLE_NO_DURATION", "EMPTY_UNKNOWN"}:
+        # as fresh would make one bad run a permanent cache hit. A key-less placeholder is
+        # retried too, so setting the key later transcribes for real.
+        if evidence.get("status") in {
+            "UNAVAILABLE_NO_DURATION", "EMPTY_UNKNOWN", "UNAVAILABLE_NO_KEY"
+        }:
             return "MISS"
         return "FRESH"
     return "MISS"
@@ -263,21 +286,6 @@ def _silence_cache_payload(video_path, asr_json):
     }
 
 
-def _vlm_prompt_payload():
-    """The exact prompt/context text the VLM stage sends; compared by equality."""
-    prompt = load_prompt("VLM_DEPTH_PROMPT")
-    if not prompt:
-        prompt = (
-            "仔细观察这些视频帧。分两部分输出：\n"
-            "【描述】不超过80字，描述画面中正在发生什么。\n"
-            "【深层分析】不超过120字，分析角色情绪、关系动态、潜台词。"
-        )
-    context = CONFIG.get("context_info", "")
-    if context:
-        prompt = f"已知信息：{context}\n\n{prompt}"
-    return {"prompt_text": prompt, "context_info": context}
-
-
 def _vlm_cache_payload(video_path, work_dir, scenes_json, frames):
     return {
         "schema_version": 1,
@@ -290,7 +298,7 @@ def _vlm_cache_payload(video_path, work_dir, scenes_json, frames):
             ),
         },
         "frames": _frame_cache_payload(video_path, CONFIG.get("fps"), frames),
-        "prompt": _vlm_prompt_payload(),
+        "prompt": vlm_prompt_payload(),
         "settings": {
             "fps": CONFIG.get("fps"),
             "vlm_model": CONFIG.get("vlm_model"),

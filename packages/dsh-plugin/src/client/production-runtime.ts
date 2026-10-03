@@ -32,6 +32,9 @@ export interface ProductionJob {
 
 export interface ProductionSequenceItem {
   readonly shotId: string;
+  /** Creator-chosen source for this cut; absent keeps automatic video-first resolution. */
+  readonly sourceVersionId?: string | undefined;
+  /** Resolved source used for preview and composition; recomputed as media changes. */
   readonly versionId?: string | undefined;
 }
 
@@ -189,6 +192,19 @@ export function referencesForTarget(
   return [...new Map([...declared, ...manual].map((version) => [version.id, version])).values()];
 }
 
+export function mediaBelongsToEpisode(path: string | undefined, episodeDirectory: string): boolean {
+  if (path === undefined) return true;
+  if (path.startsWith(`${episodeDirectory}/`)) return true;
+  const episodeName = episodeDirectory.split("/").at(-1);
+  return episodeName !== undefined && path.startsWith(`交付/${episodeName}/`);
+}
+
+export function sequenceSourceEligible(shotId: string, version: ProductionMediaVersion): boolean {
+  return version.kind === "video"
+    ? version.targetId === shotId
+    : version.targetId === shotId || version.targetId.startsWith("IMG-");
+}
+
 export function queuedItemForJob(jobId: string, queue: readonly ProductionQueueEntry[]): ProductionQueueEntry | undefined {
   if (jobId.trim() === "") return undefined;
   const escaped = jobId.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
@@ -285,25 +301,54 @@ export function reconcileSequence(
   shotIds: readonly string[],
   current: readonly ProductionSequenceItem[],
   versions: readonly ProductionMediaVersion[],
-  selections: Readonly<Record<string, string>>
+  selections: Readonly<Record<string, string>>,
+  episodeDirectory?: string
 ): ProductionSequenceItem[] {
+  const scopedVersions = episodeDirectory === undefined
+    ? versions
+    : versions.filter((version) => mediaBelongsToEpisode(version.path, episodeDirectory));
   const shotSet = new Set(shotIds);
   const preserved = current.filter((item) => shotSet.has(item.shotId));
   const present = new Set(preserved.map((item) => item.shotId));
-  const appended = shotIds.filter((shotId) => !present.has(shotId)).map((shotId) => ({ shotId }));
-  return [...preserved, ...appended].map((item) => ({
-    shotId: item.shotId,
-    versionId: selectedVersionForTarget(item.shotId, versions, selections, "video")?.id
-  }));
+  const appended: ProductionSequenceItem[] = shotIds.filter((shotId) => !present.has(shotId)).map((shotId) => ({ shotId }));
+  return [...preserved, ...appended].map((item) => {
+    if (item.sourceVersionId !== undefined) {
+      const explicit = scopedVersions.find((version) => version.id === item.sourceVersionId && sequenceSourceEligible(item.shotId, version));
+      return { ...item, versionId: explicit?.id };
+    }
+    // A produced video remains the preferred cut source even when the version strip currently
+    // points at its earlier keyframe. Static assembly is the fallback: use an explicitly selected
+    // SHOT/IMG image first, otherwise the current shot's accepted keyframe. Never pull an image
+    // from another target merely because it happened to arrive last.
+    const video = selectedVersionForTarget(item.shotId, scopedVersions, selections, "video");
+    const selectedImageId = selections[item.shotId];
+    const selectedImage = selectedImageId === undefined ? undefined : scopedVersions.find((version) => (
+      version.id === selectedImageId
+      && version.kind === "image"
+      && (version.targetId === item.shotId || version.targetId.startsWith("IMG-"))
+    ));
+    const shotImage = selectedVersionForTarget(item.shotId, scopedVersions, selections, "image");
+    const preservedImage = scopedVersions.find((version) => (
+      version.id === item.versionId && version.kind === "image" && version.targetId.startsWith("IMG-")
+    ));
+    const image = selectedImage ?? shotImage ?? preservedImage;
+    return { shotId: item.shotId, versionId: video?.id ?? image?.id };
+  });
 }
 
-export function sequenceIssues(sequence: readonly ProductionSequenceItem[], versions: readonly ProductionMediaVersion[]): string[] {
-  const versionById = new Map(versions.map((version) => [version.id, version]));
+export function sequenceIssues(sequence: readonly ProductionSequenceItem[], versions: readonly ProductionMediaVersion[], episodeDirectory?: string): string[] {
+  const versionById = new Map(versions
+    .filter((version) => episodeDirectory === undefined || mediaBelongsToEpisode(version.path, episodeDirectory))
+    .map((version) => [version.id, version]));
   const issues: string[] = [];
   for (const item of sequence) {
     const version = item.versionId === undefined ? undefined : versionById.get(item.versionId);
-    if (version === undefined || version.kind !== "video") issues.push(`${item.shotId} 缺少已选视频版本`);
-    else if (version.path === undefined) issues.push(`${item.shotId} 的视频没有可供 DSH 读取的工作区路径`);
+    if (version === undefined || (version.kind !== "video" && version.kind !== "image")) {
+      issues.push(item.sourceVersionId === undefined
+        ? `${item.shotId} 缺少已选视频或关键帧素材`
+        : `${item.shotId} 显式选择的成片素材已不可用`);
+    }
+    else if (version.path === undefined) issues.push(`${item.shotId} 的${version.kind === "video" ? "视频" : "关键帧"}没有可供 DSH 读取的工作区路径`);
   }
   return issues;
 }

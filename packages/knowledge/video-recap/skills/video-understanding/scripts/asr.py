@@ -6,7 +6,7 @@ import time
 from pathlib import Path
 
 from lib import CONFIG
-from lib import log, run_cmd, get_video_duration, mimo_asr_api_call
+from lib import log, run_cmd, get_video_duration, mimo_asr_api_call, is_moderation_refusal
 from detect import _audio_meta_path, _write_audio_meta
 from asr_timing_evidence import (
     EVIDENCE_FILENAME,
@@ -202,13 +202,13 @@ def _run_asr(wav_path):
 
     音频以 base64 data-URI 放进 OpenAI 风格的 chat/completions 消息里，转写文本回到
     choices[0].message.content。API/响应结构失败会抛错，避免把瞬时失败缓存成空转写；
-    只有无音频、超体积等确定不可发送的片段返回空串。
+    音频文件缺失/不可读同样抛错（那是上游 bug，不是静音）；只有空音频、超体积等
+    确定不可发送的片段返回空串。
     """
     try:
         raw = Path(wav_path).read_bytes()
     except OSError as e:
-        log(f"ASR 警告: 无法读取音频 {wav_path}: {e}")
-        return ""
+        raise RuntimeError(f"ASR: 无法读取音频 {wav_path}: {e}") from e
     if not raw:
         return ""
 
@@ -235,11 +235,17 @@ def _run_asr(wav_path):
     except Exception as e:
         raise ASRProviderError(f"MiMo ASR 调用失败: {e}") from e
     try:
-        return _strip_reasoning_residue(str(resp["choices"][0]["message"]["content"] or "")).strip()
+        text = _strip_reasoning_residue(str(resp["choices"][0]["message"]["content"] or "")).strip()
     except (KeyError, IndexError, TypeError):
         raise ASRProviderError(
             f"MiMo ASR 返回结构异常: {json.dumps(resp, ensure_ascii=False)[:200]}"
         )
+    if is_moderation_refusal(text):
+        # The refusal sentence is not dialogue: storing it would put it in the briefs and
+        # make cut/narration safety treat the window as speech. Record no text instead.
+        log(f"ASR 警告: MiMo 内容审核拒绝转写 {Path(wav_path).name}，该段记为无文本")
+        return ""
+    return text
 
 
 def _segment_and_transcribe(audio_wav, segments_dir, total_duration, segment_length=None):

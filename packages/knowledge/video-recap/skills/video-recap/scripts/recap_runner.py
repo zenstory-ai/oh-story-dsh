@@ -2,15 +2,18 @@
 
 import json
 import os
+import shutil
 from pathlib import Path
 
 import materials as material_lib
-import project_binding
-import resource_lock
+import resources.project_binding as project_binding
+import resources.lock as resource_lock
 
-from recap_cli import TTS_PROVIDERS, parse_args
+from lib import TTS_PROVIDERS, file_identity, material_id_for, source_id_for
+from recap_cli import parse_args
 from recap_review import run_narration_review
 from recap_runtime import (
+    RUN_MANIFEST,
     _analysis_settings,
     _build_multi_source_records,
     _coerce_videos,
@@ -26,18 +29,12 @@ from recap_runtime import (
     _write_run_manifest,
 )
 from recap_stage_qc import (
-    _post_render_qc_metadata,
-    _prepare_mimo_qc,
     _print_final_qc_pointer,
+    _print_render_warnings,
     _require_final_qc,
-    _run_mimo_qc_stage,
-    _tts_qc_metadata,
     _write_final_qc_reports,
-    _write_shift_left_stage_qc,
 )
 from recap_source import (
-    begin_local_adoption_qc,
-    begin_non_narration_qc,
     extend_assemble_args,
     load_local_assembly_evidence,
     needs_voiceover,
@@ -58,6 +55,7 @@ from recap_timeline import (
     _materials_enabled,
     _multi_manifest_mismatches,
     _pause_for_agent,
+    _preflight_visual_overlays,
     _print_narration_review_pointer,
     _read_assembly_output,
     _read_phase_ledger,
@@ -70,8 +68,6 @@ from recap_timeline import (
     _write_multi_source_output_brief,
     _write_phase_ledger,
 )
-
-RUN_MANIFEST = "recap_run_manifest.json"
 
 
 def _voiceover_args(work_dir, narration_path, args):
@@ -90,18 +86,11 @@ def _voiceover_args(work_dir, narration_path, args):
     return result
 
 
-def _approved_validation_args(args):
-    return ["--preserve-approved-text"] if args.preserve_approved_text else []
-
-
 def _record_resources(work_dir, args):
     """Write resource_lock.json for the finished render and surface anything needing a person."""
-    library_dir = getattr(args, "material_library_dir", None) or os.environ.get(
-        "VIDEO_RECAP_MATERIAL_LIBRARY_DIR"
-    )
     try:
         lock = resource_lock.write_resource_lock(
-            work_dir, library_dir=library_dir, project=getattr(args, "resolved_project", None)
+            work_dir, library_dir=_material_library_dir(args), project=getattr(args, "resolved_project", None)
         )
     except (OSError, ValueError, TypeError, KeyError) as exc:  # a record must never fail a finished render
         print(f"[video-recap] ⚠ 未能写出 resource_lock.json: {type(exc).__name__}: {exc}", flush=True)
@@ -114,6 +103,7 @@ def _finish_recap(work_dir, final_output, args):
     if args.require_final_qc:
         _require_final_qc(final_qc_result, work_dir)
     print(f"[video-recap] ✅ 完成: {final_output}")
+    _print_render_warnings(final_qc_result, work_dir, final_output)
     _print_final_qc_pointer(final_qc_result)
 
 
@@ -128,7 +118,6 @@ def _run_local_adoption(video, work_dir, args):
         (work_dir / RUN_MANIFEST).write_text(
             json.dumps(failed, ensure_ascii=False, indent=2), encoding="utf-8"
         )
-    begin_local_adoption_qc(work_dir, _write_shift_left_stage_qc)
     assemble_args = [
         str(video),
         "--work-dir", str(work_dir),
@@ -159,16 +148,30 @@ def _run_local_adoption(video, work_dir, args):
         raise
     final_output = _read_assembly_output(work_dir)
     _record_resources(work_dir, args)
-    _write_shift_left_stage_qc(
-        work_dir,
-        "post_render",
-        metadata=_post_render_qc_metadata(work_dir, final_output),
-    )
     _finish_recap(work_dir, final_output, args)
 
 
-def _run_or_restore_understanding(source_record, source_work_dir, args):
-    """Run video-understanding for one source, or restore it from the material library."""
+def _share_project_background_research(project_work_dir, source_work_dir):
+    """Give one source of a multi-video run the project-level background_research.json.
+
+    video-understanding only reads background_research.json from its own work_dir
+    (sources/<source_id>/), while the Agent writes the research once at the project level.
+    The project file is copied in when the source has none or an older one; a per-source
+    file newer than the project file is kept. copy2 keeps the mtime, so an unchanged
+    project file leaves the understanding cache identity unchanged."""
+    shared = Path(project_work_dir) / "background_research.json"
+    if not shared.is_file():
+        return
+    target = Path(source_work_dir) / "background_research.json"
+    if target.is_file() and target.stat().st_mtime_ns >= shared.stat().st_mtime_ns:
+        return
+    shutil.copy2(shared, target)
+
+
+def _run_or_restore_understanding(source_record, source_work_dir, args, project_work_dir=None):
+    """Run video-understanding for one source, or restore it from the material library.
+
+    `project_work_dir` is set for multi-video runs, whose sources share its research file."""
     source_work_dir = Path(source_work_dir)
     source_work_dir.mkdir(parents=True, exist_ok=True)
     source_path = source_record["source_path"]
@@ -183,6 +186,7 @@ def _run_or_restore_understanding(source_record, source_work_dir, args):
             source_path=source_path,
             source_identity=source_identity,
             settings=settings,
+            material_id=source_record["material_id"],
         )
         restored = result["restored"]
         if restored:
@@ -196,6 +200,8 @@ def _run_or_restore_understanding(source_record, source_work_dir, args):
                 flush=True,
             )
     if not restored:
+        if project_work_dir is not None:
+            _share_project_background_research(project_work_dir, source_work_dir)
         _run(
             "video-understanding",
             "understand.py",
@@ -222,14 +228,14 @@ def _run_or_restore_understanding(source_record, source_work_dir, args):
 
 def _single_source_record(video, args):
     """Identity + settings for the one source of a single-video run."""
-    identity = material_lib.file_identity(video)
+    identity = file_identity(video)
     return {
-        "source_id": material_lib.source_id_for(video),
+        "source_id": source_id_for(video),
         "source_path": str(video),
         "source_name": video.name,
         "source_video_identity": identity,
         "settings": _analysis_settings(args),
-        "material_id": material_lib.material_id_for(video, identity),
+        "material_id": material_id_for(video, identity),
     }
 
 
@@ -247,6 +253,20 @@ def _rebuild_understanding_brief(source_record, source_work_dir, args):
     )
 
 
+def _write_multi_source_edited_storyboard(work_dir, video):
+    """Cut pass 2 for several sources: the same OUTPUT-timeline storyboard a single-source
+    --brief-only rebuild produces, drawn from each source's frames, with its pointer added to
+    the multi-source brief. Advisory like every storyboard: a failure warns and the pause
+    still happens."""
+    try:
+        _run(
+            "video-understanding", "understand.py", str(video),
+            "--work-dir", str(work_dir), "--edited-storyboard-only",
+        )
+    except SystemExit as exc:
+        print(f"[video-recap] ⚠ 剪后故事板未生成（建议性，继续）: {exc}", flush=True)
+
+
 def _reject_stale(mismatches, label):
     if mismatches:
         details = "\n  - ".join(mismatches)
@@ -262,15 +282,14 @@ def _reject_stale_multi_manifest(work_dir, videos, args, source_records):
 
 
 def _render_cut(video_arg, work_dir, args, *extra):
-    """Render edited_source.mp4 from clip_plan.json and record the post-cut QC stage."""
+    """Render edited_source.mp4 from clip_plan.json and print its cut QC line."""
     crender = [str(video_arg), "--work-dir", str(work_dir), *extra]
     if args.target_duration:
         crender += ["--target-duration", args.target_duration]
     if args.allow_duration_drift:
         crender.append("--allow-duration-drift")
     _run("video-cut", "cut.py", *crender)
-    cut_qc = _surface_cut_qc(work_dir)
-    _write_shift_left_stage_qc(work_dir, "post_cut", metadata={"cut_qc": cut_qc})
+    _surface_cut_qc(work_dir)
 
 
 def _reject_stale_cut_narration(work_dir, clip_plan_identity):
@@ -281,12 +300,11 @@ def _reject_stale_cut_narration(work_dir, clip_plan_identity):
         )
 
 
-def _validate_cut_output_narration(work_dir, args):
+def _validate_cut_output_narration(work_dir):
     output_duration = _read_video_duration_or_raise(work_dir / "edited_source.mp4")
     _run(
         "video-script", "validate.py", "--work-dir", work_dir,
         "--mode", "cut_output", "--output-duration", f"{output_duration:.3f}",
-        *_approved_validation_args(args),
     )
 
 
@@ -294,28 +312,21 @@ def _narrate(work_dir, args, timeline):
     """Review -> TTS -> visual overlays for a validated narration.json."""
     narration_json = work_dir / "narration.json"
     review_ran = run_narration_review(work_dir, args, run=_run, timeline=timeline)
-    _write_shift_left_stage_qc(
-        work_dir, "pre_tts", metadata={"review_ran": review_ran, "timeline": timeline}
-    )
     _run(
         "video-voiceover", "voiceover.py",
         *_voiceover_args(work_dir, narration_json, args),
     )
-    _write_shift_left_stage_qc(work_dir, "post_tts", metadata=_tts_qc_metadata(work_dir))
-    overlays_path = _write_canonical_visual_overlays(work_dir, narration_json)
-    _write_shift_left_stage_qc(
-        work_dir, "pre_assemble", metadata={"visual_overlays": str(overlays_path)}
-    )
-    _run_mimo_qc_stage(work_dir, args, "pre_assemble")
+    _write_canonical_visual_overlays(work_dir, narration_json)
     return review_ran
 
 
 def _deliver(work_dir, args, assemble_video, recap_stem, timeline, extra_assemble_args=()):
     """Shared tail of every full/cut run: narration (if owned) -> assemble -> final QC."""
     project = getattr(args, "resolved_project", None)
-    if project and project["templates"]:
+    if project and any(t["role"] in project_binding.GEOMETRY_ROLES for t in project["templates"]):
         project_binding.check_canvas(project, *_probe_display_size_or_raise(assemble_video))
     project_binding.sync_packaging_layers(work_dir, project)
+    _preflight_visual_overlays(work_dir, narration=uses_narration(args))
     review_ran = _narrate(work_dir, args, timeline) if uses_narration(args) else None
     aargs = [str(assemble_video), "--work-dir", str(work_dir), "--recap-stem", recap_stem]
     extend_assemble_args(aargs, args)
@@ -343,13 +354,6 @@ def _deliver(work_dir, args, assemble_video, recap_stem, timeline, extra_assembl
 
     final_output = _read_assembly_output(work_dir)
     _record_resources(work_dir, args)
-    _write_shift_left_stage_qc(
-        work_dir,
-        "post_render",
-        metadata=_post_render_qc_metadata(work_dir, final_output),
-    )
-    if uses_narration(args):
-        _run_mimo_qc_stage(work_dir, args, "post_render", final_output=final_output)
     _finish_recap(work_dir, final_output, args)
     if uses_narration(args):
         _print_narration_review_pointer(work_dir, review_ran=review_ran)
@@ -362,6 +366,7 @@ def _run_multi_cut(videos, work_dir, args):
     work_dir.mkdir(parents=True, exist_ok=True)
     reject_unbound_narration_workdir(work_dir, args)
     reject_unsupported_subtitle_track(work_dir, args)
+    project_binding.sync_production_reference(work_dir, getattr(args, "resolved_project", None))
     source_records = _build_multi_source_records(videos, args)
     narration_json = work_dir / "narration.json"
     clip_plan_json = work_dir / "clip_plan.json"
@@ -371,12 +376,10 @@ def _run_multi_cut(videos, work_dir, args):
     if (work_dir / RUN_MANIFEST).exists():
         _reject_stale_multi_manifest(work_dir, videos, args, source_records)
     manifest_path = _write_multi_source_manifest(work_dir, source_records)
-    if not uses_narration(args):
-        begin_non_narration_qc(work_dir, args, _write_shift_left_stage_qc)
     if not clip_plan_json.exists():
         for record in source_records:
             _run_or_restore_understanding(
-                record, _source_work_dir(work_dir, record), args
+                record, _source_work_dir(work_dir, record), args, project_work_dir=work_dir
             )
         # Rewrite: _run_or_restore_understanding fills in material_id per record.
         manifest_path = _write_multi_source_manifest(work_dir, source_records)
@@ -385,43 +388,38 @@ def _run_multi_cut(videos, work_dir, args):
         _pause_for_agent(
             work_dir,
             f"{clip_plan_json}（多视频剪辑计划；每个 clip 必须带 source_id）",
-            _continuation_command(videos, work_dir, args),
+            _continuation_command(work_dir, args),
             inspect_hint=f"python3 {inspect_py} --work-dir {work_dir} state",
+            project=getattr(args, "resolved_project", None),
         )
         return
 
     _reject_stale_multi_manifest(work_dir, videos, args, source_records)
-    cp_identity = material_lib.file_identity(clip_plan_json)
+    cp_identity = file_identity(clip_plan_json)
+    # A narration written for an older clip_plan aborts before cut.py re-renders anything.
+    if uses_narration(args) and narration_json.exists():
+        _reject_stale_cut_narration(work_dir, cp_identity)
     _render_cut(videos[0], work_dir, args, "--sources-manifest", str(manifest_path))
     if uses_narration(args):
         if not narration_json.exists():
             _write_multi_source_output_brief(
                 work_dir, source_records, work_dir / "clip_plan_validated.json"
             )
-            _write_phase_ledger(
-                work_dir,
-                clip_plan_identity=cp_identity,
-                edited_source_rendered=True,
-                multi_source=True,
-            )
+            _write_multi_source_edited_storyboard(work_dir, videos[0])
+            _write_phase_ledger(work_dir, cp_identity)
             _pause_for_agent(
                 work_dir,
                 f"{narration_json}（用成片 OUTPUT 时间轴写解说，对着 {edited_source}）",
-                _continuation_command(videos, work_dir, args),
+                _continuation_command(work_dir, args),
                 inspect_hint=(
                     f"python3 {inspect_py} --work-dir {work_dir} "
                     "clip-map --output-start <s> --output-end <e>"
                 ),
+                project=getattr(args, "resolved_project", None),
             )
             return
-        _reject_stale_cut_narration(work_dir, cp_identity)
-        _write_phase_ledger(
-            work_dir,
-            clip_plan_identity=cp_identity,
-            narration_written=True,
-            multi_source=True,
-        )
-        _validate_cut_output_narration(work_dir, args)
+        _write_phase_ledger(work_dir, cp_identity)
+        _validate_cut_output_narration(work_dir)
 
     _deliver(work_dir, args, edited_source, f"multi_{videos[0].stem}", "cut_output")
 
@@ -447,12 +445,6 @@ def main():
             doctor_args += ["--tts-provider", args.tts_provider]
         _run("video-recap", "doctor.py", *doctor_args)
         return
-    if not uses_local_adoption(args) and args.mimo_qc not in {
-        "off", "pre-assemble", "post-render", "both"
-    }:
-        ap.error(
-            "MIMO_QC/--mimo-qc must be one of: off, pre-assemble, post-render, both"
-        )
     if not args.video:
         ap.error("video is required (unless --doctor)")
     validate_audio_routing(ap, args)
@@ -524,7 +516,7 @@ def main():
         ap.error("多视频 cut 暂不支持全局 subtitle Y 坐标；各源字幕带可能不同")
     if args.subtitle_y_top is not None:
         canvas_height = _probe_display_height_or_raise(
-            videos[0], require_square_pixels=True
+            videos[0], require_near_square_pixels=True
         )
         if args.subtitle_y_bot > canvas_height:
             ap.error(
@@ -555,9 +547,8 @@ def _execute_pipeline(args, videos):
             if args.work_dir
             else videos[0].parent / f"work_dir_multi_{videos[0].stem}"
         )
-        # Validate the work-directory audio policy before any run-local QC state is reset.
+        # Validate the work-directory audio policy before any stage writes into it.
         reject_unbound_narration_workdir(work_dir, args)
-        _prepare_mimo_qc(work_dir, args)
         _run_multi_cut(videos, work_dir, args)
         return
 
@@ -570,7 +561,6 @@ def _execute_pipeline(args, videos):
     work_dir.mkdir(parents=True, exist_ok=True)
     reject_unbound_narration_workdir(work_dir, args)
     reject_unsupported_subtitle_track(work_dir, args)
-    _prepare_mimo_qc(work_dir, args)
     if args.edit_mode == "dub":
         _run_dub(video, work_dir, args)
     else:
@@ -586,13 +576,10 @@ def _run_dub(video, work_dir, args):
     if not dub_script.exists():
         _run("video-voiceover", "dub.py", "--stage", "prepare", *dub_args)
         _write_run_manifest(work_dir, video, args)
-        cont = _continuation_command(video, work_dir, args)
+        cont = _continuation_command(work_dir, args)
         print("=" * 50)
         print(
-            f"[video-recap] ⏸  阅读 {work_dir / 'dub_brief.md'}，把英文原声转写切分并翻译成中文，写入 {dub_script}"
-        )
-        print(
-            '[video-recap]    格式 [{"start": 起秒, "end": 止秒, "zh": "译文"}]（按 start 升序）；逐句忠实、跟原声节奏一致、保留原音色'
+            f"[video-recap] ⏸  按 {work_dir / 'dub_brief.md'} 的要求翻译英文原声，写入 {dub_script}"
         )
         print(f"[video-recap]    写完后重跑继续: {cont}")
         print("=" * 50)
@@ -604,6 +591,7 @@ def _run_dub(video, work_dir, args):
 
 def _run_single(video, work_dir, args):
     """Single-video full or cut run; returns early at each agent pause."""
+    project_binding.sync_production_reference(work_dir, getattr(args, "resolved_project", None))
     cut = args.edit_mode == "cut"
     narration_json = work_dir / "narration.json"
     clip_plan_json = work_dir / "clip_plan.json"
@@ -619,8 +607,9 @@ def _run_single(video, work_dir, args):
         _pause_for_agent(
             work_dir,
             need_text,
-            _continuation_command(video, work_dir, args),
+            _continuation_command(work_dir, args),
             inspect_hint=inspect_hint,
+            project=getattr(args, "resolved_project", None),
         )
 
     def _reject_stale_manifest():
@@ -631,20 +620,14 @@ def _run_single(video, work_dir, args):
         if uses_narration(args):
             if not narration_json.exists():
                 _understand()
-                _write_run_manifest(work_dir, video, args)
                 _pause(f"{narration_json}", state_hint)
                 return
             _reject_stale_manifest()
-            _run(
-                "video-script", "validate.py", "--work-dir", work_dir,
-                "--mode", "full", *_approved_validation_args(args),
-            )
+            _run("video-script", "validate.py", "--work-dir", work_dir, "--mode", "full")
         elif (work_dir / RUN_MANIFEST).exists():
             _reject_stale_manifest()
         else:
             _write_run_manifest(work_dir, video, args)
-        if not uses_narration(args):
-            begin_non_narration_qc(work_dir, args, _write_shift_left_stage_qc)
         _deliver(work_dir, args, video, video.stem, "source")
         return
 
@@ -654,41 +637,28 @@ def _run_single(video, work_dir, args):
         # PASS 1: understand -> agent writes clip_plan.json ONLY.
         if not uses_narration(args) and (work_dir / RUN_MANIFEST).exists():
             _reject_stale_manifest()
-        if not uses_narration(args):
-            begin_non_narration_qc(work_dir, args, _write_shift_left_stage_qc)
         _understand()
-        _write_run_manifest(work_dir, video, args)
         _pause(f"{clip_plan_json}（只写剪辑计划；解说下一步对着剪好的成片写）", state_hint)
         return
     _reject_stale_manifest()
-    if not uses_narration(args):
-        begin_non_narration_qc(work_dir, args, _write_shift_left_stage_qc)
-    cp_identity = material_lib.file_identity(clip_plan_json)
+    cp_identity = file_identity(clip_plan_json)
+    # A narration written for an older clip_plan aborts before cut.py re-renders anything.
+    if uses_narration(args) and narration_json.exists():
+        _reject_stale_cut_narration(work_dir, cp_identity)
     _render_cut(video, work_dir, args)
     if uses_narration(args):
         if not narration_json.exists():
             # PASS 2: rebuild the brief (now an OUTPUT-timeline variant) and pause for narration.
             _rebuild_understanding_brief(_single_source_record(video, args), work_dir, args)
-            _write_phase_ledger(
-                work_dir, clip_plan_identity=cp_identity, edited_source_rendered=True
-            )
+            _write_phase_ledger(work_dir, cp_identity)
             _pause(
                 f"{narration_json}（用成片 OUTPUT 时间轴写解说，对着 {edited_source}）",
                 f"python3 {inspect_py} --work-dir {work_dir} "
                 "clip-map --output-start <s> --output-end <e>  # 核对输出↔原片时间轴",
             )
             return
-        _reject_stale_cut_narration(work_dir, cp_identity)
-        _write_phase_ledger(work_dir, clip_plan_identity=cp_identity, narration_written=True)
-        _validate_cut_output_narration(work_dir, args)
-    else:
-        _write_phase_ledger(
-            work_dir,
-            clip_plan_identity=cp_identity,
-            edited_source_rendered=True,
-            audio_mode=args.audio_mode,
-            audio_stream_index=args.audio_stream_index,
-        )
+        _write_phase_ledger(work_dir, cp_identity)
+        _validate_cut_output_narration(work_dir)
     # let the timeline / 剪映 export reference the original clips, not edited_source.mp4
     _deliver(
         work_dir, args, edited_source, video.stem, "cut_output",

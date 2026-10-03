@@ -7,6 +7,13 @@ describe("DSH workspace media boundary", () => {
     expect(() => { assertCreativePath("交付/EP001/final.mov", "media"); }).not.toThrow();
     expect(mediaMimeTypeForPath("剧集/EP001/角色板.WEBP")).toBe("image/webp");
     expect(mediaMimeTypeForPath("剧集/EP001/对白.wav")).toBe("audio/wav");
+    for (const [extension, mime] of [["aac", "audio/aac"], ["flac", "audio/flac"]]) {
+      const path = `剧集/EP001/制作成果/声音参考/林舟.${extension}`;
+      expect(() => { assertCreativePath(path, "media"); }).not.toThrow();
+      expect(mediaMimeTypeForPath(path)).toBe(mime);
+      expect(() => { assertCreativePath(path, "text"); }).toThrow();
+      expect(() => { assertCreativePath(`private/林舟.${extension}`, "media"); }).toThrow();
+    }
     expect(() => { assertCreativePath("video-recaps/demo/sources/input.mkv", "media"); }).not.toThrow();
     expect(mediaMimeTypeForPath("video-recaps/demo/sources/input.mkv")).toBe("video/x-matroska");
   });

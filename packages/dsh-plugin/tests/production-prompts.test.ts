@@ -11,6 +11,10 @@ const episodeDirectory = "剧集/EP001";
 const production = parseEpisodeProduction({
   [`${episodeDirectory}/分镜.md`]: `## SHOT-EP001-001 · 门外停步\n- 时长：4s\n\n### 冻结关键帧提示词\n> 江辰站在旧门外。`
 }, episodeDirectory);
+const videoSources = [
+  { shotId: "SHOT-EP001-001", sourceId: "MOTION-EP001-001", kind: "video" as const, path: "one.mp4" },
+  { shotId: "SHOT-EP001-002", sourceId: "MOTION-EP001-002", kind: "video" as const, path: "two.mp4" }
+];
 
 describe("DSH-native production prompts", () => {
   it("dispatches one explicit job through the short-drama skill and DSH authority", () => {
@@ -46,6 +50,9 @@ describe("DSH-native production prompts", () => {
     // MiniMax H3 cannot mix frame and reference inputs, so a mixed group goes out whole as reference_image.
     expect(prompt).toContain("方言要求整组走多槽参考时（如 MiniMax H3 的 full-reference：首尾帧输入与参考输入互斥，起始帧、结束帧都随整组以 reference_image 送入）");
     expect(prompt).toContain("并在预览里写明结束帧将作为参考图送入，或先请分镜 owner 取舍");
+    expect(prompt).toContain("MOTION-* 的「参考音频」不混入「输入参考图」");
+    expect(prompt).toContain("role 固定为 reference_audio，character 逐字照抄该行「角色」");
+    expect(prompt).toContain("adapter profile 未显式声明支持 reference_audio 时必须在提交前失败");
     expect(prompt).not.toContain("绝不能当普通参考图提交");
     // Upstream's SHOT-* selector only yields the start frame; that note matters to image jobs alone.
     expect(prompt).not.toContain("SHOT-* 只产出起始帧");
@@ -57,7 +64,7 @@ describe("DSH-native production prompts", () => {
     const keyframes = createPendingJob({ id: "batch-002", targetId: "BATCH-KEYFRAMES", kind: "image", prompt: "batch", expectedOutputs: 1 });
     const videos = createPendingJob({ id: "batch-003", targetId: "BATCH-VIDEOS", kind: "video", prompt: "batch", expectedOutputs: 1 });
     const candidates = [{ id: "SHOT-EP001-001", prompt: "第一镜" }];
-    const referenceRules = /参考图以来源条目自己的声明为准[^\n]+/u;
+    const referenceRules = /参考输入以来源条目自己的声明为准[^\n]+/u;
     const single = (job: typeof keyframes) => referenceRules.exec(nativeProductionPrompt(production, { ...job, targetId: "SHOT-EP001-001" }, []))?.[0];
     expect(referenceRules.exec(nativeBatchPrompt(production, keyframes, candidates))?.[0]).toBe(single(keyframes));
     expect(referenceRules.exec(nativeBatchPrompt(production, videos, candidates))?.[0]).toBe(single(videos));
@@ -76,9 +83,10 @@ describe("DSH-native production prompts", () => {
     expect(batchPrompt).toContain("不得 confirm 或 run");
 
     const composition = createPendingJob({ id: "compose-001", targetId: episodeDirectory, kind: "composition", prompt: "合成" });
-    const compositionPrompt = nativeCompositionPrompt(production, composition, ["one.mp4", "two.mp4"]);
+    const compositionPrompt = nativeCompositionPrompt(production, composition, videoSources);
     expect(compositionPrompt).toMatch(/^\/short-drama-edit/u);
-    expect(compositionPrompt).toContain("1. one.mp4\n2. two.mp4");
+    expect(compositionPrompt).toContain("1. SHOT-EP001-001 → MOTION-EP001-001 · 视频 · one.mp4\n2. SHOT-EP001-002 → MOTION-EP001-002 · 视频 · two.mp4");
+    expect(compositionPrompt).toContain("显式选源优先于自动结果");
     expect(compositionPrompt).toContain("剧集/EP001/剪辑单.md");
     expect(compositionPrompt).toContain("剧集/EP001/制作成果/成片/");
     expect(compositionPrompt).toContain("先写剪辑单再渲染");
@@ -87,13 +95,31 @@ describe("DSH-native production prompts", () => {
     expect(compositionPrompt).toContain("遵守 DSH 权限与审批");
   });
 
-  it("hands assembly the edit_tool 0.7.1 rules for unused shots, clip formats, subtitles and delivery", () => {
+  it("declares mixed SHOT and IMG static sources with their paths and storyboard durations", () => {
+    const composition = createPendingJob({ id: "compose-static", targetId: episodeDirectory, kind: "composition", prompt: "合成" });
+    const prompt = nativeCompositionPrompt(production, composition, [
+      { shotId: "SHOT-EP001-001", sourceId: "SHOT-EP001-001", kind: "image", path: "制作成果/SHOT-EP001-001/key.png", durationSeconds: 4 },
+      { shotId: "SHOT-EP001-002", sourceId: "IMG-EP001-DOOR", kind: "image", path: "制作成果/IMG-EP001-DOOR/door.webp", durationSeconds: 2.5 },
+      videoSources[1]!
+    ]);
+    expect(prompt).toContain("1. SHOT-EP001-001 → SHOT-EP001-001 · 静帧 · 制作成果/SHOT-EP001-001/key.png · 分镜时长 4 秒");
+    expect(prompt).toContain("2. SHOT-EP001-002 → IMG-EP001-DOOR · 静帧 · 制作成果/IMG-EP001-DOOR/door.webp · 分镜时长 2.5 秒");
+    expect(prompt).toContain("3. SHOT-EP001-002 → MOTION-EP001-002 · 视频 · two.mp4");
+    expect(prompt).toContain("静帧的来源逐字使用给出的 SHOT-* 或 IMG-*");
+    expect(prompt).toContain("须先量出真实有声区间并据此排时长，不能截断台词");
+  });
+
+  it("hands assembly the edit_tool 0.8.1 rules for static cuts, unused shots, audio and delivery", () => {
     const composition = createPendingJob({ id: "compose-002", targetId: episodeDirectory, kind: "composition", prompt: "合成" });
-    const prompt = nativeCompositionPrompt(production, composition, ["one.mp4"]);
-    expect(prompt).toContain("视频提示词.md 里的每个「## MOTION-*」都必须作为某个 CUT 的「来源」");
+    const prompt = nativeCompositionPrompt(production, composition, videoSources.slice(0, 1));
+    expect(prompt).toContain("静帧段来源写分镜里的 SHOT-* 或图片提示词里的 IMG-*");
+    expect(prompt).toContain("不得因为省钱、失败或排队自行把视频改成静帧");
+    expect(prompt).toContain("同一镜用了 SHOT-* 可同时覆盖对应 MOTION-*");
     expect(prompt).toContain("第一个「## CUT-」之前");
     expect(prompt).toContain("写明属于文件缺失、质量不可用还是叙事取舍");
-    expect(prompt).toContain("所有 CUT 的素材必须同宽、同高、同帧率");
+    expect(prompt).toContain("视频 CUT 的素材必须同宽、同高、同帧率");
+    expect(prompt).toContain("静帧则按交付规格等比铺满、居中裁切并按运镜出画");
+    expect(prompt).toContain("静帧来源入点写 0.00、出点等于时长且至少 0.50 秒");
     expect(prompt).toContain("新文件写到 剧集/EP001/制作成果/成片/规格统一/——这是剪辑阶段自己的中间文件，不放在生产阶段的原素材旁边、不覆盖已生产的素材");
     expect(prompt).toContain("文件名也不沿用原文件里的任务 ID");
     expect(prompt).not.toContain("原文件旁边的新文件");
@@ -101,7 +127,8 @@ describe("DSH-native production prompts", () => {
     expect(prompt).toContain("默认的硬字幕路线需要带 libass 的 ffmpeg");
     expect(prompt).toContain("剪辑单里只要有「画面文字」行也必须要它");
     expect(prompt).toContain("未同意就不写「画面文字」行");
-    expect(prompt).toContain("混入「音效」行");
+    expect(prompt).toContain("混入「音效」「配音」「环境声」行");
+    expect(prompt).toContain("配音可用负起点做 J-cut，也可跨切点做 L-cut");
     expect(prompt).not.toContain("零依赖");
     expect(prompt).toContain("剪辑单的「声音」行只是记录，render 不执行它");
     expect(prompt).toContain("这一步最后要像 render 一样按剪辑单的「交付响度」对整片做两遍 loudnorm（I=交付响度、TP=-1.5、LRA=11，第二遍代入第一遍的实测值并用 linear=true），音频编码为 AAC 192k、48 kHz，然后才替换 剧集/EP001/制作成果/成片/成片.mp4");
@@ -117,7 +144,7 @@ describe("DSH-native production prompts", () => {
     expect(tool).toContain('command += ["-c:a", "aac", "-b:a", "192k", "-ar", "48000"]');
 
     const composition = createPendingJob({ id: "compose-004", targetId: episodeDirectory, kind: "composition", prompt: "合成" });
-    expect(nativeCompositionPrompt(production, composition, ["one.mp4"])).toContain("I=交付响度、TP=-1.5、LRA=11");
+    expect(nativeCompositionPrompt(production, composition, videoSources.slice(0, 1))).toContain("I=交付响度、TP=-1.5、LRA=11");
     const overlay = dshDramaSkillContent("short-drama-edit", "", dramaRoot);
     expect(overlay).toContain("ends as render does with whole-film two-pass loudnorm to the declared 交付响度 (I=<交付响度>:TP=-1.5:LRA=11, the second pass fed the first pass's measurements with linear=true, audio re-encoded as AAC 192k at 48 kHz), and only then replaces 剧集/<EP>/制作成果/成片/成片.mp4");
   });
@@ -127,13 +154,13 @@ describe("DSH-native production prompts", () => {
     const tool = await readFile(resolve(dramaRoot, "short-drama-edit/scripts/edit_tool.py"), "utf8");
     expect(tool).toContain(String.raw`UNUSED_LINE = re.compile(r"^-\s*未采用镜头：\s*(.*)$")`);
     expect(tool).toContain(String.raw`item.strip() for item in unused_match.group(1).split("；")`);
-    expect(tool).toContain(String.raw`re.fullmatch(r"(MOTION-[\w-]+)\s*[（(]理由[：:]\s*(.+?)[）)]", note.strip())`);
+    expect(tool).toContain(String.raw`r"((?:MOTION|SHOT|IMG)-[\w-]+)\s*[（(]理由[：:]\s*(.+?)[）)]", note.strip()`);
     const unusedLine = /^-\s*未采用镜头：\s*(.*)$/u;
-    const unusedItem = /^(MOTION-[\w-]+)\s*[（(]理由[：:]\s*(.+?)[）)]$/u;
+    const unusedItem = /^((?:MOTION|SHOT|IMG)-[\w-]+)\s*[（(]理由[：:]\s*(.+?)[）)]$/u;
 
     const composition = createPendingJob({ id: "compose-003", targetId: episodeDirectory, kind: "composition", prompt: "合成" });
     const sources = [
-      nativeCompositionPrompt(production, composition, ["one.mp4"]),
+      nativeCompositionPrompt(production, composition, videoSources.slice(0, 1)),
       dshDramaSkillContent("short-drama-edit", "", dramaRoot)
     ];
     for (const source of sources) {
@@ -141,7 +168,10 @@ describe("DSH-native production prompts", () => {
       expect(template).toBeDefined();
       // Fill the placeholders the way a real cut list would.
       let counter = 0;
-      const line = template!.replaceAll("MOTION-…", () => `MOTION-EP001-00${String(++counter)}`).replaceAll("…", "尚未生产");
+      const line = template!
+        .replaceAll("MOTION-…", () => `MOTION-EP001-00${String(++counter)}`)
+        .replaceAll("SHOT-…", () => `SHOT-EP001-00${String(++counter)}`)
+        .replaceAll("…", "尚未生产");
       const items = unusedLine.exec(line)?.[1]?.split("；").map((item) => item.trim()).filter((item) => item !== "") ?? [];
       expect(items.length).toBeGreaterThanOrEqual(2);
       for (const item of items) expect(unusedItem.exec(item)?.[2]?.trim(), item).toBeTruthy();

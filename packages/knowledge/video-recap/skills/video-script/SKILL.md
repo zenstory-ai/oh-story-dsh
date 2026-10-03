@@ -23,7 +23,7 @@ description: >
 4. 声音/旁白编辑
 5. 第一次观看的观众
 
-Agent 先记录简洁决定，再写时间线产物。`validate.py` 负责对理解索引做机械校验；full 模式默认还会执行预算整理并计算旁白的原声重叠。已有批准稿应加 `--preserve-approved-text`，保留段落顺序、数量、时间、文本、停顿和扩展元数据，仅允许依据现有声音证据更新 `overlaps_speech`。
+Agent 先记录简洁决定，再写时间线产物。`validate.py` 负责对理解索引做机械校验，从不改写 Agent 的稿子：段落顺序、数量、时间、文本、停顿和扩展元数据原样保留，只依据现有声音证据回写实测的 `overlaps_speech`。文本装不下时间窗、段落未按时间排序等问题以 error 退回给 Agent 修改。
 
 下面的 `scripts/...` 均相对于本技能目录。若执行器从仓库根目录启动，请给脚本路径加上本技能的绝对目录。
 
@@ -44,8 +44,9 @@ REVISION 先明确本轮修改项与冻结项，再编辑对应层：表达、�
 - `work_dir/agent_narration_brief.md`：场景、时长、安静窗口与字数预算。
 - `asr_writing_chunks.json`：长对白的写作分块。
 - `timeline_fusion.json`：判断某段是否有对白或静音槽。
-- `vlm_analysis.json` / `asr_result.json`：核对具体画面与原声证据。
+- `vlm_analysis.json` / `asr_result.json`：核对具体画面与原声证据；有 `asr_clean.json` 时以它的文本为准（lint、评审、剪辑和合成都读它）。
 - brief 顶部列出的 contact sheet：不要只依赖场景摘要；反应、走位、静止和台词前后的具体时刻常常更重要。
+- `production_reference.json`（仅当 `work_dir` 里有）：另一部成片拆出的可迁移方法与节奏数值，用法见 §3。
 
 full 模式使用原片时间。cut 模式第一阶段只写 `clip_plan.json`；`edited_source.mp4` 产生后，第二阶段才按输出时间写 `narration.json`。
 
@@ -67,6 +68,8 @@ full 模式使用原片时间。cut 模式第一阶段只写 `clip_plan.json`；
 3. **`style_card.json`（适用时）**：用户当前认可的声音、口语节奏、字幕阅读姿态和明确禁忌。收到表达或字幕反馈后更新原文件，而不是只改最终文案。
 
 只记录决定、证据锚点、被放弃的备选方案和简短理由，不写冗长思维过程。
+
+若 `work_dir` 有 `production_reference.json`，制定方案前先读它。它来自另一部成片，只含可迁移的方法和测得的节奏，不含本片事实，不能作为本片画面、剧情或台词的证据。优先级：用户指令 > 本片证据 > 参考。CREATE 可把它的 `structure` 当作一个候选假设，与素材自生的假设比较；DIRECTED / REVISION 默认不套用。`targets` 是参考值，不是配额：与本片的 `audio_owner`、完整台词或表演冲突时以素材为准。可在 `recap_story_plan.json` 写可选字段 `reference_methods: [{"id": "m1", "decision": "adopt|adapt|skip", "note": "…"}]`。没有这个文件就跳过本段。
 
 ### 3.1 导演判断
 
@@ -153,7 +156,7 @@ full 模式直接按原片时间写；cut 第二阶段先查看 `edited_source.m
 
 | 字段 | 含义 |
 |------|------|
-| `start` / `end` | full 模式为原片时间；cut 第二阶段为输出时间 |
+| `start` / `end` | full 模式为原片时间；cut 第二阶段为输出时间。与上一块间隔不超过 1.6 秒的块属于同一段落，assemble 会让它紧接上一块的实际结尾（间隔 0.35 秒）播放，最多比 `start` 提前 1.2 秒，且提前的那一段不会进入原声对白；段落首块从 `start` 开始，上一块超时则顺延到上一块结尾加停顿之后 |
 | `narration` | 解说文本 |
 | `pause_after_ms` | 段后停顿，默认 250ms |
 | `overlaps_speech` | 是否与原对白重叠；连续铺底窗口通常为 `true`，真正静音槽才为 `false` |
@@ -165,7 +168,7 @@ full 模式直接按原片时间写；cut 第二阶段先查看 `edited_source.m
 2. **按连续思路写**：旁白拥有一个 beat 时，用一个或少量完整句子完成“前提 → 触发动作 → 变化/意义”，并在一次 TTS 中合成。句号服从口语思路和呼吸，不服从字幕换行；不要固定句数，也不要“一句一停”。
 3. **7:3 不是配额**：只在素材判断不足时作为避免墙到墙旁白的粗略首稿参考。实际比例服从 `audio_owner`；强对白、动作声或沉默可以完整拥有一个 beat。
 4. **视听接力**：旁白若引出原声，块尾要让观众想听；原声结束后的下一块要承接它造成的变化。
-5. **按有效语速控量**：用 `字数 / brief 头部 speech budget` 估算窗口；装不下时删减或拆分叙事任务，不用加速堆字。
+5. **按有效语速控量**：用 `字数 / brief 头部 speech budget` 估算朗读秒数，每块再加约 0.45 秒 TTS 首尾静音。brief 里每个窗口标的字数没扣这段静音，2–3 秒的短窗口要比它少写一两个字；装不下时删减或拆分叙事任务，不用加速堆字。
 6. **不看图说话**：旁白只增加上下文、因果、预期、证据支持的解释或跨越。
 7. **人物与证据优先**：优先使用已知角色名；关系、动机、潜台词和结果必须指向 visual / ASR / research / user context，且不能把背景资料伪装成当前画面事实。
 8. **写给耳朵听**：使用具体名词和动词，句子完整、口语可听；避免字幕腔、半句、空泛拔高和破折号。TTS 文本先保证听感连续，字幕再按阅读宽度拆分，不能反过来把朗读稿切碎。
@@ -218,7 +221,7 @@ python3 scripts/review.py --work-dir <work_dir>
 
 重复修改并评审，直到：
 
-- `verdict` 为 `PASS` / `OK` 且没有 `error`；或
+- `verdict` 为 `PASS` 且没有 `error`；或
 - 对仍保留的问题做明确 override。
 
 覆盖决定追加到 `work_dir/narration_review_override.md`：
@@ -237,11 +240,10 @@ python3 scripts/review.py --work-dir <work_dir>
 
 ```bash
 python3 scripts/validate.py --work-dir <work_dir> --mode full
-python3 scripts/validate.py --work-dir <work_dir> --mode full --preserve-approved-text
 # cut 输出时间线由编排器使用 --mode cut_output
 ```
 
-命令写出 `narration_lint.json`。full 模式默认执行字符预算整理、去重合并并依据安静窗口计算 `overlaps_speech`，但不会把时间段移动到安静窗口；`--preserve-approved-text` 则保留批准稿的原始时间、文本、停顿、顺序与扩展元数据，只允许更新实测 `overlaps_speech`。修复所有 error 后重复运行，直到校验干净，再继续 TTS 与合成。
+命令写出 `narration_lint.json`。full 与 cut_output 用同一套声音归属算法（原声对白区间减去安静窗口）回写 `overlaps_speech`，其余字段原样保留，不截短、不合并、不补标点、不重排。推荐字数按时间窗先扣 0.45 秒 TTS 首尾静音再计算；full 模式下某段字数超过推荐字数的 1.25 倍即报 `over_budget` error，报告里写明时间窗、`budget_chars`、`limit_chars`、`actual_chars` 和 `over_chars`：缩短文字或放宽/挪动时间窗，不要指望 TTS 替你缩稿。有 error 时命令以非零退出，逐块列出「段 N」（narration.json 里第 N 块，从 1 数；`narration_lint.json` 的 `index` 仍从 0 数）、错误码、关键数字和改法。修复所有 error 后重复运行，直到校验干净，再继续 TTS 与合成。
 
 片名或题材明确但缺少剧情上下文时，先按本技能的 `references/research-guide.md` 写 `background_research.json`。若理解素材偏薄，brief 中的数量只能当上限：宁可少写、写实，也不要为凑数复述画面。
 

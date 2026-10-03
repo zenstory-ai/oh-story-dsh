@@ -13,7 +13,6 @@ from evidence_bundle import (
     _in_ranges,
     _safe_time,
     build_evidence_bundle,
-    build_review_coverage_metadata,
     render_evidence_bundle,
 )
 from review_grounding import _load_agent_optional
@@ -42,28 +41,7 @@ CATEGORIES = [
     "other",
 ]
 
-SCORECARD_KEYS = [
-    "promise_match",
-    "hook_3s",
-    "first_15s_delivery",
-    "spine_clarity",
-    "stakes_escalation",
-    "information_gain",
-    "spoken_language",
-    "sentence_brevity",
-    "tts_pacing",
-    "grounding",
-    "original_audio_use",
-    "subtitle_readability",
-    "ending_payoff",
-    "style_consistency",
-    "ai_flavor",
-    "packaging_consistency",
-]
-
 FACTUAL_CATEGORIES = {"hallucination", "incomplete"}
-
-COVERAGE_POLICY_VERSION = "coverage_policy_v1"
 
 RUBRIC = """你是中文视频解说的创作复核编辑。依据素材证据和已有创作计划审阅草稿，只指出真实问题，宁缺毋滥：
 1. 反幻觉（最重要）：解说里的人物、动作、因果、关系必须由带标签的 evidence 支撑。画面/对白是 timeline evidence（clock=SOURCE 或 OUTPUT）；背景资料/user_context 只能作为 context-only（clock=null）辅助识别/消歧。research-only 不能升级成当前画面强事实；若与 research 一致但画面/对白里看不到，最多 severity=suggestion/category=grounding_risk，不要判 error；只有与全部可得证据矛盾才是 severity=error, category=hallucination，并指出冲突证据。
@@ -71,19 +49,18 @@ RUBRIC = """你是中文视频解说的创作复核编辑。依据素材证据�
 3. change-based beats：每个 beat 应改变知识、权力、目标、关系、情绪或风险。精简时不能只留下“发生了什么”，还要保住人物动机、接受条件及随后犹豫/行动的必要前提。若一段只重复上一段、删除后什么都不损失，可报 low_information_gain/pacing；不要用固定段数或秒数代替判断。
 4. 钩子：开头要提出正文真实兑现的戏剧问题/利害，不是交代场景，也不是无关的留存话术。弱钩子 → weak_hook。
 5. 给信息而非念画面：观众看得见动作表情；解说只增加上下文、因果、预期、证据支持的解释或跨越。复述画面 → narrating_picture。
-6. 视听分工：若提供 visual_audio_board.json，检查 narration_job=none 或 audio_owner=original_dialogue/action_sound/ambience/music/silence 的拍是否被旁白无故覆盖；必须听见的原声被盖住 → original_audio_conflict。沉默和低旁白覆盖本身不是问题。
+6. 视听分工：若提供 visual_audio_board.json，检查 narration_job=none 或 audio_owner=original_dialogue/action_sound/ambience/music/silence 的拍是否被旁白无故覆盖；必须听见的原声被盖住 → original_audio_conflict。沉默和低旁白覆盖本身不是问题。这些拍与 original_subtitles 的原声字幕块按计划没有旁白，不是跳过或漏写。
 7. 人物、反应与动作兑现：不要用旁白解释掉素材中已经能成立的表演、停顿或反应。有情感回应或知情变化的反应镜不可机械删；反打是否保留取决于它是否提供新增信息，而非是否达到统一时长。以某个可见结果为看点时，只写 evidence 已呈现的结果，不推断更强的结果（例：证据只到受击，就不能写成倒地或胜负）。当前评审只能检查计划/稿件一致性，不能凭少量帧声称最终剪点一定好坏。
 8. 密度/节奏与因果边界：7:3 不是配额。只在旁白没有任务、墙到墙压住原声、碎成一句一停，或无意长空档导致因果断裂时，报 density/pacing。不得把跨场镜头拼成同场动作/反应的虚假因果，也不用花字替补源证据或提前宣布结果。
 9. 去废词：删空泛形容（"危机四伏""震撼人心"）→ cliche。
-10. 完整句子：半句话/未收尾 → incomplete。
+10. 完整句子：旁白本身半句话/未收尾 → incomplete。某拍没有旁白不算 incomplete。
 11. 段落衔接：解说块要为随后的原声留白铺垫，下一块要承接原声刚呈现的变化；若两块各说各的、原声进来接不上 → disjoint_handoff。
 12. 结尾回收：结尾要兑现开头承诺/主线情绪，不要突然停、只复述最后画面、没有情绪/信息回报；弱回收 → weak_payoff。
 13. 风格一致性与修改范围：若提供 style_card.json，把它当作表达意图/语气/节奏边界；不符合意图 → style_mismatch。不要把 style_card 当标题/封面/首句包装计划。只提能定位到具体段落、beat 或镜头边界的具体局部修法；REVISION 未点名层默认冻结，不借局部问题重做故事、声音或包装。
 14. 包装一致性：只有提供 packaging_plan.json 时才评估标题/封面/首句/卖点承诺与正文兑现；缺失不扣分。不一致 → packaging_mismatch。不要让包装反过来改写故事判断。
-15. 去AI味：若出现模板化、空泛拔高、过度对仗、机械转折、明显 agent 示例残留，可报 ai_flavor；若出现示例人物/占位实体泄漏（如未替换示例名、模板角色）→ example_entity_leak。“不是 A，而是 B”本身不是错误，只有在先虚构旧判断再制造假洞察、或反复机械使用时才建议改写。deslop_qc.json 是 deterministic local report-only QC，不是 AIGC detector，不自动重写；只能作为证据参考，不能仅凭它判定。
-另外给一份内容效果 scorecard（1-5，advisory：除事实矛盾/残句外不要据此给 error；缺项可以省略，系统会保留为 null/未评分）：promise_match/hook_3s/first_15s_delivery/spine_clarity/stakes_escalation/information_gain/spoken_language/sentence_brevity/tts_pacing/grounding/original_audio_use/subtitle_readability/ending_payoff/style_consistency/ai_flavor/packaging_consistency。`sentence_brevity` 衡量的是句子是否简洁而完整，不是越短越高；连续短句造成串珠式 TTS 应降低分数。ai_flavor 分数含义：5=自然、人味强，1=AI味明显。
+15. 去AI味：若出现模板化、空泛拔高、过度对仗、机械转折、明显 agent 示例残留，可报 ai_flavor；若出现示例人物/占位实体泄漏（如未替换示例名、模板角色）→ example_entity_leak。“不是 A，而是 B”本身不是错误，只有在先虚构旧判断再制造假洞察、或反复机械使用时才建议改写。
 只返回 JSON（不要额外解释），格式：
-{"verdict":"PASS|REVISE|FAIL","summary":"一两句总体判断","scorecard":{"promise_match":1-5,"hook_3s":1-5,"first_15s_delivery":1-5,"spine_clarity":1-5,"stakes_escalation":1-5,"information_gain":1-5,"spoken_language":1-5,"sentence_brevity":1-5,"tts_pacing":1-5,"grounding":1-5,"original_audio_use":1-5,"subtitle_readability":1-5,"ending_payoff":1-5,"style_consistency":1-5,"ai_flavor":1-5,"packaging_consistency":1-5},"hook_candidates_review":[{"candidate":"首句","type":"suspense|contrast|stakes","score":1-5,"keep":true}],"retention_risk_points":[{"time":"00:28","risk":"为什么可能掉人","fix":"怎么改"}],"highest_return_edits":["最值得改的动作"],"information_gain_notes":[{"segment":0,"label":"motive|relationship|stakes|foreshadowing|payoff|context|visual_restatement","note":"证据/改法"}],"spoken_language_rewrites":[{"segment":0,"original":"原句","rewrite":"口语改写","why":"为什么更适合听"}],"grounding_assertions":[{"segment":0,"assertion":"人物/关系/因果断言","source":"visual|asr|research|user_context|unsupported","risk":"谨慎说明"}],"findings":[{"segment":<草稿段号(从0起)或null表示整体>,"severity":"error|warning|suggestion","category":"<上面类别之一>","issue":"问题","fix":"具体改法"}]}"""
+{"verdict":"PASS|REVISE|FAIL","summary":"一两句总体判断","findings":[{"segment":<草稿段号(从0起)或null表示整体>,"severity":"error|warning|suggestion","category":"<上面类别之一>","issue":"问题","fix":"具体改法"}]}"""
 
 
 def merge_review_findings(chunks):
@@ -173,7 +150,7 @@ def _merge_chunk_reviews(chunk_reviews):
         return parse_review_response("")
     if len(chunk_reviews) == 1:
         return chunk_reviews[0]
-    verdict_rank = {"PASS": 0, "OK": 0, "REVISE": 1, "FAIL": 2}
+    verdict_rank = {"PASS": 0, "REVISE": 1, "FAIL": 2}
     best = max(chunk_reviews, key=lambda r: verdict_rank[r["verdict"]])
     merged = dict(best)
     merged["findings"] = merge_review_findings(chunk_reviews)
@@ -187,33 +164,6 @@ def _merge_chunk_reviews(chunk_reviews):
         "findings_after_merge": len(merged["findings"]),
     }
     return merged
-
-
-def _research_guardrail_qc(review, context_items):
-    # Assertion keys are whatever the judge returned; only the list itself is normalized.
-    assertions = review["grounding_assertions"]
-    research_context_assertions = [
-        a
-        for a in assertions
-        if str(a.get("source", "")).lower() == "research"
-        or a.get("support") == "context_only"
-        or a.get("clock") is None
-    ]
-    risk_assertions = [
-        a
-        for a in research_context_assertions
-        if "spoiler" in str(a.get("risk", "")).lower()
-        or "research-only" in str(a.get("risk", "")).lower()
-        or "current-timeline" in str(a.get("risk", "")).lower()
-    ]
-    grounding_risk_findings = [
-        f for f in review["findings"] if f["category"] == "grounding_risk"
-    ]
-    return {
-        "context_only_assertions": len(context_items) + len(research_context_assertions),
-        "spoiler_risk_assertions": len(risk_assertions) + len(grounding_risk_findings),
-        "policy": "research evidence is context_only unless visual/asr-supported",
-    }
 
 
 def _load_review_research_context(work_dir):
@@ -317,41 +267,89 @@ def _format_json_context(title, value, limit=3000):
     return f"## {title}\n{text[:limit]}"
 
 
-def _clamp_score(value, default=3):
-    try:
-        score = int(round(float(value)))
-    except (TypeError, ValueError):
-        score = default
-    return max(1, min(5, score))
+# audio_owner values that leave a beat to the source track (playbook: visual_audio_board).
+ORIGINAL_AUDIO_OWNERS = frozenset(
+    ("original_dialogue", "action_sound", "ambience", "music", "silence")
+)
+_MAX_ORIGINAL_AUDIO_LINES = 40
 
 
-def _normalise_scorecard(raw):
-    # Keep a stable scorecard schema, but do NOT fabricate a judge-looking score for a dimension
-    # the model omitted: those stay None ("未评分") rather than a neutral-looking 3.
-    source = raw if isinstance(raw, dict) else {}
-    return {
-        key: (_clamp_score(source[key]) if key in source else None)
-        for key in SCORECARD_KEYS
-    }
+def _beat_window(beat, clock):
+    """(label, start, end) on `clock` when the beat carries it, else on the other clock."""
+    for name in (clock, "source" if clock == "output" else "output"):
+        start, end = beat.get(f"{name}_start"), beat.get(f"{name}_end")
+        if (
+            isinstance(start, (int, float))
+            and isinstance(end, (int, float))
+            and not isinstance(start, bool)
+            and not isinstance(end, bool)
+            and end > start
+        ):
+            return name.upper(), float(start), float(end)
+    return None
 
 
-def _normalise_list_of_dicts(value, allowed_keys):
-    out = []
-    for item in value or []:
-        if isinstance(item, dict):
-            out.append({key: item.get(key) for key in allowed_keys if key in item})
-    return out
+def _original_audio_beats(board, plan):
+    """Beats the plan leaves to the source track: audio_owner is original audio or
+    narration_job is none. visual_audio_board owns audio decisions, so a story-plan beat
+    counts only when the board does not list the same beat_id."""
+    board_items = board.get("items") if isinstance(board, dict) else None
+    plan_beats = plan.get("beats") if isinstance(plan, dict) else None
+    board_items = [b for b in board_items or [] if isinstance(b, dict)]
+    board_ids = {str(b.get("beat_id")) for b in board_items if b.get("beat_id") is not None}
+    candidates = board_items + [
+        b
+        for b in plan_beats or []
+        if isinstance(b, dict) and str(b.get("beat_id")) not in board_ids
+    ]
+    return [
+        beat
+        for beat in candidates
+        if str(beat.get("audio_owner", "")).strip() in ORIGINAL_AUDIO_OWNERS
+        or str(beat.get("narration_job", "")).strip() == "none"
+    ]
 
 
-def _normalise_string_list(value, limit=12):
-    out = []
-    for item in value or []:
-        text = str(item).strip()
-        if text:
-            out.append(text)
-        if len(out) >= limit:
-            break
-    return out
+def _format_original_audio_holds(board, plan, subtitles, clock):
+    """Name every interval the plan deliberately leaves without narration.
+
+    The planning JSON is clipped to a few thousand characters, so without this list a
+    reviewer can see a story beat with no narration and report it as skipped.
+    """
+    lines = []
+    for beat in _original_audio_beats(board, plan):
+        window = _beat_window(beat, clock)
+        when = f"{window[0]} {window[1]:.1f}-{window[2]:.1f}s" if window else "时间未标"
+        owner = str(beat.get("audio_owner", "")).strip() or "?"
+        job = str(beat.get("narration_job", "")).strip() or "?"
+        anchor = _clip_text(
+            beat.get("original_audio_anchor") or beat.get("must_keep_moment"), 60
+        )
+        tail = f" 原声锚点：{anchor}" if anchor else ""
+        lines.append(
+            f"- [{when}] beat {beat.get('beat_id', '?')} audio_owner={owner} narration_job={job}{tail}"
+        )
+    for row in subtitles if isinstance(subtitles, list) else []:
+        if not isinstance(row, dict):
+            continue
+        start, end = _safe_time(row, "start", None), _safe_time(row, "end", None)
+        text = _clip_text(row.get("text"), 60)
+        if start is None or end is None or end <= start or not text:
+            continue
+        lines.append(f"- [{clock.upper()} {start:.1f}-{end:.1f}s] 原声字幕块「{text}」")
+    if not lines:
+        return ""
+    dropped = len(lines) - _MAX_ORIGINAL_AUDIO_LINES
+    lines = lines[:_MAX_ORIGINAL_AUDIO_LINES]
+    if dropped > 0:
+        lines.append(f"- …另有 {dropped} 条同类区间未列出")
+    return (
+        "## 计划内留给原声的区间（不是漏写）\n"
+        "以下拍在 visual_audio_board/recap_story_plan 里由原声或沉默拥有，或是 original_subtitles 的原声字幕块。"
+        "这些区间没有旁白是有意的：不要报为跳过、缺失或漏写，也不要据此给 incomplete、no_throughline、"
+        "low_information_gain 或 density。只有旁白闯入并盖住必须听见的原声时报 original_audio_conflict；"
+        "相邻旁白块与这段原声接不上时报 disjoint_handoff。\n" + "\n".join(lines)
+    )
 
 
 def _format_draft(narration):
@@ -393,27 +391,33 @@ def build_review_messages(
         research=research_obj,
     )
     evidence_text = render_evidence_bundle(bundle)
-    # Optional, agent-authored planning/QC artifacts. Bad JSON returns None via _load, matching
-    # existing fail-open optional artifact behavior; these only sharpen advisory scoring.
+    # Optional, agent-authored planning artifacts. Bad JSON returns None via _load, matching
+    # existing fail-open optional artifact behavior; these only sharpen the craft findings.
     packaging = _load_optional_json(work_dir, "packaging_plan.json")
     story_plan = _load_optional_json(work_dir, "recap_story_plan.json")
     av_board = _load_optional_json(work_dir, "visual_audio_board.json")
     style_card = _load_optional_json(work_dir, "style_card.json")
-    deslop_qc = _load_optional_json(work_dir, "deslop_qc.json")
+    holds = _format_original_audio_holds(
+        av_board,
+        story_plan,
+        _load_optional_json(work_dir, "original_subtitles.json"),
+        bundle["clock"],
+    )
+    holds_block = f"{holds}\n\n" if holds else ""
     user = (
         f"{RUBRIC}\n\n"
-        "## Scorecard 评估提示\n"
-        "若 work_dir 提供了 packaging_plan/recap_story_plan/visual_audio_board/style_card/deslop_qc，则结合评估："
+        "## 创作计划参考\n"
+        "若 work_dir 提供了 packaging_plan/recap_story_plan/visual_audio_board/style_card，则结合评审："
         "packaging_plan 只负责标题/封面/首句/卖点承诺与正文兑现；style_card 只负责表达意图、语气、节奏和禁忌；"
-        "recap_story_plan 是导演意图/备选假设/chosen POV/change-based beats 的基线；visual_audio_board 是画面/表演/原声/audio_owner/narration_job/剪辑锚点的基线；deslop_qc 是 deterministic local report-only QC，不是 AIGC detector，也不会自动重写，只能当证据参考。"
-        "若未提供，则基于解说本身与画面/对白证据评分，但不得因计划文件缺失给 error。统一评估：hook 是否真实兑现；每段是否产生变化/信息增量而非看图说话；"
+        "recap_story_plan 是导演意图/备选假设/chosen POV/change-based beats 的基线；visual_audio_board 是画面/表演/原声/audio_owner/narration_job/剪辑锚点的基线。"
+        "若未提供，则基于解说本身与画面/对白证据评审，但不得因计划文件缺失给 error。统一评估：hook 是否真实兑现；每段是否产生变化/信息增量而非看图说话；"
         "结尾是否兑现开头承诺/主线情绪；是否写给耳朵听（连续完整思路、自然口语、TTS可呼吸，而非一句一停）；人物/关系/因果断言是否有 visual/ASR timeline evidence；research/user_context 仅可作为 context-only 辅助。\n"
         "审美/风格/包装/去AI味项是 advisory：可 REVISE，但除事实矛盾/残句外不要给 error。\n\n"
         f"{_format_json_context('packaging_plan.json（标题/封面/首句/卖点包装承诺，可能为空）', packaging)}\n\n"
         f"{_format_json_context('recap_story_plan.json（主线/beats/original moments，可能为空）', story_plan)}\n\n"
         f"{_format_json_context('visual_audio_board.json（画面/原声/字幕/剪辑锚点，可能为空）', av_board)}\n\n"
         f"{_format_json_context('style_card.json（表达意图/语气/节奏/禁忌，不负责包装，可能为空）', style_card)}\n\n"
-        f"{_format_json_context('deslop_qc.json（deterministic report-only QC；非AIGC检测器；不自动重写，可能为空）', deslop_qc)}\n\n"
+        f"{holds_block}"
         f"## 背景资料（context-only/advisory：只辅助识别/消歧/弱背景，不是当前画面强事实）\n"
         f"Guardrail: clock=null/context_only；不得把未来剧情或 research-only 关系/因果升级为当前事实。\n"
         f"{research_context or '(无)'}\n\n"
@@ -421,23 +425,6 @@ def build_review_messages(
         f"## 解说草稿（共 {len([s for s in (narration or []) if isinstance(s, dict)])} 段）\n{draft or '(空)'}\n"
     )
     return [{"role": "user", "content": user}]
-
-
-def _downgrade_context_assertions(assertions):
-    out = []
-    for item in assertions or []:
-        src = str(item.get("source", "")).strip().lower()
-        if src in {"research", "user_context"}:
-            item = dict(item)
-            item["support"] = "context_only"
-            item["clock"] = None
-            risk = str(item.get("risk", "")).strip()
-            label = "research-only" if src == "research" else "user_context-only"
-            item["risk"] = (
-                risk + "; " if risk else ""
-            ) + f"{label}: advisory/context_only, not a strong current-timeline fact"
-        out.append(item)
-    return out
 
 
 def parse_review_response(text):
@@ -466,8 +453,10 @@ def parse_review_response(text):
 
 def _normalise_review(data):
     verdict = str(data.get("verdict", "REVISE")).upper()
-    # PASS/REVISE/FAIL is the new vocabulary; OK is kept as a backward-compatible alias.
-    if verdict not in ("PASS", "REVISE", "FAIL", "OK"):
+    # The prompt asks for PASS/REVISE/FAIL only; a stray "OK" from the judge means approval.
+    if verdict == "OK":
+        verdict = "PASS"
+    if verdict not in ("PASS", "REVISE", "FAIL"):
         verdict = "REVISE"
     findings = []
     for f in data.get("findings", []) or []:
@@ -493,42 +482,29 @@ def _normalise_review(data):
                 "fix": str(f.get("fix", "")).strip(),
             }
         )
-    # The scorecard and the lists below are PURE ADVISORY enrichment: they never mutate the
-    # judge's verdict (deliberately not the colleague's auto-downgrade) and never gate. The
-    # hard pre-TTS gate stays exactly where it was — error findings counted in recap.py.
     return {
         "verdict": verdict,
         "summary": str(data.get("summary", "")).strip(),
-        "scorecard": _normalise_scorecard(data.get("scorecard")),
-        "hook_candidates_review": _normalise_list_of_dicts(
-            data.get("hook_candidates_review"),
-            ["candidate", "type", "score", "keep", "reason"],
-        ),
-        "retention_risk_points": _normalise_list_of_dicts(
-            data.get("retention_risk_points"), ["time", "risk", "fix", "evidence"]
-        ),
-        "highest_return_edits": _normalise_string_list(
-            data.get("highest_return_edits")
-        ),
-        "information_gain_notes": _normalise_list_of_dicts(
-            data.get("information_gain_notes"), ["segment", "label", "note", "rewrite"]
-        ),
-        "spoken_language_rewrites": _normalise_list_of_dicts(
-            data.get("spoken_language_rewrites"),
-            ["segment", "original", "rewrite", "why"],
-        ),
-        "grounding_assertions": _downgrade_context_assertions(
-            _normalise_list_of_dicts(
-                data.get("grounding_assertions"),
-                ["segment", "assertion", "source", "risk", "support", "clock"],
-            )
-        ),
         "findings": findings,
     }
 
 
+def _segment_label(segment):
+    """The draft lists blocks from 0 (`segment` keeps that index); readers see 段 N from 1."""
+    if segment is None:
+        return "整体"
+    if isinstance(segment, str) and segment.strip().isdigit():
+        segment = int(segment)
+    elif isinstance(segment, float) and segment.is_integer():
+        segment = int(segment)
+    if isinstance(segment, int) and not isinstance(segment, bool) and segment >= 0:
+        return f"段 {segment + 1}"
+    # Any other shape is not a block index; show the raw value, never as a 段 number.
+    return f"段 ?（模型返回 {json.dumps(segment, ensure_ascii=False, default=str)}）"
+
+
 def format_review_md(review):
-    """Render a parse_review_response() review; list-item keys stay judge-optional."""
+    """Render a parse_review_response() review as markdown."""
     order = {"error": 0, "warning": 1, "suggestion": 2}
     findings = sorted(review["findings"], key=lambda f: order[f["severity"]])
     counts = {
@@ -543,127 +519,13 @@ def format_review_md(review):
         "",
         review["summary"] or "_(no summary)_",
         "",
-        "## Scorecard",
+        "## Findings",
     ]
-    for key, v in review["scorecard"].items():
-        out.append(f"- {key}: {v}/5" if v is not None else f"- {key}: 未评分")
-    out.extend(["", "## Highest-return edits"])
-    out.extend([f"- {edit}" for edit in review["highest_return_edits"]] or ["- (none)"])
-    out.extend(["", "## Retention risk points"])
-    risks = review["retention_risk_points"]
-    if risks:
-        for item in risks:
-            out.append(
-                f"- {item.get('time', '?')}: {item.get('risk', '')} — {item.get('fix', '')}"
-            )
-    else:
-        out.append("- (none)")
-    out.extend(["", "## Hook candidates review"])
-    hooks = review["hook_candidates_review"]
-    if hooks:
-        for item in hooks:
-            out.append(
-                f"- {item.get('type', '?')} {item.get('score', '-')}/5: {item.get('candidate', '')} ({'keep' if item.get('keep') else 'drop'}) {item.get('reason', '')}"
-            )
-    else:
-        out.append("- (none)")
-    out.extend(
-        ["", "## Information gain / write-for-ear / grounding", "### Information gain"]
-    )
-    notes = review["information_gain_notes"]
-    out.extend(
-        [
-            f"- 段 {n.get('segment')}: {n.get('label')} — {n.get('note', '')} {n.get('rewrite', '')}"
-            for n in notes
-        ]
-        or ["- (none)"]
-    )
-    out.append("### Spoken rewrites")
-    rewrites = review["spoken_language_rewrites"]
-    out.extend(
-        [
-            f"- 段 {r.get('segment')}: {r.get('original', '')} → {r.get('rewrite', '')}（{r.get('why', '')}）"
-            for r in rewrites
-        ]
-        or ["- (none)"]
-    )
-    out.append("### Grounding assertions")
-    assertions = review["grounding_assertions"]
-    out.extend(
-        [
-            f"- 段 {a.get('segment')}: {a.get('assertion', '')} [{a.get('source', '')}] {a.get('risk', '')}"
-            for a in assertions
-        ]
-        or ["- (none)"]
-    )
-    out.extend(["", "## Findings"])
     if not findings:
         out.append("- (none)")
     for f in findings:
-        seg = "整体" if f["segment"] is None else f"段 {f['segment']}"
+        seg = _segment_label(f["segment"])
         out.append(f"- **[{f['severity']}/{f['category']}] {seg}** — {f['issue']}")
         if f["fix"]:
             out.append(f"  - 改法: {f['fix']}")
     return "\n".join(out) + "\n"
-
-
-def build_grounding_qc(work_dir, review, bundle, *, timeline="source"):
-    """Pure-ish compatibility seam: build grounding QC payload without writing it.
-
-    It reads optional QC sidecars from work_dir to preserve the existing artifact
-    contract, but has no side effects.
-    """
-    work_dir = Path(work_dir)
-    items = bundle["items"]
-    context = bundle["context_items"]
-    # The runner hands the same pipeline warnings to the bundle and the review.
-    warnings = list(bundle["warnings"])
-    verdict = "warn" if warnings else "pass"
-    if any(f["severity"] == "error" for f in review["findings"]):
-        verdict = "fail"
-    coverage_meta = build_review_coverage_metadata(bundle)
-    visual_items = [item for item in items if item["source"] == "visual"]
-    asr_items = [item for item in items if item["source"] == "asr"]
-    return {
-        "schema_version": 1,
-        "owner": "video-script.review",
-        "timeline": timeline,
-        "coverage_policy_version": COVERAGE_POLICY_VERSION,
-        "review_coverage": {
-            "time_ranges": coverage_meta["time_ranges"],
-            "scene_count": coverage_meta["scene_count"],
-            "asr_count": coverage_meta["asr_count"],
-            "dropped_ranges": coverage_meta["dropped_ranges"],
-        },
-        "evidence_contract": {
-            # Every timeline item carries the bundle clock; context items are unclocked.
-            "source_items": len(items) if bundle["clock"] == "source" else 0,
-            "output_items": len(items) if bundle["clock"] == "output" else 0,
-            "unclocked_items": 0,
-            "context_only_items": len(context),
-        },
-        "index_inputs": {
-            "vlm": bool(visual_items),
-            "asr": bool(asr_items),
-            "research": (work_dir / "background_research.json").exists(),
-        },
-        "speech_window_qc": _load_optional_json(work_dir, "silence_periods.qc.json")
-        or {"coarse_asr_windows": 0, "low_confidence_speech_flags": 0},
-        "research_guardrail": _research_guardrail_qc(review, context),
-        "warnings": warnings,
-        "verdict": verdict,
-    }
-
-
-def write_grounding_qc(work_dir, qc):
-    """Compatibility seam: write a prebuilt grounding_qc.json payload."""
-    work_dir = Path(work_dir)
-    (work_dir / "grounding_qc.json").write_text(
-        json.dumps(qc, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
-    return qc
-
-
-def _write_grounding_qc(work_dir, review, bundle, *, timeline="source"):
-    qc = build_grounding_qc(work_dir, review, bundle, timeline=timeline)
-    return write_grounding_qc(work_dir, qc)

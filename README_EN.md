@@ -1,4 +1,4 @@
-<!-- Last synced with README.md: 2026-09-20 -->
+<!-- Last synced with README.md: 2026-10-03 -->
 
 <p align="center">
   <img src="https://zenstory.ai/brand/zenstory-ai-mark.svg" alt="" width="76" height="76">
@@ -38,11 +38,11 @@
 | Workbench | Upstream capability (pinned, bundled with the plugin) | Main entry points |
 | --- | --- | --- |
 | Novel | [Oh Story 0.8.4](https://github.com/zenstory-ai/oh-story-claudecode/releases/tag/v0.8.4) · 13 Skills · 7 Roles | `/story`, `/story-long-write`, `/story-review` |
-| Short drama | [Drama Skills 0.8.0](https://github.com/zenstory-ai/drama-skills/releases/tag/v0.8.0) · 11 Skills | `/short-drama`, `/short-drama-write`, `/short-drama-storyboard`, `/short-drama-edit` |
-| Game | [NovelToGame 0.4.0](https://github.com/zenstory-ai/novel-to-game) · 7 Skills · playable 《金瓶梅》 sample | `/novel-to-game quick`, `/game-build`, `/game-qa` |
-| Video | [video-recap-skills 0.6.0](https://github.com/zenstory-ai/video-recap-skills/releases/tag/v0.6.0) · 6 Skills | `/video-recap`, `/video-script` |
+| Short drama | [Drama Skills 0.8.1](https://github.com/zenstory-ai/drama-skills/releases/tag/v0.8.1) · 11 Skills | `/short-drama`, `/short-drama-write`, `/short-drama-storyboard`, `/short-drama-edit` |
+| Game | [NovelToGame 0.5.0](https://github.com/zenstory-ai/novel-to-game) · 7 Skills · playable 《金瓶梅》 ADV sample | `/novel-to-game quick`, `/game-build`, `/game-qa` |
+| Video | [video-recap-skills 0.6.1](https://github.com/zenstory-ai/video-recap-skills/releases/tag/v0.6.1) · 7 Skills (3 user entry points) | `/video-recap`, `/video-script`, `/video-reference` |
 
-> Latest release **v0.1.12** (2026-09-28), which requires DeepSeek Harness `0.2.0-rc.1`. See [CHANGELOG.md](CHANGELOG.md) and [Releases](https://github.com/zenstory-ai/oh-story-dsh/releases); upgrade steps are in the FAQ entry [“What do I do after upgrading?”](#what-do-i-do-after-upgrading).
+> Latest release **v0.1.13** (2026-10-03). The default install uses DeepSeek Harness `0.2.0-rc.2`, the npm `latest`; explicit opt-in to `0.2.1-alpha.1` is also supported. See [CHANGELOG.md](CHANGELOG.md) and [Releases](https://github.com/zenstory-ai/oh-story-dsh/releases); upgrade steps are in the FAQ entry [“What do I do after upgrading?”](#what-do-i-do-after-upgrading).
 
 ## The four workbenches
 
@@ -85,11 +85,11 @@ Boundaries and protocols for each workbench are in the [architecture notes](docs
 Requires Node.js 24+. The install command provides pnpm temporarily, so a machine with only Node.js can run it:
 
 ```bash
-npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.0-rc.1 dsh plugin --profile web add @oh-story/dsh@0.1.12 &&
-npx -y @deepseek-ai/dsh@0.2.0-rc.1 web
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.0-rc.2 dsh plugin --profile web add @oh-story/dsh@0.1.13 &&
+npx -y @deepseek-ai/dsh@0.2.0-rc.2 web
 ```
 
-Keep the terminal running; the browser opens automatically by default. If it does not, copy the full `http://127.0.0.1:3080/?token=...` link printed in the terminal — first-time authentication needs the token in the link. Closing the terminal stops the service. Use the same dsh version for install and start: the plugin declares compatibility with the DSH `0.2.0` patch line only. DSH 0.1.7 and later check this when adding or loading a plugin and refuse a mismatch with a message (`dsh plugin allow-version` overrides it at your own risk); older DSH does not check and loads the plugin anyway. An unversioned `npx @deepseek-ai/dsh` currently resolves to the npm `latest` tag (`0.1.7-rc.2`), which this release does not support, so pin `@deepseek-ai/dsh@0.2.0-rc.1` in both commands.
+Keep the terminal running; the browser opens automatically by default. If it does not, copy the full `http://127.0.0.1:3080/?token=...` link printed in the terminal — first-time authentication needs the token in the link. Closing the terminal stops the service. Use the same dsh version for install and start. npm `latest` is currently `0.2.0-rc.2`, the recommended default. The peer range accepts `>=0.2.0-rc.2 <0.2.1-0`, plus the separate alpha opt-in line `>=0.2.1-alpha.1 <0.2.2-0`. To try the alpha, explicitly use `@deepseek-ai/dsh@0.2.1-alpha.1` in both the install and start commands; do not mix the two lines. DSH checks compatibility while adding and loading the plugin and reports mismatches (`dsh plugin allow-version` overrides it at your own risk).
 
 Before creating with AI, add a Provider and API key under DSH's Settings → Models, or set the `DEEPSEEK_API_KEY` environment variable before starting. To only browse existing work, choose "Configure later" in the first-run guide.
 
@@ -99,8 +99,8 @@ Before creating with AI, add a Provider and API key under DSH's Settings → Mod
 The prebuilt package in the GitHub Release passes the same test suite:
 
 ```bash
-npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.0-rc.1 dsh plugin --profile web add https://github.com/zenstory-ai/oh-story-dsh/releases/download/v0.1.12/oh-story-dsh-0.1.12.tgz &&
-npx -y @deepseek-ai/dsh@0.2.0-rc.1 web
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.0-rc.2 dsh plugin --profile web add https://github.com/zenstory-ai/oh-story-dsh/releases/download/v0.1.13/oh-story-dsh-0.1.13.tgz &&
+npx -y @deepseek-ai/dsh@0.2.0-rc.2 web
 ```
 
 </details>
@@ -108,7 +108,7 @@ npx -y @deepseek-ai/dsh@0.2.0-rc.1 web
 <details>
 <summary>Host dependencies for the video workbench</summary>
 
-The video pipeline additionally needs Python 3.10+ and ffmpeg/ffprobe built with the libass `subtitles` filter on the host (Debian/Ubuntu `sudo apt install ffmpeg`; Homebrew's ffmpeg has shipped without libass since January 2026, so on macOS install a libass build or let the pipeline run with `--no-burn-subtitles`). Video recaps use `MIMO_API_KEY` (Fish Audio TTS additionally needs `FISH_API_KEY`).
+The video pipeline additionally needs Python 3.10+ and ffmpeg/ffprobe on the host (Debian/Ubuntu `sudo apt install ffmpeg`). With the libass `subtitles` filter it burns subtitles in; without libass — including Homebrew's ffmpeg since January 2026 — it delivers an external SRT, or you can install a libass-enabled build. Video recaps use `MIMO_API_KEY` (Fish Audio TTS additionally needs `FISH_API_KEY`).
 
 </details>
 
@@ -128,10 +128,12 @@ DeepSeek writes the screenplay, storyboard and prompts; image, video, speech and
 ```bash
 export OPENAI_API_KEY=...            # images
 export ARK_API_KEY=... SEEDANCE_MODEL=...   # video; use the model / endpoint ID enabled on your account
-npx -y @deepseek-ai/dsh@0.2.0-rc.1 web
+npx -y @deepseek-ai/dsh@0.2.0-rc.2 web
 ```
 
 Configure only what you use: without a video key you can still write storyboards and generate keyframe images. The top of the Production view shows whether each vendor is configured and which variable is missing. At startup the plugin registers the five built-in adapters in a credential-free config file (by default under `oh-story-dsh-<uid>/` in the system temp directory, readable and writable only by the current user; the "generation environment" bar shows the full path), and the agent references it directly when running `production_tool.py run`. To use your own adapter or change timeouts, point `OH_STORY_DRAMA_ADAPTER_CONFIG` at your own file. Each vendor's parameters, resolutions and duration limits are documented in the bundled `short-drama-produce/references/providers/`. Novel covers use whichever image-generation tool is visible in the current Preset.
+
+Voice references require an explicit capability declaration: generated generic profiles omit `reference_audio` because an environment-selected model may not support it. After verifying the exact model, declare `reference_roles` including `reference_audio` in a creator-owned adapter config outside the project and point `OH_STORY_DRAMA_ADAPTER_CONFIG` at it. Without that declaration the job is rejected before paid submission, never silently stripped of its voice binding.
 
 </details>
 
@@ -141,7 +143,7 @@ Configure only what you use: without a video key you can still write storyboards
 Whichever profile the plugin is installed into, every Session of that profile loads the creation Skills. To keep the stock `web` profile clean, install into a separate profile:
 
 ```bash
-npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.0-rc.1 dsh plugin --profile story add @oh-story/dsh@0.1.12
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.0-rc.2 dsh plugin --profile story add @oh-story/dsh@0.1.13
 ```
 
 A new profile has no UI by default. Edit `~/.dsh/profiles/story/package.json` and set `dsh.profile.bundles` to:
@@ -157,8 +159,8 @@ A new profile has no UI by default. Edit `~/.dsh/profiles/story/package.json` an
 `@deepseek-ai/dsh-web-app` is DSH's own Web UI package and must load before the creation plugin. The two profiles can then run at the same time on different ports; models, credentials, workspaces and session history are stored centrally by DSH:
 
 ```bash
-npx -y @deepseek-ai/dsh@0.2.0-rc.1 web                          # stock DSH
-npx -y @deepseek-ai/dsh@0.2.0-rc.1 --profile story --port 3081  # creation workbench
+npx -y @deepseek-ai/dsh@0.2.0-rc.2 web                          # stock DSH
+npx -y @deepseek-ai/dsh@0.2.0-rc.2 --profile story --port 3081  # creation workbench
 ```
 
 </details>
@@ -306,7 +308,7 @@ That is [#50](https://github.com/zenstory-ai/oh-story-dsh/issues/50): plugin 0.1
 
 ### I also installed Oh Story for Codex or OpenCode — which copy does DSH use?
 
-DSH also reads `~/.agents/skills` and prefers a same-named copy there over the plugin's bundled, DSH-adapted version, so when the two differ, the `~/.agents` copy wins. To make DSH use only the plugin's Skills, point `DSH_AGENTS_HOME` at another directory before starting (for example `DSH_AGENTS_HOME=~/.dsh-agents npx -y @deepseek-ai/dsh@0.2.0-rc.1 web`), or move the same-named folders out of `~/.agents/skills`.
+DSH also reads `~/.agents/skills` and prefers a same-named copy there over the plugin's bundled, DSH-adapted version, so when the two differ, the `~/.agents` copy wins. To make DSH use only the plugin's Skills, point `DSH_AGENTS_HOME` at another directory before starting (for example `DSH_AGENTS_HOME=~/.dsh-agents npx -y @deepseek-ai/dsh@0.2.0-rc.2 web`), or move the same-named folders out of `~/.agents/skills`.
 
 ### Install reports `pnpm not found on PATH`?
 
@@ -322,13 +324,15 @@ Add a work directory and open a session first. In an empty directory, run a crea
 
 ### Does it work on Windows?
 
-Yes. The type, asset, unit-test and build gate runs on both macOS and Windows in CI on every change; the integration test that packages the plugin into the official DSH Web runs on Linux. The video pipeline needs Python 3.10+ and ffmpeg with libass on every platform; long-form analysis, import and long-form tracking also need Python 3 on the host, and short-drama assembly needs ffmpeg/ffprobe, with libass for the default burned-in subtitles and Node.js (Remotion) whenever the cut list has on-screen text; the long-form chapter check needs Node.js 18+.
+Yes. The type, asset, unit-test and build gate runs on both macOS and Windows in CI on every change; the integration test that packages the plugin into the official DSH Web runs on Linux. The video pipeline needs Python 3.10+ and ffmpeg/ffprobe on every platform, burning subtitles with libass or delivering an external SRT without it; long-form analysis, import and long-form tracking also need Python 3 on the host, and short-drama assembly needs ffmpeg/ffprobe, with libass for the default burned-in subtitles and Node.js (Remotion) whenever the cut list has on-screen text; the long-form chapter check needs Node.js 18+.
 
 ### What do I do after upgrading?
 
 Rerun the install command with the new version after `@oh-story/dsh@`, then restart DSH; use the same dsh version for install and start. Skills and Roles ship inside the plugin, so nothing needs to be redeployed into your project. Existing short-drama projects should note two tightenings: since 0.1.5 every storyboard shot must state its "视觉依据" (visual basis) and every `REF-*` slot must declare a `用途` (purpose); since 0.1.7 every shot's "来源" (source) must begin with a scene ID that really exists in `剧本.md`.
 
 0.1.10 adds three more: upgrade DSH to `0.1.7-rc.2` together with the plugin — it moves session logs to a new format, after which the same DSH home cannot go back to 0.1.5; Oh Story 0.8.0 splits author memory into a workspace store and a per-book store, so "本书：" entries written before the upgrade only take part in queries again after running `author_memory_commit.py migrate --workspace {workspace} --book-root {book dir}` once per book (in this plugin's single-book layout both are the workspace itself; or just ask the agent to "整理作者记忆"); and since Drama Skills 0.7.1, `剪辑单.md` must account for every unused `MOTION-*` on one `- 未采用镜头：` line before the first `## CUT-`, or the cut check blocks. 0.1.11 adds three more: after video-recap-skills 0.6.0 the run manifest has new fields, so a video project paused midway under 0.5.0 cannot resume — start a new `work/` directory or rerun from the first stage; after Drama Skills 0.8.0 a re-render auto-matches adjacent cuts within one scene by default (write `- 接镜匹配：无` in the cut list's delivery spec to keep the old look), any "画面文字" (on-screen text) line in `剪辑单.md` requires Remotion, and an earlier Remotion install must run `npm install` again in `~/.cache/short-drama-edit/remotion`; and on the novel side, writing prose is blocked while the chapter's outline is an empty shell (fewer than 30 characters besides `#` and whitespace) — finish the outline first. 0.1.12 changes only the host: upgrade DSH to `0.2.0-rc.1` together with the plugin and use the new version in both the install and start commands; plugin 0.1.11 and earlier are refused on DSH 0.2, and 0.1.12 is refused on DSH 0.1.7. See [CHANGELOG.md](CHANGELOG.md) for each release.
+
+0.1.13 defaults to DSH `0.2.0-rc.2`, now npm `latest`; `0.2.1-alpha.1` is an explicit opt-in line and must be used in both install and start commands. Drama 0.8.1 binds character reference audio to a specific character and strictly validates `reference_roles`, identity and negative controls; audio remains outside the image picker. NovelToGame 0.5.0 replaces the 《金瓶梅》 sample with a new ADV implementation: old saves are not migrated, so clear the old site's storage and start again. video-recap 0.6.1 uses QC schema 2, makes `over_budget` lint-only, removes the old QC flags and paths, and uses an external SRT when libass is unavailable. Upgraded video work directories may need ASR, cut, TTS and index regeneration; never carry forward or fabricate a PASS.
 
 ## Further reading
 

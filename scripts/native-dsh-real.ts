@@ -8,7 +8,7 @@ import { parseEnv } from "node:util";
 import { fileURLToPath } from "node:url";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const dshVersion = "0.2.0-rc.1";
+const dshVersion = process.env.DSH_TEST_VERSION ?? "0.2.1-alpha.1";
 /** Exact WebSocket route carrying every Typert Remote stream. */
 const REMOTE_STREAM_MUX_PATH = "/api/remote.mux";
 
@@ -329,7 +329,8 @@ async function main(): Promise<void> {
       projectUnchanged: true
     })}\n`);
   } catch (error) {
-    throw new Error(`${redact(String(error))}\nDSH logs:\n${redact(logs.join("").slice(-20_000))}`, { cause: error });
+    // eslint-disable-next-line preserve-caught-error -- The original cause may contain credentials; retain only redacted diagnostics.
+    throw new Error(`${redact(String(error))}\nDSH logs:\n${redact(logs.join("").slice(-20_000))}`);
   } finally {
     if (child !== undefined) await stop(child);
     if ((await stat(temporaryRoot).catch(() => undefined))?.isDirectory()) await rm(temporaryRoot, { recursive: true, force: true });

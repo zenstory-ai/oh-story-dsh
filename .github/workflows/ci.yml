@@ -70,3 +70,5 @@ jobs:
       - name: Install Chrome for the official DSH Web smoke
         run: pnpm exec playwright install --with-deps chrome
       - run: pnpm test:dsh
+      - name: Verify npm latest DSH compatibility
+        run: pnpm test:dsh:rc

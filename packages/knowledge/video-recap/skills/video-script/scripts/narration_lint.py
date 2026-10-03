@@ -5,21 +5,26 @@ timing and text checks live here, and every later consumer trusts its result.
 """
 
 import json
-import math
 from pathlib import Path
 
 from lib import CONFIG, log
 from agent_text import (
-    _clean_narration_punctuation,
+    TTS_UTTERANCE_OVERHEAD_SECONDS,
     _find_scene_for_midpoint,
-    _normalise_narration_segment,
-    _post_dedup_narration,
-    _recommended_char_budget,
+    _lint_char_budget,
     _scene_available_seconds,
     _text_char_count,
-    _truncate_at_sentence,
 )
 from deslop_qc import analyze_deslop_qc
+from entry_suggestion import (
+    SUGGESTED_ANCHOR_MAX_SHIFT_SECONDS,
+    _has_connected_predecessor,
+    _is_number,
+    _nearest_safe_anchor,
+    _other_block_spans,
+    _suggestion_window,
+)
+from lint_summary import format_lint_failure, format_lint_warnings
 from speech_ownership import (
     entry_overlaps_source_speech,
     load_source_sentence_evidence,
@@ -30,14 +35,6 @@ def _lint_issue(level, index, code, message, **extra):
     issue = {"level": level, "index": index, "code": code, "message": message}
     issue.update(extra)
     return issue
-
-
-def _is_number(value):
-    return (
-        isinstance(value, (int, float))
-        and not isinstance(value, bool)
-        and math.isfinite(value)
-    )
 
 
 def _visual_overlay_issues(index, seg):
@@ -134,11 +131,16 @@ def _clip_matches_for_segment(seg, clip_plan, requested_clip_id):
     ]
 
 
-def _source_sentence_entry_issue(index, start, anchors, speech_owned):
+def _source_sentence_entry_issue(
+    index, start, end, anchors, speech_owned, other_spans=(), window=(None, None),
+):
     """Return a blocking issue when narration enters midway through source speech.
 
     The validator reports a correction instead of silently moving audio. Source
     sentence integrity is invariant; an editorial policy string cannot bypass it.
+    `other_spans` are the other blocks' (start, end) and `window` the open range between
+    the neighbours (see _nearest_safe_anchor): the suggested entry never moves this block
+    onto, flush against, or past one of them.
     """
     if not speech_owned:
         return None
@@ -165,45 +167,81 @@ def _source_sentence_entry_issue(index, start, anchors, speech_owned):
         if pause_start - 0.05 <= start <= when + 0.08:
             return None
 
-    suggested = next(
-        (anchor for anchor in anchors if anchor["time"] > start + 0.08), None
-    )
+    suggested = _nearest_safe_anchor(start, end, anchors, other_spans, window)
     return _lint_issue(
         "error",
         index,
         "interrupts_source_sentence",
-        "Narration enters before the source sentence finishes. Move this block to the suggested "
-        "sentence-end anchor, or shorten/move/remove it when there is no later verified anchor, "
-        "then rerun lint before TTS. Source sentence interruption has no override.",
+        "Narration enters before the source sentence finishes. Move the whole block (same "
+        "duration) to the suggested sentence-end anchor, or shorten/move/remove it when no "
+        f"anchor within {SUGGESTED_ANCHOR_MAX_SHIFT_SECONDS:g}s keeps it between its neighbours "
+        "and clear of the other blocks, then rerun lint before TTS. The window stays inside the "
+        "block's clip (cut) or the output duration (cut_output); full mode does not know the "
+        "video's end, so keep it inside the video. Source sentence interruption has no override.",
         entry_time=round(start, 3),
         suggested_start=round(suggested["time"], 3) if suggested else None,
+        suggested_end=round(suggested["time"] + end - start, 3) if suggested else None,
+        max_shift_seconds=SUGGESTED_ANCHOR_MAX_SHIFT_SECONDS,
         source_text_tail=str(suggested.get("text_tail", "")).strip() if suggested else "",
         anchor_confidence=suggested["confidence"] if suggested else None,
+        anchor_boundary_use=(
+            suggested.get("boundary_use")
+            or ("unverified" if suggested["confidence"] in {"high", "medium"} else "none")
+        )
+        if suggested
+        else None,
     )
 
 
-def _has_connected_predecessor(narration, idx, start):
-    """A back-to-back narration handoff (<=150ms gap) does not expose the source track,
-    so the next TTS block is not a new source-speech entry."""
-    for other_idx, other in enumerate(narration):
-        if other_idx == idx or not isinstance(other, dict):
-            continue
-        other_start, other_end = other.get("start"), other.get("end")
-        if not _is_number(other_start) or not _is_number(other_end):
-            continue
-        if other_start < start and -0.001 <= start - other_end <= 0.15:
-            return True
-    return False
+def _suggestion_limits(seg, clip_plan, mode, output_duration):
+    """Closed range a suggested move must stay in: the block's one clip (cut mode, source
+    time), or [0, output_duration] when that is known (cut_output)."""
+    if mode == "cut" and clip_plan:
+        requested = seg.get("source_clip_id")
+        try:
+            requested = None if requested is None else int(requested)
+        except (TypeError, ValueError):
+            return None, None
+        matches = _clip_matches_for_segment(seg, clip_plan, requested)
+        return _clip_span(matches[0]) if len(matches) == 1 else (None, None)
+    usable = _is_number(output_duration) and output_duration > 0
+    return 0.0, output_duration if usable else None
+
+
+# Full-mode hard text budget: a segment longer than this multiple of its recommended
+# character budget cannot be spoken in its window, so lint returns it to the author
+# instead of anything downstream shortening it.
+OVER_BUDGET_ERROR_RATIO = 1.25
+
+
+def _over_budget_error(index, start, end, char_count, budget):
+    limit = int(budget * OVER_BUDGET_ERROR_RATIO)
+    return _lint_issue(
+        "error",
+        index,
+        "over_budget",
+        f"段 {index + 1} [{start:.2f}-{end:.2f}s] has {char_count} chars; the window holds "
+        f"about {budget} (hard limit {limit}), {char_count - limit} over the limit. "
+        "Shorten the text or widen/move the window, then rerun validate; "
+        "validation never shortens approved text.",
+        start=start,
+        end=end,
+        budget_chars=budget,
+        limit_chars=limit,
+        actual_chars=char_count,
+        over_chars=char_count - limit,
+        tts_overhead_seconds=TTS_UTTERANCE_OVERHEAD_SECONDS,
+    )
 
 
 def lint_narration(
     narration, scenes_analysis=None, *, clip_plan=None, mode="full", work_dir=None,
-    require_chronological=False,
+    output_duration=None,
 ):
     """Preflight-check agent narration before TTS; write narration_lint.json when work_dir is set.
 
-    Segments are sorted by start for the timing checks; ``require_chronological`` (the
-    --preserve-approved-text contract) additionally rejects input that is not already in order."""
+    Segments must already be in chronological order; validation never reorders them.
+    `output_duration` (cut_output) bounds where interrupt suggestions may move a block."""
     scenes_analysis = scenes_analysis or []
     errors = []
     warnings = []
@@ -221,6 +259,8 @@ def lint_narration(
         )
     else:
         previous_start = None
+        # Suggested (start, end) of blocks already told to move; later blocks keep clear.
+        suggested_spans = {}
         for idx, seg in enumerate(narration):
             if not isinstance(seg, dict):
                 errors.append(
@@ -240,7 +280,7 @@ def lint_narration(
                     )
                 )
                 continue
-            if require_chronological and previous_start is not None and start < previous_start:
+            if previous_start is not None and start < previous_start:
                 errors.append(
                     _lint_issue(
                         "error",
@@ -304,12 +344,18 @@ def lint_narration(
                 continue
 
             char_count = _text_char_count(text)
-            budget = _recommended_char_budget(start, end)
+            budget = _lint_char_budget(start, end)
             # estimate at the REAL playback rate (after the narration_speed atempo); otherwise a
-            # beat sized to its 1.3x-sped slot looks "over budget" when it actually fits.
+            # beat sized to its 1.3x-sped slot looks "over budget" when it actually fits. The
+            # utterance's TTS edge silence takes room too.
             play_rate = CONFIG["speech_rate"] * CONFIG["narration_speed"]
-            estimated_tts_seconds = char_count / play_rate
+            estimated_tts_seconds = char_count / play_rate + TTS_UTTERANCE_OVERHEAD_SECONDS
             slot_seconds = _scene_available_seconds(start, end)
+            over_limit = (
+                mode == "full" and char_count > budget * OVER_BUDGET_ERROR_RATIO
+            )
+            if over_limit:
+                errors.append(_over_budget_error(idx, start, end, char_count, budget))
             if budget < 5:
                 warnings.append(
                     _lint_issue(
@@ -322,7 +368,9 @@ def lint_narration(
                         budget_chars=budget,
                     )
                 )
-            elif estimated_tts_seconds > slot_seconds:
+            # Independent of slot_too_short: a short slot can also be overfilled, and the
+            # author needs both numbers.
+            if not over_limit and estimated_tts_seconds > slot_seconds:
                 warnings.append(
                     _lint_issue(
                         "warning",
@@ -352,15 +400,25 @@ def lint_narration(
                 entry_issue = _source_sentence_entry_issue(
                     idx,
                     start,
+                    end,
                     source_sentence_anchors,
                     entry_overlaps_source_speech(
                         start,
                         source_evidence,
                         authored_overlap=seg.get("overlaps_speech", True),
                     ),
+                    _other_block_spans(narration, idx),
+                    _suggestion_window(
+                        narration, idx, suggested_spans,
+                        _suggestion_limits(seg, clip_plan, mode, output_duration),
+                    ),
                 )
                 if entry_issue:
                     errors.append(entry_issue)
+                    if entry_issue.get("suggested_end") is not None:
+                        suggested_spans[idx] = (
+                            entry_issue["suggested_start"], entry_issue["suggested_end"],
+                        )
 
             scene_bounds = _scene_bounds_for_midpoint(scenes_analysis, start, end)
             if scenes_analysis and not scene_bounds:
@@ -404,6 +462,7 @@ def lint_narration(
                         end=end,
                         duration=round(end - start, 2),
                         frame_fact_times=[round(ts, 2) for ts in frame_fact_times[:8]],
+                        frame_fact_count=len(frame_fact_times),
                     )
                 )
 
@@ -603,11 +662,9 @@ def lint_narration(
                 )
             )
 
+    # Unfiltered, so narration-sourced blocker indices are narration.json positions.
     deslop_qc = analyze_deslop_qc(
-        [seg for seg in narration if isinstance(seg, dict)]
-        if isinstance(narration, list)
-        else [],
-        work_dir=work_dir,
+        narration if isinstance(narration, list) else [], work_dir=work_dir,
     )
     for blocker in deslop_qc["blockers"]:
         errors.append(
@@ -632,76 +689,39 @@ def lint_narration(
         "warnings": warnings,
     }
     if work_dir is not None:
-        Path(work_dir, "deslop_qc.json").write_text(
-            json.dumps(deslop_qc, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
         Path(work_dir, "narration_lint.json").write_text(
             json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8"
         )
     return report
 
 
+class NarrationLintError(ValueError):
+    """Lint found blocking errors: an ordinary result for the author to fix, not a crash.
+
+    str() is the compact per-block summary; `report` is the full lint report."""
+
+    def __init__(self, report, lint_path=None):
+        self.report = report
+        super().__init__(format_lint_failure(report, lint_path))
+
+
 def validate_narration_or_raise(
     narration, scenes_analysis=None, *, clip_plan=None, mode="full", work_dir=None,
-    require_chronological=False,
+    output_duration=None,
 ):
     report = lint_narration(
         narration, scenes_analysis, clip_plan=clip_plan, mode=mode, work_dir=work_dir,
-        require_chronological=require_chronological,
+        output_duration=output_duration,
     )
     if report["errors"]:
-        sample = "; ".join(
-            f"#{e['index']}: {e['code']}" for e in report["errors"][:3]
+        raise NarrationLintError(
+            report, None if work_dir is None else Path(work_dir, "narration_lint.json")
         )
-        raise ValueError(f"narration.json 预检失败: {sample}; 详见 narration_lint.json")
     if report["warnings"]:
-        log(
-            f"narration lint: {len(report['warnings'])} warnings (see narration_lint.json)"
-        )
+        log(format_lint_warnings(
+            report, None if work_dir is None else Path(work_dir, "narration_lint.json")
+        ))
     else:
-        log("narration lint: ok")
+        log("narration lint：通过")
     return report
 
-
-def _validate_narration_budget(narration, scenes_analysis):
-    """Trim lint-validated narration to its timing budgets; drop what cannot be spoken."""
-    del scenes_analysis  # scene boundaries are advisory (lint warns); authored timing is kept
-    cleaned = []
-    for raw in narration:
-        item = _normalise_narration_segment(raw)
-        max_chars = _recommended_char_budget(item["start"], item["end"])
-        if max_chars < 5:
-            log(f"  丢弃过短解说段 {item['start']:.1f}-{item['end']:.1f}s")
-            continue
-        if _text_char_count(item["narration"]) > max_chars * 1.25:
-            truncated = _truncate_at_sentence(item["narration"], max_chars)
-            if truncated and _text_char_count(truncated) >= 5:
-                log(f"  解说超预算，已截短: {item['start']:.1f}-{item['end']:.1f}s")
-                item["narration"] = truncated
-            else:
-                log(
-                    f"  解说超预算且无法安全截断，已丢弃: {item['start']:.1f}-{item['end']:.1f}s"
-                )
-                continue
-        item["narration"] = _clean_narration_punctuation(item["narration"])
-        stripped = item["narration"].strip()
-        if stripped and stripped[-1] in "，：、；,—":
-            item["narration"] = stripped.rstrip("，：、；,—") + "。"
-        cleaned.append(item)
-
-    cleaned.sort(key=lambda n: n["start"])
-    deduped = []
-    for item in cleaned:
-        if deduped and item["start"] < deduped[-1]["end"]:
-            prev = deduped[-1]
-            log(
-                f"  解说时间重叠: {item['start']:.1f}-{item['end']:.1f}s vs "
-                f"{prev['start']:.1f}-{prev['end']:.1f}s"
-            )
-            if _text_char_count(item["narration"]) > _text_char_count(
-                prev["narration"]
-            ):
-                deduped[-1] = item
-        else:
-            deduped.append(item)
-    return _post_dedup_narration(deduped)

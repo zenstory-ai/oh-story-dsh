@@ -3,18 +3,22 @@
 import json
 import os
 import shlex
+import shutil
 import sys
 from pathlib import Path
 
 from lib import load_json
+from lib import file_identity, ffmpeg_filters, read_json_object
+import resources.project_binding as project_binding
+from library import LIBRARY_ENV
 from recap_runtime import (
-    _coerce_videos,
     _entry,
     _load_run_manifest,
     _multi_run_manifest_payload,
+    _resume_argv,
     _run_manifest_payload,
 )
-from recap_source import audio_binding, uses_narration
+from recap_source import audio_binding
 
 ASSEMBLY_MANIFEST = "assembly_manifest.json"
 
@@ -66,6 +70,41 @@ def _canonical_visual_overlay(overlay, segment):
     return item
 
 
+def _canonical_visual_overlays(narration_path):
+    return [
+        item
+        for segment in load_json(narration_path)
+        for overlay in segment.get("visual_overlays", [])
+        if (item := _canonical_visual_overlay(overlay, segment)) is not None
+    ]
+
+
+def _preflight_visual_overlays(work_dir, *, narration):
+    """Fail before TTS and render when the run will draw text overlays but this ffmpeg has
+    no drawtext (libfreetype; stock Homebrew ffmpeg lacks it). Overlays are authored content,
+    never a default, so they are not dropped silently the way a default subtitle burn
+    degrades: the message says how to remove them. Narration runs read narration.json (the
+    overlays are only written after TTS); source modes read an existing visual_overlays.json."""
+    work_dir = Path(work_dir)
+    if shutil.which("ffmpeg") is None:
+        return
+    if narration:
+        narration_path = work_dir / "narration.json"
+        overlays = _canonical_visual_overlays(narration_path) if narration_path.exists() else []
+        remedy = "删掉 narration.json 各段的 visual_overlays"
+    else:
+        data = read_json_object(work_dir / _VISUAL_OVERLAYS) or {}
+        overlays = data.get("overlays") if isinstance(data.get("overlays"), list) else []
+        remedy = f"删掉 {_VISUAL_OVERLAYS} 里的 overlays"
+    if not overlays or "drawtext" in ffmpeg_filters():
+        return
+    raise SystemExit(
+        f"本次运行有 {len(overlays)} 个画面文字叠加（visual_overlays），但当前 ffmpeg 不支持 drawtext"
+        " 滤镜（需要 libfreetype），会在最后渲染时失败。\n"
+        f"  解决其一：(1) 安装带 drawtext/libfreetype 的 ffmpeg；(2) {remedy} 后续跑。"
+    )
+
+
 def _write_canonical_visual_overlays(work_dir, narration_path):
     """Write assemble's canonical work_dir/visual_overlays.json recap handoff.
 
@@ -76,30 +115,11 @@ def _write_canonical_visual_overlays(work_dir, narration_path):
     empty overlay list.
     """
     path = Path(work_dir) / _VISUAL_OVERLAYS
-    overlays = [
-        item
-        for segment in load_json(narration_path)
-        for overlay in segment.get("visual_overlays", [])
-        if (item := _canonical_visual_overlay(overlay, segment)) is not None
-    ]
+    overlays = _canonical_visual_overlays(narration_path)
     payload = {"schema_version": 1, "overlays": overlays}
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"[video-recap] 🧩 visual overlays: {len(overlays)} → {path}", flush=True)
     return path
-
-
-def _print_grounding_qc_pointer(work_dir):
-    qc_path = Path(work_dir) / "grounding_qc.json"
-    if not qc_path.exists():
-        return
-    data = load_json(qc_path)
-    ranges = data["review_coverage"]["time_ranges"]
-    warnings = data["warnings"]
-    suffix = f" · warnings {len(warnings)}" if warnings else ""
-    print(
-        f"[video-recap] 🧭 Grounding QC: {data['verdict']} · ranges {len(ranges)}{suffix} → {qc_path}",
-        flush=True,
-    )
 
 
 def _print_narration_review_pointer(work_dir, *, review_ran=True):
@@ -109,7 +129,6 @@ def _print_narration_review_pointer(work_dir, *, review_ran=True):
     stale narration_review.md from an older run is never surfaced. When it ran, video-script's
     review_runner has written both narration_review.json and .md.
     """
-    _print_grounding_qc_pointer(work_dir)
     if not review_ran:
         return
     review_md = Path(work_dir) / "narration_review.md"
@@ -191,20 +210,16 @@ def _read_assembly_output(work_dir):
 
 
 def _read_phase_ledger(work_dir):
-    """Phase ledger (cut mode): which artifacts exist and the clip_plan/narration they match.
-
-    Lets resume be driven by recorded phase state rather than bare file existence — the
-    prerequisite for the cut-first/narrate-second two-pause flow, and the guard that keeps a
-    narration written for one clip_plan from silently driving a different cut into TTS.
-    None before the first cut pass has recorded anything.
+    """Phase ledger (cut mode with narration): the clip_plan identity the narration is
+    written against — the guard that keeps a narration written for one clip_plan from
+    silently driving a different cut into TTS. None before pass 2 has recorded it.
     """
     path = Path(work_dir) / PHASE_LEDGER
     return load_json(path) if path.exists() else None
 
 
-def _write_phase_ledger(work_dir, **fields):
-    ledger = _read_phase_ledger(work_dir) or {}
-    ledger.update(fields)
+def _write_phase_ledger(work_dir, clip_plan_identity):
+    ledger = {"clip_plan_identity": clip_plan_identity}
     (Path(work_dir) / PHASE_LEDGER).write_text(
         json.dumps(ledger, ensure_ascii=False, indent=2), encoding="utf-8"
     )
@@ -219,86 +234,9 @@ def _cut_narration_is_stale(ledger, current_clip_plan_identity):
     return ledger is not None and ledger["clip_plan_identity"] != current_clip_plan_identity
 
 
-def _continuation_command(video, work_dir, args):
-    # Values a project binding filled in are re-derived from --project on resume.
-    bound = getattr(args, "_bound_from_project", frozenset())
-    parts = [
-        sys.executable,
-        str(_entry("video-recap", "recap.py")),
-        *[str(v) for v in _coerce_videos(video)],
-        "--work-dir",
-        str(work_dir),
-    ]
-    if args.context:
-        parts += ["--context", args.context]
-    if args.scene_threshold is not None:
-        parts += ["--scene-threshold", str(args.scene_threshold)]
-    if args.style != "纪录片":
-        parts += ["--style", args.style]
-    if args.edit_mode != "full":
-        parts += ["--edit-mode", args.edit_mode]
-    if args.audio_mode != "narration":
-        parts += ["--audio-mode", args.audio_mode]
-    if args.audio_stream_index != 0:
-        parts += ["--audio-stream-index", str(args.audio_stream_index)]
-    if args.target_duration:
-        parts += ["--target-duration", args.target_duration]
-    if args.allow_duration_drift:
-        parts.append("--allow-duration-drift")
-    if args.skip_asr:
-        parts.append("--skip-asr")
-    if args.mimo_video_overview:
-        parts.append("--mimo-video-overview")
-    if args.mimo_qc != "off":
-        parts += ["--mimo-qc", args.mimo_qc]
-    if args.mimo_qc_refresh:
-        parts.append("--mimo-qc-refresh")
-    if not args.consolidate:  # default is ON; only the opt-out needs to round-trip
-        parts.append("--no-consolidate")
-    if args.consolidate_asr:
-        parts.append("--consolidate-asr")
-    if uses_narration(args):
-        if args.mimo_tts_voice and "mimo_tts_voice" not in bound:
-            parts += ["--mimo-tts-voice", args.mimo_tts_voice]
-        if args.tts_provider != "auto" and "tts_provider" not in bound:
-            parts += ["--tts-provider", args.tts_provider]
-        if args.voice_ref and "voice_ref" not in bound:
-            parts += ["--voice-ref", args.voice_ref]
-        if args.allow_partial_tts:
-            parts.append("--allow-partial-tts")
-        if args.preserve_approved_text:
-            parts.append("--preserve-approved-text")
-    if args.burn_subtitles is not None:
-        parts.append("--burn-subtitles" if args.burn_subtitles else "--no-burn-subtitles")
-    if args.subtitle_y_top is not None:
-        parts += ["--subtitle-y-top", str(args.subtitle_y_top)]
-    if args.subtitle_y_bot is not None:
-        parts += ["--subtitle-y-bot", str(args.subtitle_y_bot)]
-    if args.output_dir:
-        parts += ["--output-dir", args.output_dir]
-    if args.export_jianying:
-        parts.append("--export-jianying")
-    if args.jianying_bundle_media:
-        parts.append("--jianying-bundle-media")
-    if args.jianying_no_bundle_media:
-        parts.append("--jianying-no-bundle-media")
-    if uses_narration(args):
-        if args.review_narration is not None:
-            parts.append(
-                "--review-narration" if args.review_narration else "--no-review-narration"
-            )
-        if args.require_narration_review:
-            parts.append("--require-narration-review")
-    if args.material_library_dir and "material_library_dir" not in bound:
-        parts += ["--material-library-dir", args.material_library_dir]
-    if getattr(args, "project", None):
-        parts += ["--project", args.project]
-    if args.use_materials:
-        parts.append("--use-materials")
-    if args.save_materials:
-        parts.append("--save-materials")
-    if args.require_final_qc:
-        parts.append("--require-final-qc")
+def _continuation_command(work_dir, args):
+    """Shell command that resumes this run: the original argv, replayable from any cwd."""
+    parts = [sys.executable, str(_entry("video-recap", "recap.py")), *_resume_argv(work_dir, args)]
     return " ".join(shlex.quote(part) for part in parts)
 
 
@@ -454,26 +392,57 @@ def _write_multi_source_output_speech_evidence(work_dir, source_records, plan):
             )
         return cache[source_id]
 
+    spans_by_source = {}
+    for clip in plan["clips"]:
+        spans_by_source.setdefault(clip["source_id"], []).append(
+            (float(clip["source_start"]), float(clip["source_end"])))
+
     mapped_anchors, mapped_speech, mapped_quiet = [], [], []
+    output_duration = max(float(clip["output_end"]) for clip in plan["clips"])
     for clip in plan["clips"]:
         source_id = clip["source_id"]
         source_start = float(clip["source_start"])
         source_end = float(clip["source_end"])
         output_start = float(clip["output_start"])
+        output_end = float(clip["output_end"])
+
+        def to_output(when):
+            # A source time on this clip's OUTPUT clock, never past its own span: the next
+            # clip on the output timeline plays a different range (or source).
+            when = min(max(when, source_start), source_end)
+            return round(min(output_start + when - source_start, output_end), 3)
+
         anchors, speech_rows, quiet_rows = load_source(source_id)
         for anchor in anchors:
             when = float(anchor["time"])
             if not (source_start - 0.05 <= when <= source_end + 0.05):
                 continue
-            pause = max(source_start, min(float(anchor["pause_start"]), when))
+            # The 0.05 s source slack can carry an anchor past the output's ends (a clip
+            # end frame-snapped 181.42 -> 181.40): narration cannot start there.
+            if not 0 <= round(output_start + when - source_start, 3) <= output_duration:
+                continue
+            # A pause end just past a frame-snapped edge belongs to this clip at that edge,
+            # unless another clip of the same source plays that instant itself.
+            if not source_start <= when <= source_end and any(
+                    start <= when <= end for start, end in spans_by_source[source_id]):
+                continue
+            # Same default as the single-source remap in video-understanding's timeline brief.
+            pause = max(source_start, min(float(anchor.get("pause_start", when - 0.12)), when))
             item = dict(anchor)
             item.update(
                 source_id=source_id,
                 source_time=round(when, 3),
-                time=round(output_start + when - source_start, 3),
-                source_pause_start=round(pause, 3),
-                pause_start=round(output_start + pause - source_start, 3),
+                time=to_output(when),
+                source_pause_start=round(min(pause, source_end), 3),
+                pause_start=to_output(pause),
+                # `time` IS the pause end; keep the source value apart (one clock per field).
+                source_pause_end=round(float(anchor.get("pause_end", when)), 3),
             )
+            item["pause_end"] = item["time"]
+            if "expected_time" in anchor:
+                expected = float(anchor["expected_time"])
+                item["source_expected_time"] = round(expected, 3)
+                item["expected_time"] = to_output(expected)
             mapped_anchors.append(item)
         for rows, destination, require_text in (
             (speech_rows, mapped_speech, True),
@@ -493,8 +462,8 @@ def _write_multi_source_output_speech_evidence(work_dir, source_records, plan):
                     source_id=source_id,
                     source_start=round(start, 3),
                     source_end=round(end, 3),
-                    start=round(output_start + start - source_start, 3),
-                    end=round(output_start + end - source_start, 3),
+                    start=to_output(start),
+                    end=to_output(end),
                 )
                 destination.append(item)
 
@@ -503,6 +472,8 @@ def _write_multi_source_output_speech_evidence(work_dir, source_records, plan):
         "artifact": "speech_boundary_anchors_output.json",
         "timeline": "cut_output",
         "source_artifact": "multi_source_manifest.json",
+        # video-script's cut_output lint trusts this evidence only for this exact plan file.
+        "clip_plan_identity": file_identity(Path(work_dir) / "clip_plan_validated.json"),
         "sentence_anchors": sorted(mapped_anchors, key=lambda row: row["time"]),
         "speech_spans": sorted(mapped_speech, key=lambda row: (row["start"], row["end"])),
         "quiet_windows": sorted(mapped_quiet, key=lambda row: (row["start"], row["end"])),
@@ -552,14 +523,31 @@ def _write_multi_source_output_brief(work_dir, source_records, validated_plan_pa
             f"{c['source_id']} `{src['source_path']}` "
             f"source {_fmt_range(c['source_start'], c['source_end'])}{reason}"
         )
-    anchors = speech_evidence["sentence_anchors"]
-    if anchors:
-        lines += ["", "## 原声句末安全切入点"]
-        lines.extend(
-            f"- {row['time']:.3f}s ({row['source_id']})"
-            for row in anchors
-            if row["confidence"] in {"high", "medium"}
+    anchors = []
+    for row in speech_evidence["sentence_anchors"]:
+        # Schema-1 anchors (no `boundary_use`) came from the old coarse estimator: high/medium
+        # labels there are usable but unverified.
+        use = row.get("boundary_use") or (
+            "unverified" if row["confidence"] in {"high", "medium"} else "none"
         )
+        if use != "none":
+            anchors.append((row, use))
+    if anchors:
+        lines += [
+            "",
+            "## 原声句末安全切入点",
+            "",
+            "`unverified` 点是粗粒度 ASR 窗口里的标点位置估计、再吸附到短停顿：不切断单词，"
+            "但不保证原声句子已说完（误差上限见 `±`）；门禁照常生效。",
+        ]
+        for row, use in anchors:
+            if use == "verified":
+                label = row["confidence"]
+            elif "timing_bound_seconds" in row:
+                label = f"unverified ±{float(row['timing_bound_seconds']):.1f}s"
+            else:  # schema-1 anchors carry no error bound
+                label = "unverified"
+            lines.append(f"- {row['time']:.3f}s [{label}] ({row['source_id']})")
     lines += ["", "## Source work dirs"]
     for s in source_records:
         lines.append(f"- {s['source_id']}: `{_source_work_dir(work_dir, s)}`")
@@ -595,7 +583,7 @@ def _fmt_range(start, end):
 
 
 def _material_library_dir(args):
-    return args.material_library_dir or os.environ.get("VIDEO_RECAP_MATERIAL_LIBRARY_DIR") or None
+    return args.material_library_dir or os.environ.get(LIBRARY_ENV) or None
 
 
 def _materials_enabled(args):
@@ -606,7 +594,7 @@ def _save_materials_enabled(args):
     return bool(_material_library_dir(args) and args.save_materials)
 
 
-def _pause_for_agent(work_dir, need_text, cont, inspect_hint=None):
+def _pause_for_agent(work_dir, need_text, cont, inspect_hint=None, project=None):
     brief = Path(work_dir) / "agent_narration_brief.md"
     print("=" * 50)
     if "Research the story FIRST" in brief.read_text(encoding="utf-8"):
@@ -617,5 +605,8 @@ def _pause_for_agent(work_dir, need_text, cont, inspect_hint=None):
     print(f"[video-recap] ⏸  阅读 {brief}（按 video-script 规则）后写入 {need_text}")
     if inspect_hint:
         print(f"[video-recap]    先核对状态/时间轴（建议性）: {inspect_hint}")
+    reference_note = project_binding.bound_reference_note(work_dir, project)
+    if reference_note:
+        print(f"[video-recap]    {reference_note}")
     print(f"[video-recap]    写完后重跑继续: {cont}")
     print("=" * 50)

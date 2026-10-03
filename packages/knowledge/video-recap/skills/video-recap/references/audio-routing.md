@@ -26,9 +26,9 @@ exactly this all-or-none bundle:
 It requires narration mode, stream 0, a new explicit `--work-dir`, and a delivery path
 that does not already exist. `--output-dir` is optional; when omitted, delivery uses the
 new work directory's parent. The route calls only the video-assemble CLI; it does
-not run understanding, script validation, narration review, voiceover, MiMo QC, cut,
+not run understanding, script validation, narration review, voiceover, cut,
 continuation, editor export, or material-cache reuse. Ambient TTS provider and voice
-configuration are inert. Explicit TTS/voice/review/MiMo/editor flags are rejected rather
+configuration are inert. Explicit TTS/voice/review/editor flags are rejected rather
 than silently ignored.
 
 `recap_run_manifest.json` records the resolved path of all three local artifacts under
@@ -54,8 +54,10 @@ episodes. Use two existing stages rather than sending an old mix binding into a 
      --sources-manifest SOURCES_JSON
    ```
 
-   A single-source cut omits `--sources-manifest`. For already locked frame decisions,
-   use the picture-plan path instead. Read `clip_plan_validated.json` (or the locked path's
+   `SOURCES_JSON` must be `{"sources": [{"source_id": ..., "source_path": ...}]}`
+   (optional per-source `duration` and `source_work_dir`); recap's
+   `multi_source_manifest.json` already has this shape. A single-source cut omits
+   `--sources-manifest`. For already locked frame decisions, use the picture-plan path instead. Read `clip_plan_validated.json` (or the locked path's
    `picture_map.json`) before placing sound.
 2. Keep the selected WAVs, `tts_meta.json`, and `narration_adoption.json` when the words,
    WAV bytes, and selected voice are unchanged. Do not run voiceover just to move a line.
@@ -97,7 +99,6 @@ narration review files are not read as evidence for the current run.
   not run, and continuation commands do not promote it into explicit flags.
 - Cut audio modes support selected stream 0 only. Full mode may pass
   another stream to assemble, subject to assemble/export support.
-- Source modes do not support advisory MiMo QC; use `off`.
 - Local adopted full-sound assembly consumes a prebuilt picture in `full` mode; use the
   two-stage workflow above for single- or multi-source cuts. That assembly invocation
   does not resume an old work directory or export an editor draft.
@@ -105,7 +106,8 @@ narration review files are not read as evidence for the current run.
   because the precise-track contract only binds adopted packet audio.
 
 `--preserve-approved-text` remains opt-in and is forwarded unchanged to
-voiceover and continuation only in narration mode.
+voiceover and continuation only in narration mode. The narration validator no longer takes
+it: validation never rewrites narration in any mode.
 
 Narration may explicitly select `--tts-provider index-tts`; `auto` does not
 select Index TTS. Index TTS cannot be combined with MiMo voice selection,
