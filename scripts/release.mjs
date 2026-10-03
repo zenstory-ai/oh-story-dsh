@@ -11,7 +11,9 @@ import { promisify } from "node:util";
 const execFileAsync = promisify(execFile);
 const stableTag = /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 const shaPattern = /^[a-f0-9]{40}$/;
+const sha256Pattern = /^[a-f0-9]{64}$/;
 const githubActionsAppId = 15368;
+const canonicalRepository = "zenstory-ai/oh-story-dsh";
 
 function invariant(condition, message) {
   if (!condition) throw new Error(message);
@@ -23,9 +25,12 @@ export function validateReleaseMetadata({ tag, rootVersion, packageVersion, chan
   const version = tag.slice(1);
   invariant(rootVersion === packageVersion, `root/package version mismatch: ${rootVersion} != ${packageVersion}`);
   invariant(version === packageVersion, `tag/package version mismatch: ${version} != ${packageVersion}`);
-  const escaped = version.replaceAll(".", "\\.");
+  const hasDatedHeading = changelog.split(/\r?\n/).some((line) => {
+    const heading = /^## \[([^\]]+)\] - \d{4}-\d{2}-\d{2}$/.exec(line);
+    return heading?.[1] === version;
+  });
   invariant(
-    new RegExp(`^## \\[${escaped}\\] - \\d{4}-\\d{2}-\\d{2}$`, "m").test(changelog),
+    hasDatedHeading,
     `missing dated changelog heading for ${version}`,
   );
   return { version, tag };
@@ -54,7 +59,7 @@ function normalizeWorkflowPath(value) {
 }
 
 export function selectCiProof({
-  repository = "zenstory-ai/oh-story-dsh",
+  repository = canonicalRepository,
   sourceSha,
   workflowId,
   workflowPath,
@@ -83,6 +88,12 @@ export function selectCiProof({
     Number(checkSuite?.app?.id) === githubActionsAppId,
     `unexpected check-suite app: expected ${githubActionsAppId}, received ${checkSuite?.app?.id ?? "missing"}`,
   );
+  invariant(Number(checkSuite?.id) === Number(run.check_suite_id), "check-suite ID does not match the CI run");
+  invariant(checkSuite?.head_sha === sourceSha, "check-suite source SHA does not match the release source");
+  invariant(
+    checkSuite?.status === "completed" && checkSuite?.conclusion === "success",
+    `check suite did not succeed: ${checkSuite?.status ?? "missing"}/${checkSuite?.conclusion ?? "missing"}`,
+  );
   for (const requiredName of requiredJobs) {
     const matches = jobs.filter((job) => job.name === requiredName);
     invariant(matches.length === 1, `missing required CI job or ambiguous name: ${requiredName}`);
@@ -99,10 +110,46 @@ export function selectCiProof({
     workflowPath: normalizeWorkflowPath(workflowPath),
     runId: Number(run.id),
     runAttempt: Number(run.run_attempt),
+    runStatus: run.status,
+    runConclusion: run.conclusion,
     checkSuiteId: Number(run.check_suite_id),
     checkSuiteAppId: githubActionsAppId,
+    checkSuiteHeadSha: checkSuite.head_sha,
+    checkSuiteStatus: checkSuite.status,
+    checkSuiteConclusion: checkSuite.conclusion,
     requiredJobs,
   };
+}
+
+export function verifyFinalCiSnapshot({ selectedRun, refetchedRun, sourceSha, workflowId, workflowPath }) {
+  invariant(Number(refetchedRun?.id) === Number(selectedRun.id), "refetched CI run ID changed");
+  invariant(Number(refetchedRun.run_attempt) === Number(selectedRun.run_attempt), "CI run attempt changed during proof collection");
+  invariant(Number(refetchedRun.check_suite_id) === Number(selectedRun.check_suite_id), "CI check-suite ID changed during proof collection");
+  invariant(refetchedRun.head_sha === sourceSha, "refetched CI run source SHA changed");
+  invariant(refetchedRun.head_branch === "main" && refetchedRun.event === "push", "refetched CI run is not a main push");
+  invariant(Number(refetchedRun.workflow_id) === Number(workflowId), "refetched CI workflow ID changed");
+  invariant(normalizeWorkflowPath(refetchedRun.path) === normalizeWorkflowPath(workflowPath), "refetched CI workflow path changed");
+  invariant(
+    refetchedRun.status === "completed" && refetchedRun.conclusion === "success",
+    `refetched CI run did not succeed: ${refetchedRun.status}/${refetchedRun.conclusion}`,
+  );
+}
+
+export function verifyPublisherSourceIdentity({
+  repository,
+  repositoryMetadata,
+  mainBranch,
+  sourceSha,
+  remoteTagSha = null,
+}) {
+  invariant(repository === canonicalRepository, `publisher repository must be ${canonicalRepository}`);
+  invariant(repositoryMetadata?.full_name === canonicalRepository, "GitHub repository identity mismatch");
+  invariant(repositoryMetadata?.private === false, "publisher requires the canonical public repository");
+  invariant(repositoryMetadata?.default_branch === "main", "publisher requires main as the default branch");
+  invariant(mainBranch?.name === "main" && mainBranch?.protected === true, "publisher requires protected default branch main");
+  if (remoteTagSha !== null) {
+    invariant(remoteTagSha === sourceSha, `remote tag moved: ${remoteTagSha} != ${sourceSha}`);
+  }
 }
 
 async function digestFile(file) {
@@ -110,6 +157,14 @@ async function digestFile(file) {
   const sha256 = createHash("sha256").update(bytes).digest("hex");
   const sha512 = createHash("sha512").update(bytes).digest("base64");
   return { size: bytes.length, sha256, integrity: `sha512-${sha512}` };
+}
+
+export async function verifyIndependentFileDigests({ files, expected }) {
+  for (const key of ["manifest", "promotionProof", "ciProof"]) {
+    invariant(sha256Pattern.test(expected[key] ?? ""), `invalid expected producer digest for ${key}`);
+    const actual = (await digestFile(files[key])).sha256;
+    invariant(actual === expected[key], `producer digest mismatch for ${key}: ${actual} != ${expected[key]}`);
+  }
 }
 
 export async function createReleaseManifest({ tarball, sourceSha, version }) {
@@ -241,20 +296,26 @@ async function git(args) {
   return stdout.trim();
 }
 
-async function commandCiProof(args) {
+async function createCiProof(args) {
   const token = process.env.GITHUB_TOKEN;
   invariant(token, "GITHUB_TOKEN is required for CI proof");
   const repository = args.repository;
   const sourceSha = args.sha;
   invariant(repository && sourceSha, "--repository and --sha are required");
+  invariant(repository === canonicalRepository, `repository must be ${canonicalRepository}`);
   invariant(await git(["rev-parse", "HEAD"]) === sourceSha, "checked-out HEAD does not match requested source SHA");
   await execFileAsync("git", ["fetch", "--no-tags", "origin", "main"]);
   await execFileAsync("git", ["merge-base", "--is-ancestor", sourceSha, "origin/main"]);
+  const base = `https://api.github.com/repos/${repository}`;
+  const repositoryMetadata = await githubJson(base, { token });
+  const mainBranch = await githubJson(`${base}/branches/main`, { token });
+  let remoteTagSha = null;
   if (args.tag) {
     invariant((await git(["rev-parse", `${args.tag}^{commit}`])) === sourceSha, `tag ${args.tag} does not resolve to ${sourceSha}`);
+    remoteTagSha = await resolveRemoteTag(repository, args.tag, token);
   }
+  verifyPublisherSourceIdentity({ repository, repositoryMetadata, mainBranch, sourceSha, remoteTagSha });
 
-  const base = `https://api.github.com/repos/${repository}`;
   const workflow = await githubJson(`${base}/actions/workflows/ci.yml`, { token });
   invariant(normalizeWorkflowPath(workflow.path) === ".github/workflows/ci.yml", "CI workflow path mismatch");
   const runs = await collectPages(`${base}/actions/workflows/${workflow.id}/runs?branch=main&event=push&head_sha=${sourceSha}`, token);
@@ -264,13 +325,21 @@ async function commandCiProof(args) {
   invariant(candidates.length > 0, `no exact-SHA main-push CI run found for ${sourceSha}`);
   const newest = candidates[0];
   const jobs = await collectPages(`${base}/actions/runs/${newest.id}/attempts/${newest.run_attempt}/jobs`, token);
-  const checkSuite = await githubJson(`${base}/check-suites/${newest.check_suite_id}`, { token });
+  const refetchedRun = await githubJson(`${base}/actions/runs/${newest.id}`, { token });
+  verifyFinalCiSnapshot({
+    selectedRun: newest,
+    refetchedRun,
+    sourceSha,
+    workflowId: workflow.id,
+    workflowPath: workflow.path,
+  });
+  const checkSuite = await githubJson(`${base}/check-suites/${refetchedRun.check_suite_id}`, { token });
   const proof = selectCiProof({
     repository,
     sourceSha,
     workflowId: workflow.id,
     workflowPath: workflow.path,
-    runs,
+    runs: [refetchedRun],
     jobs,
     checkSuite,
     requiredJobs: [
@@ -280,6 +349,16 @@ async function commandCiProof(args) {
       "Packaged DSH Web integration",
     ],
   });
+  return {
+    ...proof,
+    repositoryVisibility: "public",
+    defaultBranch: "main",
+    mainProtected: true,
+  };
+}
+
+async function commandCiProof(args) {
+  const proof = await createCiProof(args);
   if (args.output) await writeFile(args.output, `${JSON.stringify(proof, null, 2)}\n`);
   process.stdout.write(`${JSON.stringify(proof)}\n`);
 }
@@ -314,7 +393,40 @@ async function commandManifest(args) {
   process.stdout.write(`${JSON.stringify(manifest)}\n`);
 }
 
+async function commandDigests(args) {
+  const files = {
+    manifest: args.manifest,
+    promotionProof: args["promotion-proof"],
+    ciProof: args["ci-proof"],
+  };
+  const digests = {
+    manifest: (await digestFile(files.manifest)).sha256,
+    promotionProof: (await digestFile(files.promotionProof)).sha256,
+    ciProof: (await digestFile(files.ciProof)).sha256,
+  };
+  const output = [
+    `manifest-sha256=${digests.manifest}`,
+    `promotion-proof-sha256=${digests.promotionProof}`,
+    `ci-proof-sha256=${digests.ciProof}`,
+    "",
+  ].join("\n");
+  if (args.output) await writeFile(args.output, output, { flag: "a" });
+  process.stdout.write(`${JSON.stringify(digests)}\n`);
+}
+
 async function commandVerifyManifest(args) {
+  await verifyIndependentFileDigests({
+    files: {
+      manifest: args.manifest,
+      promotionProof: args["promotion-proof"],
+      ciProof: args["ci-proof"],
+    },
+    expected: {
+      manifest: args["manifest-sha256"],
+      promotionProof: args["promotion-proof-sha256"],
+      ciProof: args["ci-proof-sha256"],
+    },
+  });
   const manifest = await loadJson(args.manifest);
   await verifyReleaseManifest({ manifest, directory: args.directory, expectedSourceSha: args.sha });
   const promotionProof = await loadJson(args["promotion-proof"]);
@@ -334,10 +446,18 @@ async function commandVerifyManifest(args) {
   if (args["ci-proof"]) {
     const proof = await loadJson(args["ci-proof"]);
     invariant(proof.schemaVersion === 1, "unsupported CI proof schema");
-    invariant(proof.repository === "zenstory-ai/oh-story-dsh", "CI proof repository mismatch");
+    invariant(proof.repository === canonicalRepository, "CI proof repository mismatch");
     invariant(proof.sourceSha === manifest.sourceSha, "CI proof source SHA mismatch");
     invariant(proof.workflowPath === ".github/workflows/ci.yml", "CI proof workflow path mismatch");
     invariant(proof.checkSuiteAppId === githubActionsAppId, "CI proof application mismatch");
+    invariant(proof.runStatus === "completed" && proof.runConclusion === "success", "CI proof run outcome mismatch");
+    invariant(proof.checkSuiteHeadSha === manifest.sourceSha, "CI proof suite source mismatch");
+    invariant(
+      proof.checkSuiteStatus === "completed" && proof.checkSuiteConclusion === "success",
+      "CI proof suite outcome mismatch",
+    );
+    invariant(proof.repositoryVisibility === "public", "CI proof repository visibility mismatch");
+    invariant(proof.defaultBranch === "main" && proof.mainProtected === true, "CI proof protected main mismatch");
   }
   process.stdout.write(`${JSON.stringify({ verified: true, sourceSha: manifest.sourceSha })}\n`);
 }
@@ -404,6 +524,7 @@ async function commandGithubPublish(args) {
   const manifest = await loadJson(args.manifest);
   await verifyReleaseManifest({ manifest, directory: args.directory, expectedSourceSha: args.sha });
   invariant(manifest.tag === args.tag, "manifest tag mismatch");
+  await createCiProof({ repository: args.repository, sha: args.sha, tag: args.tag });
   const remoteTagSha = await resolveRemoteTag(args.repository, args.tag, token);
   invariant(remoteTagSha === manifest.sourceSha, `remote tag moved: ${remoteTagSha} != ${manifest.sourceSha}`);
   let release = await findRelease(args.repository, args.tag, token);
@@ -479,6 +600,8 @@ async function run(command, args, options = {}) {
 async function commandNpmPublish(args) {
   const manifest = await loadJson(args.manifest);
   await verifyReleaseManifest({ manifest, directory: args.directory, expectedSourceSha: args.sha });
+  invariant(manifest.tag === args.tag, "manifest tag mismatch");
+  await createCiProof({ repository: args.repository, sha: args.sha, tag: args.tag });
   const { status, metadata } = await registryMetadata(manifest.package, manifest.version);
   const decision = npmPublicationDecision({
     status,
@@ -486,6 +609,7 @@ async function commandNpmPublish(args) {
     localIntegrity: manifest.files[0].integrity,
   });
   if (decision === "publish") {
+    await createCiProof({ repository: args.repository, sha: args.sha, tag: args.tag });
     await run("npm", ["publish", path.join(args.directory, manifest.files[0].name), "--access", "public", "--provenance", "--ignore-scripts"]);
   }
   process.stdout.write(`${JSON.stringify({ package: manifest.package, version: manifest.version, decision })}\n`);
@@ -552,6 +676,7 @@ async function main() {
     check: commandCheck,
     "ci-proof": commandCiProof,
     manifest: commandManifest,
+    digests: commandDigests,
     "verify-manifest": commandVerifyManifest,
     "github-publish": commandGithubPublish,
     "npm-publish": commandNpmPublish,

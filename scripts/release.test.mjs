@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -10,6 +11,9 @@ import {
   npmPublicationDecision,
   selectCiProof,
   validateReleaseMetadata,
+  verifyFinalCiSnapshot,
+  verifyIndependentFileDigests,
+  verifyPublisherSourceIdentity,
   verifyPromotionProof,
   verifyReleaseManifest,
 } from "./release.mjs";
@@ -20,6 +24,10 @@ const requiredJobs = [
   "Portability (windows-latest)",
   "Packaged DSH Web integration",
 ];
+
+function sha256(value) {
+  return createHash("sha256").update(value).digest("hex");
+}
 
 test("release metadata requires a stable tag, matching versions, and a dated changelog heading", () => {
   assert.deepEqual(
@@ -67,6 +75,25 @@ test("release metadata requires a stable tag, matching versions, and a dated cha
   );
 });
 
+test("changelog headings use literal versions, not a generated regex", () => {
+  for (const heading of ["## [1x2x3] - 2026-10-03", "## [11.2.3] - 2026-10-03", "### [1.2.3] - 2026-10-03"]) {
+    assert.throws(
+      () => validateReleaseMetadata({ tag: "v1.2.3", rootVersion: "1.2.3", packageVersion: "1.2.3", changelog: heading }),
+      /dated changelog/,
+    );
+  }
+  assert.throws(
+    () =>
+      validateReleaseMetadata({
+        tag: "v1.2.3\n",
+        rootVersion: "1.2.3\n",
+        packageVersion: "1.2.3\n",
+        changelog: "## [1.2.3\n] - 2026-10-03",
+      }),
+    /stable release tag/,
+  );
+});
+
 test("CI proof selects the newest exact-SHA main push attempt and rejects stale success", () => {
   const input = {
     sourceSha: "a".repeat(40),
@@ -99,7 +126,7 @@ test("CI proof selects the newest exact-SHA main push attempt and rejects stale 
       },
     ],
     jobs: requiredJobs.map((name) => ({ name, status: "completed", conclusion: "success" })),
-    checkSuite: { app: { id: 15368 } },
+    checkSuite: { id: 44, head_sha: "a".repeat(40), status: "completed", conclusion: "success", app: { id: 15368 } },
     requiredJobs,
   };
   assert.throws(() => selectCiProof(input), /newest exact-SHA CI run did not succeed/);
@@ -127,7 +154,7 @@ test("CI proof requires every configured job and the GitHub Actions app", () => 
       },
     ],
     jobs: requiredJobs.map((name) => ({ name, status: "completed", conclusion: "success" })),
-    checkSuite: { app: { id: 15368 } },
+    checkSuite: { id: 55, head_sha: "b".repeat(40), status: "completed", conclusion: "success", app: { id: 15368 } },
     requiredJobs,
   };
   assert.equal(selectCiProof(base).runAttempt, 3);
@@ -136,9 +163,91 @@ test("CI proof requires every configured job and the GitHub Actions app", () => 
     /missing required CI job/,
   );
   assert.throws(
-    () => selectCiProof({ ...base, checkSuite: { app: { id: 1 } } }),
+    () => selectCiProof({ ...base, checkSuite: { ...base.checkSuite, app: { id: 1 } } }),
     /unexpected check-suite app/,
   );
+});
+
+test("CI proof binds the suite and rejects an attempt N+1 race", () => {
+  const sourceSha = "9".repeat(40);
+  const run = {
+    id: 120,
+    run_attempt: 1,
+    head_sha: sourceSha,
+    head_branch: "main",
+    event: "push",
+    status: "completed",
+    conclusion: "success",
+    workflow_id: 123,
+    path: ".github/workflows/ci.yml",
+    check_suite_id: 77,
+  };
+  const suite = { id: 77, head_sha: sourceSha, status: "completed", conclusion: "success", app: { id: 15368 } };
+  assert.throws(
+    () =>
+      selectCiProof({
+        sourceSha,
+        workflowId: 123,
+        workflowPath: ".github/workflows/ci.yml",
+        runs: [run],
+        jobs: requiredJobs.map((name) => ({ name, status: "completed", conclusion: "success" })),
+        checkSuite: { ...suite, head_sha: "8".repeat(40) },
+        requiredJobs,
+      }),
+    /check-suite source SHA/,
+  );
+  assert.throws(
+    () =>
+      verifyFinalCiSnapshot({
+        selectedRun: run,
+        refetchedRun: { ...run, run_attempt: 2, status: "in_progress", conclusion: null },
+        sourceSha,
+        workflowId: 123,
+        workflowPath: ".github/workflows/ci.yml",
+      }),
+    /run attempt changed/,
+  );
+});
+
+test("npm writer source gate rejects a moved tag and noncanonical repository", () => {
+  const sourceSha = "7".repeat(40);
+  const valid = {
+    repository: "zenstory-ai/oh-story-dsh",
+    repositoryMetadata: { full_name: "zenstory-ai/oh-story-dsh", private: false, default_branch: "main" },
+    mainBranch: { name: "main", protected: true },
+    sourceSha,
+    remoteTagSha: sourceSha,
+  };
+  assert.doesNotThrow(() => verifyPublisherSourceIdentity(valid));
+  assert.throws(
+    () => verifyPublisherSourceIdentity({ ...valid, remoteTagSha: "6".repeat(40) }),
+    /remote tag moved/,
+  );
+  assert.throws(
+    () => verifyPublisherSourceIdentity({ ...valid, repositoryMetadata: { ...valid.repositoryMetadata, private: true } }),
+    /public repository/,
+  );
+});
+
+test("consumer rejects coordinated manifest and proof substitution using producer digests", async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "dsh-release-digests-"));
+  const files = {
+    manifest: path.join(directory, "RELEASE-MANIFEST.json"),
+    promotionProof: path.join(directory, "PROMOTION-PROOF.json"),
+    ciProof: path.join(directory, "ci-proof.json"),
+  };
+  await writeFile(files.manifest, '{"source":"original"}\n');
+  await writeFile(files.promotionProof, '{"manifest":"original"}\n');
+  await writeFile(files.ciProof, '{"run":1}\n');
+  const expected = {
+    manifest: sha256('{"source":"original"}\n'),
+    promotionProof: sha256('{"manifest":"original"}\n'),
+    ciProof: sha256('{"run":1}\n'),
+  };
+  await verifyIndependentFileDigests({ files, expected });
+  await writeFile(files.manifest, '{"source":"substituted"}\n');
+  await writeFile(files.promotionProof, '{"manifest":"substituted"}\n');
+  await assert.rejects(verifyIndependentFileDigests({ files, expected }), /producer digest mismatch/);
 });
 
 test("manifest binds bytes, source, run attempt, and expected package entries", async () => {
@@ -233,5 +342,8 @@ test("all local actions are immutable and the release workflow has isolated publ
   assert.match(release, /github-release:[\s\S]*contents: write/);
   assert.match(release, /npm:[\s\S]*id-token: write/);
   assert.match(release, /artifact-ids: \$\{\{ needs\.verify\.outputs\.artifact-id \}\}/);
+  assert.match(release, /manifest-sha256: \$\{\{ steps\.digests\.outputs\.manifest-sha256 \}\}/);
+  assert.match(release, /npm-publish[^\n]+--repository "\$GITHUB_REPOSITORY" --tag "\$GITHUB_REF_NAME"/);
+  assert.match(release, /persist-credentials: false/);
   assert.match(release, /EVENT_NAME.*workflow_dispatch[\s\S]*refs\/heads\/main/);
 });

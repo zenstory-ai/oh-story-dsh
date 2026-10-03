@@ -26,10 +26,14 @@ jobs:
       contents: read
     outputs:
       artifact-id: ${{ steps.upload.outputs.artifact-id }}
+      manifest-sha256: ${{ steps.digests.outputs.manifest-sha256 }}
+      promotion-proof-sha256: ${{ steps.digests.outputs.promotion-proof-sha256 }}
+      ci-proof-sha256: ${{ steps.digests.outputs.ci-proof-sha256 }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
+          persist-credentials: false
       - name: Require stable tag or a nonpublishing main dry-run
         env:
           EVENT_NAME: ${{ github.event_name }}
@@ -81,6 +85,9 @@ jobs:
             --run-attempt "$GITHUB_RUN_ATTEMPT" \
             --artifact-name "$ARTIFACT_NAME" \
             --output release/RELEASE-MANIFEST.json
+      - name: Bind promotion records outside the artifact
+        id: digests
+        run: node scripts/release.mjs digests --manifest release/RELEASE-MANIFEST.json --promotion-proof release/PROMOTION-PROOF.json --ci-proof release/ci-proof.json --output "$GITHUB_OUTPUT"
       - name: Upload the only promotable artifact
         id: upload
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
@@ -103,21 +110,23 @@ jobs:
     timeout-minutes: 10
     permissions:
       actions: read
+      checks: read
       contents: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
+          persist-credentials: false
       - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
           artifact-ids: ${{ needs.verify.outputs.artifact-id }}
           path: release
-      - name: Revalidate exact artifact and publish append-only assets
+      - name: Revalidate producer-bound promotion records
+        run: node scripts/release.mjs verify-manifest --manifest release/RELEASE-MANIFEST.json --promotion-proof release/PROMOTION-PROOF.json --ci-proof release/ci-proof.json --manifest-sha256 "${{ needs.verify.outputs.manifest-sha256 }}" --promotion-proof-sha256 "${{ needs.verify.outputs.promotion-proof-sha256 }}" --ci-proof-sha256 "${{ needs.verify.outputs.ci-proof-sha256 }}" --directory release --sha "$GITHUB_SHA" --run-id "$GITHUB_RUN_ID" --run-attempt "$GITHUB_RUN_ATTEMPT" --artifact-name "$ARTIFACT_NAME"
+      - name: Publish append-only GitHub assets
         env:
           GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          node scripts/release.mjs verify-manifest --manifest release/RELEASE-MANIFEST.json --promotion-proof release/PROMOTION-PROOF.json --ci-proof release/ci-proof.json --directory release --sha "$GITHUB_SHA" --run-id "$GITHUB_RUN_ID" --run-attempt "$GITHUB_RUN_ATTEMPT" --artifact-name "$ARTIFACT_NAME"
-          node scripts/release.mjs github-publish --manifest release/RELEASE-MANIFEST.json --directory release --sha "$GITHUB_SHA" --repository "$GITHUB_REPOSITORY" --tag "$GITHUB_REF_NAME"
+        run: node scripts/release.mjs github-publish --manifest release/RELEASE-MANIFEST.json --directory release --sha "$GITHUB_SHA" --repository "$GITHUB_REPOSITORY" --tag "$GITHUB_REF_NAME"
 
   npm:
     name: Publish npm package
@@ -127,10 +136,14 @@ jobs:
     timeout-minutes: 10
     permissions:
       actions: read
+      checks: read
       contents: read
       id-token: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 24
@@ -139,7 +152,7 @@ jobs:
           artifact-ids: ${{ needs.verify.outputs.artifact-id }}
           path: release
       - name: Revalidate the exact tarball
-        run: node scripts/release.mjs verify-manifest --manifest release/RELEASE-MANIFEST.json --promotion-proof release/PROMOTION-PROOF.json --ci-proof release/ci-proof.json --directory release --sha "$GITHUB_SHA" --run-id "$GITHUB_RUN_ID" --run-attempt "$GITHUB_RUN_ATTEMPT" --artifact-name "$ARTIFACT_NAME"
+        run: node scripts/release.mjs verify-manifest --manifest release/RELEASE-MANIFEST.json --promotion-proof release/PROMOTION-PROOF.json --ci-proof release/ci-proof.json --manifest-sha256 "${{ needs.verify.outputs.manifest-sha256 }}" --promotion-proof-sha256 "${{ needs.verify.outputs.promotion-proof-sha256 }}" --ci-proof-sha256 "${{ needs.verify.outputs.ci-proof-sha256 }}" --directory release --sha "$GITHUB_SHA" --run-id "$GITHUB_RUN_ID" --run-attempt "$GITHUB_RUN_ATTEMPT" --artifact-name "$ARTIFACT_NAME"
       - name: Detect the existing token fallback
         id: npm-auth
         env:
@@ -154,15 +167,18 @@ jobs:
       - name: Publish with the existing token fallback
         if: steps.npm-auth.outputs.token == 'true'
         env:
+          GITHUB_TOKEN: ${{ github.token }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
           NPM_CONFIG_USERCONFIG: ${{ runner.temp }}/oh-story-dsh-npmrc
         run: |
           printf '//registry.npmjs.org/:_authToken=%s\n' "$NODE_AUTH_TOKEN" > "$NPM_CONFIG_USERCONFIG"
           chmod 600 "$NPM_CONFIG_USERCONFIG"
-          node scripts/release.mjs npm-publish --manifest release/RELEASE-MANIFEST.json --directory release --sha "$GITHUB_SHA"
+          node scripts/release.mjs npm-publish --manifest release/RELEASE-MANIFEST.json --directory release --sha "$GITHUB_SHA" --repository "$GITHUB_REPOSITORY" --tag "$GITHUB_REF_NAME"
       - name: Publish with npm Trusted Publishing
         if: steps.npm-auth.outputs.token == 'false'
-        run: node scripts/release.mjs npm-publish --manifest release/RELEASE-MANIFEST.json --directory release --sha "$GITHUB_SHA"
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/release.mjs npm-publish --manifest release/RELEASE-MANIFEST.json --directory release --sha "$GITHUB_SHA" --repository "$GITHUB_REPOSITORY" --tag "$GITHUB_REF_NAME"
 
   verify-public:
     name: Verify public channels
@@ -175,6 +191,8 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 24
@@ -182,6 +200,8 @@ jobs:
         with:
           artifact-ids: ${{ needs.verify.outputs.artifact-id }}
           path: release
+      - name: Revalidate producer-bound promotion records
+        run: node scripts/release.mjs verify-manifest --manifest release/RELEASE-MANIFEST.json --promotion-proof release/PROMOTION-PROOF.json --ci-proof release/ci-proof.json --manifest-sha256 "${{ needs.verify.outputs.manifest-sha256 }}" --promotion-proof-sha256 "${{ needs.verify.outputs.promotion-proof-sha256 }}" --ci-proof-sha256 "${{ needs.verify.outputs.ci-proof-sha256 }}" --directory release --sha "$GITHUB_SHA" --run-id "$GITHUB_RUN_ID" --run-attempt "$GITHUB_RUN_ATTEMPT" --artifact-name "$ARTIFACT_NAME"
       - name: Verify anonymous bytes, npm integrity, and isolated install
         env:
           NODE_AUTH_TOKEN: ""

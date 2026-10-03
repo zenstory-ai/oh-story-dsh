@@ -40,8 +40,10 @@ tarball size, SHA-256, and npm-compatible SHA-512 integrity. Separate CI and
 promotion proofs bind the CI run/attempt and release run/attempt to the exact
 manifest and artifact name without making public release bytes change on a
 retry. GitHub and npm publishers download the exact artifact ID produced by
-that run and verify all three records independently before using their narrowly
-scoped credentials.
+that run. The producing job also passes independent SHA-256 values for the
+manifest, promotion proof, and CI proof as job outputs; every consumer compares
+those values before a write credential is exposed. This prevents a coordinated
+replacement of the tarball and all self-contained proof files.
 
 GitHub assets are append-only under workflow control: an absent asset is
 uploaded, an existing byte-identical asset is accepted, and an existing asset
@@ -52,8 +54,12 @@ a different integrity fails. HTTP 401/403/429/5xx and network failures are
 errors, not evidence that a release or version is absent.
 
 This is workflow-enforced append-only behavior, not a claim that GitHub makes a
-tag or release immutable against repository administrators. Every retry
-re-resolves the tag and rejects a source commit that differs from the manifest.
+tag or release immutable against repository administrators. Immediately before
+either GitHub or npm can mutate public state, the shared source gate re-resolves
+the tag, confirms the canonical public repository and protected default `main`,
+proves source ancestry, and rechecks the exact CI workflow. It refetches the
+selected run after reading its latest-attempt jobs and rejects an attempt,
+check-suite, source, status, conclusion, or GitHub Actions application change.
 
 After both publishers finish, the workflow anonymously downloads the GitHub
 tarball, waits a bounded time for npm registry propagation, compares

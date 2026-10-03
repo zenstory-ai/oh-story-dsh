@@ -13,7 +13,7 @@
 
 ### Changed
 
-- 发布流水线改为先验证稳定 Tag、版本、变更记录、`main` 祖先关系与同一提交的完整 CI，再只打包一次并按 run/attempt、源码提交与 SHA-256/SHA-512 清单提升同一份产物。GitHub Release 和 npm 分到最小权限 Job；重跑只接受完全相同的既有公开字节，不再覆盖资产或把鉴权、限流、网络错误误当成「尚未发布」。正式发布后还会匿名核对 GitHub 下载、npm `dist.integrity` 与隔离安装。手动触发只允许 `main`，仍是不会发布的演练。
+- 发布流水线改为先验证稳定 Tag、版本、变更记录、受保护 `main` 祖先关系与同一提交的完整 CI，再只打包一次并按 run/attempt、源码提交与 SHA-256/SHA-512 清单提升同一份产物。生产 Job 另把 manifest、promotion proof 与 CI proof 的 SHA-256 交给每个消费 Job，发布前还会重新读取远端 Tag 与 CI 最新 attempt，协同替换 artifact 内文件或移动 Tag 都会失败。GitHub Release 和 npm 分到最小权限 Job；重跑只接受完全相同的既有公开字节，不再覆盖资产或把鉴权、限流、网络错误误当成「尚未发布」。正式发布后还会匿名核对 GitHub 下载、npm `dist.integrity` 与隔离安装。手动触发只允许 `main`，仍是不会发布的演练。
 
 ### Fixed
 
