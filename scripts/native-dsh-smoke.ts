@@ -1564,6 +1564,7 @@ async function main(): Promise<void> {
             src: element.src, marker: element.getAttribute("data-e2e-instance"), title: element.title,
             bounds: element.getBoundingClientRect().toJSON(), display: getComputedStyle(element).display
           }))),
+          responses: gamePreviewResponses.slice(-12),
           inner: await frame?.evaluate(() => ({
             instance: document.body.dataset.fixtureInstance, clicks: document.body.dataset.clicks,
             readyState: document.readyState, text: document.querySelector("#play")?.textContent,
@@ -1571,7 +1572,7 @@ async function main(): Promise<void> {
           }))
         };
       };
-      const inputBeforeClick = await generatedInputState();
+      let inputBeforeClick = await generatedInputState();
       const requireGeneratedInput = async (phase: string): Promise<void> => {
         try { await generatedFrame.getByRole("button", { name: "输入已验证", exact: true }).waitFor({ state: "visible", timeout: 10_000 }); }
         catch (error) {
@@ -1710,9 +1711,19 @@ async function main(): Promise<void> {
       if (!useRealDeepSeek) {
         await projectSelect.selectOption(`workspace:${generatedGameId}`);
         await generatedFrame.getByRole("button", { name: "试玩成功", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+        await generatedFrame.locator("#play:enabled").waitFor({ state: "visible", timeout: 10_000 });
+        // Selecting a different project intentionally creates a fresh iframe.
+        // Diagnose this click against that instance, not the discarded first one.
+        await generatedIframe.evaluate((element) => {
+          element.setAttribute("data-e2e-instance", "generated-return-input");
+          element.closest('[data-slot="conversation.session"]')?.setAttribute("data-e2e-anchor", "game-return-input");
+          element.closest(".oh-story-split-surface")?.setAttribute("data-e2e-surface", "game-return-input");
+        });
+        inputBeforeClick = await generatedInputState();
         await generatedFrame.getByRole("button", { name: "试玩成功", exact: true }).click();
-        await generatedFrame.getByRole("button", { name: "输入已验证", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+        await requireGeneratedInput("after returning from bundled project");
         await generatedIframe.evaluate((element) => { element.setAttribute("data-e2e-instance", "new-build-preserved"); });
+        inputBeforeClick = await generatedInputState();
         const beforeGameUpdate = (await sessionEvents(origin, gameSession.sessionId)).at(-1)?.seq ?? -1;
         await rpc(origin, "session/prompt", {
           request: {
@@ -1727,7 +1738,7 @@ async function main(): Promise<void> {
         if (await generatedIframe.getAttribute("data-e2e-instance") !== "new-build-preserved") {
           throw new Error("A newly built preview silently remounted after the game iframe lost focus.");
         }
-        await generatedFrame.getByRole("button", { name: "输入已验证", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+        await requireGeneratedInput("after pending build completion");
         await gameStudio.getByRole("button", { name: "载入新版本", exact: true }).click();
         await generatedFrame.getByRole("button", { name: "试玩成功", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
         if (await generatedIframe.getAttribute("data-e2e-instance") !== null) {
