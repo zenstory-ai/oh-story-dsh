@@ -7,6 +7,7 @@ import test from "node:test";
 
 import {
   classifyHttpStatus,
+  createCiProof,
   createReleaseManifest,
   npmPublicationDecision,
   selectCiProof,
@@ -207,6 +208,61 @@ test("CI proof binds the suite and rejects an attempt N+1 race", () => {
       }),
     /run attempt changed/,
   );
+});
+
+test("CI proof fetches attempt jobs and suite before the final run race guard", async () => {
+  const sourceSha = "5".repeat(40);
+  const run = {
+    id: 130,
+    run_attempt: 1,
+    head_sha: sourceSha,
+    head_branch: "main",
+    event: "push",
+    status: "completed",
+    conclusion: "success",
+    workflow_id: 123,
+    path: ".github/workflows/ci.yml",
+    check_suite_id: 88,
+  };
+  const order = [];
+  const dependencies = {
+    token: "fixture-token",
+    git: async (args) => (args[0] === "rev-parse" ? sourceSha : ""),
+    execFile: async () => undefined,
+    resolveRemoteTag: async () => sourceSha,
+    collectPages: async (url) => {
+      if (url.includes("/jobs")) {
+        order.push("jobs");
+        return requiredJobs.map((name) => ({ name, status: "completed", conclusion: "success" }));
+      }
+      order.push("runs");
+      return [run];
+    },
+    githubJson: async (url) => {
+      if (url.endsWith("/zenstory-ai/oh-story-dsh")) {
+        return { full_name: "zenstory-ai/oh-story-dsh", private: false, default_branch: "main" };
+      }
+      if (url.endsWith("/branches/main")) return { name: "main", protected: true };
+      if (url.endsWith("/actions/workflows/ci.yml")) return { id: 123, path: ".github/workflows/ci.yml" };
+      if (url.endsWith("/check-suites/88")) {
+        order.push("suite");
+        return { id: 88, head_sha: sourceSha, status: "completed", conclusion: "success", app: { id: 15368 } };
+      }
+      if (url.endsWith("/actions/runs/130")) {
+        order.push("final-run");
+        return { ...run, run_attempt: 2, status: "in_progress", conclusion: null };
+      }
+      throw new Error(`unexpected fixture URL: ${url}`);
+    },
+  };
+  await assert.rejects(
+    createCiProof(
+      { repository: "zenstory-ai/oh-story-dsh", sha: sourceSha, tag: "v1.2.3" },
+      dependencies,
+    ),
+    /run attempt changed/,
+  );
+  assert.deepEqual(order, ["runs", "jobs", "suite", "final-run"]);
 });
 
 test("npm writer source gate rejects a moved tag and noncanonical repository", () => {

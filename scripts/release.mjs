@@ -296,50 +296,47 @@ async function git(args) {
   return stdout.trim();
 }
 
-async function createCiProof(args) {
-  const token = process.env.GITHUB_TOKEN;
+export async function createCiProof(args, dependencies = {}) {
+  const token = dependencies.token ?? process.env.GITHUB_TOKEN;
+  const gitCommand = dependencies.git ?? git;
+  const execFileCommand = dependencies.execFile ?? execFileAsync;
+  const githubJsonCommand = dependencies.githubJson ?? githubJson;
+  const collectPagesCommand = dependencies.collectPages ?? collectPages;
+  const resolveRemoteTagCommand = dependencies.resolveRemoteTag ?? resolveRemoteTag;
   invariant(token, "GITHUB_TOKEN is required for CI proof");
   const repository = args.repository;
   const sourceSha = args.sha;
   invariant(repository && sourceSha, "--repository and --sha are required");
   invariant(repository === canonicalRepository, `repository must be ${canonicalRepository}`);
-  invariant(await git(["rev-parse", "HEAD"]) === sourceSha, "checked-out HEAD does not match requested source SHA");
-  await execFileAsync("git", ["fetch", "--no-tags", "origin", "main"]);
-  await execFileAsync("git", ["merge-base", "--is-ancestor", sourceSha, "origin/main"]);
+  invariant(await gitCommand(["rev-parse", "HEAD"]) === sourceSha, "checked-out HEAD does not match requested source SHA");
+  await execFileCommand("git", ["fetch", "--no-tags", "origin", "main"]);
+  await execFileCommand("git", ["merge-base", "--is-ancestor", sourceSha, "origin/main"]);
   const base = `https://api.github.com/repos/${repository}`;
-  const repositoryMetadata = await githubJson(base, { token });
-  const mainBranch = await githubJson(`${base}/branches/main`, { token });
+  const repositoryMetadata = await githubJsonCommand(base, { token });
+  const mainBranch = await githubJsonCommand(`${base}/branches/main`, { token });
   let remoteTagSha = null;
   if (args.tag) {
-    invariant((await git(["rev-parse", `${args.tag}^{commit}`])) === sourceSha, `tag ${args.tag} does not resolve to ${sourceSha}`);
-    remoteTagSha = await resolveRemoteTag(repository, args.tag, token);
+    invariant((await gitCommand(["rev-parse", `${args.tag}^{commit}`])) === sourceSha, `tag ${args.tag} does not resolve to ${sourceSha}`);
+    remoteTagSha = await resolveRemoteTagCommand(repository, args.tag, token);
   }
   verifyPublisherSourceIdentity({ repository, repositoryMetadata, mainBranch, sourceSha, remoteTagSha });
 
-  const workflow = await githubJson(`${base}/actions/workflows/ci.yml`, { token });
+  const workflow = await githubJsonCommand(`${base}/actions/workflows/ci.yml`, { token });
   invariant(normalizeWorkflowPath(workflow.path) === ".github/workflows/ci.yml", "CI workflow path mismatch");
-  const runs = await collectPages(`${base}/actions/workflows/${workflow.id}/runs?branch=main&event=push&head_sha=${sourceSha}`, token);
+  const runs = await collectPagesCommand(`${base}/actions/workflows/${workflow.id}/runs?branch=main&event=push&head_sha=${sourceSha}`, token);
   const candidates = runs
     .filter((run) => run.head_sha === sourceSha && run.head_branch === "main" && run.event === "push")
     .sort((left, right) => Number(right.id) - Number(left.id));
   invariant(candidates.length > 0, `no exact-SHA main-push CI run found for ${sourceSha}`);
   const newest = candidates[0];
-  const jobs = await collectPages(`${base}/actions/runs/${newest.id}/attempts/${newest.run_attempt}/jobs`, token);
-  const refetchedRun = await githubJson(`${base}/actions/runs/${newest.id}`, { token });
-  verifyFinalCiSnapshot({
-    selectedRun: newest,
-    refetchedRun,
-    sourceSha,
-    workflowId: workflow.id,
-    workflowPath: workflow.path,
-  });
-  const checkSuite = await githubJson(`${base}/check-suites/${refetchedRun.check_suite_id}`, { token });
+  const jobs = await collectPagesCommand(`${base}/actions/runs/${newest.id}/attempts/${newest.run_attempt}/jobs`, token);
+  const checkSuite = await githubJsonCommand(`${base}/check-suites/${newest.check_suite_id}`, { token });
   const proof = selectCiProof({
     repository,
     sourceSha,
     workflowId: workflow.id,
     workflowPath: workflow.path,
-    runs: [refetchedRun],
+    runs: [newest],
     jobs,
     checkSuite,
     requiredJobs: [
@@ -348,6 +345,14 @@ async function createCiProof(args) {
       "Portability (windows-latest)",
       "Packaged DSH Web integration",
     ],
+  });
+  const refetchedRun = await githubJsonCommand(`${base}/actions/runs/${newest.id}`, { token });
+  verifyFinalCiSnapshot({
+    selectedRun: newest,
+    refetchedRun,
+    sourceSha,
+    workflowId: workflow.id,
+    workflowPath: workflow.path,
   });
   return {
     ...proof,
