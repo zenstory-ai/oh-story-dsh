@@ -606,7 +606,7 @@ async function main(): Promise<void> {
       writeFile(join(generatedGameRoot, "_progress.md"), "# Progress\n\n- playable: complete\n"),
       // Expose an actionable button only after its input listener is attached;
       // a streamed HTML response can make it visible before the script arrives.
-      writeFile(join(generatedGameRoot, "build", "app", "index.html"), "<!doctype html><html lang=zh-CN><meta charset=utf-8><title>DSH Game Smoke</title><button id=play disabled>试玩成功</button><script>const play=document.querySelector('#play');play.addEventListener('click',event=>event.currentTarget.textContent='输入已验证');play.disabled=false</script></html>"),
+      writeFile(join(generatedGameRoot, "build", "app", "index.html"), "<!doctype html><html lang=zh-CN><meta charset=utf-8><title>DSH Game Smoke</title><button id=play disabled>试玩成功</button><script>document.body.dataset.fixtureInstance=String(Math.random());document.body.dataset.clicks='0';const play=document.querySelector('#play');play.addEventListener('click',event=>{document.body.dataset.clicks=String(Number(document.body.dataset.clicks)+1);event.currentTarget.textContent='输入已验证'});play.disabled=false</script></html>"),
       writeFile(join(generatedGameRoot, "qa", "verification.json"), `${JSON.stringify({
         schemaVersion: 3,
         status: "PASS",
@@ -1546,17 +1546,51 @@ async function main(): Promise<void> {
         };
         throw new Error(`Generated workspace game was not playable: ${JSON.stringify(diagnostics)}`, { cause: error });
       }
-      await generatedPlay.click();
-      await generatedFrame.getByRole("button", { name: "输入已验证", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
       const generatedIframe = page.locator('iframe[title="《DSH Game Studio Smoke》可试玩预览"]');
-      await generatedIframe.evaluate((element) => { element.setAttribute("data-e2e-instance", "generated-preserved"); });
+      await generatedFrame.locator("#play:enabled").waitFor({ state: "visible", timeout: 10_000 });
+      await generatedIframe.evaluate((element) => {
+        element.setAttribute("data-e2e-instance", "generated-preserved");
+        element.closest('[data-slot="conversation.session"]')?.setAttribute("data-e2e-anchor", "game-before-input");
+        element.closest(".oh-story-split-surface")?.setAttribute("data-e2e-surface", "game-before-input");
+      });
+      const generatedInputState = async () => {
+        const frame = page.frames().find((candidate) => candidate.url().includes("/oh-story/game-preview/workspace/"));
+        return {
+          project: await projectSelect.inputValue(),
+          tabs: await gameTabs.getByRole("tab", { selected: true }).allTextContents(),
+          anchors: await page.locator('[data-slot="conversation.session"]').evaluateAll((elements) => elements.map((element) => element.getAttribute("data-e2e-anchor"))),
+          surfaces: await page.locator(".oh-story-split-surface").evaluateAll((elements) => elements.map((element) => element.getAttribute("data-e2e-surface"))),
+          frames: await page.locator("iframe").evaluateAll((elements) => elements.map((element) => ({
+            src: element.src, marker: element.getAttribute("data-e2e-instance"), title: element.title,
+            bounds: element.getBoundingClientRect().toJSON(), display: getComputedStyle(element).display
+          }))),
+          inner: await frame?.evaluate(() => ({
+            instance: document.body.dataset.fixtureInstance, clicks: document.body.dataset.clicks,
+            readyState: document.readyState, text: document.querySelector("#play")?.textContent,
+            disabled: document.querySelector<HTMLButtonElement>("#play")?.disabled
+          }))
+        };
+      };
+      const inputBeforeClick = await generatedInputState();
+      const requireGeneratedInput = async (phase: string): Promise<void> => {
+        try { await generatedFrame.getByRole("button", { name: "输入已验证", exact: true }).waitFor({ state: "visible", timeout: 10_000 }); }
+        catch (error) {
+          const after = await generatedInputState().then(
+            (value) => ({ ok: true, value }),
+            (diagnosticError) => ({ ok: false, error: String(diagnosticError) })
+          );
+          throw new Error(`Generated game input failed ${phase}: ${JSON.stringify({ error: String(error), before: inputBeforeClick, after, pageErrors })}`, { cause: error });
+        }
+      };
+      await generatedPlay.click();
+      await requireGeneratedInput("after initial click");
       await gameTabs.getByRole("tab", { name: "项目文件", exact: true }).click();
       await page.locator(".oh-game-design").waitFor({ state: "visible", timeout: 10_000 });
       await gameTabs.getByRole("tab", { name: "试玩", exact: true }).click();
       if (await generatedIframe.getAttribute("data-e2e-instance") !== "generated-preserved") {
         throw new Error("Preview/Design switching remounted the generated game iframe.");
       }
-      await generatedFrame.getByRole("button", { name: "输入已验证", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+      await requireGeneratedInput("after Preview/Design restoration");
       const generatedBrowserFrame = page.frames().find((frame) => frame.url().includes("/oh-story/game-preview/workspace/"));
       if (generatedBrowserFrame === undefined) throw new Error("Generated workspace game frame was not attached.");
       const previewEscapeBlocked = await generatedBrowserFrame.evaluate(async (sessionId) => {
