@@ -48,7 +48,7 @@ npx -y @deepseek-ai/dsh@0.2.0-rc.2 web
 
 ![短剧工作台](https://raw.githubusercontent.com/zenstory-ai/oh-story-dsh/main/docs/images/drama-workbench-demo.gif)
 
-选择某集的 creator-first 文档后可切换到「生产」，查看镜头板、素材板、任务、成片顺序与关系画布；图片与视频按钮先准备完整生产预检，创作者在 Chat 明确确认同一任务后才会运行。
+选择某集的 creator-first 文档后可切换到「生产」，查看镜头板、素材板、任务、成片顺序与关系画布（无限画布：拖动空白处平移、滚轮以光标为中心缩放、方向键移动选中节点、Enter 打开原文，「适应」框选全部节点）；图片与视频按钮先准备完整生产预检，创作者在 Chat 明确确认同一任务后才会运行。
 
 ## 游戏工作台
 

@@ -58,7 +58,7 @@ File tree, editor and Chat in three panes. The editor follows the agent as it wr
 
 ![Short-drama workbench](docs/images/drama-workbench-demo.gif)
 
-Each episode keeps at most five Markdown files: `剧本.md` (screenplay), `视觉设定.md` (visual bible), `分镜.md` (storyboard), `图片提示词.md` (image prompts) and `视频提示词.md` (video prompts). The Production view projects them into a shot board, an asset board, jobs/versions, final-cut order and a relationship canvas, and flags duplicate IDs, dangling references and format errors in place. Image, video and music jobs are previewed and confirmed by you before any vendor API is called; the final cut is rendered by `/short-drama-edit` from `剪辑单.md` (the edit decision list) into `剧集/<EP>/制作成果/成片/`.
+Each episode keeps at most five Markdown files: `剧本.md` (screenplay), `视觉设定.md` (visual bible), `分镜.md` (storyboard), `图片提示词.md` (image prompts) and `视频提示词.md` (video prompts). The Production view projects them into a shot board, an asset board, jobs/versions, final-cut order and an infinite, pannable and zoomable relationship canvas, and flags duplicate IDs, dangling references and format errors in place. Image, video and music jobs are previewed and confirmed by you before any vendor API is called; the final cut is rendered by `/short-drama-edit` from `剪辑单.md` (the edit decision list) into `剧集/<EP>/制作成果/成片/`.
 
 ### Game
 

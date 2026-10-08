@@ -779,17 +779,23 @@
 .oh-story-sequence > ol > li > strong { overflow: hidden; text-overflow: ellipsis; }
 .oh-story-sequence > ol > li > div:last-child { display: grid; width: clamp(160px, 25vw, 260px); min-width: 0; grid-template-columns: minmax(0, 1fr) auto auto; gap: 3px; }
 .oh-story-sequence > ol > li select { width: 100%; min-width: 0; }
-.oh-story-canvas-shell { position: relative; display: flex; height: max(580px, calc(100% - 84px)); min-height: 580px; flex-direction: column; overflow: hidden; }
-.oh-story-canvas-shell > .oh-story-projection-note { z-index: 3; flex: none; margin: 8px 168px 8px 8px; }
+.oh-story-production:has(> .oh-story-canvas-shell) { display: flex; flex-direction: column; }
+.oh-story-production:has(> .oh-story-canvas-shell) > :not(.oh-story-canvas-shell) { flex: none; }
+.oh-story-canvas-shell { position: relative; display: flex; min-height: 420px; flex: 1 0 420px; flex-direction: column; overflow: hidden; }
+.oh-story-canvas-shell > .oh-story-projection-note { z-index: 3; flex: none; margin: 8px 232px 8px 8px; }
 .oh-story-canvas-controls { position: absolute; z-index: 4; top: 8px; right: 8px; display: flex; align-items: center; gap: 3px; padding: 3px; border: 1px solid var(--os-border); border-radius: 8px; background: var(--dsw-alias-bg-base); }
 .oh-story-canvas-controls span { min-width: 44px; color: var(--os-muted); text-align: center; }
-.oh-story-canvas-viewport { width: 100%; min-height: 0; flex: 1; overflow: auto; background-color: var(--dsw-alias-bg-base); background-image: radial-gradient(var(--os-border) 1px, transparent 1px); background-size: 20px 20px; }
-.oh-story-canvas { position: relative; width: 1800px; height: 1800px; transform-origin: 0 0; }
-.oh-story-canvas svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
-.oh-story-canvas path { fill: none; opacity: .35; stroke: var(--dsw-alias-border-l2); stroke-width: 1.5; }
-.oh-story-canvas path[data-active] { opacity: .8; stroke: var(--dsw-alias-state-business-primary); }
+.oh-story-canvas-viewport { position: relative; width: 100%; min-height: 0; flex: 1; overflow: hidden; cursor: grab; touch-action: none; overscroll-behavior: contain; background-color: var(--dsw-alias-bg-base); background-image: radial-gradient(var(--os-border) 1px, transparent 1px); background-size: 20px 20px; }
+.oh-story-canvas-viewport[data-panning] { cursor: grabbing; }
+.oh-story-canvas-viewport:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: -2px; }
+.oh-story-canvas { position: absolute; top: 0; left: 0; width: 0; height: 0; overflow: visible; transform-origin: 0 0; }
+.oh-story-canvas svg { position: absolute; top: 0; left: 0; width: 1px; height: 1px; overflow: visible; pointer-events: none; }
+.oh-story-canvas path { fill: none; opacity: .6; stroke: var(--dsw-alias-border-l2); stroke-width: 1.5; }
+.oh-story-canvas path[data-active] { opacity: .9; stroke-width: 2.5; stroke: var(--dsw-alias-state-business-primary); }
 .oh-story-canvas article { position: absolute; display: flex; width: 180px; min-height: 76px; box-sizing: border-box; flex-direction: column; gap: 4px; padding: 10px; border: 1px solid var(--os-border); border-radius: 8px; background: var(--dsw-alias-bg-layer-1); box-shadow: 0 4px 14px rgb(0 0 0 / 8%); cursor: grab; user-select: none; touch-action: none; }
-.oh-story-canvas article:active { cursor: grabbing; }
+.oh-story-canvas article:active,
+.oh-story-canvas article[data-dragging] { z-index: 2; cursor: grabbing; }
+.oh-story-canvas article[data-selected] { z-index: 1; }
 .oh-story-canvas article[data-node-type="shot"] { border-color: var(--dsw-alias-state-business-primary); }
 .oh-story-canvas article[data-selected] { box-shadow: 0 0 0 2px color-mix(in srgb, var(--dsw-alias-state-business-primary) 28%, transparent), 0 4px 14px rgb(0 0 0 / 8%); }
 .oh-story-canvas article small { color: var(--os-muted); text-transform: uppercase; }
@@ -966,7 +972,7 @@
 [data-oh-story-layout="compact"] .oh-story-sequence > ol > li select { grid-column: 1 / -1; }
 [data-oh-story-layout="compact"] .oh-story-sequence > ol > li button:first-of-type { grid-column: 2; }
 [data-oh-story-layout="compact"] .oh-story-canvas-shell > .oh-story-projection-note { overflow: hidden; max-height: 48px; margin: 8px; }
-[data-oh-story-layout="compact"] .oh-story-canvas-controls { position: static; flex: none; align-self: flex-end; margin: 0 8px 8px; }
+[data-oh-story-layout="compact"] .oh-story-canvas-controls { position: static; flex: none; flex-wrap: wrap; align-self: stretch; justify-content: flex-end; margin: 0 8px 8px; }
 
 /* Video mode intentionally stays a preview surface: one player, a read-only artifact view,
    and the official DSH Conversation. It shares no nonlinear-editor or timeline runtime. */

@@ -2058,6 +2058,40 @@ async function main(): Promise<void> {
       if (leftAfterKeyboardMove !== leftBeforeKeyboardMove + 10) {
         throw new Error("Production canvas did not expose keyboard-operable Session layout controls.");
       }
+      const canvasViewport = page.locator(".oh-story-canvas-viewport");
+      const canvasWorld = page.locator(".oh-story-canvas");
+      const canvasBox = await canvasViewport.boundingBox();
+      if (canvasBox === null) throw new Error("Production canvas viewport is not laid out.");
+      const canvasTransform = () => canvasWorld.evaluate((element) => (element as HTMLElement).style.transform);
+      const canvasCorner = await canvasViewport.evaluate((element) => {
+        const box = element.getBoundingClientRect();
+        for (let y = box.bottom - 24; y > box.top + 24; y -= 24) {
+          for (let x = box.right - 24; x > box.left + 24; x -= 24) {
+            if (document.elementFromPoint(x, y) === element) return { x, y };
+          }
+        }
+        throw new Error("Production canvas has no empty background to pan from.");
+      });
+      const transformBeforePan = await canvasTransform();
+      await page.mouse.move(canvasCorner.x, canvasCorner.y);
+      await page.mouse.down();
+      await page.mouse.move(canvasCorner.x - 240, canvasCorner.y - 160, { steps: 8 });
+      await page.mouse.up();
+      const transformAfterPan = await canvasTransform();
+      if (transformAfterPan === transformBeforePan || Number.parseFloat(await firstCanvasNode.evaluate((element) => getComputedStyle(element).left)) !== leftAfterKeyboardMove) {
+        throw new Error(`Dragging the canvas background did not pan the view independently of node layout: ${transformBeforePan} -> ${transformAfterPan}`);
+      }
+      const zoomLabel = page.locator(".oh-story-canvas-controls span");
+      const zoomBeforeWheel = await zoomLabel.textContent();
+      await page.mouse.move(canvasBox.x + canvasBox.width / 2, canvasBox.y + canvasBox.height / 2);
+      await page.mouse.wheel(0, -240);
+      await page.waitForFunction((before) => document.querySelector(".oh-story-canvas-controls span")?.textContent !== before, zoomBeforeWheel, { timeout: 5_000 });
+      await page.getByRole("button", { name: "适应", exact: true }).click();
+      const framedNodes = await page.locator(".oh-story-canvas article").evaluateAll((elements, box) => elements.every((element) => {
+        const rect = element.getBoundingClientRect();
+        return rect.left >= box.x - 1 && rect.right <= box.x + box.width + 1;
+      }), canvasBox);
+      if (!framedNodes) throw new Error("Canvas fit did not frame every node after panning and zooming.");
       await productionTabs.getByRole("tab", { name: "镜头", exact: true }).click();
       await page.locator(".oh-story-shot-card").first().getByRole("button", { name: "IMG-ZHOUBOSEN-SHEET", exact: true }).click();
       await page.getByRole("textbox", { name: "剧集/EP001/图片提示词.md" }).waitFor({ state: "visible", timeout: 10_000 });

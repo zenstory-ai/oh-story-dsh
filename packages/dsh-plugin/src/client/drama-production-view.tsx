@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 // Type-only: erased from the browser bundle, but a modality added to the host registry
 // without a label below becomes a type error instead of an unlabelled chip.
 import type { DramaAdapterModality, DramaAdapterStatus } from "../drama-adapters.js";
 import { productionCompleteness, type DramaDocumentTarget, type DramaEpisodeProduction, type DramaProductionSection } from "./drama-production.js";
 import { endpoint } from "./workbench-ui.js";
+import type { CanvasViewport } from "./canvas-viewport.js";
+import { ProductionCanvas } from "./production-canvas.js";
 import { nativeBatchPrompt, nativeCompositionPrompt, nativeProductionPrompt } from "./production-prompts.js";
 import { activeProductionJobId, compositionInFlight, createPendingJob, mediaBelongsToEpisode, queuedItemForJob, reconcileProductionJobs, reconcileSequence, referencesForTarget, reorderSequence, sequenceIssues, sequenceSourceEligible, selectedVersionForTarget, type CanvasPoint, type ProductionJob, type ProductionMediaVersion, type ProductionQueueEntry, type ProductionSequenceItem } from "./production-runtime.js";
 
@@ -21,7 +23,7 @@ interface Props {
   readonly manualReferences: Readonly<Record<string, readonly string[]>>;
   readonly sequence: readonly ProductionSequenceItem[];
   readonly canvas: Readonly<Record<string, CanvasPoint>>;
-  readonly zoom: number;
+  readonly viewport: CanvasViewport | undefined;
   readonly onSectionChange: (section: DramaProductionSection) => void;
   readonly onSelect: (id: string | undefined) => void;
   readonly onNavigate: (target: DramaDocumentTarget) => void;
@@ -31,7 +33,7 @@ interface Props {
   readonly onOpenMedia: (path: string) => void;
   readonly onSequenceChange: (sequence: ProductionSequenceItem[]) => void;
   readonly onCanvasChange: (canvas: Record<string, CanvasPoint>) => void;
-  readonly onZoomChange: (zoom: number) => void;
+  readonly onViewportChange: (viewport: CanvasViewport) => void;
   readonly onDispatchPrompt: (prompt: string) => Promise<void>;
   readonly onCancelTurn: () => Promise<void>;
   readonly onRemoveQueued: (itemId: string) => Promise<void>;
@@ -209,7 +211,9 @@ export function DramaProductionView(props: Props) {
     {props.section === "assets" && <AssetBoard {...props} onCreateJob={createJob} />}
     {props.section === "tasks" && <TaskBoard jobs={props.jobs} queue={props.queue} sessionRunning={props.sessionRunning} onCancel={cancelJob} onRemoveQueued={removeQueuedJob} />}
     {props.section === "sequence" && <SequenceBoard {...props} episodeDirectory={props.production.episodeDirectory} onCompose={composeSequence} />}
-    {props.section === "canvas" && <ProductionCanvas {...props} />}
+    {props.section === "canvas" && (props.production.shots.length + props.production.assets.length + props.production.visualAssets.length === 0
+      ? <section className="oh-story-canvas-shell" aria-label="短剧素材与镜头关系画布"><MissingDocument document={`${props.production.episodeDirectory}/分镜.md`} documentPaths={props.production.documentPaths} what="关系" skill="/short-drama-storyboard" onNavigate={props.onNavigate} /></section>
+      : <ProductionCanvas production={props.production} selectedId={props.selectedId} canvas={props.canvas} viewport={props.viewport} onSelect={props.onSelect} onNavigate={props.onNavigate} onCanvasChange={props.onCanvasChange} onViewportChange={props.onViewportChange} />)}
   </div>;
 }
 
@@ -273,16 +277,6 @@ export function SequenceBoard(props: Pick<Props, "jobs" | "sequence" | "versions
       : sourceVersionId === "" ? { shotId: item.shotId, versionId: item.versionId } : { ...item, sourceVersionId, versionId: sourceVersionId }));
   };
   return <section className="oh-story-sequence"><div className="oh-story-sequence-summary"><strong>{props.sequence.length} 个镜头</strong><span>{props.sequence.length === 0 ? "还没有镜头" : composing ? "成片任务进行中" : issues.length === 0 ? "已可合成" : `${String(issues.length)} 个阻塞项`}</span><button type="button" disabled={composing || issues.length > 0 || props.sequence.length < 2} onClick={props.onCompose}>合成成片</button></div>{issues.length > 0 && <ul className="oh-story-sequence-issues">{issues.slice(0, 3).map((issue) => <li key={issue}>{issue}</li>)}{issues.length > 3 && <li>另有 {issues.length - 3} 个阻塞项，请在下方镜头行补齐素材。</li>}</ul>}<ol>{props.sequence.map((item, index) => { const version = item.versionId === undefined ? undefined : versionById.get(item.versionId); const choices = scopedVersions.filter((candidate) => candidate.path !== undefined && sequenceSourceEligible(item.shotId, candidate)); const explicitMissing = item.sourceVersionId !== undefined && !choices.some((choice) => choice.id === item.sourceVersionId); return <li key={item.shotId}><span>{String(index + 1).padStart(2, "0")}</span>{version === undefined ? <div className="oh-story-sequence-missing">缺少素材</div> : <MediaPreview version={version} interactive={false} />}<strong>{item.shotId}</strong><div><select aria-label={`选择 ${item.shotId} 成片素材`} value={item.sourceVersionId ?? ""} onChange={(event) => { chooseSource(item.shotId, event.target.value); }}><option value="">自动（视频优先）</option>{explicitMissing && <option value={item.sourceVersionId} disabled>已选素材不可用</option>}{choices.map((choice) => <option value={choice.id} key={choice.id}>{choice.targetId} · {choice.kind === "video" ? "视频" : "静帧"} · {choice.path?.split("/").at(-1)}</option>)}</select><button type="button" aria-label={`上移 ${item.shotId}`} disabled={index === 0} onClick={() => { move(index, -1); }}>↑</button><button type="button" aria-label={`下移 ${item.shotId}`} disabled={index === props.sequence.length - 1} onClick={() => { move(index, 1); }}>↓</button></div></li>; })}</ol></section>;
-}
-
-function ProductionCanvas(props: Props) {
-  const nodes = useMemo(() => { const sourceAssets = [...props.production.assets, ...props.production.visualAssets]; const assets = sourceAssets.map((asset, index) => ({ id: asset.id, label: asset.title, type: "asset", initial: { x: 80, y: 80 + index * 150 } })); const shots = props.production.shots.map((shot, index) => ({ id: shot.id, label: shot.title, type: "shot", initial: { x: 640, y: 80 + index * 180 } })); return [...assets, ...shots]; }, [props.production.assets, props.production.shots, props.production.visualAssets]);
-  const positions = Object.fromEntries(nodes.map((node) => [node.id, props.canvas[node.id] ?? node.initial]));
-  const startDrag = (event: ReactPointerEvent<HTMLElement>, id: string) => { event.currentTarget.setPointerCapture(event.pointerId); const origin = positions[id] ?? { x: 0, y: 0 }; const start = { x: event.clientX, y: event.clientY }; const move = (moveEvent: PointerEvent) => { props.onCanvasChange({ ...props.canvas, [id]: { x: origin.x + (moveEvent.clientX - start.x) / props.zoom, y: origin.y + (moveEvent.clientY - start.y) / props.zoom } }); }; const end = () => { globalThis.removeEventListener("pointermove", move); globalThis.removeEventListener("pointerup", end); }; globalThis.addEventListener("pointermove", move); globalThis.addEventListener("pointerup", end); };
-  const moveNode = (id: string, x: number, y: number) => { const origin = positions[id] ?? { x: 0, y: 0 }; props.onCanvasChange({ ...props.canvas, [id]: { x: origin.x + x, y: origin.y + y } }); };
-  const connections = props.production.shots.flatMap((shot) => shot.references.map((reference) => [reference, shot.id] as const));
-  if (nodes.length === 0) return <section className="oh-story-canvas-shell" aria-label="短剧素材与镜头关系画布"><MissingDocument document={`${props.production.episodeDirectory}/分镜.md`} documentPaths={props.production.documentPaths} what="关系" skill="/short-drama-storyboard" onNavigate={props.onNavigate} /></section>;
-  return <section className="oh-story-canvas-shell" aria-label="短剧素材与镜头关系画布"><div className="oh-story-projection-note">文档关系 · 布局仅保存在当前 DSH Session</div><div className="oh-story-canvas-controls"><button type="button" aria-label="缩小画布" onClick={() => { props.onZoomChange(Math.max(.5, props.zoom - .1)); }}>−</button><span>{Math.round(props.zoom * 100)}%</span><button type="button" aria-label="放大画布" onClick={() => { props.onZoomChange(Math.min(1.8, props.zoom + .1)); }}>＋</button><button type="button" onClick={() => { props.onCanvasChange({}); props.onZoomChange(.65); }}>复位</button></div><div className="oh-story-canvas-viewport"><div className="oh-story-canvas" style={{ transform: `scale(${String(props.zoom)})` }}><svg aria-hidden="true">{connections.map(([from, to]) => { const a = positions[from]; const b = positions[to]; if (a === undefined || b === undefined) return null; return <path key={`${from}:${to}`} data-active={to === props.selectedId || undefined} d={`M ${String(a.x + 180)} ${String(a.y + 50)} C ${String(a.x + 360)} ${String(a.y + 50)}, ${String(b.x - 180)} ${String(b.y + 50)}, ${String(b.x)} ${String(b.y + 50)}`} />; })}</svg>{nodes.map((node) => <article key={node.id} tabIndex={0} aria-label={`${node.type === "asset" ? "素材" : "镜头"} ${node.label}`} data-node-type={node.type} data-selected={node.id === props.selectedId || undefined} style={{ left: positions[node.id]?.x, top: positions[node.id]?.y }} onKeyDown={(event) => { const step = event.shiftKey ? 40 : 10; const delta: readonly [number, number] | undefined = event.key === "ArrowLeft" ? [-step, 0] : event.key === "ArrowRight" ? [step, 0] : event.key === "ArrowUp" ? [0, -step] : event.key === "ArrowDown" ? [0, step] : undefined; if (delta !== undefined) { event.preventDefault(); moveNode(node.id, delta[0], delta[1]); } }} onPointerDown={(event) => { startDrag(event, node.id); }} onDoubleClick={() => { const target = props.production.targets.get(node.id); if (target !== undefined) props.onNavigate(target); }}><small>{node.type === "asset" ? "素材" : "镜头"}</small><strong>{node.label}</strong><span>{node.id}</span></article>)}</div></div></section>;
 }
 
 /** Scroll the card an Agent focus_target selected into view; without it the tab switches but the card stays off-screen. */
