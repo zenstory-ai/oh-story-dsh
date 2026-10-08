@@ -3,6 +3,15 @@
 `@oh-story/dsh` is distributed as the same prebuilt tarball through npm and
 GitHub Releases. A release is created only from a `v<package-version>` tag.
 
+## Upstream update issues
+
+`.github/workflows/upstream-updates.yml` runs daily and opens one
+`upstream-update` issue per new version of a bundled Skill set (latest GitHub
+release ahead of the pinned manifest commit) or of DeepSeek Harness (an npm
+dist-tag on a version the plugin does not declare). Each issue carries the sync
+checklist. Close an issue to decline that version; it will not be reopened.
+Run `pnpm upstream:updates` for a local dry run.
+
 ## One-time npm setup
 
 The npm account used for the first publication must be allowed to publish the
