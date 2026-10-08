@@ -1,0 +1,36 @@
+name: Upstream Updates
+
+on:
+  schedule:
+    # 01:17 UTC = 09:17 Asia/Shanghai, daily.
+    - cron: "17 1 * * *"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Only print which issues would be opened
+        type: boolean
+        default: false
+
+concurrency:
+  group: upstream-updates
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  watch:
+    name: Open issues for new upstream versions
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Check Skill sets and DeepSeek Harness
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          DRY_RUN: ${{ inputs.dry_run && '--dry-run' || '' }}
+        run: node scripts/upstream-updates.mjs $DRY_RUN
