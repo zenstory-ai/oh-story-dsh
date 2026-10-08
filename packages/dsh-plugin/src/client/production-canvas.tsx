@@ -57,14 +57,16 @@ export function ProductionCanvas(props: Props) {
   const wheelCommit = useRef<ReturnType<typeof setTimeout>>(undefined);
   /** A selection made by clicking a node is already in view and must not move the canvas. */
   const selectedHere = useRef<string>(undefined);
+  /** The selection the view last followed; resizes and re-parses must not snap back to it. */
+  const followed = useRef<string>(undefined);
 
   const positions: Record<string, CanvasPoint> = Object.fromEntries(nodes.map((node) => [node.id, props.canvas[node.id] ?? node.initial]));
   if (liveNode !== undefined) positions[liveNode.id] = liveNode.point;
   const committedViewport = props.viewport ?? (size.width > 0 ? fitNodes(Object.values(positions), size) : DEFAULT_CANVAS_VIEWPORT);
   const viewport = liveViewport ?? committedViewport;
 
-  const latest = useRef({ viewport, committedViewport, props });
-  latest.current = { viewport, committedViewport, props };
+  const latest = useRef({ viewport, committedViewport, props, nodes, size });
+  latest.current = { viewport, committedViewport, props, nodes, size };
 
   useLayoutEffect(() => {
     const element = viewportRef.current;
@@ -87,6 +89,7 @@ export function ProductionCanvas(props: Props) {
       setLiveViewport(next);
       clearTimeout(wheelCommit.current);
       wheelCommit.current = setTimeout(() => {
+        wheelCommit.current = undefined;
         latest.current.props.onViewportChange(next);
         setLiveViewport(undefined);
       }, WHEEL_COMMIT_DELAY);
@@ -107,16 +110,33 @@ export function ProductionCanvas(props: Props) {
 
   // A target selected elsewhere (another tab, or the Agent focusing it) is brought into view.
   useEffect(() => {
-    const { viewport: current, props: currentProps } = latest.current;
+    const { viewport: current, props: currentProps, nodes: currentNodes, size: currentSize } = latest.current;
     const id = currentProps.selectedId;
-    if (id === undefined || size.width === 0 || id === selectedHere.current) return;
-    const node = nodes.find((candidate) => candidate.id === id);
+    if (!measured || id === followed.current) return;
+    followed.current = id;
+    if (id === undefined) return;
+    if (id === selectedHere.current) {
+      selectedHere.current = undefined;
+      return;
+    }
+    const node = currentNodes.find((candidate) => candidate.id === id);
     if (node === undefined) return;
     const point = currentProps.canvas[id] ?? node.initial;
-    if (!nodeVisible(current, point, size)) currentProps.onViewportChange(centerOn(current, point, size));
-  }, [nodes, props.selectedId, size]);
+    if (!nodeVisible(current, point, currentSize)) currentProps.onViewportChange(centerOn(current, point, currentSize));
+  }, [measured, props.selectedId]);
+
+  /** Lands a wheel burst still waiting to commit, so a pan or button starts from what is shown. */
+  const flushWheel = () => {
+    if (wheelCommit.current === undefined) return;
+    clearTimeout(wheelCommit.current);
+    wheelCommit.current = undefined;
+    props.onViewportChange(viewport);
+    setLiveViewport(undefined);
+  };
 
   const commitViewport = (next: CanvasViewport) => {
+    clearTimeout(wheelCommit.current);
+    wheelCommit.current = undefined;
     setLiveViewport(undefined);
     props.onViewportChange(next);
   };
@@ -129,6 +149,7 @@ export function ProductionCanvas(props: Props) {
     if (event.target instanceof Element && event.target.closest("article") !== null) return;
     if (event.button !== 0 && event.button !== 1) return;
     event.preventDefault();
+    flushWheel();
     const element = event.currentTarget;
     element.setPointerCapture(event.pointerId);
     element.focus({ preventScroll: true });
@@ -186,7 +207,7 @@ export function ProductionCanvas(props: Props) {
       setLiveNode(undefined);
       if (moved) props.onCanvasChange({ ...props.canvas, [id]: next });
       else {
-        selectedHere.current = id;
+        if (id !== props.selectedId) selectedHere.current = id;
         props.onSelect(id);
       }
     };
@@ -240,13 +261,15 @@ export function ProductionCanvas(props: Props) {
   const gridSize = 20 * viewport.zoom;
 
   return <section className="oh-story-canvas-shell" aria-label="短剧素材与镜头关系画布">
-    <div className="oh-story-projection-note" id="oh-story-canvas-help">文档关系 · 拖动空白处平移，滚轮缩放，方向键移动选中节点，Enter 打开原文 · 布局只在本页保留</div>
+    <div className="oh-story-canvas-toolbar">
+    <div className="oh-story-canvas-help" id="oh-story-canvas-help">拖动空白处平移 · 滚轮缩放 · 方向键移动节点 · Enter 打开原文 · 布局只在本页保留</div>
     <div className="oh-story-canvas-controls">
       <button type="button" aria-label="缩小画布" onClick={() => { zoomAtCenter(1 / BUTTON_ZOOM_STEP); }}>−</button>
       <span aria-live="polite">{Math.round(viewport.zoom * 100)}%</span>
       <button type="button" aria-label="放大画布" onClick={() => { zoomAtCenter(BUTTON_ZOOM_STEP); }}>＋</button>
       <button type="button" onClick={() => { commitViewport(fitNodes(Object.values(positions), size)); }}>适应</button>
       <button type="button" onClick={() => { props.onCanvasChange({}); commitViewport(fitNodes(nodes.map((node) => node.initial), size)); }}>复位</button>
+    </div>
     </div>
     <div
       ref={viewportRef}
