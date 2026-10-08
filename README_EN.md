@@ -40,7 +40,7 @@
 | Novel | [Oh Story 0.8.4](https://github.com/zenstory-ai/oh-story-claudecode/releases/tag/v0.8.4) · 13 Skills · 7 Roles | `/story`, `/story-long-write`, `/story-review` |
 | Short drama | [Drama Skills 0.8.1](https://github.com/zenstory-ai/drama-skills/releases/tag/v0.8.1) · 11 Skills | `/short-drama`, `/short-drama-write`, `/short-drama-storyboard`, `/short-drama-edit` |
 | Game | [NovelToGame 0.5.0](https://github.com/zenstory-ai/novel-to-game) · 7 Skills · playable 《金瓶梅》 ADV sample | `/novel-to-game quick`, `/game-build`, `/game-qa` |
-| Video | [video-recap-skills 0.6.1](https://github.com/zenstory-ai/video-recap-skills/releases/tag/v0.6.1) · 7 Skills (3 user entry points) | `/video-recap`, `/video-script`, `/video-reference` |
+| Video | [video-recap-skills 0.6.2](https://github.com/zenstory-ai/video-recap-skills/releases/tag/v0.6.2) · 7 Skills (3 user entry points) | `/video-recap`, `/video-script`, `/video-reference` |
 
 > Latest release **v0.1.13** (2026-10-03). The default install uses DeepSeek Harness `0.2.0-rc.2`, the npm `latest`; explicit opt-in to `0.2.1-alpha.1` is also supported. See [CHANGELOG.md](CHANGELOG.md) and [Releases](https://github.com/zenstory-ai/oh-story-dsh/releases); upgrade steps are in the FAQ entry [“What do I do after upgrading?”](#what-do-i-do-after-upgrading).
 

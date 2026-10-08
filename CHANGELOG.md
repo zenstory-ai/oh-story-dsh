@@ -11,6 +11,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- 同步 [video-recap-skills 0.6.2](https://github.com/zenstory-ai/video-recap-skills/releases/tag/v0.6.2)（`539168622918e058bd250c793b82f043eced31e0`）：dub（英译中原声复刻）必须显式带 `--confirm-voice-rights`，缺少时在建 `work_dir`、抽音频和任何外发请求之前报错，其他模式传入也报错；技能桥要求 Agent 先向用户确认视频音频使用权与说话人同意克隆，确认后才加该参数。**旧 `work/` 打印的 dub 续跑命令需要补上这个参数。** video-script 与 video-voiceover 写明每条远程调用发送的内容与关闭方式；没有 `MIMO_API_KEY` 时旁白评审直接退出，不再把稿件发出去。
+
 ### Fixed
 
 - 修复 npm 发布把相对 tgz 路径误识别为 GitHub 仓库地址的问题；增加严格绑定原始制品的一次性恢复流程，补齐 0.1.13 的 npm 渠道，不移动标签或覆盖已发布资产。
