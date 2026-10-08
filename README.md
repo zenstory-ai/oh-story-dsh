@@ -38,7 +38,7 @@
 | 小说 | [Oh Story 0.8.4](https://github.com/zenstory-ai/oh-story-claudecode/releases/tag/v0.8.4) · 13 Skills · 7 Roles | `/story`、`/story-long-write`、`/story-review` |
 | 短剧 | [Drama Skills 0.8.1](https://github.com/zenstory-ai/drama-skills/releases/tag/v0.8.1) · 11 Skills | `/short-drama`、`/short-drama-write`、`/short-drama-storyboard`、`/short-drama-edit` |
 | 游戏 | [NovelToGame 0.5.0](https://github.com/zenstory-ai/novel-to-game) · 7 Skills · 《金瓶梅》ADV 可玩示例 | `/novel-to-game quick`、`/game-build`、`/game-qa` |
-| 视频 | [video-recap-skills 0.6.1](https://github.com/zenstory-ai/video-recap-skills/releases/tag/v0.6.1) · 7 Skills（3 个用户入口） | `/video-recap`、`/video-script`、`/video-reference` |
+| 视频 | [video-recap-skills 0.6.2](https://github.com/zenstory-ai/video-recap-skills/releases/tag/v0.6.2) · 7 Skills（3 个用户入口） | `/video-recap`、`/video-script`、`/video-reference` |
 
 > 最新版本 **v0.1.13**（2026-10-03）。默认安装使用 npm `latest` 的 DeepSeek Harness `0.2.0-rc.2`；另支持显式选择 `0.2.1-alpha.1`。变更见 [CHANGELOG.md](CHANGELOG.md) 与 [Releases](https://github.com/zenstory-ai/oh-story-dsh/releases)；升级步骤见常见问题[「升级到新版本后要做什么」](#升级到新版本后要做什么)。
 

@@ -9,7 +9,7 @@
 - 13 个 Oh Story 0.8.4 小说 Skills 与 7 个专业 Roles；
 - 11 个 Drama Skills 0.8.1 短剧流程，每集按请求维护最多五份 creator-first Markdown，成片装配另写《剪辑单.md》；
 - 7 个 NovelToGame 0.5.0 Skills、`game-adaptations/<project>` 产物协议与《金瓶梅 · 风月总账》ADV 可玩构建；
-- 7 个 video-recap-skills 0.6.1 Skills（3 个用户入口）、`video-recaps/<project>` 项目约定与轻量视频预览工作台；
+- 7 个 video-recap-skills 0.6.2 Skills（3 个用户入口）、`video-recaps/<project>` 项目约定与轻量视频预览工作台；
 - 小说协议 hooks 与安全的 Session workspace 文件路由；
 - 小说/短剧的文件树、编辑器、Chat 三栏工作台，以及游戏/视频的“左侧工作台 + 右侧 Chat”制作面板；
 - Markdown 与 JSONL 结构化预览；
@@ -74,7 +74,7 @@ npx -y @deepseek-ai/dsh@0.2.0-rc.2 web
 
 Drama Skills 0.6.0 不支持把 v0.5 结构化项目原地升级为 creator-first 项目。旧项目应继续锁定 v0.5 并只读保留；迁移时请新建项目根，逐集人工确认当前工作实际需要的 `剧本.md`、`视觉设定.md`、`分镜.md`、`图片提示词.md` 或 `视频提示词.md`，不要预建空文档。
 
-0.8.1 的角色参考音频必须绑定具体角色，并通过严格的 `reference_roles`、身份与禁控校验；音频不会出现在图片参考选择器里。NovelToGame 0.5.0 的 ADV 示例不迁移旧存档，升级后清除旧站点存储并重新开始。video-recap 0.6.1 改用 QC schema 2，删除旧 QC 标志/路径；升级既有 `work/` 时可能重新生成 ASR、剪辑、TTS 与索引，不得沿用或伪造旧 PASS。
+0.8.1 的角色参考音频必须绑定具体角色，并通过严格的 `reference_roles`、身份与禁控校验；音频不会出现在图片参考选择器里。NovelToGame 0.5.0 的 ADV 示例不迁移旧存档，升级后清除旧站点存储并重新开始。video-recap 0.6.1 改用 QC schema 2，删除旧 QC 标志/路径；升级既有 `work/` 时可能重新生成 ASR、剪辑、TTS 与索引，不得沿用或伪造旧 PASS。0.6.2 起 dub（英译中原声复刻）必须带 `--confirm-voice-rights`，包括旧 `work/` 打印的续跑命令；没有 `MIMO_API_KEY` 时旁白评审直接退出，不再外发稿件。
 
 ## 没看到界面时
 
