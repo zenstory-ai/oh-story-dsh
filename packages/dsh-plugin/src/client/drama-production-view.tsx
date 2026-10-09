@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 // Type-only: erased from the browser bundle, but a modality added to the host registry
 // without a label below becomes a type error instead of an unlabelled chip.
 import type { DramaAdapterModality, DramaAdapterStatus } from "../drama-adapters.js";
 import { productionCompleteness, type DramaDocumentTarget, type DramaEpisodeProduction, type DramaProductionSection } from "./drama-production.js";
 import { endpoint } from "./workbench-ui.js";
+import type { CanvasViewport } from "./canvas-viewport.js";
+import { ProductionCanvas } from "./production-canvas.js";
 import { nativeBatchPrompt, nativeCompositionPrompt, nativeProductionPrompt } from "./production-prompts.js";
 import { activeProductionJobId, compositionInFlight, createPendingJob, mediaBelongsToEpisode, queuedItemForJob, reconcileProductionJobs, reconcileSequence, referencesForTarget, reorderSequence, sequenceIssues, sequenceSourceEligible, selectedVersionForTarget, type CanvasPoint, type ProductionJob, type ProductionMediaVersion, type ProductionQueueEntry, type ProductionSequenceItem } from "./production-runtime.js";
 
@@ -21,7 +23,7 @@ interface Props {
   readonly manualReferences: Readonly<Record<string, readonly string[]>>;
   readonly sequence: readonly ProductionSequenceItem[];
   readonly canvas: Readonly<Record<string, CanvasPoint>>;
-  readonly zoom: number;
+  readonly viewport: CanvasViewport | undefined;
   readonly onSectionChange: (section: DramaProductionSection) => void;
   readonly onSelect: (id: string | undefined) => void;
   readonly onNavigate: (target: DramaDocumentTarget) => void;
@@ -31,7 +33,7 @@ interface Props {
   readonly onOpenMedia: (path: string) => void;
   readonly onSequenceChange: (sequence: ProductionSequenceItem[]) => void;
   readonly onCanvasChange: (canvas: Record<string, CanvasPoint>) => void;
-  readonly onZoomChange: (zoom: number) => void;
+  readonly onViewportChange: (viewport: CanvasViewport) => void;
   readonly onDispatchPrompt: (prompt: string) => Promise<void>;
   readonly onCancelTurn: () => Promise<void>;
   readonly onRemoveQueued: (itemId: string) => Promise<void>;
@@ -77,11 +79,18 @@ const MODALITY_LABEL: Readonly<Record<DramaAdapterModality, string>> = { image: 
 /**
  * DeepSeek writes the prompts; the pictures, videos, speech and music come from
  * provider APIs that the produce Skill calls. Nothing in the conversation says so,
- * and the keys live in the host environment, so the 生产 view states it up front.
+ * and the keys live in the host environment, so the 生产 view states it up front —
+ * as one compact status pill per concern, with the detail one click away.
  */
-function ProductionEnvironment({ sessionId }: { readonly sessionId: string }) {
+function ProductionStatus({ sessionId, diagnostics, onNavigate }: {
+  readonly sessionId: string;
+  readonly diagnostics: DramaEpisodeProduction["diagnostics"];
+  readonly onNavigate: (target: DramaDocumentTarget) => void;
+}) {
   const [preflight, setPreflight] = useState<DramaPreflight | "failed">();
   const [attempt, setAttempt] = useState(0);
+  const [open, setOpen] = useState<"environment" | "diagnostics">();
+  const [copied, setCopied] = useState(false);
   // The summary is host-wide (the route ignores sessionId); the id only keeps
   // the URL shape shared with every other workbench endpoint.
   useEffect(() => {
@@ -95,18 +104,47 @@ function ProductionEnvironment({ sessionId }: { readonly sessionId: string }) {
       .catch(() => { if (!controller.signal.aborted) setPreflight("failed"); });
     return () => { controller.abort(); };
   }, [attempt, sessionId]);
-  const unconfigured = typeof preflight === "object" ? preflight.adapters.filter((adapter) => !adapter.configured) : [];
-  return <div className="oh-story-production-environment" role="status" aria-label="媒体生成环境">
-    <strong>生成环境</strong>
-    {preflight === undefined && <span data-pending>检查中…</span>}
-    {preflight === "failed" && <button type="button" onClick={() => { setPreflight(undefined); setAttempt((value) => value + 1); }}>环境检查失败 · 重试</button>}
-    {typeof preflight === "object" && <>
-      <span data-ready={preflight.python.ok || undefined}>Python {preflight.python.version ?? "未找到"}</span>
-      {preflight.adapters.map((adapter) => <span key={adapter.name} data-ready={adapter.configured || undefined} title={adapter.configured ? `${adapter.name} 已配置` : `缺少环境变量 ${adapter.missing.join("、")}`}>{MODALITY_LABEL[adapter.modality]} {adapter.label}{adapter.configured ? "" : ` · 缺 ${adapter.missing.join("、")}`}</span>)}
-      <em>DeepSeek 只负责写提示词；图片、视频、语音、音乐由上面的供应商 API 生成，Key 在启动 DSH 前写入宿主机环境变量。
-        {unconfigured.length === preflight.adapters.length && " 当前一个都没配置，生产任务会停在 adapter 之前。"}
-        {" "}Adapter 配置{preflight.adapterConfig.generated ? "已自动登记" : "使用自定义文件"}{preflight.adapterConfig.ok ? "" : "（写入失败）"}：<code>{preflight.adapterConfig.path}</code>。详见 README「媒体生成 API」。</em>
-    </>}
+  const toggle = (panel: "environment" | "diagnostics") => { setOpen((current) => current === panel ? undefined : panel); };
+  const configured = typeof preflight === "object" ? preflight.adapters.filter((adapter) => adapter.configured).length : 0;
+  const total = typeof preflight === "object" ? preflight.adapters.length : 0;
+  const environmentTone = typeof preflight !== "object" ? "neutral" : !preflight.python.ok || !preflight.adapterConfig.ok ? "error" : configured === total ? "ready" : configured > 0 ? "partial" : "idle";
+  const protocolErrors = diagnostics.filter((item) => item.severity === "error").length;
+  const adapterFile = typeof preflight === "object" ? preflight.adapterConfig.path.split(/[\\/]/u).at(-1) : undefined;
+  return <div className="oh-story-production-status">
+    <div className="oh-story-status-pills">
+      {preflight === "failed"
+        ? <button type="button" className="oh-story-status-pill" data-tone="error" onClick={() => { setPreflight(undefined); setAttempt((value) => value + 1); }}><i aria-hidden="true" />环境检查失败<em>重试</em></button>
+        : <button type="button" className="oh-story-status-pill" data-tone={environmentTone} aria-expanded={open === "environment"} aria-controls="oh-story-production-environment" aria-label="媒体生成环境" onClick={() => { toggle("environment"); }}>
+          <i aria-hidden="true" />生成环境
+          <em>{typeof preflight !== "object" ? "检查中…" : !preflight.python.ok ? "需要 Python 3.10+" : `${String(configured)}/${String(total)} 供应商已配置`}</em>
+          <b aria-hidden="true" />
+        </button>}
+      {diagnostics.length > 0 && <button type="button" className="oh-story-status-pill" data-tone={protocolErrors > 0 ? "error" : "warning"} aria-expanded={open === "diagnostics"} aria-controls="oh-story-production-diagnostics" onClick={() => { toggle("diagnostics"); }}>
+        <i aria-hidden="true" />{protocolErrors > 0 ? `${String(protocolErrors)} 个协议错误` : `${String(diagnostics.length)} 个格式提醒`}<b aria-hidden="true" />
+      </button>}
+    </div>
+    {open === "environment" && typeof preflight === "object" && <section className="oh-story-status-panel" id="oh-story-production-environment" aria-label="媒体生成环境详情">
+      <ul className="oh-story-provider-list">
+        <li data-ready={preflight.python.ok || undefined} data-error={!preflight.python.ok || undefined}><i aria-hidden="true" /><span>运行</span><strong>Python</strong><small>{preflight.python.ok ? preflight.python.version : `${preflight.python.version ?? "未找到"} · Skill 脚本需要 3.10+`}</small></li>
+        {preflight.adapters.map((adapter) => <li key={adapter.name} data-ready={adapter.configured || undefined}>
+          <i aria-hidden="true" /><span>{MODALITY_LABEL[adapter.modality]}</span><strong>{adapter.label}</strong>
+          {adapter.configured ? <small>已配置</small> : <small>缺 {adapter.missing.map((name) => <code key={name}>{name}</code>)}</small>}
+        </li>)}
+      </ul>
+      <p>DeepSeek 只负责写提示词，图片、视频、语音、音乐由这些供应商 API 生成。Key 写在启动 DSH 之前的宿主机环境变量里{configured === 0 ? "；现在一个都没配置，生产任务会在调用供应商之前停下" : ""}。详见 README「媒体生成 API」。</p>
+      <footer>
+        <span>Adapter 配置{preflight.adapterConfig.generated ? "（自动登记）" : "（自定义）"}{preflight.adapterConfig.ok ? "" : " · 写入失败"}</span>
+        <code title={preflight.adapterConfig.path}>{adapterFile}</code>
+        <button type="button" onClick={() => { void navigator.clipboard.writeText(preflight.adapterConfig.path).then(() => { setCopied(true); setTimeout(() => { setCopied(false); }, 1500); }); }}>{copied ? "已复制" : "复制路径"}</button>
+      </footer>
+    </section>}
+    {open === "diagnostics" && <section className="oh-story-status-panel oh-story-production-diagnostics" id="oh-story-production-diagnostics" aria-label="文档格式提醒">
+      <ul>{diagnostics.slice(0, 8).map((item) => <li data-severity={item.severity} key={`${item.path}:${String(item.offset)}:${item.code}`}>
+        <button type="button" onClick={() => { onNavigate({ path: item.path, offset: item.offset, id: item.targetId ?? item.code }); }}>{item.path.split("/").at(-1)}<span>:{item.line}</span></button>
+        <span>{item.message}</span>
+      </li>)}</ul>
+      {diagnostics.length > 8 && <p>另有 {diagnostics.length - 8} 项，请按文档位置修复。</p>}
+    </section>}
   </div>;
 }
 
@@ -125,7 +163,6 @@ function handleSectionKey(event: ReactKeyboardEvent<HTMLButtonElement>, current:
 
 export function DramaProductionView(props: Props) {
   const [notice, setNotice] = useState<string>();
-  const protocolErrors = props.production.diagnostics.filter((item) => item.severity === "error").length;
   const jobsRef = useRef(props.jobs);
   const commitJobs = useCallback((next: ProductionJob[]) => {
     jobsRef.current = next;
@@ -202,14 +239,15 @@ export function DramaProductionView(props: Props) {
 
   return <div className="oh-story-production">
     <div className="oh-story-production-bar"><div className="oh-story-production-tabs" role="tablist" aria-label="短剧生产视图">{SECTION_ORDER.map((item) => <button type="button" role="tab" tabIndex={props.section === item ? 0 : -1} aria-selected={props.section === item} key={item} onKeyDown={(event) => { handleSectionKey(event, item, props.onSectionChange); }} onClick={() => { props.onSectionChange(item); }}>{SECTION_LABELS[item]}</button>)}</div><div className="oh-story-production-meta"><span className="oh-story-production-summary">{props.production.shots.length} 镜 · {props.production.assets.length + props.production.visualAssets.length} 素材 · {props.jobs.filter((job) => job.status === "awaiting_confirmation" || job.status === "running" || job.status === "pending").length} 任务</span><button type="button" onClick={props.onRefresh}>刷新</button></div></div>
-    <ProductionEnvironment sessionId={props.sessionId} />
+    <ProductionStatus sessionId={props.sessionId} diagnostics={props.production.diagnostics} onNavigate={props.onNavigate} />
     {notice !== undefined && <div className="oh-story-production-notice" role="status"><span>{notice}</span><button type="button" aria-label="关闭提示" onClick={() => { setNotice(undefined); }}>×</button></div>}
-    {props.production.diagnostics.length > 0 && <details className="oh-story-production-diagnostics"><summary>{protocolErrors > 0 ? `${String(protocolErrors)} 个协议错误` : `${String(props.production.diagnostics.length)} 个格式提醒`}</summary><ul>{props.production.diagnostics.slice(0, 8).map((item) => <li data-severity={item.severity} key={`${item.path}:${String(item.offset)}:${item.code}`}><button type="button" onClick={() => { props.onNavigate({ path: item.path, offset: item.offset, id: item.targetId ?? item.code }); }}>{item.path.split("/").at(-1)}:{item.line}</button><span>{item.message}</span></li>)}</ul>{props.production.diagnostics.length > 8 && <p>另有 {props.production.diagnostics.length - 8} 项，请按文档位置修复。</p>}</details>}
     {props.section === "shots" && <ShotBoard {...props} onCreateJob={createJob} onBatch={createBatch} />}
     {props.section === "assets" && <AssetBoard {...props} onCreateJob={createJob} />}
     {props.section === "tasks" && <TaskBoard jobs={props.jobs} queue={props.queue} sessionRunning={props.sessionRunning} onCancel={cancelJob} onRemoveQueued={removeQueuedJob} />}
     {props.section === "sequence" && <SequenceBoard {...props} episodeDirectory={props.production.episodeDirectory} onCompose={composeSequence} />}
-    {props.section === "canvas" && <ProductionCanvas {...props} />}
+    {props.section === "canvas" && (props.production.shots.length + props.production.assets.length + props.production.visualAssets.length === 0
+      ? <section className="oh-story-canvas-shell" aria-label="短剧素材与镜头关系画布"><MissingDocument document={`${props.production.episodeDirectory}/分镜.md`} documentPaths={props.production.documentPaths} what="关系" skill="/short-drama-storyboard" onNavigate={props.onNavigate} /></section>
+      : <ProductionCanvas production={props.production} selectedId={props.selectedId} canvas={props.canvas} viewport={props.viewport} onSelect={props.onSelect} onNavigate={props.onNavigate} onCanvasChange={props.onCanvasChange} onViewportChange={props.onViewportChange} />)}
   </div>;
 }
 
@@ -219,7 +257,7 @@ function ShotBoard(props: Props & { readonly onCreateJob: (targetId: string, kin
   return <section className="oh-story-shot-board"><div className="oh-story-production-actions"><button type="button" onClick={() => { void props.onBatch("image"); }}>准备批量关键帧</button><button type="button" onClick={() => { void props.onBatch("video"); }}>准备批量视频</button></div><div className="oh-story-shot-grid">{props.production.shots.map((shot) => {
     const completeness = productionCompleteness(shot); const versions = props.versions.filter((version) => version.targetId === shot.id); const selected = selectedVersionForTarget(shot.id, props.versions, props.selections, "image") ?? selectedVersionForTarget(shot.id, props.versions, props.selections, "video");
     return <article className="oh-story-shot-card" role="button" tabIndex={0} aria-pressed={props.selectedId === shot.id} aria-label={`选中镜头 ${shot.id} ${shot.title}`} ref={props.selectedId === shot.id ? selectedRef : undefined} data-selected={props.selectedId === shot.id || undefined} key={shot.id} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); props.onSelect(shot.id); } }} onClick={() => { props.onSelect(shot.id); }}>
-      {selected === undefined ? <div className="oh-story-shot-placeholder"><strong>{shot.id.split("-").at(-1)}</strong><span>等待关键帧成果</span></div> : <MediaPreview version={selected} />}<header><button type="button" onClick={(event) => { event.stopPropagation(); props.onNavigate({ path: shot.path, offset: shot.offset, id: shot.id }); }}>{shot.id}</button><span>{shot.durationSeconds === undefined ? "—" : `${String(shot.durationSeconds)}s`}</span></header><h3>{shot.title}</h3>{shot.shotSpec !== undefined && <p>{shot.shotSpec}</p>}<dl><dt>起</dt><dd>{shot.start ?? "未填写"}</dd><dt>终</dt><dd>{shot.end ?? "未填写"}</dd></dl>
+      {selected === undefined ? <div className="oh-story-shot-placeholder"><strong>{shot.id.split("-").at(-1)}</strong><span>待生成关键帧</span></div> : <MediaPreview version={selected} />}<header><button type="button" onClick={(event) => { event.stopPropagation(); props.onNavigate({ path: shot.path, offset: shot.offset, id: shot.id }); }}>{shot.id}</button><span>{shot.durationSeconds === undefined ? "—" : `${String(shot.durationSeconds)}s`}</span></header><h3>{shot.title}</h3>{shot.shotSpec !== undefined && <p>{shot.shotSpec}</p>}<dl><dt>起</dt><dd>{shot.start ?? "未填写"}</dd><dt>终</dt><dd>{shot.end ?? "未填写"}</dd></dl>
       <div className="oh-story-shot-status"><ReadinessBadge label="关键帧" ready={completeness.keyframe} /><ReadinessBadge label="运动" ready={completeness.motion} /><ReadinessBadge label="参考" ready={completeness.references} /><span>{versions.length} 版本</span></div><div className="oh-story-reference-links">{shot.sceneIds.length > 0 ? shot.sceneIds.map((sceneId) => <ReferenceButton key={sceneId} id={sceneId} production={props.production} onNavigate={props.onNavigate} />) : shot.source !== undefined && <ReferenceButton id={shot.source} production={props.production} onNavigate={props.onNavigate} />}{shot.references.map((id) => <ReferenceButton id={id} production={props.production} onNavigate={props.onNavigate} key={id} />)}</div>
       <div className="oh-story-card-actions">{shot.keyframePrompt !== undefined && <button type="button" onClick={(event) => { event.stopPropagation(); void props.onCreateJob(shot.id, "image", shot.keyframePrompt ?? ""); }}>准备关键帧</button>}{shot.motion?.prompt !== undefined && <button type="button" onClick={(event) => { event.stopPropagation(); void props.onCreateJob(shot.id, "video", shot.motion?.prompt ?? ""); }}>准备视频</button>}</div>{versions.length > 1 && <VersionStrip targetId={shot.id} versions={versions} selections={props.selections} onSelectionsChange={props.onSelectionsChange} />}
     </article>;
@@ -242,7 +280,7 @@ function AssetBoard(props: Props & { readonly onCreateJob: (targetId: string, ki
     props.onManualReferencesChange({ ...mutable, [referenceTarget]: next });
   };
   if (assets.length === 0 && props.libraryVersions.length === 0) return <section className="oh-story-assets"><MissingDocument document={`${props.production.episodeDirectory}/图片提示词.md`} documentPaths={props.production.documentPaths} what="素材" skill="/short-drama-image-prompts" onNavigate={props.onNavigate} /></section>;
-  return <section className="oh-story-assets"><div className="oh-story-asset-grid">{assets.map((asset) => { const prompt = "prompt" in asset ? asset.prompt : asset.description; const versions = props.versions.filter((version) => version.targetId === asset.id); const selected = selectedVersionForTarget(asset.id, props.versions, props.selections, "image"); return <article className="oh-story-asset-card" ref={props.selectedId === asset.id ? selectedRef : undefined} data-selected={props.selectedId === asset.id || undefined} key={asset.id}>{selected === undefined ? <div className="oh-story-asset-placeholder">{asset.kind === "character" ? "人" : asset.kind === "scene" ? "景" : asset.kind === "prop" ? "物" : "设"}</div> : <MediaPreview version={selected} />}<div><small>{ASSET_KIND_LABEL[asset.kind]}</small><h3>{asset.title}</h3><button type="button" onClick={() => { props.onNavigate({ path: asset.path, offset: asset.offset, id: asset.id }); }}>{asset.id}</button></div>{prompt !== undefined && <p className="oh-story-asset-description">{prompt}</p>}<div className="oh-story-card-actions">{prompt !== undefined && <button type="button" onClick={() => { void props.onCreateJob(asset.id, "image", prompt); }}>准备素材</button>}</div>{versions.length > 0 && <VersionStrip targetId={asset.id} versions={versions} selections={props.selections} onSelectionsChange={props.onSelectionsChange} />}</article>; })}</div><div className="oh-story-media-library"><header><div><strong>项目媒体库</strong><span>{library.length}/{props.libraryVersions.length} 项 · 可跨集复用</span></div><div><input aria-label="搜索项目媒体" value={query} placeholder="搜索 ID 或路径" onChange={(event) => { setQuery(event.target.value); }} /><select aria-label="筛选媒体类型" value={kind} onChange={(event) => { setKind(event.target.value as typeof kind); }}><option value="all">全部</option><option value="image">图片</option><option value="video">视频</option></select></div></header><p className="oh-story-projection-note">{referenceTarget === undefined ? "先在镜头页选中一个镜头，再回到这里把已有图片设为该镜头的补充参考。" : `可把下面的图片设为 ${referenceTarget} 的补充参考。`}补充参考只提示 Agent 核对；写进来源条目的「输入参考图」后才会送进生产。</p><div className="oh-story-media-library-grid">{library.map((version) => { const selected = referenceTarget !== undefined && (props.manualReferences[referenceTarget] ?? []).includes(version.id); return <article key={version.id}><MediaPreview version={version} /><strong>{version.targetId}</strong><span title={version.path}>{version.path}</span><footer>{version.path !== undefined && <button type="button" onClick={() => { props.onOpenMedia(version.path!); }}>打开文件</button>}{referenceTarget !== undefined && version.kind === "image" && <button type="button" aria-pressed={selected} aria-label={`${selected ? "取消" : "设为"} ${referenceTarget} 参考 ${version.targetId}`} title="提示 Agent 核对；写进「输入参考图」后才会送进生产" onClick={() => { toggleReference(version.id); }}>{selected ? "已设补充参考" : "设为补充参考"}</button>}</footer></article>; })}</div></div></section>;
+  return <section className="oh-story-assets"><div className="oh-story-asset-grid">{assets.map((asset) => { const prompt = "prompt" in asset ? asset.prompt : asset.description; const versions = props.versions.filter((version) => version.targetId === asset.id); const selected = selectedVersionForTarget(asset.id, props.versions, props.selections, "image"); return <article className="oh-story-asset-card" ref={props.selectedId === asset.id ? selectedRef : undefined} data-selected={props.selectedId === asset.id || undefined} key={asset.id}><div className="oh-story-asset-media" data-kind={asset.kind}>{selected === undefined ? <div className="oh-story-asset-placeholder" aria-hidden="true">{asset.kind === "character" ? "人" : asset.kind === "scene" ? "景" : asset.kind === "prop" ? "物" : "设"}</div> : <MediaPreview version={selected} />}<small>{ASSET_KIND_LABEL[asset.kind]}</small></div><div className="oh-story-asset-head"><h3>{asset.title}</h3><button type="button" onClick={() => { props.onNavigate({ path: asset.path, offset: asset.offset, id: asset.id }); }}>{asset.id}</button></div>{prompt !== undefined && <p className="oh-story-asset-description">{prompt}</p>}<div className="oh-story-card-actions">{prompt !== undefined && <button type="button" onClick={() => { void props.onCreateJob(asset.id, "image", prompt); }}>准备素材</button>}</div>{versions.length > 0 && <VersionStrip targetId={asset.id} versions={versions} selections={props.selections} onSelectionsChange={props.onSelectionsChange} />}</article>; })}</div><div className="oh-story-media-library"><header><div><strong>项目媒体库</strong><span>{library.length}/{props.libraryVersions.length} 项 · 可跨集复用</span></div><div><input aria-label="搜索项目媒体" value={query} placeholder="搜索 ID 或路径" onChange={(event) => { setQuery(event.target.value); }} /><select aria-label="筛选媒体类型" value={kind} onChange={(event) => { setKind(event.target.value as typeof kind); }}><option value="all">全部</option><option value="image">图片</option><option value="video">视频</option></select></div></header><p className="oh-story-projection-note">{referenceTarget === undefined ? "先在镜头页选中一个镜头，再回到这里把已有图片设为该镜头的补充参考。" : `可把下面的图片设为 ${referenceTarget} 的补充参考。`}补充参考只提示 Agent 核对；写进来源条目的「输入参考图」后才会送进生产。</p><div className="oh-story-media-library-grid">{library.map((version) => { const selected = referenceTarget !== undefined && (props.manualReferences[referenceTarget] ?? []).includes(version.id); return <article key={version.id}><MediaPreview version={version} /><strong>{version.targetId}</strong><span title={version.path}>{version.path}</span><footer>{version.path !== undefined && <button type="button" onClick={() => { props.onOpenMedia(version.path!); }}>打开文件</button>}{referenceTarget !== undefined && version.kind === "image" && <button type="button" aria-pressed={selected} aria-label={`${selected ? "取消" : "设为"} ${referenceTarget} 参考 ${version.targetId}`} title="提示 Agent 核对；写进「输入参考图」后才会送进生产" onClick={() => { toggleReference(version.id); }}>{selected ? "已设补充参考" : "设为补充参考"}</button>}</footer></article>; })}</div></div></section>;
 }
 
 function TaskBoard({ jobs, queue, sessionRunning, onCancel, onRemoveQueued }: {
@@ -254,8 +292,8 @@ function TaskBoard({ jobs, queue, sessionRunning, onCancel, onRemoveQueued }: {
 }) {
   const activeJobId = activeProductionJobId(jobs, queue, sessionRunning);
   return <section className="oh-story-task-board">
-    <div className="oh-story-projection-note">图片、视频、语音、音乐都先预检、后确认。这里跟踪图片、视频与成片任务；语音和音乐在 Chat 里完成，结果直接落在制作成果目录。供应商见上方「生成环境」，实际账号、模型与可用性由当前 DSH 运行环境决定。</div>
-    {jobs.length === 0 ? <div className="oh-story-production-empty">还没有生产任务。可从镜头或素材页提交单个或批量任务。</div> : [...jobs].reverse().map((job) => {
+    <p className="oh-story-board-hint">这里跟踪图片、视频与成片任务，每项都先预检、再由你在 Chat 确认。语音和音乐在 Chat 里完成，结果直接写进制作成果目录。</p>
+    {jobs.length === 0 ? <div className="oh-story-production-empty"><strong>还没有生产任务</strong><p>在「镜头」或「素材」页准备关键帧、视频或素材，确认后的任务会出现在这里。</p></div> : [...jobs].reverse().map((job) => {
       const queued = queuedItemForJob(job.id, queue);
       const displayStatus = queued === undefined ? STATUS_LABELS[job.status] : "DSH Queue";
       return <article key={job.id} data-job-id={job.id} data-status={job.status}><header><strong title={job.targetId}>{job.targetId}</strong><span>{JOB_KIND_LABEL[job.kind]}</span><span>{displayStatus}</span></header><div className="oh-story-task-progress"><i style={{ width: `${String(job.progress)}%` }} /></div><details><summary>查看投产提示词</summary><p>{job.prompt}</p></details>{job.expectedOutputs > 1 && <small>{job.completedOutputs}/{job.expectedOutputs} 项成果</small>}{job.error !== undefined && <div className="oh-story-error">{job.error}</div>}{job.output !== undefined && <MediaPreview version={job.output} />}<footer>{queued !== undefined && (job.status === "awaiting_confirmation" || job.status === "pending" || job.status === "running") && <button type="button" onClick={() => { void onRemoveQueued(job, queued.id); }}>从 DSH Queue 移除</button>}{activeJobId === job.id && <button type="button" onClick={() => { void onCancel(job); }}>停止当前 DSH Turn</button>}</footer></article>;
@@ -272,17 +310,7 @@ export function SequenceBoard(props: Pick<Props, "jobs" | "sequence" | "versions
       ? item
       : sourceVersionId === "" ? { shotId: item.shotId, versionId: item.versionId } : { ...item, sourceVersionId, versionId: sourceVersionId }));
   };
-  return <section className="oh-story-sequence"><div className="oh-story-sequence-summary"><strong>{props.sequence.length} 个镜头</strong><span>{props.sequence.length === 0 ? "还没有镜头" : composing ? "成片任务进行中" : issues.length === 0 ? "已可合成" : `${String(issues.length)} 个阻塞项`}</span><button type="button" disabled={composing || issues.length > 0 || props.sequence.length < 2} onClick={props.onCompose}>合成成片</button></div>{issues.length > 0 && <ul className="oh-story-sequence-issues">{issues.slice(0, 3).map((issue) => <li key={issue}>{issue}</li>)}{issues.length > 3 && <li>另有 {issues.length - 3} 个阻塞项，请在下方镜头行补齐素材。</li>}</ul>}<ol>{props.sequence.map((item, index) => { const version = item.versionId === undefined ? undefined : versionById.get(item.versionId); const choices = scopedVersions.filter((candidate) => candidate.path !== undefined && sequenceSourceEligible(item.shotId, candidate)); const explicitMissing = item.sourceVersionId !== undefined && !choices.some((choice) => choice.id === item.sourceVersionId); return <li key={item.shotId}><span>{String(index + 1).padStart(2, "0")}</span>{version === undefined ? <div className="oh-story-sequence-missing">缺少素材</div> : <MediaPreview version={version} interactive={false} />}<strong>{item.shotId}</strong><div><select aria-label={`选择 ${item.shotId} 成片素材`} value={item.sourceVersionId ?? ""} onChange={(event) => { chooseSource(item.shotId, event.target.value); }}><option value="">自动（视频优先）</option>{explicitMissing && <option value={item.sourceVersionId} disabled>已选素材不可用</option>}{choices.map((choice) => <option value={choice.id} key={choice.id}>{choice.targetId} · {choice.kind === "video" ? "视频" : "静帧"} · {choice.path?.split("/").at(-1)}</option>)}</select><button type="button" aria-label={`上移 ${item.shotId}`} disabled={index === 0} onClick={() => { move(index, -1); }}>↑</button><button type="button" aria-label={`下移 ${item.shotId}`} disabled={index === props.sequence.length - 1} onClick={() => { move(index, 1); }}>↓</button></div></li>; })}</ol></section>;
-}
-
-function ProductionCanvas(props: Props) {
-  const nodes = useMemo(() => { const sourceAssets = [...props.production.assets, ...props.production.visualAssets]; const assets = sourceAssets.map((asset, index) => ({ id: asset.id, label: asset.title, type: "asset", initial: { x: 80, y: 80 + index * 150 } })); const shots = props.production.shots.map((shot, index) => ({ id: shot.id, label: shot.title, type: "shot", initial: { x: 640, y: 80 + index * 180 } })); return [...assets, ...shots]; }, [props.production.assets, props.production.shots, props.production.visualAssets]);
-  const positions = Object.fromEntries(nodes.map((node) => [node.id, props.canvas[node.id] ?? node.initial]));
-  const startDrag = (event: ReactPointerEvent<HTMLElement>, id: string) => { event.currentTarget.setPointerCapture(event.pointerId); const origin = positions[id] ?? { x: 0, y: 0 }; const start = { x: event.clientX, y: event.clientY }; const move = (moveEvent: PointerEvent) => { props.onCanvasChange({ ...props.canvas, [id]: { x: origin.x + (moveEvent.clientX - start.x) / props.zoom, y: origin.y + (moveEvent.clientY - start.y) / props.zoom } }); }; const end = () => { globalThis.removeEventListener("pointermove", move); globalThis.removeEventListener("pointerup", end); }; globalThis.addEventListener("pointermove", move); globalThis.addEventListener("pointerup", end); };
-  const moveNode = (id: string, x: number, y: number) => { const origin = positions[id] ?? { x: 0, y: 0 }; props.onCanvasChange({ ...props.canvas, [id]: { x: origin.x + x, y: origin.y + y } }); };
-  const connections = props.production.shots.flatMap((shot) => shot.references.map((reference) => [reference, shot.id] as const));
-  if (nodes.length === 0) return <section className="oh-story-canvas-shell" aria-label="短剧素材与镜头关系画布"><MissingDocument document={`${props.production.episodeDirectory}/分镜.md`} documentPaths={props.production.documentPaths} what="关系" skill="/short-drama-storyboard" onNavigate={props.onNavigate} /></section>;
-  return <section className="oh-story-canvas-shell" aria-label="短剧素材与镜头关系画布"><div className="oh-story-projection-note">文档关系 · 布局仅保存在当前 DSH Session</div><div className="oh-story-canvas-controls"><button type="button" aria-label="缩小画布" onClick={() => { props.onZoomChange(Math.max(.5, props.zoom - .1)); }}>−</button><span>{Math.round(props.zoom * 100)}%</span><button type="button" aria-label="放大画布" onClick={() => { props.onZoomChange(Math.min(1.8, props.zoom + .1)); }}>＋</button><button type="button" onClick={() => { props.onCanvasChange({}); props.onZoomChange(.65); }}>复位</button></div><div className="oh-story-canvas-viewport"><div className="oh-story-canvas" style={{ transform: `scale(${String(props.zoom)})` }}><svg aria-hidden="true">{connections.map(([from, to]) => { const a = positions[from]; const b = positions[to]; if (a === undefined || b === undefined) return null; return <path key={`${from}:${to}`} data-active={to === props.selectedId || undefined} d={`M ${String(a.x + 180)} ${String(a.y + 50)} C ${String(a.x + 360)} ${String(a.y + 50)}, ${String(b.x - 180)} ${String(b.y + 50)}, ${String(b.x)} ${String(b.y + 50)}`} />; })}</svg>{nodes.map((node) => <article key={node.id} tabIndex={0} aria-label={`${node.type === "asset" ? "素材" : "镜头"} ${node.label}`} data-node-type={node.type} data-selected={node.id === props.selectedId || undefined} style={{ left: positions[node.id]?.x, top: positions[node.id]?.y }} onKeyDown={(event) => { const step = event.shiftKey ? 40 : 10; const delta: readonly [number, number] | undefined = event.key === "ArrowLeft" ? [-step, 0] : event.key === "ArrowRight" ? [step, 0] : event.key === "ArrowUp" ? [0, -step] : event.key === "ArrowDown" ? [0, step] : undefined; if (delta !== undefined) { event.preventDefault(); moveNode(node.id, delta[0], delta[1]); } }} onPointerDown={(event) => { startDrag(event, node.id); }} onDoubleClick={() => { const target = props.production.targets.get(node.id); if (target !== undefined) props.onNavigate(target); }}><small>{node.type === "asset" ? "素材" : "镜头"}</small><strong>{node.label}</strong><span>{node.id}</span></article>)}</div></div></section>;
+  return <section className="oh-story-sequence"><div className="oh-story-sequence-summary"><strong>{props.sequence.length} 个镜头</strong><span>{props.sequence.length === 0 ? "还没有镜头" : composing ? "成片任务进行中" : issues.length === 0 ? "已可合成" : `${String(issues.length)} 个阻塞项`}</span><button type="button" disabled={composing || issues.length > 0 || props.sequence.length < 2} onClick={props.onCompose}>合成成片</button></div>{issues.length > 0 && <ul className="oh-story-sequence-issues">{issues.slice(0, 3).map((issue) => <li key={issue}>{issue}</li>)}{issues.length > 3 && <li>另有 {issues.length - 3} 个阻塞项，请在下方镜头行补齐素材。</li>}</ul>}<ol>{props.sequence.map((item, index) => { const version = item.versionId === undefined ? undefined : versionById.get(item.versionId); const choices = scopedVersions.filter((candidate) => candidate.path !== undefined && sequenceSourceEligible(item.shotId, candidate)); const explicitMissing = item.sourceVersionId !== undefined && !choices.some((choice) => choice.id === item.sourceVersionId); return <li key={item.shotId}><span>{String(index + 1).padStart(2, "0")}</span>{version === undefined ? <div className="oh-story-sequence-missing">缺少素材</div> : <MediaPreview version={version} interactive={false} />}<div className="oh-story-sequence-main"><strong title={item.shotId}>{item.shotId}</strong><select aria-label={`选择 ${item.shotId} 成片素材`} value={item.sourceVersionId ?? ""} onChange={(event) => { chooseSource(item.shotId, event.target.value); }}><option value="">自动（视频优先）</option>{explicitMissing && <option value={item.sourceVersionId} disabled>已选素材不可用</option>}{choices.map((choice) => <option value={choice.id} key={choice.id}>{choice.targetId} · {choice.kind === "video" ? "视频" : "静帧"} · {choice.path?.split("/").at(-1)}</option>)}</select></div><div className="oh-story-sequence-move"><button type="button" aria-label={`上移 ${item.shotId}`} disabled={index === 0} onClick={() => { move(index, -1); }}>↑</button><button type="button" aria-label={`下移 ${item.shotId}`} disabled={index === props.sequence.length - 1} onClick={() => { move(index, 1); }}>↓</button></div></li>; })}</ol></section>;
 }
 
 /** Scroll the card an Agent focus_target selected into view; without it the tab switches but the card stays off-screen. */

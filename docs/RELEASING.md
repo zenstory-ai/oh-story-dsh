@@ -141,7 +141,7 @@ metadata and manifest integrity rather than resubmit while processing.
 Do not announce a release until the registry reports the exact version:
 
 ```bash
-VERSION=0.1.13
+VERSION=0.1.14
 npm view "@oh-story/dsh@$VERSION" version dist.integrity
 npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.0-rc.2 dsh plugin --profile web add "@oh-story/dsh@$VERSION"
 ```

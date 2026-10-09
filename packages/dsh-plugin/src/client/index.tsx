@@ -39,6 +39,7 @@ import {
   type DramaProductionSection
 } from "./drama-production.js";
 import { DramaProductionView } from "./drama-production-view.js";
+import type { CanvasViewport } from "./canvas-viewport.js";
 import { createPendingJob, type
   CanvasPoint,
   mediaTargetFromPath,
@@ -137,7 +138,7 @@ interface WorkbenchMemory {
   productionReferences: Record<string, Record<string, string[]>>;
   productionSequence: Record<string, ProductionSequenceItem[]>;
   productionCanvas: Record<string, Record<string, CanvasPoint>>;
-  productionZoom: Record<string, number>;
+  productionViewport: Record<string, CanvasViewport>;
   productionIntentCalls: Record<string, boolean>;
   /** Latest settled Agent write the workbench has already followed or taken as history. */
   settledMutation: string | undefined;
@@ -184,7 +185,7 @@ function createWorkbenchStore() {
       productionReferences: {},
       productionSequence: {},
       productionCanvas: {},
-      productionZoom: {},
+      productionViewport: {},
       productionIntentCalls: {},
       settledMutation: undefined,
       hydrated: false
@@ -258,8 +259,8 @@ function createWorkbenchStore() {
       setProductionCanvas: (draft, update: Update<Record<string, Record<string, CanvasPoint>>>) => {
         draft.productionCanvas = applyUpdate(draft.productionCanvas, update);
       },
-      setProductionZoom: (draft, update: Update<Record<string, number>>) => {
-        draft.productionZoom = applyUpdate(draft.productionZoom, update);
+      setProductionViewport: (draft, update: Update<Record<string, CanvasViewport>>) => {
+        draft.productionViewport = applyUpdate(draft.productionViewport, update);
       },
       setProductionIntentCalls: (draft, update: Update<Record<string, boolean>>) => {
         draft.productionIntentCalls = applyUpdate(draft.productionIntentCalls, update);
@@ -718,7 +719,7 @@ function CreativeWorkbench({
   const productionReferencesByEpisode = useStore((memory) => memory.productionReferences);
   const productionSequenceByEpisode = useStore((memory) => memory.productionSequence);
   const productionCanvasByEpisode = useStore((memory) => memory.productionCanvas);
-  const productionZoomByEpisode = useStore((memory) => memory.productionZoom);
+  const productionViewportByEpisode = useStore((memory) => memory.productionViewport);
   const productionIntentCalls = useStore((memory) => memory.productionIntentCalls);
   const surfaceRef = useRef<HTMLDivElement>(null);
   const setWorkbenchPreference = actions.setWorkbenchPreference;
@@ -810,7 +811,7 @@ function CreativeWorkbench({
   const productionReferences = episodeDirectory === undefined ? {} : productionReferencesByEpisode[episodeDirectory] ?? {};
   const productionSequence = episodeDirectory === undefined ? [] : productionSequenceByEpisode[episodeDirectory] ?? [];
   const productionCanvas = episodeDirectory === undefined ? {} : productionCanvasByEpisode[episodeDirectory] ?? {};
-  const productionZoom = episodeDirectory === undefined ? .65 : productionZoomByEpisode[episodeDirectory] ?? .65;
+  const productionViewport = episodeDirectory === undefined ? undefined : productionViewportByEpisode[episodeDirectory];
   const setProductionSelectedId = useCallback((selectedId: string | undefined) => {
     if (episodeDirectory !== undefined) actions.setProductionSelectedIds((current) => ({ ...current, [episodeDirectory]: selectedId }));
   }, [actions, episodeDirectory]);
@@ -829,8 +830,8 @@ function CreativeWorkbench({
   const setProductionCanvas = useCallback((canvas: Record<string, CanvasPoint>) => {
     if (episodeDirectory !== undefined) actions.setProductionCanvas((current) => ({ ...current, [episodeDirectory]: canvas }));
   }, [actions, episodeDirectory]);
-  const setProductionZoom = useCallback((zoom: number) => {
-    if (episodeDirectory !== undefined) actions.setProductionZoom((current) => ({ ...current, [episodeDirectory]: zoom }));
+  const setProductionViewport = useCallback((viewport: CanvasViewport) => {
+    if (episodeDirectory !== undefined) actions.setProductionViewport((current) => ({ ...current, [episodeDirectory]: viewport }));
   }, [actions, episodeDirectory]);
   const editorMode = useStore((memory) => memory.editorMode);
   const setEditorMode = actions.setEditorMode;
@@ -1554,7 +1555,7 @@ function CreativeWorkbench({
               manualReferences={productionReferences}
               sequence={productionSequence}
               canvas={productionCanvas}
-              zoom={productionZoom}
+              viewport={productionViewport}
               onSectionChange={setProductionSection}
               onSelect={setProductionSelectedId}
               onNavigate={navigateProductionTarget}
@@ -1564,7 +1565,7 @@ function CreativeWorkbench({
               onOpenMedia={(path) => { revealPath(path); }}
               onSequenceChange={setProductionSequence}
               onCanvasChange={setProductionCanvas}
-              onZoomChange={setProductionZoom}
+              onViewportChange={setProductionViewport}
               onDispatchPrompt={sendProductionPrompt}
               onCancelTurn={cancelProduction}
               onRemoveQueued={removeQueuedProduction}
