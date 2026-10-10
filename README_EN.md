@@ -37,12 +37,12 @@
 
 | Workbench | Upstream capability (pinned, bundled with the plugin) | Main entry points |
 | --- | --- | --- |
-| Novel | [Oh Story 0.8.4](https://github.com/zenstory-ai/oh-story-claudecode/releases/tag/v0.8.4) · 13 Skills · 7 Roles | `/story`, `/story-long-write`, `/story-review` |
+| Novel | [Oh Story 0.8.5](https://github.com/zenstory-ai/oh-story-claudecode/releases/tag/v0.8.5) · 13 Skills · 7 Roles | `/story`, `/story-long-write`, `/story-review` |
 | Short drama | [Drama Skills 0.8.1](https://github.com/zenstory-ai/drama-skills/releases/tag/v0.8.1) · 11 Skills | `/short-drama`, `/short-drama-write`, `/short-drama-storyboard`, `/short-drama-edit` |
 | Game | [NovelToGame 0.5.0](https://github.com/zenstory-ai/novel-to-game) · 7 Skills · playable 《金瓶梅》 ADV sample | `/novel-to-game quick`, `/game-build`, `/game-qa` |
 | Video | [video-recap-skills 0.6.2](https://github.com/zenstory-ai/video-recap-skills/releases/tag/v0.6.2) · 7 Skills (3 user entry points) | `/video-recap`, `/video-script`, `/video-reference` |
 
-> Latest release **v0.1.14** (2026-10-08). The default install uses DeepSeek Harness `0.2.0-rc.2`, the npm `latest`; explicit opt-in to `0.2.1-alpha.1` is also supported. See [CHANGELOG.md](CHANGELOG.md) and [Releases](https://github.com/zenstory-ai/oh-story-dsh/releases); upgrade steps are in the FAQ entry [“What do I do after upgrading?”](#what-do-i-do-after-upgrading).
+> Latest release **v0.1.15** (2026-10-10). The default install uses DeepSeek Harness `0.2.0-rc.2`, the npm `latest`; explicit opt-in to `0.2.1-alpha.1` is also supported. See [CHANGELOG.md](CHANGELOG.md) and [Releases](https://github.com/zenstory-ai/oh-story-dsh/releases); upgrade steps are in the FAQ entry [“What do I do after upgrading?”](#what-do-i-do-after-upgrading).
 
 ## The four workbenches
 
@@ -85,7 +85,7 @@ Boundaries and protocols for each workbench are in the [architecture notes](docs
 Requires Node.js 24+. The install command provides pnpm temporarily, so a machine with only Node.js can run it:
 
 ```bash
-npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.0-rc.2 dsh plugin --profile web add @oh-story/dsh@0.1.14 &&
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.0-rc.2 dsh plugin --profile web add @oh-story/dsh@0.1.15 &&
 npx -y @deepseek-ai/dsh@0.2.0-rc.2 web
 ```
 
@@ -99,7 +99,7 @@ Before creating with AI, add a Provider and API key under DSH's Settings → Mod
 The prebuilt package in the GitHub Release passes the same test suite:
 
 ```bash
-npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.0-rc.2 dsh plugin --profile web add https://github.com/zenstory-ai/oh-story-dsh/releases/download/v0.1.14/oh-story-dsh-0.1.14.tgz &&
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.0-rc.2 dsh plugin --profile web add https://github.com/zenstory-ai/oh-story-dsh/releases/download/v0.1.15/oh-story-dsh-0.1.15.tgz &&
 npx -y @deepseek-ai/dsh@0.2.0-rc.2 web
 ```
 
@@ -143,7 +143,7 @@ Voice references require an explicit capability declaration: generated generic p
 Whichever profile the plugin is installed into, every Session of that profile loads the creation Skills. To keep the stock `web` profile clean, install into a separate profile:
 
 ```bash
-npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.0-rc.2 dsh plugin --profile story add @oh-story/dsh@0.1.14
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.0-rc.2 dsh plugin --profile story add @oh-story/dsh@0.1.15
 ```
 
 A new profile has no UI by default. Edit `~/.dsh/profiles/story/package.json` and set `dsh.profile.bundles` to:
@@ -335,6 +335,8 @@ Rerun the install command with the new version after `@oh-story/dsh@`, then rest
 0.1.13 defaults to DSH `0.2.0-rc.2`, now npm `latest`; `0.2.1-alpha.1` is an explicit opt-in line and must be used in both install and start commands. Drama 0.8.1 binds character reference audio to a specific character and strictly validates `reference_roles`, identity and negative controls; audio remains outside the image picker. NovelToGame 0.5.0 replaces the 《金瓶梅》 sample with a new ADV implementation: old saves are not migrated, so clear the old site's storage and start again. video-recap 0.6.1 uses QC schema 2, makes `over_budget` lint-only, removes the old QC flags and paths, and uses an external SRT when libass is unavailable. Upgraded video work directories may need ASR, cut, TTS and index regeneration; never carry forward or fabricate a PASS.
 
 0.1.14 turns the short-drama canvas into an infinite canvas: drag empty space to pan, scroll to zoom around the cursor, place nodes anywhere and use Fit to frame them all; the view and layout still live only in the current page. The Production view's media environment and format notes now sit in status pills at the top. video-recap 0.6.2 requires `--confirm-voice-rights` for dub (English-to-Chinese voice-cloned dubbing); add it to dub resume commands printed by older `work/` directories.
+
+0.1.15 only updates the bundled Oh Story (0.8.5); the DSH line is unchanged. About twice as many author habits now reach the prose writer (from 8 to 15 at roughly 40 characters each); any that still do not fit are named in their original wording in the end-of-chapter report (per batch for daily updates), at which point asking the agent to "整理作者记忆" merges similar entries. Books kept under a `长篇/` folder also get their author habits automatically when writing chapters. Author memory needs no migration: reinstall the plugin, restart DSH and start a new session.
 
 ## Further reading
 

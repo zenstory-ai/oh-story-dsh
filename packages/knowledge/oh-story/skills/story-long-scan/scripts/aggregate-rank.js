@@ -14,7 +14,8 @@
  *
  * 聚合：每平台按题材给本数、占比、热度中位数、字数中位数、高频标签与样本够不够；
  * 全局给标签热词、字数分布、书名常见词、多榜重合与每题材代表作。同一平台内
- * 书名+作者相同视为同一本书，只计一次。只读输入，除 --out 外不写文件。
+ * 书名+作者相同视为同一本书，只计一次。整份没有热度数字的榜（如书库按页序排）只算名次，
+ * 不参与选热度口径。只读输入，除 --out 外不写文件。
  */
 
 "use strict";
@@ -361,13 +362,18 @@ function isNewList(list) {
   return /新书|新人|新作|潜力/.test(list);
 }
 
+// 门槛的分母只算上过带热度数字的榜的书（inMetricList）。只有名次的榜（如书库按页序排）
+// 本来就没有热度，算进分母的话，书库页取得多，同平台大热榜的真实热度会被挤成「按榜单名次」。
 function pickMetric(books) {
   const counts = new Map();
   for (const b of books) for (const k of Object.keys(b.metrics)) counts.set(k, (counts.get(k) || 0) + 1);
-  const threshold = Math.max(1, Math.ceil(books.length * 0.3));
+  const threshold = Math.max(1, Math.ceil(books.filter((b) => b.inMetricList).length * 0.3));
   for (const k of METRIC_PRIORITY) if ((counts.get(k) || 0) >= threshold) return k;
   return "";
 }
+
+// 题材里有的书没热度时，有值的书少于这个数就不报中位：一两本书的数字代表不了整个题材。
+const MIN_HEAT_KNOWN = 3;
 
 function titleGrams(titles, minCount) {
   const counter = new Map();
@@ -395,6 +401,9 @@ function aggregate(parsedFiles, opts) {
   for (const [platform, files] of byPlatform) {
     const entries = files.flatMap((f) => f.entries);
     const scale = opts.scale || (SHORT_PLATFORMS.has(platform) ? "short" : "long");
+    // 整份没有一条带热度数字的榜只算名次榜，它的书不进热度口径门槛的分母（见 pickMetric）。
+    const rankOnlyFiles = files.filter((f) => !f.entries.some((e) => Object.keys(e.metrics).length));
+    const rankOnlyEntries = new Set(rankOnlyFiles.flatMap((f) => f.entries));
 
     // 同平台同书（书名+作者）只算一本；记录它出现在哪些榜。
     const books = new Map();
@@ -418,6 +427,7 @@ function aggregate(parsedFiles, opts) {
       if (!book.lists.includes(label)) book.lists.push(label);
       if (isNewList(e.list)) book.inNewList = true;
       else book.inOtherList = true;
+      if (!rankOnlyEntries.has(e)) book.inMetricList = true;
     }
     const uniq = Array.from(books.values());
     const metric = pickMetric(uniq);
@@ -434,11 +444,14 @@ function aggregate(parsedFiles, opts) {
     const genres = Array.from(genreMap.entries())
       .map(([name, list]) => {
         const sorted = [...list].sort(byHeat);
+        const heatKnown = metric ? list.filter((b) => typeof b.metrics[metric] === "number").length : 0;
+        const heatShown = heatKnown === list.length || heatKnown >= MIN_HEAT_KNOWN;
         return {
           name,
           count: list.length,
           share: uniq.length ? list.length / uniq.length : 0,
-          heatMedian: metric ? median(list.map((b) => b.metrics[metric])) : null,
+          heatMedian: metric && heatShown ? median(list.map((b) => b.metrics[metric])) : null,
+          heatKnown,
           wordsMedian: median(list.map((b) => b.words)),
           newCount: list.filter((b) => b.inNewList).length,
           topTags: countBy(list.flatMap((b) => b.tags)).slice(0, 3).map(([t]) => t),
@@ -467,6 +480,7 @@ function aggregate(parsedFiles, opts) {
       platform,
       scale,
       metric,
+      rankOnlyLists: metric ? Array.from(new Set(rankOnlyFiles.map((f) => f.list))) : [],
       entryCount: entries.length,
       bookCount: uniq.length,
       unresolved: entries.filter((e) => !e.resolved).length,
@@ -529,6 +543,13 @@ function pct(x) {
   return `${Math.round(x * 100)}%`;
 }
 
+// 题材热度中位：全都有值照旧只写数；部分有值写明几本有值；有值太少（见 MIN_HEAT_KNOWN）不写数。
+function fmtHeatMedian(g) {
+  if (!g.heatKnown || g.heatKnown === g.count) return fmtNum(g.heatMedian);
+  if (g.heatMedian === null) return `—（只有 ${g.heatKnown} 本有值）`;
+  return `${fmtNum(g.heatMedian)}（${g.heatKnown} 本有值）`;
+}
+
 // 文件头「数据质量」是给脚本和维护者看的标记；「扫榜聚合.md」落在作者文件夹，翻成白话。
 const QUALITY_WORDS = {
   "[OK]": "正常",
@@ -572,7 +593,7 @@ function renderMarkdown(result) {
         g.name,
         String(g.count),
         pct(g.share),
-        fmtNum(g.heatMedian),
+        fmtHeatMedian(g),
         fmtNum(g.wordsMedian),
         g.topTags.join("、") || "—",
         g.sparse ? "少" : "够",
@@ -584,6 +605,9 @@ function renderMarkdown(result) {
 
     if (p.heat) {
       out.push(`- 热度分布（${p.metric}，${p.heat.known} 本有值）：P25 ${fmtNum(p.heat.p25)} / 中位 ${fmtNum(p.heat.p50)} / P75 ${fmtNum(p.heat.p75)} / 最高 ${fmtNum(p.heat.max)}`);
+    }
+    if (p.rankOnlyLists.length) {
+      out.push(`- 没有热度数字的榜（只按名次）：${p.rankOnlyLists.join("、")}；热度中位和热度分布只算有热度的书`);
     }
     if (p.words.known) out.push(`- 字数分布（${p.words.known} 本有值，中位 ${fmtNum(p.words.median)}字）：${p.words.buckets.map((b) => `${b.label} ${b.count}`).join("，")}`);
     out.push(`- 状态：${p.status.map(([s, c]) => `${s} ${c}`).join("，")}`);

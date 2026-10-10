@@ -15,7 +15,8 @@
 职责边界:
 - 脚本做确定性部分：固定首行、定位、标题行字面量、细纲指针、文风全文路径与裁决、
   上一章结尾、降档判定与情绪/节奏槽、固定块指针。
-- 脚本代查作者记忆（prose_style + story_design）并填好 author_preferences。
+- 脚本代查作者记忆（prose_style + story_design）并填好 author_preferences；装不下的条目在核对报告里
+  点名，并拼好章末对作者说的那句原话。
 - 脚本注入 `设定/题材定位.md`「作者已定」（本书的偏好、红线与否掉的方案），超过 AUTHOR_DECIDED_CHARS
   可见字截断并注明去原文看；它是书级设定，优先于作者记忆。
 - 主会话填九个固定槽：执行安排 / 本章意图 / 作者本轮要求 / 本章技法 / 本节速记 / 涉及角色 /
@@ -147,6 +148,8 @@ def previous_chapter_tail(project: Path, chapter: int):
 
 
 MEMORY_KINDS = ("prose_style", "story_design")
+IMPORTANCE_RANK = {"low": 1, "medium": 2, "high": 3}
+MISSED_SHOWN = 8  # 给作者的那句话最多点名几条，其余用「等」带过；完整清单走「整理作者记忆」
 # 限定「流程」的作者记忆里，这些取值指的就是长篇写正文。
 LONG_WRITE_WORKFLOWS = {"长篇", "长篇写作", "写长篇", "长篇连载", "长篇网文", "长篇正文", "story-long-write"}
 
@@ -168,6 +171,51 @@ def scoped_memory_values(workspace: Path):
                 and scope.get("level") in values and scope.get("value")):
             values[scope["level"]].add(scope["value"])
     return values
+
+
+WORKSPACE_MARKERS = (".active-book", "长篇", "短篇", "拆文库")
+
+
+def memory_state_kind(directory: Path):
+    """目录下 `.story/作者记忆/` 那份 state 是哪一级：不带 book 字段为 "project"，带书名为 "book"，
+    没有或读不出为 None（与 author_memory_commit.py 的 peek_book_name 同一判据）。"""
+    text = read_text(directory / ".story" / "作者记忆" / "_author-memory-state.json")
+    try:
+        document = json.loads(text) if text else None
+    except ValueError:
+        return None
+    if not isinstance(document, dict):
+        return None
+    book = document.get("book")
+    return "book" if isinstance(book, str) and book.strip() else "project"
+
+
+def find_workspace(project: Path):
+    """写章代查作者记忆用的创作工作区，按 author-memory.md「存放与路由」认，返回 (目录, 是否认出)。
+
+    依次认：书目录或祖先里的 `.story-deployed`（已部署的宿主）；书目录上一层叫 长篇／短篇 时取再上一层；
+    书目录自己就有项目级作者记忆或 `书级/`（单书布局）；最近一个带 `.active-book`、`长篇/`、`短篇/`、`拆文库/`
+    或项目级作者记忆的祖先（到用户主目录为止，主目录本身不算）。都没有时把书目录当工作区，但这是猜的：
+    DSH 等宿主不写 `.story-deployed`，多书工作区里的书若被当成工作区，查询会报错或把书级记忆挪位。
+    """
+    project = project.resolve()
+    deployed = next((d for d in (project, *project.parents) if (d / ".story-deployed").is_file()), None)
+    if deployed is not None:
+        return deployed, True
+    if project.parent.name in {"长篇", "短篇"}:
+        return project.parent.parent, True
+    if memory_state_kind(project) == "project" or (project / ".story" / "作者记忆" / "书级").is_dir():
+        return project, True
+    try:
+        home = Path.home().resolve()
+    except (RuntimeError, KeyError):  # 拿不到主目录时一路找到根
+        home = None
+    for ancestor in project.parents:
+        if ancestor == home:
+            break
+        if any((ancestor / marker).exists() for marker in WORKSPACE_MARKERS) or memory_state_kind(ancestor) == "project":
+            return ancestor, True
+    return project, False
 
 
 def genre_line(project: Path):
@@ -232,24 +280,30 @@ def author_decided(project: Path):
 
 
 def query_author_memory(project: Path):
-    """代主会话做写正文那一次作者记忆查询（prose_style + story_design，每次 ≤2KB）。
+    """代主会话做写正文那一次作者记忆查询（prose_style + story_design）。
 
-    工作区取书目录及其祖先里第一个带 `.story-deployed` 的目录；找不到就把书目录当工作区。
+    注入块原样用 query 给的 lines 拼——每次查询的 lines ≤2KB，预算量的就是写手读到的这几行，
+    这里不另行排版。工作区按 find_workspace 认；认不出、而书目录里又是一份带书名的记忆时不代查——
+    那既可能是单书布局的旧版记忆，也可能是没有任何迹象的多书工作区里的一本书，拿书目录当工作区去查，
+    后一种会被当成前一种「归位」，此后正确的查询全部报错。
     限定题材的条目只在取值出现在本书「题材类型」里时代查，限定流程的只认长篇写作的取值；
     其余限定条目不猜，报给主会话自己判断。
-    返回 (条目列表, 超编 ID 列表, 未代查的限定取值, 错误)；错误时由主会话按 author-memory.md 手动查询。
+    返回 (注入行, 没带上的 [(ID, 断言首句)], 未代查的限定取值, 错误)；错误时由主会话按 author-memory.md 手动查询。
     """
-    workspace = next((d for d in (project, *project.parents) if (d / ".story-deployed").is_file()), project)
+    workspace, recognised = find_workspace(project)
     script = Path(__file__).with_name("author_memory_commit.py")
     if not script.is_file():
         return None, [], {}, "author_memory_commit.py 缺失"
+    if not recognised and memory_state_kind(project) == "book":
+        return None, [], {}, ("认不出创作工作区（书目录及祖先都没有 .active-book、长篇/、短篇/、拆文库/ 或项目级作者记忆），"
+                              "书目录里却是本书的记忆；先按 author-memory.md「存放与路由」定好 --workspace")
     scoped = scoped_memory_values(workspace)
     book = book_genres(project)
     genres = sorted(v for v in scoped["genre"] if v.casefold() in book) or [None]
     workflows = sorted(v for v in scoped["workflow"] if v.casefold() in {w.casefold() for w in LONG_WRITE_WORKFLOWS})
     skipped = {"genre": sorted(v for v in scoped["genre"] if v not in genres),
                "workflow": sorted(v for v in scoped["workflow"] if v not in workflows)}
-    items, omitted, seen = [], [], set()
+    lines, omitted, summaries, importance, seen = [], [], {}, {}, set()
     for genre in genres:
         for workflow in workflows or [None]:
             command = [sys.executable, str(script), "query", "--workspace", str(workspace), "--book-root", str(project)]
@@ -266,13 +320,22 @@ def query_author_memory(project: Path):
                 result = {}
             if not result.get("ok"):
                 return None, [], {}, result.get("error") or completed.stderr.strip() or "query 失败"
-            for item in result.get("items") or []:
+            items, rendered = result.get("items") or [], result.get("lines") or []
+            if len(items) != len(rendered):
+                return None, [], {}, "query 输出缺 lines（作者记忆脚本与组装脚本版本不一致）"
+            for item, line in zip(items, rendered):
                 if item.get("id") not in seen:
                     seen.add(item.get("id"))
-                    items.append(item)
-            omitted += [i for i in result.get("omitted_ids") or [] if i not in omitted and i not in seen]
-    omitted = [i for i in omitted if i not in seen]
-    return items, omitted, {k: v for k, v in skipped.items() if v}, None
+                    lines.append(line)
+            omitted += [i for i in result.get("omitted_ids") or [] if i not in omitted]
+            summaries.update(result.get("omitted_summaries") or {})
+            importance.update(result.get("omitted_importance") or {})
+    # 每次查询的漏项各自按优先级排好，合并后按重要度重排（同重要度保持先后），
+    # 给作者点名的前几条才是最该知道的；某次漏、另一次带上了的不算没带上。
+    ranked = sorted((i for i in omitted if i not in seen),
+                    key=lambda i: (-IMPORTANCE_RANK.get(importance.get(i), 0), omitted.index(i)))
+    missed = [(i, summaries.get(i, "")) for i in ranked]
+    return lines, missed, {k: v for k, v in skipped.items() if v}, None
 
 
 def learn_heading_form(project: Path, chapter: int, title: str):
@@ -503,23 +566,27 @@ def build(project: Path, chapter: int, report: list):
         report.append("作者已定：已注入" + ("（超长截断，写手需回原文读完）" if cut else ""))
     else:
         report.append("作者已定：题材定位里没有或为空，未注入")
-    items, omitted, skipped, memory_error = query_author_memory(project)
+    lines, missed, skipped, memory_error = query_author_memory(project)
     if memory_error:
         memory_block = (f"{SLOT_MARK} 组装脚本查询作者记忆失败（{memory_error}），"
                         "按 author-memory.md 手动 query prose_style + story_design 后填入；无则写「无」")
-        report.append(f"作者记忆：脚本查询失败——{memory_error}，归主会话手动查询")
-    elif items:
-        memory_block = "\n".join(f"- {item.get('assertion', '').strip()}（{item.get('id', '')}）" for item in items)
-        report.append(f"作者记忆：已注入 {len(items)} 条" + (
-            f"；超编未装下 {len(omitted)} 条（{'、'.join(omitted)}），转告作者建议「整理作者记忆」" if omitted else ""))
+        report.append(f"作者记忆：脚本查询失败——{memory_error}，归主会话手动查询；手查有没带上的（任一次查询带上了的不算），章末照模板那一行用原话说")
     else:
-        memory_block = "无"
-        report.append("作者记忆：无相关 active 条目")
+        memory_block = "\n".join(lines) if lines else "无"
+        report.append(f"作者记忆：已注入 {len(lines)} 条" if lines or missed else "作者记忆：无相关 active 条目")
+    if missed:
+        # 装不下的不能悄悄略过：拼好给作者的原话，章末汇报照模板那一行原样说。
+        shown = "".join(f"「{summary or item_id}」" for item_id, summary in missed[:MISSED_SHOWN])
+        more = "等" if len(missed) > MISSED_SHOWN else ""
+        report.append(
+            f"作者记忆：装不下、这章没带上 {len(missed)} 条（{'、'.join(i for i, _ in missed)}），章末汇报原样说这句——"
+            f"你记下的写作习惯这章有 {len(missed)} 条没带上：{shown}{more}；"
+            "说「整理作者记忆」可以合并相近的、调低不常用的。")
     if skipped and not memory_error:
         named = "；".join(f"{'题材' if k == 'genre' else '流程'}：{'、'.join(v)}" for k, v in skipped.items())
         memory_block += (f"\n{SLOT_MARK} 另有限定范围的作者记忆未代查（{named}）：本书适用的，"
                          "带 --genre／--workflow 跑 SKILL.md「核心方法」的 query 命令（--kind prose_style --kind story_design）后补进本块")
-        report.append(f"作者记忆：限定范围未代查（{named}），归主会话判断是否适用")
+        report.append(f"作者记忆：限定范围未代查（{named}），归主会话判断是否适用；补查有没带上的（已在本块里的不算），章末照模板那一行用原话说")
     parts.append("——— author_preferences（作者记忆，低优先级倾向，不逐条追求命中）———\n" + memory_block)
     parts.append("——— style_resolution ———\n"
                  f"{SLOT_MARK} 本轮请求里作者对表达的明确要求及其覆盖的默认条款（没有写「无」）；"

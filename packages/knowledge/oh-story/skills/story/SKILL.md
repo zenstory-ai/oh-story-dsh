@@ -17,7 +17,7 @@ metadata: {"openclaw":{"source":"https://github.com/zenstory-ai/oh-story-claudec
 | 写短篇 | 短篇、盐言、一万字 | `/story-short-write` |
 | 长篇拆文 | 拆文、分析这本书、黄金三章、灵感库、跨书灵感聚合 | `/story-long-analyze` |
 | 短篇拆文 | 拆短篇、分析这个故事 | `/story-short-analyze` |
-| 长篇扫榜 | 长篇排行、什么火、起点/番茄/晋江 | `/story-long-scan` |
+| 长篇扫榜 | 长篇排行、什么火、新书在冒什么、起点/番茄/晋江/七猫长篇 | `/story-long-scan` |
 | 选题决策 | 写什么能爆、帮我选题、选题方向 | `/story-long-scan` |
 | 短篇扫榜 | 短篇排行、知乎盐言排行 | `/story-short-scan` |
 | 去 AI 味 | 去 AI 味、太 AI、去味 | `/story-deslop` |

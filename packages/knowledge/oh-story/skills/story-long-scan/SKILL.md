@@ -1,7 +1,7 @@
 ---
 name: story-long-scan
 version: 1.0.0
-description: "长篇网文扫榜。分析起点、番茄、晋江等平台排行榜数据，提炼市场趋势与热门题材。触发方式：/story-long-scan、/长篇扫榜、「长篇什么火」「起点排行」。"
+description: "长篇网文扫榜。分析起点、番茄、晋江、七猫等平台排行榜与新书数据，提炼市场趋势与热门题材。触发方式：/story-long-scan、/长篇扫榜、「长篇什么火」「起点排行」「扫七猫新书」。"
 metadata: {"openclaw":{"source":"https://github.com/zenstory-ai/oh-story-claudecode"}}
 ---
 # story-long-scan：长篇网文扫榜
@@ -178,12 +178,7 @@ metadata: {"openclaw":{"source":"https://github.com/zenstory-ai/oh-story-claudec
 | [references/publishing-guide.md](references/publishing-guide.md) | 平台适配+推荐机制校验+数据指标+简介设计 |
 | 五份平台参考（链接见「脚本采集模式」第 1 步） | 「确定数据来源」：只读所选平台那份——榜单网址、命令、字段、故障排查、平台分析维度 |
 | [scripts/aggregate-rank.js](scripts/aggregate-rank.js) | 把输出目录里的原始榜单聚合成短表（`--out` 落盘，`--sample` 抽原始条目，`--json` 机读），主会话只读它 |
-| [scripts/cdp-utils.js](scripts/cdp-utils.js) | CDP 公共工具函数（ab/sleep/evalJSON/safeStr/scrollLoad/getArg），各采集脚本共用 |
-| [scripts/fanqie-rank-scraper.js](scripts/fanqie-rank-scraper.js) | 番茄榜单采集，用法见番茄参考 |
-| [scripts/qidian-rank-scraper.js](scripts/qidian-rank-scraper.js) | 起点榜单采集，用法见起点参考 |
-| [scripts/qimao-rank-scraper.js](scripts/qimao-rank-scraper.js) | 七猫榜单采集，用法见七猫参考 |
-| [scripts/jjwxc-rank-scraper.js](scripts/jjwxc-rank-scraper.js) | 晋江榜单采集，用法见晋江参考 |
-| [scripts/ciweimao-rank-scraper.js](scripts/ciweimao-rank-scraper.js) | 刺猬猫榜单采集，用法见刺猬猫参考 |
+| [scripts/cdp-utils.js](scripts/cdp-utils.js) 与各平台采集脚本 | CDP 公共工具与各平台采集脚本（`{平台}-rank-scraper.js`），命令见所选平台参考 |
 
 ---
 

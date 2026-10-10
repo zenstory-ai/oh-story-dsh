@@ -48,7 +48,7 @@ metadata: {"openclaw":{"source":"https://github.com/zenstory-ai/oh-story-claudec
 除了上面的执行规则，构思和写作时遵循：
 
 - **定方向就换风格**：题材一旦确定，腔调、开篇、钩子、情绪烈度、金句、招式、收尾全部切到该题材包（追妻含时代变体与小三/死人文学分支）；冷门题材用公式结构骨架兜底，腔调按 `short-craft.md`
-- **复用作者习惯**：有作者记忆时，正文前用 `scripts/author_memory_commit.py query --workspace {工作区} --book-root {项目目录} --kind prose_style --kind story_design [--genre {题材}] [--workflow 短篇]` 获取 active 条目（≤2KB），传给正文/改写 agent 作为自然倾向，不逐条展示或最大化命中，不牺牲连贯、节奏和字数；硬门禁、当前请求和本篇设定优先。长期声明在收尾用 `record` 写入并回传回执，细则见 [references/author-memory.md](references/author-memory.md)。
+- **复用作者习惯**：有作者记忆时，正文前用 `scripts/author_memory_commit.py query --workspace {工作区} --book-root {项目目录} --kind prose_style --kind story_design [--genre {题材}] [--workflow 短篇]` 把输出的 `lines` 原样交正文/改写 agent 作自然倾向，不逐条追求命中，不牺牲连贯、节奏和字数；硬门禁、当前请求和本篇设定优先；没装下的交稿时用原话告诉作者。长期声明在收尾用 `record` 写入并回传回执，细则见 [references/author-memory.md](references/author-memory.md)。
 
 ---
 
