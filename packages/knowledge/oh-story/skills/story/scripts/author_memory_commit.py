@@ -34,21 +34,22 @@ PENDING_MAX_BYTES = 12288
 JOURNAL_MAX_BYTES = 24576
 QUERY_MAX_BYTES = 2048
 ASSERTION_MAX_BYTES = 120  # 新建条目的断言限一句话；解释进 reason（不进 query 载荷）。
-OMITTED_IDS_MAX = 20  # omitted_ids 封顶，omitted 保留真实总数——漏项列表不许把载荷本身挤炸。
 LEGACY_ASSERTION_MAX_BYTES = 768  # 存量条目的读取上限；强化老条目不受新上限约束。
 
-# query 的输出是要原样贴进执行 agent prompt 的注入载荷，QUERY_MAX_BYTES
-# 是它在 prompt 里的注意力预算，不该放大。防「作者以为载入了、实际被静默
-# 截断挤掉」靠三层：①新建条目的断言限 ASSERTION_MAX_BYTES，从源头短（强化
-# 已有条目不受限，否则存量长断言再也无法被确认，只会派生重复条目）；②写入
-# 端按下列任务组合（与 references/author-memory-maintenance.md 的映射表同包跟版）估算
-# 最坏查询情形——全局条目＋各 scope 维度上最重的单一切片（一次查询只带一
-# 个 book/genre/workflow，不同书的条目不会同现；切片按 casefold 归并，与
-# same_scope_value 同一口径，轻重按 compact 字节＋列表分隔符算，与真实载荷
-# 同一把尺），装不下时在返回的 warnings 里点名将被略过的条目、指向「整理作
-# 者记忆」，写入本身永不因注入预算失败；③查询按 重要度→本书例外→最近更新
-# 排序装填，被略过的恒是重要度较低的条目，漏下的 ID 按同一优先级顺序报进
-# omitted_ids。
+# query 输出里的 lines（每条一行「- 断言（编号）」）是交给执行 agent 的注入
+# 载荷，QUERY_MAX_BYTES 是它在 prompt 里的注意力预算，不该放大；量的是执行者
+# 真正读到的这几行，不是 JSON 外壳（编号、kind、scope 只给主会话和脚本看）。
+# 防「作者以为载入了、实际被静默挤掉」靠三层：①新建条目的断言限
+# ASSERTION_MAX_BYTES，从源头短（强化已有条目不受限，否则存量长断言再也无法
+# 被确认，只会派生重复条目）；②写入端按下列任务组合（与
+# references/author-memory-maintenance.md 的映射表同包跟版）估算最坏查询情形——
+# 全局条目＋各 scope 维度上最重的单一切片（一次查询只带一个 book/genre/workflow，
+# 不同书的条目不会同现；切片按 casefold 归并，与 same_scope_value 同一口径，
+# 轻重按渲染后的行字节算，与真实载荷同一把尺），装不下时在返回的 warnings 里
+# 点名将被略过的条目、指向「整理作者记忆」，写入本身永不因注入预算失败；
+# ③查询按 重要度→本书例外→最近更新 排序装填，被略过的恒是重要度较低的条目，
+# 漏下的 ID 按同一优先级全数报进 omitted_ids，首句报进 omitted_summaries，
+# 供主会话用原话告诉作者哪几条没带上。
 QUERY_COMBOS: dict[str, tuple[str, ...]] = {
     "正文初稿/续写": ("prose_style", "story_design"),
     "去AI味/改写": ("prose_style",),
@@ -1086,12 +1087,19 @@ def summarize_assertion(assertion: str, *, limit: int = 14) -> str:
 
 
 def compact_item(item: dict[str, Any]) -> dict[str, Any]:
-    """query 载荷只带这四个字段——估算与真实输出必须同一把尺。"""
+    """query 的 items 只带这四个字段，给主会话和脚本按 kind/scope 判断用；
+    reason、evidence 等一律不出 store。"""
     return {"id": item["id"], "kind": item["kind"], "scope": item["scope"], "assertion": item["assertion"]}
 
 
-def compact_bytes(item: dict[str, Any]) -> int:
-    return len(json.dumps(compact_item(item), ensure_ascii=False).encode("utf-8"))
+def render_line(item: dict[str, Any]) -> str:
+    """执行者读到的一行：断言原文＋编号。注入预算量的就是这几行。"""
+    return f"- {item['assertion']}（{item['id']}）"
+
+
+def line_bytes(item: dict[str, Any]) -> int:
+    """一行在注入载荷里的占位，含行尾换行——估算与真实装填只用这一把尺。"""
+    return len((render_line(item) + "\n").encode("utf-8"))
 
 
 SCOPE_RANK = {"book": 0, "genre": 1, "workflow": 2, "global": 3}
@@ -1121,48 +1129,38 @@ def fit_items(
     *,
     extra: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], list[str]]:
-    """按 query 输出信封把条目装进 QUERY_MAX_BYTES：装不下的跳过而不中断
-    （一条长的不挡后面的短条），漏下的 ID 报进 omitted_ids（封顶
-    OMITTED_IDS_MAX 条，omitted 保留真实总数）。返回 (结果文档, 全部漏下 ID)。
+    """按渲染后的行把条目装进 QUERY_MAX_BYTES：装不下的跳过而不中断（一条长的
+    不挡后面的短条）。返回 (结果文档, 全部漏下 ID)。
 
-    漏项恒按候选优先级排序，不按被丢弃的先后：收尾回吐的条目优先级高于循环
-    里跳过的，若按追加顺序排，omitted_ids 的封顶正好会把最该报的那条切掉。
-    `extra` 是同样计入信封的附加字段（book_revision 等）。
+    只有 lines 计入预算；items、漏项清单和 `extra`（book_revision 等）是给主会话
+    和脚本看的，不进执行者 prompt，所以漏项全数列出、不封顶，并按候选优先级
+    排序——排在前面的就是作者最该知道没带上的那几条。
     """
+    kept: list[dict[str, Any]] = []
+    dropped: list[dict[str, Any]] = []
+    used = 0
+    for item in sorted_items:
+        size = line_bytes(item)
+        if used + size > QUERY_MAX_BYTES:
+            dropped.append(item)
+            continue
+        kept.append(item)
+        used += size
     result: dict[str, Any] = {
         "ok": True,
         "command": "query",
         "initialized": True,
         "revision": revision,
-        "items": [],
-        "omitted": 0,
-        "omitted_ids": [],
+        "items": [compact_item(item) for item in kept],
+        "lines": [render_line(item) for item in kept],
+        "omitted": len(dropped),
+        "omitted_ids": [item["id"] for item in dropped],
+        "omitted_summaries": {item["id"]: summarize_assertion(item["assertion"]) for item in dropped},
+        # 组装脚本按题材×流程查好几次再合并，合并后只能按重要度重排漏项，所以把它带出来。
+        "omitted_importance": {item["id"]: item["importance"] for item in dropped},
     }
     result.update(extra or {})
-    order = {item["id"]: index for index, item in enumerate(sorted_items)}
-    kept: list[dict[str, Any]] = []
-    dropped: set[str] = set()
-
-    def ordered_omitted() -> list[str]:
-        return sorted(dropped, key=order.__getitem__)
-
-    def envelope_bytes() -> int:
-        omitted = ordered_omitted()
-        result["items"] = [compact_item(item) for item in kept]
-        result["omitted"] = len(omitted)
-        result["omitted_ids"] = omitted[:OMITTED_IDS_MAX]
-        return len((json.dumps(result, ensure_ascii=False, sort_keys=True) + "\n").encode("utf-8"))
-
-    for item in sorted_items:
-        kept.append(item)
-        if envelope_bytes() > QUERY_MAX_BYTES:
-            kept.pop()
-            dropped.add(item["id"])
-    # omitted 计数落定后包可能恰好贴边超出一两个字节，回吐条目直到装下。
-    while kept and envelope_bytes() > QUERY_MAX_BYTES:
-        dropped.add(kept.pop()["id"])
-    envelope_bytes()
-    return result, ordered_omitted()
+    return result, result["omitted_ids"]
 
 
 def build_query_result(
@@ -1170,8 +1168,8 @@ def build_query_result(
     project_state: dict[str, Any] | None,
     book_state: dict[str, Any] | None,
 ) -> tuple[dict[str, Any], list[str]]:
-    """真实查询与写入端估算共用的唯一信封构造：候选已按优先级排好，这里补上
-    book_revision 等附加字段再装填。两处信封差一个字段就是一次假阴性——回执
+    """真实查询与写入端估算共用的唯一装填入口：候选已按优先级排好，这里补上
+    book_revision 等附加字段再装填。两处装填口径一旦分叉就是假阴性——回执
     说没事、query 照样丢条。"""
     extra: dict[str, Any] = {}
     if book_state is not None:
@@ -1208,12 +1206,13 @@ def merged_query(
 
 
 def slice_weight(items: list[dict[str, Any]]) -> int:
-    """切片在真实载荷里的占位：compact 字节＋每条在 JSON 数组里的分隔符。
+    """切片在真实载荷里的占位：按渲染后的行（含换行）计。
 
-    只比 compact 字节会挑错切片——条目多、单条短的切片字节和更小，实际占位
-    却更大，于是估算判「装得下」而真实查询溢出（warnings 假阴性）。
+    必须与 fit_items 同一把尺。按 JSON 字节挑会挑错切片——scope 取值长、断言
+    短的切片 JSON 更重，渲染出的行却更轻，于是估算判「装得下」而真实查询溢出
+    （warnings 假阴性）。
     """
-    return sum(compact_bytes(item) + 2 for item in items)
+    return sum(line_bytes(item) for item in items)
 
 
 def active_of_kinds(state: dict[str, Any] | None, kinds: tuple[str, ...]) -> list[dict[str, Any]]:
@@ -1419,16 +1418,20 @@ def command_query(
     project_state = load_state(project_store(workspace))
     book_state = load_state(book_store(workspace, book_root, book)) if book_root is not None else None
     if project_state is None and book_state is None:
-        return {"ok": True, "command": "query", "initialized": False, "revision": 0, "items": [], "omitted": 0, "omitted_ids": []}
+        return {"ok": True, "command": "query", "initialized": False, "revision": 0, "items": [], "lines": [],
+                "omitted": 0, "omitted_ids": [], "omitted_summaries": {}, "omitted_importance": {}}
     requested_scopes = {
         "genre": optional_text(genre, "query.genre", max_bytes=180),
         "workflow": optional_text(workflow, "query.workflow", max_bytes=180),
     }
     # 装不下的**跳过而不中断**（一条长的不挡后面的短条），漏下的 ID 报进
     # omitted_ids：非空＝记忆超编该整理了，不是「没有更多了」。写入端的
-    # warnings 与这里共用 build_query_result 同一个信封，估算即实况。
+    # warnings 与这里共用 build_query_result 同一把尺，估算即实况。
     result, _ = merged_query(project_state, book_state, set(kinds), requested_scopes)
-    require(len((json.dumps(result, ensure_ascii=False, sort_keys=True) + "\n").encode("utf-8")) <= QUERY_MAX_BYTES, "query result exceeds its fixed byte budget")
+    require(
+        sum(len((line + "\n").encode("utf-8")) for line in result["lines"]) <= QUERY_MAX_BYTES,
+        "query lines exceed their fixed byte budget",
+    )
     return result
 
 

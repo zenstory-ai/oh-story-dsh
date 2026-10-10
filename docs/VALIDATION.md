@@ -1,6 +1,20 @@
 # Validation
 
-Released: `@oh-story/dsh` 0.1.14 on DeepSeek Harness `0.2.0-rc.2`, with explicit `0.2.1-alpha.1` coverage. Local aggregate acceptance passed on 2026-10-08; 0.1.13 evidence below remains the latest credentialed browser and paid-provider observation.
+Released: `@oh-story/dsh` 0.1.15 on DeepSeek Harness `0.2.0-rc.2`, with explicit `0.2.1-alpha.1` coverage. Local aggregate acceptance passed on 2026-10-10; 0.1.13 evidence below remains the latest credentialed browser and paid-provider observation.
+
+## 0.1.15 release evidence
+
+### Local evidence
+
+- Oh Story 0.8.5 (`2cf7be61b139`): synchronized from a clean detached worktree of the `v0.8.5` tag, so a locally excluded `skills/story-long-analyze.zip` in the neighbouring checkout is not bundled; parity passes against that worktree (365 files, 13 Skills, 7 Roles, `agents_version` 34). The upstream author-memory transaction suite and all 42 writer-pipeline tests pass on the tag.
+- Issue #61 reproduction against the bundled scripts in the DSH single-book layout (workspace is the book root): 20 active global `prose_style` habits of about 40 characters each. The 0.8.4 `query` returns 8 items and omits 12; the 0.8.5 `query` returns 16 items with `lines`, omits 4 and reports each omission in `omitted_summaries`. `build_writer_prompt.find_workspace` recognises both the single-book layout and a book under `长篇/`.
+- On 2026-10-10, `pnpm verify:release` completed against the release source: lint, typecheck, all four parity checks (Oh Story 0.8.5, Drama 0.8.1, NovelToGame 0.5.0, video-recap 0.6.2), the DSH boundary, 16 release checks, 3 upstream-update checks, 173 unit/contract tests across 23 files and the build; packaged Chrome result JSON reported `"ok": true` on DSH `0.2.1-alpha.1` and `0.2.0-rc.2`.
+- No plugin source changed in this release; the diff under `packages/knowledge` is 35 bundled Oh Story files plus the manifest.
+
+### Release gates
+
+- **Local aggregate acceptance — PASSED 2026-10-10:** `pnpm verify:release` with both alpha and rc.2 result JSON reporting `"ok": true`.
+- **Credentialed browser demos and paid provider — NOT RERUN:** no `DEEPSEEK_API_KEY` run was made for 0.1.15; the fixture provider does not exercise a real writer receiving the larger author-memory block.
 
 ## 0.1.14 release evidence
 

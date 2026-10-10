@@ -35,12 +35,12 @@
 
 | 工作台 | 上游能力（固定版本，随插件打包） | 主要入口 |
 | --- | --- | --- |
-| 小说 | [Oh Story 0.8.4](https://github.com/zenstory-ai/oh-story-claudecode/releases/tag/v0.8.4) · 13 Skills · 7 Roles | `/story`、`/story-long-write`、`/story-review` |
+| 小说 | [Oh Story 0.8.5](https://github.com/zenstory-ai/oh-story-claudecode/releases/tag/v0.8.5) · 13 Skills · 7 Roles | `/story`、`/story-long-write`、`/story-review` |
 | 短剧 | [Drama Skills 0.8.1](https://github.com/zenstory-ai/drama-skills/releases/tag/v0.8.1) · 11 Skills | `/short-drama`、`/short-drama-write`、`/short-drama-storyboard`、`/short-drama-edit` |
 | 游戏 | [NovelToGame 0.5.0](https://github.com/zenstory-ai/novel-to-game) · 7 Skills · 《金瓶梅》ADV 可玩示例 | `/novel-to-game quick`、`/game-build`、`/game-qa` |
 | 视频 | [video-recap-skills 0.6.2](https://github.com/zenstory-ai/video-recap-skills/releases/tag/v0.6.2) · 7 Skills（3 个用户入口） | `/video-recap`、`/video-script`、`/video-reference` |
 
-> 最新版本 **v0.1.14**（2026-10-08）。默认安装使用 npm `latest` 的 DeepSeek Harness `0.2.0-rc.2`；另支持显式选择 `0.2.1-alpha.1`。变更见 [CHANGELOG.md](CHANGELOG.md) 与 [Releases](https://github.com/zenstory-ai/oh-story-dsh/releases)；升级步骤见常见问题[「升级到新版本后要做什么」](#升级到新版本后要做什么)。
+> 最新版本 **v0.1.15**（2026-10-10）。默认安装使用 npm `latest` 的 DeepSeek Harness `0.2.0-rc.2`；另支持显式选择 `0.2.1-alpha.1`。变更见 [CHANGELOG.md](CHANGELOG.md) 与 [Releases](https://github.com/zenstory-ai/oh-story-dsh/releases)；升级步骤见常见问题[「升级到新版本后要做什么」](#升级到新版本后要做什么)。
 
 ## 四个工作台
 
@@ -83,7 +83,7 @@
 需要 Node.js 24+。安装命令会临时提供 pnpm，只装了 Node.js 的机器也能执行：
 
 ```bash
-npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.0-rc.2 dsh plugin --profile web add @oh-story/dsh@0.1.14 &&
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.0-rc.2 dsh plugin --profile web add @oh-story/dsh@0.1.15 &&
 npx -y @deepseek-ai/dsh@0.2.0-rc.2 web
 ```
 
@@ -97,7 +97,7 @@ npx -y @deepseek-ai/dsh@0.2.0-rc.2 web
 GitHub Release 中的预构建包经过同一套测试：
 
 ```bash
-npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.0-rc.2 dsh plugin --profile web add https://github.com/zenstory-ai/oh-story-dsh/releases/download/v0.1.14/oh-story-dsh-0.1.14.tgz &&
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.0-rc.2 dsh plugin --profile web add https://github.com/zenstory-ai/oh-story-dsh/releases/download/v0.1.15/oh-story-dsh-0.1.15.tgz &&
 npx -y @deepseek-ai/dsh@0.2.0-rc.2 web
 ```
 
@@ -141,7 +141,7 @@ npx -y @deepseek-ai/dsh@0.2.0-rc.2 web
 插件装进哪个 profile，那个 profile 的每个 Session 就都会加载创作 Skills。想让原版 `web` 保持干净，就把插件装进独立 profile：
 
 ```bash
-npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.0-rc.2 dsh plugin --profile story add @oh-story/dsh@0.1.14
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.0-rc.2 dsh plugin --profile story add @oh-story/dsh@0.1.15
 ```
 
 新 profile 默认没有界面。编辑 `~/.dsh/profiles/story/package.json`，把 `dsh.profile.bundles` 改成：
@@ -325,6 +325,8 @@ DSH 的 `plugin add` 内部需要 pnpm，单独运行 `npx @deepseek-ai/dsh ... 
 0.1.13 默认把宿主升到 npm `latest` 的 DSH `0.2.0-rc.2`；`0.2.1-alpha.1` 只作为显式试用线，安装和启动必须同时写明该版本。Drama 0.8.1 的角色参考音频现在绑定到具体角色，并严格校验 `reference_roles`、人物身份与禁控条件；音频仍不进入图片选择器。NovelToGame 0.5.0 的《金瓶梅》示例已换成新的 ADV 实现，旧存档不会迁移，请清除旧站点存储后重新开始。video-recap 0.6.1 改用 QC schema 2：`over_budget` 只由 lint 判定，旧 QC 路径与标志已删除；没有 libass 时使用外部 SRT。旧视频项目升级后可能要重新生成 ASR、剪辑、TTS 与索引，不能沿用旧 PASS，也不能伪造通过记录。
 
 0.1.14 的短剧「画布」改为无限画布：拖动空白处平移、滚轮以光标为中心缩放，节点可以放在任意位置，「适应」一键框选全部节点；视野与布局仍只在当前页面保留。「生产」视图的生成环境与格式提醒收进顶部状态胶囊，点开查看。video-recap 0.6.2 的 dub（英译中原声复刻）必须带 `--confirm-voice-rights`，旧 `work/` 打印的 dub 续跑命令要补上这个参数。
+
+0.1.15 只换了随包的 Oh Story（0.8.5），DSH 版本线不变。写正文时能带给写手的作者习惯约多一倍（每条 40 字左右时从 8 条到 15 条）；还有装不下的，写完一章（日更是一批）的汇报里会用原话点名是哪几条，这时说「整理作者记忆」合并相近条目即可。书放在 `长篇/` 文件夹下时，写章也能自动带上作者习惯。作者记忆不用迁移，重装插件、重启 DSH 后新开会话就生效。
 
 ## 延伸阅读
 

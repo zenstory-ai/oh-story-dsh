@@ -16,7 +16,7 @@ metadata: {"openclaw":{"source":"https://github.com/zenstory-ai/oh-story-claudec
 
 ## 作者习惯边界
 
-若作者记忆 state 已存在，审查前用 `scripts/author_memory_commit.py query --workspace {工作区} --book-root {书目录} --kind delivery --kind interaction --kind prose_style [--genre {题材}] [--workflow 审稿]` 获取本次相关 active 条目（`--workspace`、`--kind` 必传；不传 `--book-root` 就拿不到本书级偏好；`--genre` 填本书题材类型；总输出 ≤2KB）。它们只能帮助解释意图和组织报告，不能降低 rubric 严重度、把事实冲突判为无问题或跳过平台门禁；当前请求仍优先。完整规则见 [references/author-memory.md](references/author-memory.md)。
+若作者记忆 state 已存在，审查前用 `scripts/author_memory_commit.py query --workspace {工作区} --book-root {书目录} --kind delivery --kind interaction --kind prose_style [--genre {题材}] [--workflow 审稿]` 获取本次相关 active 条目（`--workspace`、`--kind` 必传；不传 `--book-root` 就拿不到本书级偏好；`--genre` 填本书题材类型）。它们只能帮助解释意图和组织报告，不能降低 rubric 严重度、把事实冲突判为无问题或跳过平台门禁；当前请求仍优先。完整规则见 [references/author-memory.md](references/author-memory.md)。
 
 用户对报告格式或协作方式作出稳定声明时，在本轮审查完成后用 `record` 记录，并按 author-memory.md「回执怎么告诉作者」转告；只记作者明确说的，一次性要求不记录，不从反复修改推断。审查发现、工具告警和助手建议本身绝不自动学习。
 

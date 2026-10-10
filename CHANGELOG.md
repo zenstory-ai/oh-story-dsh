@@ -11,6 +11,18 @@
 
 ## [Unreleased]
 
+## [0.1.15] - 2026-10-10
+
+### Changed
+
+- 同步 [Oh Story 0.8.5](https://github.com/zenstory-ai/oh-story-claudecode/releases/tag/v0.8.5)（`2cf7be61b139f3852c82f981a7ff4eed2aaf5926`，`agents_version` 仍是 34，13 Skills、7 Roles 不变）：写正文时作者记忆的篇幅（单次查询 2048 字节）改按写手实际读到的「- 习惯原文（编号）」计算，编号、分类等格式不再占篇幅，同样篇幅能带上约一倍的习惯（每条 40 字左右时从 8 条到 15 条，20 字左右时从 11 条到 27 条）。篇幅不做成可调，装不下也不暂停写作（[#61](https://github.com/zenstory-ai/oh-story-dsh/issues/61)）。
+- 上游扫榜给起点、七猫加了「书库新书」采集，「扫七猫新书」这类说法也会进长篇扫榜。DSH 原生扫榜不运行随包采集与汇总脚本，只用当前 Preset 的网页工具，所以这份新书采集和汇总口径的修复在 DSH 里不会自动生效。
+
+### Fixed
+
+- 有作者习惯这章没带上时，写完一章（日更是一批）的汇报里会用原话点名是哪几条，并建议说「整理作者记忆」；原来只在内部核对报告里记一笔，作者看不到，没带上的超过 20 条时数目还会少报（[#61](https://github.com/zenstory-ai/oh-story-dsh/issues/61)）。
+- 书放在工作区的 `长篇/`、`短篇/` 文件夹下时，写章的组装脚本能认出工作区并自动带上全局与本书的作者习惯，不再查询失败、退回对话里手查；工作区认不出、书目录下又只有本书记忆时不再代查，避免把本书记忆挪位后再也读不出来。DSH 默认的单书布局（工作区就是书根）照常识别。
+
 ## [0.1.14] - 2026-10-08
 
 ### Added
@@ -306,7 +318,9 @@
 - 提供 13 个 Oh Story 小说 Skills、7 个专业 Roles 与 10 个 Drama Skills。
 - 提供文件树、Markdown/JSONL 编辑预览与官方 DSH Chat 同屏的三栏工作台。
 
-[Unreleased]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.13...HEAD
+[Unreleased]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.15...HEAD
+[0.1.15]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.14...v0.1.15
+[0.1.14]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.13...v0.1.14
 [0.1.13]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.12...v0.1.13
 [0.1.12]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.11...v0.1.12
 [0.1.11]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.10...v0.1.11

@@ -2,11 +2,11 @@
   "schemaVersion": 2,
   "upstream": {
     "repository": "git@github.com:zenstory-ai/oh-story-claudecode.git",
-    "commit": "4a50d5583590eb7f207037e35136c1168bc02201",
-    "releaseVersion": "0.8.4",
+    "commit": "2cf7be61b139f3852c82f981a7ff4eed2aaf5926",
+    "releaseVersion": "0.8.5",
     "agentsVersion": 34
   },
-  "generatedAt": "2026-09-28T04:14:57.961Z",
+  "generatedAt": "2026-10-10T12:00:01.414Z",
   "skills": [
     "browser-cdp",
     "story",
@@ -89,13 +89,13 @@
     },
     {
       "path": "skills/story-deslop/SKILL.md",
-      "sha256": "c967d9222417f8dee3a7ee4eaa82afb034a1c3040c63234deb80074749be2fab",
-      "bytes": 20392
+      "sha256": "2b5173dec3f21de13057c85f1d4e421506409657d56289667d3ba14f9802355c",
+      "bytes": 20402
     },
     {
       "path": "skills/story-deslop/references/agent-calls.md",
-      "sha256": "ce0763db2eb779749c384d8f9701f60e8a2a53db4c7ccfd30c6f537fa0e3c9f8",
-      "bytes": 1679
+      "sha256": "a85729f92fe36713376a7ea67b7612bff244fcef632450432e6cef821c5fd8a1",
+      "bytes": 1669
     },
     {
       "path": "skills/story-deslop/references/anti-ai-writing.md",
@@ -104,13 +104,13 @@
     },
     {
       "path": "skills/story-deslop/references/author-memory-maintenance.md",
-      "sha256": "5727f0ab785e5839ec5aba79929838d125de2422c076d3b3045c25497896881b",
-      "bytes": 8766
+      "sha256": "9ea57cc93f70ec7f1df6df03e4c3605e0937d4a95c89c01d230b391082eaacda",
+      "bytes": 9177
     },
     {
       "path": "skills/story-deslop/references/author-memory.md",
-      "sha256": "376c06efa01b308a2c7e8fcfd37f0ba2045e00ada20cbe63792e1d0246b222d2",
-      "bytes": 11531
+      "sha256": "832171fac5265e613ea55eac028c1ba90da2e907eb60bb8cc6c7c70a7e2a7ba1",
+      "bytes": 11655
     },
     {
       "path": "skills/story-deslop/references/banned-words.md",
@@ -129,8 +129,8 @@
     },
     {
       "path": "skills/story-deslop/scripts/author_memory_commit.py",
-      "sha256": "2d5a04400210e8b5dbd92ccfbe0bebac73b7fc624930319ac0740b9e922cfbc5",
-      "bytes": 79758
+      "sha256": "cc1e0d957f3eea9e04d679423ecb511b5eb7d8dc5bfcaa87196cfe258e2103d5",
+      "bytes": 80004
     },
     {
       "path": "skills/story-deslop/scripts/check-ai-patterns.js",
@@ -354,8 +354,8 @@
     },
     {
       "path": "skills/story-long-scan/SKILL.md",
-      "sha256": "88d46967faba05f4f8e6e45a9734d12c6053ea7b0f777319d8766cb1e3a5e19f",
-      "bytes": 10901
+      "sha256": "ef2c3b3ae4484b470cf96cf37ffb1c9e89c9f29977903aae7216151575e7ca36",
+      "bytes": 10396
     },
     {
       "path": "skills/story-long-scan/references/genre-trends.md",
@@ -379,13 +379,13 @@
     },
     {
       "path": "skills/story-long-scan/references/platform-qidian.md",
-      "sha256": "9b27932c83514f2e922d47aa1a8a2535c69817f3f73426bc520ce879fe745a54",
-      "bytes": 2212
+      "sha256": "ed651d5db0aeee1707ddc995cd123493d470aabf6eade284d99041af90988889",
+      "bytes": 3214
     },
     {
       "path": "skills/story-long-scan/references/platform-qimao.md",
-      "sha256": "59ad08d1564c0f3436b1864e4a300fa64c22056575d8d9fb3efb9a2667df480a",
-      "bytes": 1325
+      "sha256": "79cd399e169817b7b78ff51a4639f5e86e0172f0ef5b940728ea84bf75600908",
+      "bytes": 2436
     },
     {
       "path": "skills/story-long-scan/references/publishing-guide.md",
@@ -404,8 +404,8 @@
     },
     {
       "path": "skills/story-long-scan/scripts/aggregate-rank.js",
-      "sha256": "c8f6ebf7d834af4b530451fa607b37d3173f0c12475e73a43c6e2fbccdb230c7",
-      "bytes": 26415
+      "sha256": "e4276059de456262aee30e5ce43777a9e702534b3712f684495ac75177cfa124",
+      "bytes": 28225
     },
     {
       "path": "skills/story-long-scan/scripts/cdp-utils.js",
@@ -429,23 +429,23 @@
     },
     {
       "path": "skills/story-long-scan/scripts/qidian-rank-scraper.js",
-      "sha256": "1b64e055436f8aa6a49818ef1ae5093795692df593dddd6dc326b1a0efd09a8e",
-      "bytes": 22495
+      "sha256": "6e0a6cee1446a13876abddb4e048de5a31941095f8f0ee1f410aefa91e4a6e00",
+      "bytes": 48445
     },
     {
       "path": "skills/story-long-scan/scripts/qimao-rank-scraper.js",
-      "sha256": "f5fec96499dfa6e27304acbb7c67896f9fcc9d7e7cde0a793648b6229e178326",
-      "bytes": 16751
+      "sha256": "ae276405cf3d85c451cd9da4ee4dba9097f4710f5dc4dfd88fcf9c9cddb850be",
+      "bytes": 35541
     },
     {
       "path": "skills/story-long-write/SKILL.md",
-      "sha256": "1b750d4ff4b240b8df384c1238c4663aa9c1d507bb58557e4fd8f286d09e6257",
-      "bytes": 14561
+      "sha256": "de63533d8150367b2fce4bb1209158fde64b4e1739e0e9082160f81716b8dcdc",
+      "bytes": 14551
     },
     {
       "path": "skills/story-long-write/references/agent-calls.md",
-      "sha256": "dae94c81b29bcb3c75d0b4e46fd186e7063d793daac673448d2ca852cb91b050",
-      "bytes": 7526
+      "sha256": "31e54e0b5f1cff9ccea509a3acb9b1f1429e766b18704e7783e49c5eec4831b0",
+      "bytes": 7524
     },
     {
       "path": "skills/story-long-write/references/anti-ai-writing.md",
@@ -459,13 +459,13 @@
     },
     {
       "path": "skills/story-long-write/references/author-memory-maintenance.md",
-      "sha256": "5727f0ab785e5839ec5aba79929838d125de2422c076d3b3045c25497896881b",
-      "bytes": 8766
+      "sha256": "9ea57cc93f70ec7f1df6df03e4c3605e0937d4a95c89c01d230b391082eaacda",
+      "bytes": 9177
     },
     {
       "path": "skills/story-long-write/references/author-memory.md",
-      "sha256": "376c06efa01b308a2c7e8fcfd37f0ba2045e00ada20cbe63792e1d0246b222d2",
-      "bytes": 11531
+      "sha256": "832171fac5265e613ea55eac028c1ba90da2e907eb60bb8cc6c7c70a7e2a7ba1",
+      "bytes": 11655
     },
     {
       "path": "skills/story-long-write/references/banned-words.md",
@@ -834,13 +834,13 @@
     },
     {
       "path": "skills/story-long-write/references/workflow-chapter.md",
-      "sha256": "81349f6dea2c1da27e13b829c77f451f21d6ef1b1d90dcba9226499a1c07779d",
-      "bytes": 14746
+      "sha256": "3dc19a1f5f77d80ce3a353f9bc91af0ae054d90ad6b01ecc8a45b019a9f3e866",
+      "bytes": 14839
     },
     {
       "path": "skills/story-long-write/references/workflow-daily.md",
-      "sha256": "cb5da4f044bef876afb6eb66639457171b247671f1be1c1eda1c1975e200accb",
-      "bytes": 7707
+      "sha256": "7df54479d7ed0897b12f0cf3e209f372b9c48abfab3d4cb9c2e5463936648855",
+      "bytes": 7761
     },
     {
       "path": "skills/story-long-write/references/workflow-outline.md",
@@ -864,8 +864,8 @@
     },
     {
       "path": "skills/story-long-write/references/writer-prompt-fallback.md",
-      "sha256": "de90964b56296c4313974cb770f0faece72d1bc219a005c45eba04b0e12c859f",
-      "bytes": 3617
+      "sha256": "06836efcca3d8de8b6b6bd53f6e65b2b5154d5d697af6e081a0d5c11e3da1632",
+      "bytes": 3888
     },
     {
       "path": "skills/story-long-write/references/writing-craft.md",
@@ -874,8 +874,8 @@
     },
     {
       "path": "skills/story-long-write/scripts/author_memory_commit.py",
-      "sha256": "2d5a04400210e8b5dbd92ccfbe0bebac73b7fc624930319ac0740b9e922cfbc5",
-      "bytes": 79758
+      "sha256": "cc1e0d957f3eea9e04d679423ecb511b5eb7d8dc5bfcaa87196cfe258e2103d5",
+      "bytes": 80004
     },
     {
       "path": "skills/story-long-write/scripts/build_architect_brief.py",
@@ -884,8 +884,8 @@
     },
     {
       "path": "skills/story-long-write/scripts/build_writer_prompt.py",
-      "sha256": "549db22e87d5bf5b33154869bcc08fd0e26e22662cb745b7c371eba007696a9a",
-      "bytes": 32544
+      "sha256": "2bbe62ea381ec87c740e6870565cf0bd2ccfabac4e1b5b9850eca30533e543dc",
+      "bytes": 37169
     },
     {
       "path": "skills/story-long-write/scripts/check-ai-patterns.js",
@@ -939,8 +939,8 @@
     },
     {
       "path": "skills/story-review/SKILL.md",
-      "sha256": "e2f9a2b6bb28b8c17a428347ab4973623b3448e6933ca84f5be554df9317e00b",
-      "bytes": 21760
+      "sha256": "bef847a7d56192aaab3817cc139dc5e0826ea8b7dd24cd4469bf595a0d6843ff",
+      "bytes": 21741
     },
     {
       "path": "skills/story-review/references/agent-prompts.md",
@@ -954,13 +954,13 @@
     },
     {
       "path": "skills/story-review/references/author-memory-maintenance.md",
-      "sha256": "5727f0ab785e5839ec5aba79929838d125de2422c076d3b3045c25497896881b",
-      "bytes": 8766
+      "sha256": "9ea57cc93f70ec7f1df6df03e4c3605e0937d4a95c89c01d230b391082eaacda",
+      "bytes": 9177
     },
     {
       "path": "skills/story-review/references/author-memory.md",
-      "sha256": "376c06efa01b308a2c7e8fcfd37f0ba2045e00ada20cbe63792e1d0246b222d2",
-      "bytes": 11531
+      "sha256": "832171fac5265e613ea55eac028c1ba90da2e907eb60bb8cc6c7c70a7e2a7ba1",
+      "bytes": 11655
     },
     {
       "path": "skills/story-review/references/banned-words.md",
@@ -1039,8 +1039,8 @@
     },
     {
       "path": "skills/story-review/scripts/author_memory_commit.py",
-      "sha256": "2d5a04400210e8b5dbd92ccfbe0bebac73b7fc624930319ac0740b9e922cfbc5",
-      "bytes": 79758
+      "sha256": "cc1e0d957f3eea9e04d679423ecb511b5eb7d8dc5bfcaa87196cfe258e2103d5",
+      "bytes": 80004
     },
     {
       "path": "skills/story-review/scripts/check-ai-patterns.js",
@@ -1579,8 +1579,8 @@
     },
     {
       "path": "skills/story-short-scan/scripts/aggregate-rank.js",
-      "sha256": "c8f6ebf7d834af4b530451fa607b37d3173f0c12475e73a43c6e2fbccdb230c7",
-      "bytes": 26415
+      "sha256": "e4276059de456262aee30e5ce43777a9e702534b3712f684495ac75177cfa124",
+      "bytes": 28225
     },
     {
       "path": "skills/story-short-scan/scripts/cdp-utils.js",
@@ -1599,23 +1599,23 @@
     },
     {
       "path": "skills/story-short-write/SKILL.md",
-      "sha256": "7532bc2bed58f11534c4728693075ea6f474f2885cbb989f650b474ffd7a0f60",
-      "bytes": 11135
+      "sha256": "8160ca32701f21f5922c22cb7e32c095d6aadd86b7bf28da4ecb347835bdfaef",
+      "bytes": 11154
     },
     {
       "path": "skills/story-short-write/references/agent-calls.md",
-      "sha256": "e2f07dc88803d29b3db4c105b2f6d9ae1b6aee2c0fdd94f0ee0556cc3a354070",
-      "bytes": 2297
+      "sha256": "10486caa8d4d1cd28031364fa22b84d5e354c73db738db01467c11801d304567",
+      "bytes": 2261
     },
     {
       "path": "skills/story-short-write/references/author-memory-maintenance.md",
-      "sha256": "5727f0ab785e5839ec5aba79929838d125de2422c076d3b3045c25497896881b",
-      "bytes": 8766
+      "sha256": "9ea57cc93f70ec7f1df6df03e4c3605e0937d4a95c89c01d230b391082eaacda",
+      "bytes": 9177
     },
     {
       "path": "skills/story-short-write/references/author-memory.md",
-      "sha256": "376c06efa01b308a2c7e8fcfd37f0ba2045e00ada20cbe63792e1d0246b222d2",
-      "bytes": 11531
+      "sha256": "832171fac5265e613ea55eac028c1ba90da2e907eb60bb8cc6c7c70a7e2a7ba1",
+      "bytes": 11655
     },
     {
       "path": "skills/story-short-write/references/banned-words.md",
@@ -1794,8 +1794,8 @@
     },
     {
       "path": "skills/story-short-write/scripts/author_memory_commit.py",
-      "sha256": "2d5a04400210e8b5dbd92ccfbe0bebac73b7fc624930319ac0740b9e922cfbc5",
-      "bytes": 79758
+      "sha256": "cc1e0d957f3eea9e04d679423ecb511b5eb7d8dc5bfcaa87196cfe258e2103d5",
+      "bytes": 80004
     },
     {
       "path": "skills/story-short-write/scripts/check-ai-patterns.js",
@@ -1834,28 +1834,28 @@
     },
     {
       "path": "skills/story/SKILL.md",
-      "sha256": "c5d6e4d0d00b03ce22d9319a8988cfef7afb83b60633fe95c3a57dba07db4de5",
-      "bytes": 12389
+      "sha256": "e12c2c6dd896f1981767f9e52b0ed244db736d819e9dddde3f5fcc110c8f41f6",
+      "bytes": 12423
     },
     {
       "path": "skills/story/VERSION",
-      "sha256": "cf6a05db55c83ecdf0b3323be40d441e20f4bbd3860a3f4104a9dab70fbae161",
+      "sha256": "a92b0248b8baacfaf54e8d59caaca7d5e6b9a0a25ee140c81ea973b4ae25142f",
       "bytes": 6
     },
     {
       "path": "skills/story/references/author-memory-maintenance.md",
-      "sha256": "5727f0ab785e5839ec5aba79929838d125de2422c076d3b3045c25497896881b",
-      "bytes": 8766
+      "sha256": "9ea57cc93f70ec7f1df6df03e4c3605e0937d4a95c89c01d230b391082eaacda",
+      "bytes": 9177
     },
     {
       "path": "skills/story/references/author-memory.md",
-      "sha256": "376c06efa01b308a2c7e8fcfd37f0ba2045e00ada20cbe63792e1d0246b222d2",
-      "bytes": 11531
+      "sha256": "832171fac5265e613ea55eac028c1ba90da2e907eb60bb8cc6c7c70a7e2a7ba1",
+      "bytes": 11655
     },
     {
       "path": "skills/story/scripts/author_memory_commit.py",
-      "sha256": "2d5a04400210e8b5dbd92ccfbe0bebac73b7fc624930319ac0740b9e922cfbc5",
-      "bytes": 79758
+      "sha256": "cc1e0d957f3eea9e04d679423ecb511b5eb7d8dc5bfcaa87196cfe258e2103d5",
+      "bytes": 80004
     }
   ]
 }

@@ -12,12 +12,15 @@
  *   node qimao-rank-scraper.js --channel male --type hot --period all    # 日榜+月榜
  *   node qimao-rank-scraper.js --channel female --type new      # 女生新书榜
  *   node qimao-rank-scraper.js --channel all --type all         # 全部采集
+ *   node qimao-rank-scraper.js --source library --pages 3       # 书库筛选页：点击量前 3 页新书
  *
- * 前置：
+ * 前置（排行榜）：
  *   node {SKILL_DIR}/browser-cdp/scripts/setup-cdp-chrome.js 9222
+ * 书库筛选页是服务端渲染，直接走 HTTPS，不需要 Chrome。
  */
 
 const fs = require("fs");
+const https = require("https");
 const path = require("path");
 const { ab, sleep, evalJSONBase64, scrollLoad, getArg, localDateStamp, runCli } = require("./cdp-utils");
 
@@ -269,6 +272,404 @@ function renderMarkdown(ch, rt, period, url, books, rawCount, now = new Date().t
 }
 
 // ---------------------------------------------------------------------------
+// 书库筛选页（--source library）
+// 全部频道 · 30万字以下 · 3天内更新 · 连载中 · 按点击量。页面服务端渲染，Node 直接取 HTML，
+// 不开 Chrome。页面没有热度数字，名次就是点击量页序；只有子分类，主类另查分类页标题。
+// ---------------------------------------------------------------------------
+
+const LIBRARY_ID = "library";
+const LIBRARY_LIST = "全站书库点击新书"; // 带「新书」：聚合时进「新书榜」列
+const LIBRARY_HOST = "www.qimao.com";
+const LIBRARY_TITLE_MARKS = ["3天内更新", "30万以下", "连载中"];
+const LIBRARY_SORT = "按点击量";
+const LIBRARY_SORT_OPTIONS = ["按点击量", "按总字数", "最近更新", "按收藏数"];
+const LIBRARY_FILTER_NOTE = "全部频道·30万字以下·3天内更新·连载中";
+const LIBRARY_DEFAULT_PAGES = 3;
+const LIBRARY_MAX_PAGES = 10;
+const LIBRARY_REQUEST_GAP_MS = 800;
+const LIBRARY_SPARSE_BELOW = 15;
+const DESKTOP_HEADERS = {
+  "User-Agent":
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36",
+  Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+  "Accept-Language": "zh-CN,zh;q=0.9",
+  "Accept-Encoding": "identity",
+};
+const MAX_HTML_BYTES = 5 * 1024 * 1024;
+
+/** 书库第 page 页。段位依次是频道-主类-子类-字数-更新-?-状态-排序-页码，a 表示不限。 */
+function libraryPageUrl(page) {
+  return `https://${LIBRARY_HOST}/shuku/a-a-a-1-1-a-0-click-${page}/`;
+}
+
+/** 只按主类筛选的书库页；它的 <title> 以「{主类}小说-」开头。 */
+function categoryUrl(mainId) {
+  return `https://${LIBRARY_HOST}/shuku/a-${mainId}-a-a-a-a-a-click-1/`;
+}
+
+/** 校验 --pages：1 到 10 的整数，默认 3。 */
+function parseLibraryPages(raw) {
+  if (raw === null || raw === undefined) return LIBRARY_DEFAULT_PAGES;
+  const text = String(raw).trim();
+  const pages = /^\d+$/.test(text) ? Number(text) : NaN;
+  if (!Number.isInteger(pages) || pages < 1 || pages > LIBRARY_MAX_PAGES) {
+    throw new Error(`未知 --pages: ${raw}（书库翻页取 1-${LIBRARY_MAX_PAGES} 的整数）`);
+  }
+  return pages;
+}
+
+/**
+ * 取一页 HTML：桌面 UA、不压缩、15 秒超时、最多跟 3 次站内重定向；
+ * 跳出 www.qimao.com/shuku/ 或状态码不是 200 都算这一页失败。
+ * 七猫的响应头有折行（行首带空格的 content-security-policy 等），Node 默认的严格解析器会
+ * 直接报 Parse Error，所以这一个请求放宽头部解析；只读公开页面，不影响别的请求。
+ */
+function fetchQimaoHtml(url, redirects = 3) {
+  return new Promise((resolve, reject) => {
+    const options = { headers: DESKTOP_HEADERS, timeout: 15000, insecureHTTPParser: true };
+    const req = https.get(url, options, (res) => {
+      const status = res.statusCode;
+      if (status >= 300 && status < 400 && res.headers.location) {
+        res.resume();
+        if (redirects <= 0) {
+          reject(new Error("重定向超过 3 次"));
+          return;
+        }
+        let next;
+        try {
+          next = new URL(res.headers.location, url);
+        } catch {
+          reject(new Error(`重定向地址无效：${res.headers.location}`));
+          return;
+        }
+        if (next.protocol !== "https:" || next.host !== LIBRARY_HOST || !next.pathname.startsWith("/shuku/")) {
+          reject(new Error(`被重定向到 ${next.host}${next.pathname}，不是七猫书库页（可能被风控或登录页拦住）`));
+          return;
+        }
+        fetchQimaoHtml(next.toString(), redirects - 1).then(resolve, reject);
+        return;
+      }
+      if (status !== 200) {
+        res.resume();
+        reject(new Error(`HTTP ${status}`));
+        return;
+      }
+      let body = "";
+      res.setEncoding("utf8");
+      res.on("data", (chunk) => {
+        body += chunk;
+        if (body.length > MAX_HTML_BYTES) req.destroy(new Error("页面大小异常"));
+      });
+      res.on("end", () => resolve(body));
+      res.on("error", reject);
+    });
+    req.on("timeout", () => req.destroy(new Error("请求超时（15 秒）")));
+    req.on("error", reject);
+  });
+}
+
+const HTML_ENTITIES = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " " };
+
+function decodeEntities(text) {
+  return String(text || "").replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (whole, name) => {
+    if (name[0] === "#") {
+      const code = /^#x/i.test(name) ? parseInt(name.slice(2), 16) : parseInt(name.slice(1), 10);
+      return Number.isInteger(code) && code > 0 && code <= 0x10ffff ? String.fromCodePoint(code) : whole;
+    }
+    const decoded = HTML_ENTITIES[name.toLowerCase()];
+    return decoded === undefined ? whole : decoded;
+  });
+}
+
+/** 去标签、解实体、压空白：先去标签再解实体，&lt;b&gt; 这样的书名原样保留。
+ *  注释和标签反复删到不再变化，再删掉散落的尖括号：「<!<!---->--」这类嵌套、没闭合的写法
+ *  删一遍会拼出新的「<!--」。正文里真正的尖括号在源码中都是实体，最后解码才还原，不会误删。 */
+function htmlText(html) {
+  let stripped = String(html || "");
+  for (let previous = null; stripped !== previous; ) {
+    previous = stripped;
+    // 没闭合的注释照 HTML 规则一直注释到结尾
+    stripped = stripped.replace(/<!--[\s\S]*?(?:-->|$)/g, "").replace(/<[^>]*>/g, " ");
+  }
+  return decodeEntities(stripped.replace(/[<>]/g, "")).replace(/\s+/g, " ").trim();
+}
+
+function attrValue(attrs, name) {
+  const m = String(attrs || "").match(
+    new RegExp(`(?:^|\\s)${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))`, "i")
+  );
+  if (!m) return null;
+  return decodeEntities(m[1] !== undefined ? m[1] : m[2] !== undefined ? m[2] : m[3]);
+}
+
+/** 所有 class 同时含 classNames 的元素（Vue 的 data-v-xxx 属性照常容忍）。 */
+function findByClass(html, classNames, limit = Infinity) {
+  const wanted = [].concat(classNames);
+  const found = [];
+  const re = /<([a-zA-Z][\w-]*)\b([^>]*)>/g;
+  let m;
+  while ((m = re.exec(html)) && found.length < limit) {
+    const cls = attrValue(m[2], "class");
+    if (cls === null) continue;
+    const tokens = cls.split(/\s+/);
+    if (!wanted.every((name) => tokens.includes(name))) continue;
+    const tag = m[1].toLowerCase();
+    const closeRe = new RegExp(`</${tag}\\s*>`, "ig");
+    closeRe.lastIndex = re.lastIndex;
+    const close = closeRe.exec(html);
+    found.push({ attrs: m[2], inner: html.slice(re.lastIndex, close ? close.index : html.length) });
+  }
+  return found;
+}
+
+function firstByClass(html, classNames) {
+  return findByClass(html, classNames, 1)[0] || null;
+}
+
+function normalizeWords(text) {
+  const t = String(text || "").replace(/\s+/g, "");
+  if (/^[\d.]+万?字$/.test(t)) return t;
+  if (/^[\d.]+万?$/.test(t)) return `${t}字`;
+  return "";
+}
+
+/**
+ * 解析一页书库 HTML。每个 li.qm-cover-text-item 是一本书：
+ * .s-tit a（书名、/shuku/{bookId}/）、.s-category（子分类，链接里带主类 id）、
+ * .s-status、.s-words-num、.s-desc、.s-author、.s-update-time。
+ */
+function parseShukuPage(html) {
+  const source = String(html || "");
+  const titleMatch = source.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  const sortTabs = findByClass(source, ["tab-inner", "active"])
+    .map((el) => htmlText(el.inner))
+    .filter((label) => LIBRARY_SORT_OPTIONS.includes(label));
+  const pagerNumbers = findByClass(source, ["page-btn", "num"]).map((el) => ({
+    n: /^\d+$/.test(htmlText(el.inner)) ? Number(htmlText(el.inner)) : null,
+    active: (attrValue(el.attrs, "class") || "").split(/\s+/).includes("active"),
+  }));
+  const numbered = pagerNumbers.filter((p) => p.n !== null);
+  const activePager = numbered.find((p) => p.active);
+
+  const starts = [];
+  const liRe = /<li\b([^>]*)>/gi;
+  let m;
+  while ((m = liRe.exec(source))) {
+    const cls = attrValue(m[1], "class") || "";
+    if (cls.split(/\s+/).includes("qm-cover-text-item")) starts.push(m.index);
+  }
+  const items = starts.map((start, i) => {
+    const nextStart = i + 1 < starts.length ? starts[i + 1] : source.length;
+    const end = source.indexOf("</li>", start);
+    const chunk = source.slice(start, end > start && end < nextStart ? end : nextStart);
+    const titleEl = firstByClass(chunk, "s-tit");
+    const anchor = titleEl && titleEl.inner.match(/<a\b([^>]*)>([\s\S]*?)<\/a\s*>/i);
+    const href = anchor ? attrValue(anchor[1], "href") || "" : "";
+    const idMatch = href.match(/\/shuku\/(\d+)\/?(?:[?#]|$)/);
+    const categoryEl = firstByClass(chunk, "s-category");
+    const categoryHref = categoryEl ? attrValue(categoryEl.attrs, "href") || "" : "";
+    const categoryIds = categoryHref.match(/\/shuku\/a-(\d+)-(\d+)-/);
+    const text = (cls) => {
+      const el = firstByClass(chunk, cls);
+      return el ? htmlText(el.inner) : "";
+    };
+    const bookId = idMatch ? idMatch[1] : "";
+    return {
+      bookId,
+      title: anchor ? htmlText(anchor[2]) : "",
+      url: bookId ? `https://${LIBRARY_HOST}/shuku/${bookId}/` : "",
+      author: text("s-author"),
+      genre: "",
+      subGenre: categoryEl ? htmlText(categoryEl.inner) : "",
+      mainId: categoryIds ? categoryIds[1] : "",
+      status: text("s-status"),
+      words: normalizeWords(text("s-words-num")),
+      update: text("s-update-time"),
+      desc: text("s-desc"),
+    };
+  });
+
+  return {
+    title: titleMatch ? htmlText(titleMatch[1]) : "",
+    sort: sortTabs.length === 1 ? sortTabs[0] : "",
+    activePage: activePager ? activePager.n : null,
+    maxPage: numbered.length ? Math.max(...numbered.map((p) => p.n)) : null,
+    items,
+  };
+}
+
+/** 页面实际生效的筛选必须和文件头写的一致（#340）：标题三项齐全，读得到排序时必须是按点击量。 */
+function libraryPageProblems(page, requestedPage) {
+  const problems = [];
+  const missing = LIBRARY_TITLE_MARKS.filter((mark) => !page.title.includes(mark));
+  if (missing.length) {
+    problems.push(`页面标题「${page.title || "空"}」缺少「${missing.join("」「")}」，筛选没生效（可能被风控页拦住）`);
+  }
+  if (page.sort && page.sort !== LIBRARY_SORT) {
+    problems.push(`页面排序是「${page.sort}」，不是「${LIBRARY_SORT}」`);
+  }
+  if (page.activePage !== null && page.activePage !== requestedPage) {
+    problems.push(`请求第 ${requestedPage} 页，页面停在第 ${page.activePage} 页`);
+  }
+  return problems;
+}
+
+/** 主类页 <title>「都市小说-好看的都市小说-…」→「都市」；对不上就返回空串。 */
+function parseCategoryTitle(html) {
+  const m = String(html || "").match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  const title = m ? htmlText(m[1]) : "";
+  const name = title.match(/^([^\s\-—|]+?)小说-/);
+  return name ? name[1] : "";
+}
+
+function metaPart(value) {
+  return String(value || "").replace(/\*/g, "").replace(/\s*·\s*/g, "·").trim();
+}
+
+function summarizeLibraryQuality(books, rawCount, pageProblems) {
+  const count = (pred) => books.filter(pred).length;
+  const linked = count((book) => book.url);
+  const problems = [...pageProblems];
+  if (rawCount > books.length) problems.push(`移除无效条目 ${rawCount - books.length} 条`);
+  if (linked < books.length) problems.push(`作品页链接缺失 ${books.length - linked} 条`);
+  const missing = [
+    ["主类未解析", (book) => !book.genre],
+    ["子分类缺失", (book) => !book.subGenre],
+    ["状态缺失", (book) => !book.status],
+    ["字数缺失", (book) => !book.words],
+  ];
+  for (const [label, pred] of missing) {
+    const n = count(pred);
+    if (n) problems.push(`${label} ${n} 条`);
+  }
+  // 书库页本来就没有热度数字，缺热度不算问题，名次即点击量页序。
+  if (books.length < LIBRARY_SPARSE_BELOW) problems.push(`[数据稀疏] 实际采集 ${books.length} 条`);
+  return { linked, problems, quality: problems.length ? "[存在问题]" : "[OK]" };
+}
+
+function renderLibraryMarkdown({ books, rawCount, pages, pagesRead, pageProblems = [], now = new Date().toISOString() }) {
+  const summary = summarizeLibraryQuality(books, rawCount, pageProblems);
+  const range = pagesRead < pages ? `取前 ${pages} 页（实取 ${pagesRead} 页）` : `取前 ${pages} 页`;
+  const lines = [
+    `# 七猫 · ${LIBRARY_LIST}`,
+    "",
+    `- 数据质量：${summary.quality}`,
+    `- 有效条目：${books.length} / ${rawCount}`,
+    `- 问题摘要：${summary.problems.length ? summary.problems.join("；") : "无"}`,
+    `- 作品页链接：${summary.linked} / ${books.length}`,
+    `- 来源：${libraryPageUrl(1)}`,
+    `- 筛选：${LIBRARY_FILTER_NOTE}；${LIBRARY_SORT}排序，${range}；名次即页序，书库页没有热度数字`,
+    `- 抓取时间：${now}`,
+    `- 条目数：${books.length}`,
+    "",
+    "---",
+    "",
+  ];
+  for (const b of books) {
+    lines.push(`### #${b.rank} ${b.title}`);
+    // 元信息按位置聚合：作者、题材（主类，取不到时退用子分类）、子分类进标签、状态、字数。
+    const meta = [
+      metaPart(b.author),
+      metaPart(b.genre || b.subGenre),
+      b.genre ? metaPart(b.subGenre) : "",
+      metaPart(b.status) || "[待补]",
+      b.words || "[待补]",
+    ].filter(Boolean);
+    lines.push(`*${meta.join(" · ")}*`);
+    if (b.update) lines.push(`**最新更新：** ${b.update}`);
+    if (b.url) lines.push(`[作品页](${b.url})`);
+    const desc = cleanDesc(b.desc);
+    if (desc) lines.push("", "**简介**", "", desc);
+    lines.push("", "---", "");
+  }
+  return { content: lines.join("\n"), summary };
+}
+
+/**
+ * 翻页采集书库。按 bookId 去重、按首次出现连续编号；某页没有新书就停。
+ * 第 1 页失败或一本没采到 → 抛错（不写文件）；后面某页失败 → 保留已采到的页，partial。
+ */
+async function scrapeLibrary(pages) {
+  console.log(`\n→ 采集 七猫${LIBRARY_LIST}（${LIBRARY_FILTER_NOTE}，${LIBRARY_SORT}，前 ${pages} 页）...`);
+  const books = [];
+  const seen = new Set();
+  const pageProblems = [];
+  let invalid = 0;
+  let pagesRead = 0;
+  let maxPage = null;
+  let requested = 0;
+  const politeGet = async (url) => {
+    if (requested++ > 0) sleep(LIBRARY_REQUEST_GAP_MS);
+    return fetchQimaoHtml(url);
+  };
+
+  for (let page = 1; page <= pages; page++) {
+    if (maxPage !== null && page > maxPage) {
+      console.log(`  书库只有 ${maxPage} 页，停止翻页`);
+      break;
+    }
+    let parsed;
+    try {
+      parsed = parseShukuPage(await politeGet(libraryPageUrl(page)));
+      const problems = libraryPageProblems(parsed, page);
+      if (problems.length) throw new Error(problems.join("；"));
+    } catch (err) {
+      const reason = `第 ${page} 页没取到：${err && err.message ? err.message : err}`;
+      if (!books.length) throw new Error(reason);
+      console.error(`  ✗ ${reason}，保留前 ${pagesRead} 页`);
+      pageProblems.push(reason);
+      break;
+    }
+    pagesRead++;
+    if (page === 1) maxPage = parsed.maxPage;
+    let fresh = 0;
+    let duplicate = 0;
+    for (const item of parsed.items) {
+      if (!item.title || !item.author) {
+        invalid++;
+        continue;
+      }
+      const key = item.bookId || `${item.title}|${item.author}`;
+      if (seen.has(key)) {
+        duplicate++;
+        continue;
+      }
+      seen.add(key);
+      books.push({ ...item, rank: books.length + 1 });
+      fresh++;
+    }
+    console.log(`  第 ${page} 页：新书 ${fresh} 本${duplicate ? `，跨页重复 ${duplicate} 本` : ""}`);
+    if (!fresh) break;
+  }
+
+  if (!books.length) {
+    throw new Error(`书库第 1 页一本书都没解析出来（页面条目 ${invalid} 个），页面可能改版`);
+  }
+
+  // 书库页只有子分类；主类按分类页标题查，每个主类 id 本次运行只请求一次。
+  const mainNames = new Map();
+  for (const id of new Set(books.map((book) => book.mainId).filter(Boolean))) {
+    try {
+      mainNames.set(id, parseCategoryTitle(await politeGet(categoryUrl(id))));
+    } catch (err) {
+      console.error(`  ⚠ 主类 ${id} 没查到：${err && err.message ? err.message : err}`);
+      mainNames.set(id, "");
+    }
+  }
+  for (const book of books) book.genre = mainNames.get(book.mainId) || "";
+
+  const { content, summary } = renderLibraryMarkdown({
+    books,
+    rawCount: books.length + invalid,
+    pages,
+    pagesRead,
+    pageProblems,
+  });
+  console.log(`  ✓ 提取 ${books.length} 本（链接 ${summary.linked}/${books.length}，${summary.quality}）`);
+  return { content, partialReasons: pageProblems };
+}
+
+// ---------------------------------------------------------------------------
 // 主流程
 // ---------------------------------------------------------------------------
 
@@ -278,6 +679,13 @@ const OUTDIR = getArg(args, "--outdir") || ".";
 const CHANNEL = getArg(args, "--channel") || "male";
 const RANKTYPE = getArg(args, "--type") || "hot";
 const PERIOD = getArg(args, "--period") || "day";
+const SOURCE = getArg(args, "--source") || "rank";
+const PAGES_ARG = getArg(args, "--pages");
+
+/** 参数是否显式出现过（含 --x=value 写法）；书库模式下用来拒绝排行榜专用参数。 */
+function hasArg(argv, name) {
+  return argv.some((arg) => arg === name || String(arg).startsWith(`${name}=`));
+}
 
 function scrapeRank(port, channelId, rankTypeId, periodId) {
   const ch = CHANNELS.find((c) => c.id === channelId);
@@ -356,7 +764,9 @@ function scrapeRank(port, channelId, rankTypeId, periodId) {
   return renderMarkdown(ch, rt, period, url, books, rawCount);
 }
 
-function buildTargets(channel, rankType, period) {
+function buildTargets(channel, rankType, period, source = "rank") {
+  // 书库只有一个目标：全站一份，不进 --type all（它不需要 Chrome，筛选也和排行榜无关）。
+  if (source === LIBRARY_ID) return [{ channel: "all", rankType: LIBRARY_ID, period: null }];
   const channels = channel === "all" ? CHANNELS.map((item) => item.id) : [channel];
   const rankTypes = rankType === "all" ? RANK_TYPES.map((item) => item.id) : [rankType];
   const targets = [];
@@ -376,13 +786,30 @@ function buildTargets(channel, rankType, period) {
 }
 
 function outputFilename(channelId, rankTypeId, periodId, date) {
+  if (rankTypeId === LIBRARY_ID) return `七猫${LIBRARY_LIST}_${date}.md`;
   const channel = CHANNELS.find((item) => item.id === channelId);
   const rankType = RANK_TYPES.find((item) => item.id === rankTypeId);
   const period = periodId ? PERIODS.find((item) => item.id === periodId) : null;
   return `七猫${channel.label}${rankType.label}${period ? period.label : ""}_${date}.md`;
 }
 
-function main() {
+/** 参数全部在联网、开浏览器之前校验；返回本次要采的目标与书库页数。 */
+function resolvePlan() {
+  if (SOURCE !== "rank" && SOURCE !== LIBRARY_ID) {
+    throw new Error(`未知 --source: ${SOURCE}（rank / ${LIBRARY_ID}）`);
+  }
+  if (SOURCE === LIBRARY_ID) {
+    const rankOnly = ["--channel", "--type", "--period"].filter((name) => hasArg(args, name));
+    if (rankOnly.length) {
+      throw new Error(
+        `--source library 不能配 ${rankOnly.join("、")}：书库筛选固定为${LIBRARY_FILTER_NOTE}、${LIBRARY_SORT}`
+      );
+    }
+    return { targets: buildTargets(null, null, null, LIBRARY_ID), pages: parseLibraryPages(PAGES_ARG) };
+  }
+  if (hasArg(args, "--pages")) {
+    throw new Error("--pages 只用于 --source library");
+  }
   if (CHANNEL !== "all" && !CHANNELS.some((channel) => channel.id === CHANNEL)) {
     throw new Error(`未知 --channel: ${CHANNEL}`);
   }
@@ -392,12 +819,25 @@ function main() {
   if (PERIOD !== "all" && !PERIODS.some((period) => period.id === PERIOD)) {
     throw new Error(`未知 --period: ${PERIOD}`);
   }
-  const targets = buildTargets(CHANNEL, RANKTYPE, PERIOD);
+  return { targets: buildTargets(CHANNEL, RANKTYPE, PERIOD), pages: 0 };
+}
+
+async function main() {
+  const { targets, pages } = resolvePlan();
   let written = 0;
   let failed = 0;
+  const partialReasons = [];
 
   for (const target of targets) {
-    const content = scrapeRank(PORT, target.channel, target.rankType, target.period);
+    let content;
+    if (target.rankType === LIBRARY_ID) {
+      // 书库一次只有一个目标：整份失败直接抛错（exit 1，不写文件），页级失败带回 partialReasons。
+      const library = await scrapeLibrary(pages);
+      content = library.content;
+      partialReasons.push(...library.partialReasons);
+    } else {
+      content = scrapeRank(PORT, target.channel, target.rankType, target.period);
+    }
     if (!content) {
       failed++;
       continue;
@@ -414,8 +854,8 @@ function main() {
     planned: targets.length,
     written,
     failed,
-    partial: failed > 0,
-    partialReasons: [],
+    partial: failed > 0 || partialReasons.length > 0,
+    partialReasons,
   };
 }
 
