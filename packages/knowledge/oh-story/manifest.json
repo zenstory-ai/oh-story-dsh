@@ -354,8 +354,168 @@
     },
     {
       "path": "skills/story-long-scan/SKILL.md",
-      "sha256": "ef2c3b3ae4484b470cf96cf37ffb1c9e89c9f29977903aae7216151575e7ca36",
-      "bytes": 10396
+      "sha256": "6560bec3f6379aee2817552fcd9e2291ef14b11568221583c700e25c49e4aba5",
+      "bytes": 13928
+    },
+    {
+      "path": "skills/story-long-scan/bridge/ciweimao_app/__init__.py",
+      "sha256": "55ed92f6cedd6420354e8678aee2258888178f3603419002f4fe470b6bbd61c8",
+      "bytes": 36
+    },
+    {
+      "path": "skills/story-long-scan/bridge/ciweimao_app/api.py",
+      "sha256": "7fd8c306818ed086c3c7da07c3a8df4e5479fd5887f03af47acf9f21a51f478b",
+      "bytes": 31750
+    },
+    {
+      "path": "skills/story-long-scan/bridge/ciweimao_app/config.py",
+      "sha256": "ab48e24bf6a4c2949bbf547426a881718c4b98ba491c74fe9de44df071c956ff",
+      "bytes": 3809
+    },
+    {
+      "path": "skills/story-long-scan/bridge/ciweimao_app/content.py",
+      "sha256": "d4615afada420773dbd4068865412e624b75603e09d4712c9ceae607e872b290",
+      "bytes": 1767
+    },
+    {
+      "path": "skills/story-long-scan/bridge/ciweimao_app/crypto.py",
+      "sha256": "5c549ec9ee587eef7ed65bc08dad89e64c76117ac09c45debb48288b527b4e08",
+      "bytes": 1676
+    },
+    {
+      "path": "skills/story-long-scan/bridge/ciweimao_app/guest.py",
+      "sha256": "b8534df9cf33d8c03fe045a94527b2663b27347f3b95d78f76207c8c2241ae13",
+      "bytes": 6042
+    },
+    {
+      "path": "skills/story-long-scan/bridge/ciweimao_app/models.py",
+      "sha256": "7ce3c511acbe389e5ae836849b14275ada1f09c5746c53ba2f9e0aeaf0d34bbe",
+      "bytes": 1352
+    },
+    {
+      "path": "skills/story-long-scan/bridge/ciweimao_app/protocol.py",
+      "sha256": "2da1bb7e30abf00c86b17fa98a87ca33d3e378a3ab03c45f3bbe91829ffea39b",
+      "bytes": 1119
+    },
+    {
+      "path": "skills/story-long-scan/bridge/ciweimao_app/requirements.txt",
+      "sha256": "69c65f7998ef21ec2b7edc38a7362e1d41478293410311c4617ab2b4d61d8bf4",
+      "bytes": 23
+    },
+    {
+      "path": "skills/story-long-scan/bridge/ciweimao_app/web.py",
+      "sha256": "7c7ca3951b043f2c877f60d0a00e42baeb4d3c7affcc00ccea08948135210267",
+      "bytes": 34529
+    },
+    {
+      "path": "skills/story-long-scan/bridge/fanqie_app/__init__.py",
+      "sha256": "6de6e0fd59c510884303c7bf36d7fb39cfbf38289af7c0d4e7770cd56ed38ebf",
+      "bytes": 96
+    },
+    {
+      "path": "skills/story-long-scan/bridge/fanqie_app/fanqie_client.py",
+      "sha256": "d2b9aa5502b10420cf7894b621136c51ee742fbd4f7b25ad60efbd368ebe03ac",
+      "bytes": 35703
+    },
+    {
+      "path": "skills/story-long-scan/bridge/fanqie_app/fanqie_pure.py",
+      "sha256": "8befbf72094d2b5c385fb2e7c5be269399bf5d423de6eab37d29cc10bf7efdde",
+      "bytes": 28478
+    },
+    {
+      "path": "skills/story-long-scan/bridge/jjwxc_app/__init__.py",
+      "sha256": "70400546d2e8b0fc805da754688fec429e9551765aa11ba39cf85c5efe9ed65a",
+      "bytes": 648
+    },
+    {
+      "path": "skills/story-long-scan/bridge/jjwxc_app/book.py",
+      "sha256": "44320bd725de0f3d368d4da2546fd74822fee84a719c667992f366ab66bce46d",
+      "bytes": 7154
+    },
+    {
+      "path": "skills/story-long-scan/bridge/jjwxc_app/http.py",
+      "sha256": "85867b488a541ce8fa641129532c389c16d24e8487cd802122d1dc99d4d631a3",
+      "bytes": 11597
+    },
+    {
+      "path": "skills/story-long-scan/bridge/jjwxc_app/rank.py",
+      "sha256": "f995fe386e4c02d3d2a83bd9fe8dd36860fe9e56e6cddd7154dc0799360bf87a",
+      "bytes": 14911
+    },
+    {
+      "path": "skills/story-long-scan/bridge/net.py",
+      "sha256": "938080d994b139c4ddc9d4c874184e85bc1fead8f5547a2048ca773a778c2bb3",
+      "bytes": 1551
+    },
+    {
+      "path": "skills/story-long-scan/bridge/rankmin/__init__.py",
+      "sha256": "135cfee089b1f00a99486ab5fb4aeb59ad814ddf4272f24671f4170490c43d1e",
+      "bytes": 364
+    },
+    {
+      "path": "skills/story-long-scan/bridge/rankmin/__main__.py",
+      "sha256": "e08d66143b76c9e5dc935d18585177740da49a3695836278941a686ac67f4949",
+      "bytes": 35714
+    },
+    {
+      "path": "skills/story-long-scan/bridge/rankmin/ciweimao.py",
+      "sha256": "b04c5982c315d31693627f93ee8a992601c43571905210580530e8fdeb179488",
+      "bytes": 13411
+    },
+    {
+      "path": "skills/story-long-scan/bridge/rankmin/ciweimao_egress.py",
+      "sha256": "3f16b1dd7b1599e99e1ef18e2de0acb53c282407837add3d96d26a79c377ef7b",
+      "bytes": 5042
+    },
+    {
+      "path": "skills/story-long-scan/bridge/rankmin/contracts.py",
+      "sha256": "b053248bba373560b5b849b40c0a150d4c47d02361ec0aa0b7026b505cbb1bd9",
+      "bytes": 2148
+    },
+    {
+      "path": "skills/story-long-scan/bridge/rankmin/fanqie.py",
+      "sha256": "29edbf27b26651e3287a417cef4ac42d425639ffad416f9495951ffa577325e5",
+      "bytes": 20496
+    },
+    {
+      "path": "skills/story-long-scan/bridge/rankmin/http_client.py",
+      "sha256": "6571e9034e0ee7931dc4bb299630cce7e54f12a159fc6505a339111da78b9222",
+      "bytes": 4288
+    },
+    {
+      "path": "skills/story-long-scan/bridge/rankmin/jjwxc.py",
+      "sha256": "713476e8b9876c24ff49a1c91d8b7ec9878c8a3f7dc13f83274bbf7cc4626fb9",
+      "bytes": 8388
+    },
+    {
+      "path": "skills/story-long-scan/bridge/rankmin/markdown_out.py",
+      "sha256": "8822ce086905d5dca97cdf5ea6eb593c8c9f81c9d0ab9972bb20aab225c275be",
+      "bytes": 5020
+    },
+    {
+      "path": "skills/story-long-scan/bridge/rankmin/providers.py",
+      "sha256": "2a234645a4822d6fc308c34f0c8f1ffc6d6593b981b63ae32aeddfbfef5f874a",
+      "bytes": 1264
+    },
+    {
+      "path": "skills/story-long-scan/bridge/rankmin/qidian.py",
+      "sha256": "d9ece985ac5d23dca62f10043934dd47f3f091bfcce9c69bc1299c21b1cea56a",
+      "bytes": 9971
+    },
+    {
+      "path": "skills/story-long-scan/bridge/rankmin/textutil.py",
+      "sha256": "6b921d41e8ef877e76b3a299f0636d7ad0e9255efaeb2f6c3fcd1ab6ba8f3b85",
+      "bytes": 1290
+    },
+    {
+      "path": "skills/story-long-scan/bridge/rankmin_cli.py",
+      "sha256": "13b212032f4c27685b7e3ee536a8e184dcc7ec1a09099aca01230dfb6b7f2d1d",
+      "bytes": 446
+    },
+    {
+      "path": "skills/story-long-scan/bridge/requirements.txt",
+      "sha256": "613819d9a963e1e7137383267a2544031b2fb83354917b74628f17849e5451db",
+      "bytes": 49
     },
     {
       "path": "skills/story-long-scan/references/genre-trends.md",
@@ -364,28 +524,28 @@
     },
     {
       "path": "skills/story-long-scan/references/platform-ciweimao.md",
-      "sha256": "fb6e75739e369d76928db627fb3efb55fea41766a8038c551855a73a997a904e",
-      "bytes": 1002
+      "sha256": "1473a34e5a033474df162909be0ea2f888e99fbd736abf19f7e0fde88ffcced0",
+      "bytes": 1040
     },
     {
       "path": "skills/story-long-scan/references/platform-fanqie.md",
-      "sha256": "70c1aea21d8c04f3f44a07202cd1c04a33ff90f1a6030ed2012590e4398cfa3a",
-      "bytes": 4156
+      "sha256": "86eefec3035d3b9c347f6923e2b1413c782e63c5f31efde8a6eb9e511a54efde",
+      "bytes": 3643
     },
     {
       "path": "skills/story-long-scan/references/platform-jjwxc.md",
-      "sha256": "6e0261dd37f22bc2ced3d88b358ad9bbf311d5c09ffca3112b7701396ba085a9",
-      "bytes": 1660
+      "sha256": "934a7494a47a849f25716c77f0ff9d9cc0e84ac6471be6d555922bc930d83263",
+      "bytes": 2032
     },
     {
       "path": "skills/story-long-scan/references/platform-qidian.md",
-      "sha256": "ed651d5db0aeee1707ddc995cd123493d470aabf6eade284d99041af90988889",
-      "bytes": 3214
+      "sha256": "6fa48a39d4d6ce62f4c297cba7ae9ef30c39b4950db0fc002afa048aafeda200",
+      "bytes": 2688
     },
     {
       "path": "skills/story-long-scan/references/platform-qimao.md",
-      "sha256": "79cd399e169817b7b78ff51a4639f5e86e0172f0ef5b940728ea84bf75600908",
-      "bytes": 2436
+      "sha256": "315d6eb54260f07fd2c23aac3ffaf1c9e375cc6172097dbdfecb2f418ff36956",
+      "bytes": 1011
     },
     {
       "path": "skills/story-long-scan/references/publishing-guide.md",
@@ -399,8 +559,8 @@
     },
     {
       "path": "skills/story-long-scan/references/topic-decision.md",
-      "sha256": "c06e77502799b3a1bddb29894d195a4d21a583182c10865e1add666902b0512b",
-      "bytes": 4552
+      "sha256": "70fe3229ebbb936c2d1d6088d8cfb229c899abdff80b1509bfa4704f43aa5308",
+      "bytes": 4544
     },
     {
       "path": "skills/story-long-scan/scripts/aggregate-rank.js",
@@ -1549,8 +1709,8 @@
     },
     {
       "path": "skills/story-short-scan/SKILL.md",
-      "sha256": "0c8314c6c62b9dfcbd9053debcc4513de48c895c73eb2e20a99903d24eccfa91",
-      "bytes": 9199
+      "sha256": "02349c41e614749b1ccc4bf208aec978162c6bed657d6d0ac52165bb5f95fbb9",
+      "bytes": 9312
     },
     {
       "path": "skills/story-short-scan/references/manual-rank-input.md",

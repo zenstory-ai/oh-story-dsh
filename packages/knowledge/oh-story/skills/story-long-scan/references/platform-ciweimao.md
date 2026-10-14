@@ -1,14 +1,14 @@
 # 刺猬猫：采集与分析
 
-作者选了刺猬猫才读本文。需先用 `/browser-cdp` 启动 Chrome。rank-index 单页展示全部榜单，脚本按文本解析，按书名归一回填作品页链接，带连通性自检与空结果重试。
+作者选了刺猬猫才读本文。采集走本技能 `bridge/ciweimao_app` 的 App 协议客户端，经 `bridge/rankmin_cli.py` 写榜。不要启动 CDP，不要下章节。没有账号环境变量时客户端自己注册游客。出口用 `CIWEIMAO_PROXY_URL`，或 `~/.dsh/ciweimao/` 里的快代理密钥。
 
 ## 榜单与命令
 
-`node scripts/ciweimao-rank-scraper.js --type {榜单} --outdir {输出目录}`：click 点击榜 / favor 收藏榜 / recommend 推荐榜 / subscribe 订阅榜 / monthly 月票榜 / tsukkomi 吐槽榜 / newbook 新书榜 / blade 刀片榜 / all 全部（默认）。
+在技能目录执行 `python3 bridge/rankmin_cli.py --out {输出目录} --limit 20 --ciweimao fans_value:week,favor:week,tsukkomi:week,yp_new:month`。别名是 `order:time_type`，例如 `favor:week`、`yp:month`。不要全采，不要读 tokens.json，不要下章节。
 
 ## 字段
 
-排名、书名、作者（仅榜首条目带）、题材（其余条目带）、榜单值（聚合的热度口径；各榜含义不同，不跨榜比较）、作品页链接。刺猬猫是小平台：同方向不到 10 本才算稀疏，聚合时加 `--sparse 10`。
+排名、书名、作者、字数、作品页。题材和榜单值只有接口带了才写，没有就标 [待补]，不要下章节补。刺猬猫是小平台：同方向不到 10 本才算稀疏。
 
 ## 分析维度
 

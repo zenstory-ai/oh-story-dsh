@@ -109,9 +109,25 @@ describe("Oh Story bundled skill provider", () => {
     // Oh Story 0.8.2: scan conclusions hand off to the writing Skills through files.
     const longScan = await provider.get(candidates.find((value) => value.name === "story-long-scan")!, {});
     expect(longScan?.content).toContain("选题决策.md");
+    expect(longScan?.content).toContain("bridge/rankmin_cli.py");
+    expect(longScan?.content).toContain("--qidian yuepiao,hotsales,readindex");
+    expect(longScan?.content).toContain("--fanqie male-hot-xifangqihuan,male-newbook-xifangqihuan,female-hot-gufengshiqing,female-newbook-gufengshiqing");
+    expect(longScan?.content).toContain("male-rising-<题材>,female-rising-<题材>");
+    expect(longScan?.content).toContain("不要写进默认的四个分类");
+    expect(longScan?.content).toContain("--ciweimao fans_value:week,favor:week,tsukkomi:week,yp_new:month");
+    expect(longScan?.content).toContain("72 个频道分页");
+    expect(longScan?.content).toContain("收藏、营养液、积分和字数");
+    expect(longScan?.content).toContain("[待补]");
+    expect(longScan?.content).toContain("退出码 2");
+    expect(longScan?.content).toContain("不要跑 searchmin_cli.py 去补");
+    expect(longScan?.content).not.toContain("python3 bridge/searchmin_cli.py");
+    expect(longScan?.content).toContain("七猫本版本没有 provider");
+    expect(longScan?.content).toContain("不要把 sanjiang、collect、女生精选或女生月票写进命令");
     expect((await provider.get(candidates.find((value) => value.name === "story-short-scan")!, {}))?.content).toContain("短篇扫榜结论.md");
     const shortScan = await provider.get(candidates.find((value) => value.name === "story-short-scan")!, {});
     expect(shortScan?.content).toContain("可信度：样本多少篇、来自哪几个榜");
+    expect(shortScan?.content).toContain("bridge/rankmin_cli.py");
+    expect(shortScan?.content).not.toContain("searchmin_cli.py");
     for (const name of ["story-long-analyze", "story-import"]) {
       const analysis = await provider.get(candidates.find((value) => value.name === name)!, {});
       for (const rule of [

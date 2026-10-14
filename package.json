@@ -31,6 +31,7 @@
     "demo:video": "tsx scripts/render-workbench-demo.ts video",
     "assets:sync": "pnpm assets:sync:story && pnpm assets:sync:drama && pnpm assets:sync:game && pnpm assets:sync:video",
     "assets:sync:story": "tsx scripts/sync-oh-story-assets.ts",
+    "assets:rank": "tsx scripts/apply-rank-bridge.ts",
     "assets:sync:drama": "tsx scripts/sync-drama-assets.ts",
     "assets:sync:game": "tsx scripts/sync-novel-to-game-assets.ts",
     "assets:sync:video": "tsx scripts/sync-video-recap-assets.ts",

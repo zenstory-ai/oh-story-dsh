@@ -43,36 +43,55 @@ metadata: {"openclaw":{"source":"https://github.com/zenstory-ai/oh-story-claudec
 
 ### Phase 2：确定数据来源
 
-**扫榜需要真实数据支撑。** 根据当前环境选择数据来源：
+**扫榜需要真实数据支撑。** 起点、番茄、刺猬猫和晋江只跑本技能目录里的 `bridge/rankmin_cli.py`。起点男频是匿名 HTTP，不带 Cookie，不进详情页，也不保存原始 HTML。番茄走同目录的 `bridge/fanqie_app`，取分类热门、分类最新，以及按题材的新书明文。没有跨题材书库列表。刺猬猫走同目录的 `bridge/ciweimao_app`，也就是 App 采集器的协议客户端。晋江走同目录的 `bridge/jjwxc_app`，拉书店榜的频道分页，并读公开作品页上的收藏、营养液、积分和字数。七猫本版本没有 provider。
 
 | 优先级 | 模式 | 说明 | 何时用 |
 |--------|------|------|--------|
-| 1 | **脚本采集** | 直接抓取平台页面/SSR 数据，产出结构化文件 | 优先；起点默认不需要 Chrome |
-| 2 | **用户提供** | 用户粘贴榜单截图/文字/链接 | 用户已有数据时 |
-| 3 | **内置知识** | 基于知识库趋势数据做分析 | 无法联网、用户无数据时 |
+| 1 | **rankmin** | 起点移动男频榜、番茄分类热门/最新/题材新书、刺猬猫 App 排行、晋江书店榜，写出榜单 markdown | 选了起点、番茄、刺猬猫或晋江 |
+| 2 | **用户提供** | 用户粘贴榜单截图/文字 | 用户已有数据，或平台没有 provider |
+| 3 | **内置知识** | 基于知识库趋势数据做分析 | 命令失败且用户无数据时 |
 
-#### 脚本采集模式
+#### 起点和番茄
 
-1. 只读所选平台那一份：[起点](references/platform-qidian.md) / [番茄](references/platform-fanqie.md) / [七猫](references/platform-qimao.md) / [晋江](references/platform-jjwxc.md) / [刺猬猫](references/platform-ciweimao.md)。里面有榜单网址、命令、字段、默认组合、故障排查和该平台的分析维度；需要浏览器态的平台先 `/browser-cdp` 启动 Chrome。
-2. 每次扫榜新建输出目录 `扫榜/{YYYYMMDD}/`（同日再扫加 `-2`），存本次榜单，不往旧目录追加（聚合会混进旧榜）；文件名 `{平台}{榜单}_{YYYYMMDD}.md`。脚本已做清洗和质量标注。
-3. 聚合：`node scripts/aggregate-rank.js {输出目录} --out {输出目录}/扫榜聚合.md`（小平台加 `--sparse 10`）。**主会话只读这份聚合**，不整份读原始榜单：题材分布、本数占比、热度与字数中位、标签热词、书名常见词、多榜重合、每题材前 3 本代表作。
-4. 看聚合的「采集情况」：标了问题（书名没解出来、没采到、只有书单）的榜单按平台参考排查重采；重采不了就在报告里说明结论不含它。同方向不到 15 本（小平台 10 本）标「少」，等同 `[数据稀疏]`。
-5. 要看原始条目（开篇卖点、新人设、新桥段）时按需抽样：`node scripts/aggregate-rank.js {输出目录} --sample {题材/标签/书名词} --n 5`，一次一个方向。
+1. 平台参考只读分析维度和字段：[起点](references/platform-qidian.md) / [番茄](references/platform-fanqie.md)。不要执行参考里的旧命令，不要启动 CDP。
+2. 每次扫榜新建输出目录 `扫榜/{YYYYMMDD}/`（同日再扫加 `-2`）。在本技能目录执行：`python3 bridge/rankmin_cli.py --out {输出目录} --limit 20 --qidian yuepiao,hotsales,readindex`。番茄再加 `--fanqie male-hot-xifangqihuan,male-newbook-xifangqihuan,female-hot-gufengshiqing,female-newbook-gufengshiqing`。要看正在起量的新书，把 `male-rising-<题材>`、`female-rising-<题材>` 加在同一条 `--fanqie` 后面，不要写进默认的四个分类。这是该题材连载且 30 万字以下按热度，不是网页书库。作者点名的榜或题材换成对应别名，不要一次扫完全部题材。不要把 sanjiang、collect、女生精选或女生月票写进命令。
+3. 成功时写出 `起点{榜}_{日期}.md` 和 `番茄{榜}_{日期}.md`。主会话读这些文件。本包没有聚合脚本，不要运行 `scripts/` 下的采集或聚合命令。
+4. stdout 打出的路径就是这次拿到的榜，先读这些文件。任一榜失败则退出码 2，stderr 会点名失败的榜。不要编造名次，不要改走 CDP，也不要打开网页榜、library 页或作品页去补，也不要跑 searchmin_cli.py 去补。起点女生精选榜和女生月票榜当前没有公开列表，报 unavailable 时结论不含这两条。起点热度看榜单值，不是总推荐；文件不写总推荐、签约和收费模式。番茄 `hot` 是分类热门，`newbook` 是分类最新，`rising` 是题材新书。番茄标签只取简介里的【】，没有就不写。三江推荐本版本不采集。不要抓 library 页。
+5. 同方向不到 15 本标「少」，等同 `[数据稀疏]`。要看某一条的简介，直接打开对应 markdown，一次一个方向。
+
+#### 刺猬猫
+
+1. 平台参考只读分析维度：[刺猬猫](references/platform-ciweimao.md)。不要执行参考里的旧命令，不要启动 CDP。
+2. 同一条命令加 `--ciweimao fans_value:week,favor:week,tsukkomi:week,yp_new:month`。作者点名的榜换成 `order:time_type`，不要一次扫完全部。
+3. 成功时写出 `刺猬猫{榜}_{日期}.md`。没有账号环境变量时，客户端按自己的游客注册取得会话，写在运行用户的 `~/.dsh/ciweimao-guest.json`。出口与采集器相同：`CIWEIMAO_PROXY_URL`，或 `KDL_SECRET_ID` / `KDL_SECRET_KEY`，密钥文件也可放在 `~/.dsh/ciweimao/`。不要读 `tokens.json`，不要把会话或代理地址写进报告，不要下章节。
+4. 退出码 2 时 stderr 会点名失败的榜。stdout 里已经打出的文件照常读。不要打开网页榜、library 页或作品页去补，也不要跑 searchmin_cli.py 去补。缺模块、注册失败或书名缺了哪个 `book_id`，报告里照命令原文写。榜单值写 `[待补]` 时不要改去作品页补。
+5. 同方向不到 10 本标「少」。
+
+#### 晋江
+
+1. 平台参考只读分析维度：[晋江](references/platform-jjwxc.md)。不要执行参考里的旧网页命令，不要启动 CDP，不要下章节。
+2. 同一条命令加 `--jjwxc 月度排行榜·言情,月度排行榜·纯爱,新晋作者榜·言情,完结金榜·言情`。别名是「榜名·频道」。12 个父榜各有言情、纯爱、衍生、无CP+、百合、原创。作者点名的榜换成别名，不要一次扫完 72 个频道。
+3. `--limit` 默认 20，只要第一页。要下拉加载的后续条目时提高 `--limit`。客户端按页继续，直到本数够、短页或重复页。到了 40 页上限，末页仍满且本数不够时，这次榜失败。本数已经够但末页仍满时，文件会写明后面可能还有，不要把这一页当成榜尾。
+4. 成功时写出 `晋江{榜}_{日期}.md`。收藏、营养液、积分、字数来自公开作品页。没读到的标 `[待补]`。作者积分榜和 TOP100 没有频道分页，命令会失败。不下章节。
+5. 退出码 2 时 stderr 会点名失败的榜。stdout 里已经打出的文件照常读。不要编造名次，不要改走 CDP，也不要打开网页榜、library 页或作品页去补，也不要跑 searchmin_cli.py 去补。
+
+#### 七猫
+
+本版本没有 provider。不要启动 CDP，也不要把 [七猫](references/platform-qimao.md) 里的旧命令改回去跑。作者没提供榜单时，结论不含七猫。分析维度只作历史对照。
 
 #### 其他数据来源
 
-**用户提供：** 已有扫描结果文件 → 直接聚合；链接 → 用 WebFetch 抓取；粘贴/截图 → 整理成 `# {平台} · {榜单名}` 标题、每本一段 `### #{排名} {书名}` 加一行 `*作者 · 题材 · 连载中 · 120万字 · 3.5万收藏*`（热度写「数字+口径」；有标签再加 `**标签：** a、b`）存进输出目录，再同样聚合。
+**用户提供：** 粘贴或截图整理成 `# {平台} · {榜单名}` 标题、每本一段 `### #{排名} {书名}` 加一行 `*作者 · 题材 · 连载中 · 120万字 · 3.5万收藏*`，存进本次输出目录。不要为了整理去抓站。
 
 **内置知识：** 加载 `references/genre-trends.md`，明确标注「以下分析基于历史趋势数据；未完成实时榜单校验前只能作为候选假设。」并列出需要复扫的榜单。
 
----
 
 ### Phase 3：数据分析
 
-以聚合结果为主，按所选平台参考里的「分析维度」看，再提取通用维度：
+以本次输出目录里的榜单 markdown 为主，按所选平台参考里的「分析维度」看，再提取通用维度：
 
 1. **题材分布**：题材表的本数、占比与热度中位
-2. **新题材信号**：新书榜列、多榜重合；`扫榜/` 下上一次的日期目录里有 `扫榜聚合.md` 就对比
+2. **新题材信号**：新书榜列、多榜重合；`扫榜/` 下上一次的日期目录里有榜单 markdown 就对比
 3. **经典题材变化**：老牌题材的走势（上升/稳定/下降），没有上期数据就只写现状
 4. **字数**：字数分布与各题材字数中位
 5. **书名模式**：书名常见词 + 代表作书名
@@ -131,7 +150,7 @@ metadata: {"openclaw":{"source":"https://github.com/zenstory-ai/oh-story-claudec
 
 把扫榜结果变成能直接用的选题建议，产出 `选题决策.md`。完整方法（选题四步 + 可行性判断 + 输出模板）见 [references/topic-decision.md](references/topic-decision.md)。
 
-**从文件接上：** 先读 `{outdir}/选题决策.md` 的「扫榜结论」和 `扫榜聚合.md`，不靠对话记忆；两者都没有就回 Phase 2。
+**从文件接上：** 先读 `{outdir}/选题决策.md` 的「扫榜结论」和本次榜单 markdown，不靠对话记忆；两者都没有就回 Phase 2。
 
 **如信息不足，向用户补齐项目条件：**「目标平台、已有素材、擅长题材/写作约束、计划篇幅是什么？」
 
@@ -176,9 +195,8 @@ metadata: {"openclaw":{"source":"https://github.com/zenstory-ai/oh-story-claudec
 | [references/reader-profiling.md](references/reader-profiling.md) | 需要分析目标读者画像时 |
 | [references/genre-trends.md](references/genre-trends.md) | 查看题材趋势候选、切入约束和样本校验规则时 |
 | [references/publishing-guide.md](references/publishing-guide.md) | 平台适配+推荐机制校验+数据指标+简介设计 |
-| 五份平台参考（链接见「脚本采集模式」第 1 步） | 「确定数据来源」：只读所选平台那份——榜单网址、命令、字段、故障排查、平台分析维度 |
-| [scripts/aggregate-rank.js](scripts/aggregate-rank.js) | 把输出目录里的原始榜单聚合成短表（`--out` 落盘，`--sample` 抽原始条目，`--json` 机读），主会话只读它 |
-| [scripts/cdp-utils.js](scripts/cdp-utils.js) 与各平台采集脚本 | CDP 公共工具与各平台采集脚本（`{平台}-rank-scraper.js`），命令见所选平台参考 |
+| 五份平台参考（链接见 Phase 2） | 起点、番茄、刺猬猫、晋江读「分析维度」和字段；七猫本版本没有 provider，不执行其中的采集命令 |
+| [bridge/rankmin_cli.py](bridge/rankmin_cli.py) | 起点移动榜、番茄分类落地、刺猬猫 App 排行、晋江书店榜。`--self-test` 不联网。stdout 是已写出的榜；有榜失败则退出码 2，stderr 点名，不编造榜单，也不要打开网页榜、library 页或作品页去补，也不要跑 searchmin_cli.py 去补 |
 
 ---
 
