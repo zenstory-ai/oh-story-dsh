@@ -35,6 +35,7 @@ DEEPSEEK_API_KEY_FILE=/path/to/key pnpm test:dsh:real
 
 - Oh Story：`packages/knowledge/oh-story`
 - Drama Skills：`packages/knowledge/drama`
+- NovelToGame：`packages/knowledge/novel-to-game`
 - video-recap-skills：`packages/knowledge/video-recap`
 
 本地同步相邻 checkout：
@@ -42,6 +43,7 @@ DEEPSEEK_API_KEY_FILE=/path/to/key pnpm test:dsh:real
 ```bash
 OH_STORY_UPSTREAM_DIR=/path/to/oh-story-claudecode pnpm assets:sync:story
 DRAMA_SKILLS_UPSTREAM_DIR=/path/to/drama-skills pnpm assets:sync:drama
+NOVEL_TO_GAME_UPSTREAM_DIR=/path/to/novel-to-game pnpm assets:sync:game
 VIDEO_RECAP_UPSTREAM_DIR=/path/to/video-recap-skills pnpm assets:sync:video
 pnpm assets:check
 ```
