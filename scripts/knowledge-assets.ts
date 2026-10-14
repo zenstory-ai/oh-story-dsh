@@ -166,3 +166,10 @@ export async function currentOhStoryFiles(): Promise<AssetManifest["files"]> {
     .filter((path) => basename(path) !== "manifest.json")
     .map(async (path) => ({ path: portableRelative(ohStoryRoot, path), ...await fileDigest(path) })));
 }
+
+export async function refreshBundledManifest(): Promise<AssetManifest> {
+  const manifest = await readManifest();
+  const next: AssetManifest = { ...manifest, files: await currentOhStoryFiles() };
+  await writeFile(join(ohStoryRoot, "manifest.json"), `${JSON.stringify(next, null, 2)}\n`);
+  return next;
+}

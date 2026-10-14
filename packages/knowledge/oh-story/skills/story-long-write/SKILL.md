@@ -15,7 +15,7 @@ metadata: {"openclaw":{"source":"https://github.com/zenstory-ai/oh-story-claudec
 必须分块读到 EOF：
 
 1. 规划按时刻读：定方向、定设定读 `references/workflow-setup.md`，出卷纲读 `references/workflow-volume.md`，出细纲或补纲读 `references/workflow-outline.md`，只读当前时刻的；写指定章读取 `references/workflow-chapter.md`；日更先读取 `references/workflow-daily.md`，进入正文前再完整读取 `workflow-chapter.md`；大修先读 `references/workflow-revision.md`，改稿时还要读什么由它写明。
-2. 主会话直接写正文时，首次落笔前完整读取 `references/long-format.md` 与 `references/writing-craft.md`（和写手同一套技法）；`references/long-chapter-quality.md`、`references/long-chapter-hooks.md` 只在排查具体问题时读，去味走检测器，不预读。交给 narrative-writer 时，由该 agent 按自己的 reference 表完成写前读取，主会话不得用未读 reference 的临时 prompt 替代。
+2. 主会话直接写正文时，首次落笔前完整读取 `references/long-format.md` 与 `references/writing-craft.md`（和写手同一套技法；第 11 节是场面计数，不另读 scene-grammar.md；第 12 节是句子表面计数，不另读 prose-surface.md）；`references/long-chapter-quality.md`、`references/long-chapter-hooks.md` 只在排查具体问题时读，去味走检测器，不预读。交给 narrative-writer 时，由该 agent 按自己的 reference 表完成写前读取，主会话不得用未读 reference 的临时 prompt 替代。
 3. 本章技法按下方「本章技法」一段选，至多一份；主会话自己写时按那段只读指定小节，这是本条唯一允许的按节读。
 4. 正文写前，references 读完后立即重读当前用户请求、本章细纲和卷纲，先在上下文里**记下本轮约束**：原样记录用户明确字数范围、必发生、禁止发生、精确时间锚与本章停笔点、章尾新债。references 只提供技法，不得覆盖这些项目事实；作者给的字数范围写在细纲「字数范围」行（命令参数只作临时覆盖），有它就不用默认 ±15%。交付前逐项复核：字数带外按 `workflow-chapter.md` 的收口流程交用户处置，不自动补字；其余项越界不算完成。
 

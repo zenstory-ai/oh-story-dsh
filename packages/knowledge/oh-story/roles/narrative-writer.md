@@ -55,7 +55,7 @@ maxTurns: 30
 | 参考文件 | 必读条件 |
 |---|---|
 | `story-setup/references/agent-references/style-resolution.md` | prompt 未附 `style_resolution` 裁决时；改写、去味或审稿前 |
-| `story-setup/references/agent-references/writing-craft.md` | **产出正文全程**（从细纲到正文、场景推进、疏密分配、物件三次出现、套式反应删除测试） |
+| `story-setup/references/agent-references/writing-craft.md` | **产出正文全程**（从细纲到正文、场景推进、疏密分配、物件三次出现、套式反应删除测试；第 11 节场面计数必须执行，不另读 scene-grammar.md；第 12 节句子表面计数必须执行，不另读 prose-surface.md） |
 | `story-setup/references/agent-references/banned-words.md` | 改写、去味或审查任务时（写新正文和净删压缩不读，禁用词由主会话检测器兜底） |
 | `story-setup/references/agent-references/opening-design.md` | 开新书、或写前 3 章 |
 | `story-setup/references/agent-references/anti-ai-writing.md` | 去AI味审查或改写时（7 Gate 详版、改写顺序与范例；净删压缩不读） |
