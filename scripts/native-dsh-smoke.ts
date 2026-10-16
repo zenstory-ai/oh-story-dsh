@@ -1910,19 +1910,31 @@ async function main(): Promise<void> {
           const seat = scroller === undefined
             ? undefined
             : Array.from(scroller.children).find((element): element is HTMLElement => element instanceof HTMLElement && element.hasAttribute("data-composer-seat"));
-          const tail = flow?.lastElementChild;
+          // DSH may retain hidden/folding rows or auxiliary nodes at the end.
+          // Measure the final rendered row in this flow, including its running status.
+          const tail = flow === null || flow === undefined ? undefined : Array.from(
+            flow.querySelectorAll<HTMLElement>("[data-chat-flow-key], [data-chat-running]")
+          ).filter((element) => element.closest("[data-chat-flow]") === flow
+            && element.getBoundingClientRect().width > 0 && element.getBoundingClientRect().height > 0).at(-1);
           if (!(tail instanceof HTMLElement) || seat === undefined || flow === null || flow === undefined || scroller === undefined) {
             return { ready: false, scroller: scroller !== undefined, flow: flow !== null && flow !== undefined, seat: seat !== undefined, tail: tail?.tagName };
           }
           const tailBox = tail.getBoundingClientRect();
           const seatBox = seat.getBoundingClientRect();
+          const scrollBox = scroller.getBoundingClientRect();
           const clearance = Number.parseFloat(getComputedStyle(flow).paddingBottom);
           return {
-            ready: clearance >= seatBox.height + 15 && tailBox.bottom <= seatBox.top + 1,
+            ready: clearance >= seatBox.height + 15
+              && tailBox.top >= scrollBox.top - 1 && tailBox.bottom <= seatBox.top + 1
+              && tailBox.bottom <= scrollBox.bottom + 1,
             clearance,
             seatHeight: Math.round(seatBox.height),
             seatTop: Math.round(seatBox.top),
+            tailTop: Math.round(tailBox.top),
             tailBottom: Math.round(tailBox.bottom),
+            viewportTop: Math.round(scrollBox.top),
+            viewportBottom: Math.round(scrollBox.bottom),
+            tailFlowKey: tail.getAttribute("data-chat-flow-key"),
             tail: `${tail.tagName}.${tail.className}`,
             fromBottom: Math.round(scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight)
           };
@@ -1933,30 +1945,6 @@ async function main(): Promise<void> {
           todoLayout = await measureTodoLayout();
         }
         if (!todoLayout.ready) throw new Error(`Streaming Todo left the Chat tail behind the Composer: ${JSON.stringify(todoLayout)}`);
-        const flow = page.locator('[data-slot="conversation.session"] [data-chat-flow]:not([data-step-process-content])');
-        const tail = flow.locator(":scope > *").last();
-        // The seat grows by the Todo panel one layout pass before the workbench
-        // republishes its height, so assert the settled frame, not the resize.
-        await page.waitForFunction(() => {
-          const body = document.querySelector('[data-slot="conversation.session"] [data-chat-flow]:not([data-step-process-content])');
-          const seat = document.querySelector("[data-composer-seat]");
-          const last = body?.lastElementChild;
-          if (body == null || seat == null || last == null) return false;
-          const seatTop = seat.getBoundingClientRect().top;
-          const lastBox = last.getBoundingClientRect();
-          return Number.parseFloat(getComputedStyle(body).paddingBottom) >= seat.getBoundingClientRect().height + 15
-            && lastBox.top + lastBox.height <= seatTop + 1;
-        }, undefined, { timeout: 15_000 });
-        const [tailBox, seatBox, scrollBox, clearance, tailFlowKey] = await Promise.all([
-          tail.boundingBox(), page.locator("[data-composer-seat]").boundingBox(), scroller.boundingBox(),
-          flow.evaluate((element) => Number.parseFloat(getComputedStyle(element).paddingBottom)), tail.getAttribute("data-chat-flow-key")
-        ]);
-        // DSH 0.1.7 ends the flow with the running Turn's step-process group, which carries a flow
-        // key; the geometry, not the kind of the last row, is what must hold.
-        if (tailBox === null || seatBox === null || scrollBox === null
-          || tailBox.y < scrollBox.y - 1 || tailBox.y + tailBox.height > seatBox.y + 1 || clearance < seatBox.height + 15) {
-          throw new Error(`Streaming Todo obscured Chat: ${JSON.stringify({ tailBox, seatBox, scrollBox, clearance, tailFlowKey })}`);
-        }
       }
       await prepareDemoSurface(page);
       await selectFile(page, "剧集/EP001/剧本.md");

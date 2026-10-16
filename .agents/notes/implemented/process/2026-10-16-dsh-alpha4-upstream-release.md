@@ -24,6 +24,8 @@ DSH 官方 alpha.2 移除 `both` 工具展示模式，并将内置子代理工�
 
 ## Verification
 
+第二轮 alpha.4 smoke 已通过 Role、工作台切换与长答复多尺寸尾部检查，Todo 断言却把 `flow.lastElementChild` 当成最后一条可见内容，得到零矩形后又在另一次读取取得 null。官方 ChatFlow 分别标记内容行 `data-chat-flow-key` 与运行行 `data-chat-running`，折叠结构及辅助尾节点不保证有可见矩形。Todo 检查改为同一顶层 flow 中最后一个有实际矩形的语义内容或运行行，并在同一次测量核对其上下边界、Composer 座位与完整留白；保留尾行必须位于视口内且在 Composer 上方的要求，不修改已通过长答复检查的产品布局。
+
 alpha.4 打包 smoke 首轮暴露默认工作区可保留多条空白会话，原先「全局只有一条 blank」的假设失效。官方 `SessionListRequest` 只接收 cursor，列表仍是全局；新建接口仅在显式 sessionId 时尝试复用指定空白会话。测试以使用引导所在主对话的 `data-conversation-session` 读取当前身份，再同时核对该条 global list 记录的 blank 与默认工作区规范路径，只启动当前可见会话并验证引导消失。
 
 真实供应商脚本按 `tool/call.callId` 与 `tool/result.message.toolCallId` 关联每个必需 Role 的结果；要求角色参数精确匹配、结果非错误且包含非空文本，避免只发起调用或失败后由父模型自行完成也通过。最终输出成功返回结果的必需 Role 数量。
