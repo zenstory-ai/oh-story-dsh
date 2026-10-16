@@ -24,6 +24,8 @@ DSH 官方 alpha.2 移除 `both` 工具展示模式，并将内置子代理工�
 
 ## Verification
 
+alpha.4 打包 smoke 首轮暴露默认工作区可保留多条空白会话，原先「全局只有一条 blank」的假设失效。官方 `SessionListRequest` 只接收 cursor，列表仍是全局；新建接口仅在显式 sessionId 时尝试复用指定空白会话。测试以使用引导所在主对话的 `data-conversation-session` 读取当前身份，再同时核对该条 global list 记录的 blank 与默认工作区规范路径，只启动当前可见会话并验证引导消失。
+
 真实供应商脚本按 `tool/call.callId` 与 `tool/result.message.toolCallId` 关联每个必需 Role 的结果；要求角色参数精确匹配、结果非错误且包含非空文本，避免只发起调用或失败后由父模型自行完成也通过。最终输出成功返回结果的必需 Role 数量。
 
 DSH 适配定向验证：alpha.4 开发依赖下，`pnpm --filter @oh-story/dsh typecheck`、`pnpm dsh:boundary` 通过；Role、真实 Cordis Context 契约、文件活动与生产状态四个测试文件共 57 项通过。新增契约覆盖 managed 子 Agent 在首请求前配置一次角色与工具限制、caller delivery、工具取消触发 disposal、缺少初始化时拒绝、恢复新角色 descriptor 时重建配置以及恢复旧 descriptor 时避免重复注册。公开类型使用本地结构接口，避免旧宿主类型没有 `startActivation` 导致消费者 TypeScript 编译失败。最后复核历史 descriptor 分支后，Role 两文件 15 项与定向 ESLint 再次通过。

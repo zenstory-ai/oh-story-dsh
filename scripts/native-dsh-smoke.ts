@@ -808,15 +808,20 @@ async function main(): Promise<void> {
     // DSH 0.1.7 opens a fresh home straight into a blank Session in its default workspace, so the
     // guide belongs to that blank state: it returns with that Session and retires once it starts.
     if (!useRealDeepSeek) {
-      // DSH lists a blank Session only while it is selected; its workspace's New Session action
-      // reuses that blank Session.
+      // New Session may retain earlier blank Sessions. Bind the assertion to the
+      // guide's currently selected conversation and its default-workspace directory.
       await firstRunPage.getByRole("treeitem").filter({ hasText: /^(?:Default workspace|默认工作区)/u }).first().hover();
       await firstRunPage.getByRole("button", { name: /^(?:New session in Default workspace|在“默认工作区”中新建会话)$/u }).click();
       await welcome.waitFor({ state: "visible", timeout: 10_000 });
-      const firstRunSessions = await rpc<{ readonly items: readonly { readonly sessionId: string; readonly blank: boolean }[] }>(origin, "session/list", { _request: {} });
-      const blankSessions = firstRunSessions.items.filter((item) => item.blank);
-      if (blankSessions.length !== 1) throw new Error(`Expected the default workspace's one blank Session: ${JSON.stringify(firstRunSessions.items)}`);
-      await prepareSession(origin, blankSessions[0]!.sessionId, "你好", "通用 · 首次启动");
+      const selectedSessionId = await welcome.evaluate((guide) =>
+        guide.closest("[data-conversation-content]")?.getAttribute("data-conversation-session"));
+      const firstRunSessions = await rpc<{ readonly items: readonly { readonly sessionId: string; readonly blank: boolean; readonly cwd?: string }[] }>(origin, "session/list", { _request: {} });
+      const selectedSession = firstRunSessions.items.find((item) => item.sessionId === selectedSessionId);
+      const defaultWorkspacePath = await realpath(join(temporaryRoot, "documents", "deepseek-harness", "default-workspace"));
+      if (selectedSession?.blank !== true || selectedSession.cwd === undefined || await realpath(selectedSession.cwd) !== defaultWorkspacePath) {
+        throw new Error(`Expected the guide's selected blank Session in the default workspace: ${JSON.stringify({ selectedSessionId, selectedSession, defaultWorkspacePath })}`);
+      }
+      await prepareSession(origin, selectedSession.sessionId, "你好", "通用 · 首次启动");
       await welcome.waitFor({ state: "detached", timeout: 10_000 });
     }
     if (firstRunErrors.length > 0) throw new Error(`First-launch browser errors: ${JSON.stringify(firstRunErrors)}`);
