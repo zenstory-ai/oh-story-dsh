@@ -2,7 +2,7 @@
 
 本文件中的 `scripts/` 与 `references/` 路径均相对本 skill 根目录。精修必读本文件与 `short-format.md`（格式快速检查、字数口径）；新对话里精修也先读它。
 
-Phase 3 写手只做内容覆盖与格式自检，派写时将此分工写入 prompt。Phase 4 由 narrative-writer 或主会话其中一方按 `references/short-deslop.md` 去味，再检查一致性。S1/S2 与 blocking 必须修，S3 与 advisory 建议看，S4 仅提示。主会话负责最终文件扫描与交付验收；修改后只复核改动并重跑受影响检查。
+Phase 3 写手只做覆盖与格式自检。Phase 4 由 narrative-writer 或主会话一方读 `references/short-deslop.md` 与 `references/deslop-gates.md`，定点修复清单及检测问题，再查一致性；完整三层诊断另走 `/story-deslop`。S1/S2 与 blocking 必须修，S3 与 advisory 建议看，S4 仅提示。主会话最终扫描、验收；改后只复核改动并重跑受影响检查。
 
 按文末「精修清单」完成检查。文件模式依次运行 `node scripts/check-ai-patterns.js --check --fail-on=blocking 正文.md`、`node scripts/check-outline-copy.js --outline 小节大纲.md 正文.md`、`node scripts/normalize-punctuation.js 正文.md`、`node scripts/check-degeneration.js --check 正文.md`，blocking 先改正文再复扫。照搬检测报出的誓词、关键原话等功能性台词保留，登记进 `小节大纲.md` 末尾「复沓锚句」再复检，其余现场重写。
 
@@ -12,7 +12,7 @@ Phase 3 写手只做内容覆盖与格式自检，派写时将此分工写入 pr
 
 已部署对应 agent 时可派出：narrative-writer 去味的 prompt 见 [agent-calls.md](agent-calls.md)「精修去味」；一致性检查派 `Agent(subagent_type: "consistency-checker", prompt: "项目目录：{dir}\n检查范围：{正文文件}\n检查类型：事实冲突+伏笔断线+角色属性不一致")`。agent 不可用时主会话直接执行。
 
-**正文洁净规则**：字数、禁用词、格式等自检结果只在对话中说明，不另存文件或附到正文；正文不得出现 `<!-- 自检 -->` 等检查标记。
+**正文洁净规则**：自检结果只在对话中说明，不另存或附正文；正文不得出现 `<!-- 自检 -->` 等检查标记。
 
 **交付说明（给作者看）**：用白话说明：
 1. 写了什么：标题、一句话核心钩子或反转、总字数、几节。
@@ -58,10 +58,10 @@ Phase 3 写手只做内容覆盖与格式自检，派写时将此分工写入 pr
 - [ ] 章末是否有未完成动作、新信息、局部兑现、关系变化、余韵或明确下一步之一？
 
 ### AI 腔
-- [ ] 无禁止比喻：「命运的齿轮」「如潮水般」「仿佛春风」「心猛地一沉」「眼眶泛红」
+- [ ] 比喻、情绪词与反应有上下文作用；不凭「如潮水般」「心猛地一沉」「眼眶泛红」孤立词句判错
 - [ ] 重复的身体/情绪描写按功能取舍：无新增信息就删，不换部位或同义动作凑数
 - [ ] 「像/好像/仿佛/如同」不成片堆叠；超过 10 处或检测器报比喻密度时逐处复核功能，有功能的留，不设硬上限、不机械全删
-- [ ] 完整 AI 腔黑名单见 short-deslop.md
+- [ ] 检测候选已逐处按功能复核，短篇卖点保护见 short-deslop.md
 
 ### 技法
 - [ ] 情绪落地：按 `short-craft.md` 第 2 节检查上下文支撑，保留准确直写，清理空泛与重复说明

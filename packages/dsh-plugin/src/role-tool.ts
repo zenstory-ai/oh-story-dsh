@@ -1,6 +1,9 @@
+import { randomUUID } from "node:crypto";
 import type { Context } from "@deepseek-ai/cordis";
+import type { Agent } from "@deepseek-ai/dsh-agent";
 import type { ContentBlock } from "@deepseek-ai/dsh-llm";
-import type { SubagentRuntime } from "@deepseek-ai/dsh-subagent";
+import type { Session, SessionId } from "@deepseek-ai/dsh-session";
+import type { SubagentResult } from "@deepseek-ai/dsh-subagent";
 import type { JsonValue } from "@deepseek-ai/dsh-util-values";
 import { defineTool, type ToolDefinition } from "@deepseek-ai/dsh-tools";
 import {
@@ -8,11 +11,100 @@ import {
   createOhStoryReferenceTool,
   OH_STORY_REFERENCE_TOOL_NAME
 } from "./reference-tool.js";
-import { markOhStoryRoleSession, ohStoryRoleLabel } from "./role-identity.js";
+import { markOhStoryRoleSession, observeOhStoryRoleDescriptor, ohStoryRoleLabel, ohStoryRoleOfSession } from "./role-identity.js";
 import { OH_STORY_ROLE_NAMES, loadBundledRole, type OhStoryRoleName } from "./role-provider.js";
 
 export const OH_STORY_ROLE_TOOL_NAME = "oh_story_role";
-export type OhStoryRoleSubagents = Pick<SubagentRuntime, "start">;
+interface RoleStartRequest {
+  readonly label: string;
+  readonly prompt: ContentBlock[];
+  readonly parent: Agent;
+  readonly persona: string;
+  readonly toolFilter: { readonly allow: readonly string[] };
+  readonly maxDepth: number;
+  readonly signal: AbortSignal;
+}
+
+interface RoleRun {
+  readonly id: string;
+  readonly localAgent?: { readonly session: Session };
+  readonly result: Promise<SubagentResult>;
+  dispose(): Promise<void>;
+}
+
+interface ManagedRoleSpec {
+  readonly provider: string;
+  readonly label: string;
+  readonly childId: SessionId;
+  readonly request: Pick<RoleStartRequest, "parent" | "prompt" | "maxDepth">;
+  readonly signal: AbortSignal;
+  readonly delivery: "caller";
+}
+
+/** Local seam types also let TypeScript consumers use the older DSH declarations. */
+export type OhStoryRoleSubagents = {
+  startActivation(spec: ManagedRoleSpec): Promise<{
+    readonly childId: SessionId;
+    readonly result: Promise<SubagentResult>;
+    dispose(): Promise<void>;
+  }>;
+} | {
+  start(provider: string, request: RoleStartRequest): Promise<RoleRun>;
+};
+
+const configuredRoleAgents = new WeakSet<Agent>();
+
+function configureRoleAgent(agent: Agent, role: OhStoryRoleName, persona: string, allow: readonly string[]): void {
+  if (configuredRoleAgents.has(agent)) return;
+  const systemPrompt = agent.ctx.get("systemPrompt");
+  const tools = agent.ctx.get("tools");
+  if (systemPrompt === undefined || tools === undefined) throw new Error("Oh Story Role requires the DSH prompt and tool services.");
+  systemPrompt.section({
+    name: "deployment:persona-prefix",
+    order: systemPrompt.getSectionOrder("DEPLOYMENT_PERSONA_PREFIX"),
+    text: persona
+  });
+  tools.restrict({ allow });
+  markOhStoryRoleSession(agent.session, role);
+  configuredRoleAgents.add(agent);
+}
+
+async function startRole(runtime: OhStoryRoleSubagents, role: OhStoryRoleName, request: RoleStartRequest): Promise<RoleRun> {
+  if (!("startActivation" in runtime)) return runtime.start("spawn", request);
+  // The new seam accepts no persona/tool filter. Configure this reserved child in
+  // agent/created, which DSH awaits before admitting its first model request.
+  const childId = randomUUID() as SessionId;
+  let configured = false;
+  const unobserve = request.parent.ctx.on("agent/created", ({ agent }) => {
+    if (agent.id !== childId) return;
+    configureRoleAgent(agent, role, request.persona, request.toolFilter.allow);
+    configured = true;
+  }, { global: true });
+  try {
+    const activation = await runtime.startActivation({
+      provider: "spawn",
+      label: request.label,
+      childId,
+      request: { parent: request.parent, prompt: request.prompt, maxDepth: request.maxDepth },
+      signal: request.signal,
+      delivery: "caller"
+    });
+    if (!configured) {
+      await activation.dispose();
+      throw new Error("DSH did not initialize the Oh Story Role child before publication.");
+    }
+    let disposal: Promise<void> | undefined;
+    const dispose = (): Promise<void> => {
+      request.signal.removeEventListener("abort", cancel);
+      return disposal ??= activation.dispose();
+    };
+    // startActivation's signal covers admission only; the caller owns later cancellation.
+    const cancel = (): void => { void dispose().catch(() => {}); };
+    request.signal.addEventListener("abort", cancel, { once: true });
+    if (request.signal.aborted) cancel();
+    return { id: activation.childId, result: activation.result, dispose };
+  } finally { unobserve(); }
+}
 
 const roleTools: Readonly<Record<OhStoryRoleName, readonly string[]>> = {
   // Oh Story 0.8.0 lets the extractor write its own batch input file (never
@@ -77,7 +169,7 @@ export async function createOhStoryRoleTool(subagents?: OhStoryRoleSubagents): P
         exec.agent?.ctx.tools.get(name, exec.agent) !== undefined);
       const runtime = subagents ?? exec.agent.ctx.get("subagents");
       if (runtime === undefined) throw new Error("oh_story_role requires the DSH subagent runtime.");
-      const run = await runtime.start("spawn", {
+      const run = await startRole(runtime, args.role, {
         // DSH persists this label in the child's subagent/descriptor; the
         // native hooks read the Role back from it before the child's first tool call.
         label: ohStoryRoleLabel(args.role),
@@ -113,6 +205,29 @@ export async function registerOhStoryRoleTool(context: Context): Promise<void> {
   ]);
   context.tools.register(referenceDefinition);
   context.tools.guard(bundledReferenceGuard(referenceDefinition, context.tools));
+  if ("startActivation" in context.subagents) {
+    // Managed children remain in DSH's durable catalog. Reapply the same Role on
+    // a resumed child, whose descriptor already exists instead of being appended.
+    const personas = new Map(await Promise.all(OH_STORY_ROLE_NAMES.map(async (role) =>
+      [role, await loadBundledRole(role, undefined, "native-tools")] as const)));
+    context.on("agent/created", ({ agent }) => {
+      const events = agent.session.ownEvents();
+      for (const event of events) observeOhStoryRoleDescriptor(agent.session, event);
+      const role = ohStoryRoleOfSession(agent.session);
+      if (role === undefined) return;
+      const descriptor = events.find((event) => event.type === "subagent/descriptor")?.data as {
+        readonly persona?: unknown;
+        readonly toolFilter?: unknown;
+      } | undefined;
+      // DSH already restores these fields from pre-activation Role sessions.
+      if (typeof descriptor?.persona === "string" && descriptor.toolFilter !== undefined) return;
+      const persona = personas.get(role);
+      if (persona === undefined) return;
+      const tools = agent.ctx.get("tools");
+      const allow = roleToolFilter(role).allow.filter((tool) => tools?.get(tool, agent) !== undefined);
+      configureRoleAgent(agent, role, persona, allow);
+    });
+  }
   let dispose: (() => void) | undefined;
   const mount = (): void => { dispose ??= context.tools.register(definition); };
   const unmount = (): void => { dispose?.(); dispose = undefined; };

@@ -8,7 +8,7 @@ import { parseEnv } from "node:util";
 import { fileURLToPath } from "node:url";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const dshVersion = process.env.DSH_TEST_VERSION ?? "0.2.1-alpha.1";
+const dshVersion = process.env.DSH_TEST_VERSION ?? "0.2.1-alpha.4";
 /** Exact WebSocket route carrying every Typert Remote stream. */
 const REMOTE_STREAM_MUX_PATH = "/api/remote.mux";
 
@@ -287,11 +287,29 @@ async function main(): Promise<void> {
 
     const storyEvents = await waitForCompletedTurn(origin, session.sessionId);
     const roleCalls = storyEvents.filter((event) => event.type === "tool/call")
-      .map((event) => event.data as { readonly name?: string; readonly arguments?: string })
+      .map((event) => event.data as { readonly callId?: string; readonly name?: string; readonly arguments?: unknown })
       .filter((data) => data.name === "oh_story_role");
-    const roleArguments = roleCalls.map((call) => call.arguments ?? "").join("\n");
-    for (const role of ["story-explorer", "consistency-checker"]) {
-      if (!roleArguments.includes(role)) throw new Error(`Real DSH Agent did not call required Role ${role}.`);
+    const roleResults = storyEvents.filter((event) => event.type === "tool/result")
+      .map((event) => (event.data as { readonly message?: {
+        readonly toolCallId?: string;
+        readonly isError?: boolean;
+        readonly content?: readonly { readonly type?: string; readonly text?: string }[];
+      } }).message);
+    const requiredRoles = ["story-explorer", "consistency-checker"];
+    let successfulRoles = 0;
+    for (const role of requiredRoles) {
+      const calls = roleCalls.filter((call) => {
+        try {
+          const args = typeof call.arguments === "string" ? JSON.parse(call.arguments) as unknown : call.arguments;
+          return (args as { readonly role?: unknown } | undefined)?.role === role;
+        } catch { return false; }
+      });
+      if (calls.length === 0) throw new Error(`Real DSH Agent did not call required Role ${role}.`);
+      const succeeded = calls.some((call) => call.callId !== undefined && roleResults.some((message) =>
+        message !== undefined && message.toolCallId === call.callId && message.isError !== true
+        && message.content?.some((block) => block.type === "text" && (block.text?.trim().length ?? 0) > 0) === true));
+      if (!succeeded) throw new Error(`Real DSH Role ${role} has no successful non-empty result.`);
+      successfulRoles += 1;
     }
     if (!storyEvents.some((event) => event.type === "assistant/message")) throw new Error("Story review Session has no durable assistant result.");
 
@@ -325,6 +343,7 @@ async function main(): Promise<void> {
       model: selectedModel,
       skills: ["story-review", "short-drama-review"],
       roleCalls: roleCalls.length,
+      successfulRoles,
       durableSessionEvents: { story: storyEvents.length, drama: dramaEvents.length },
       projectUnchanged: true
     })}\n`);

@@ -25,7 +25,7 @@ const DSH_SKILL_BRIDGE = [
   // Upstream deploys these 「与作者协作」 rules only in its CLAUDE.md/AGENTS.md
   // templates, which DSH does not install.
   "Working with the author: reply and report in the author's writing terms (book, chapter, outline, settings), never in script, field, or state names; attach a raw error only when something failed. A template block marked <!-- author-report --> is only a format reference: output its text directly, without that marker and without a code fence.",
-  "Record a writing habit or preference the author asks to remember, forget, or confirm only through the story Skill's author memory, whose scripts/author_memory_commit.py writes .story/作者记忆/; never keep it in a host or DSH memory. Simply follow a one-off request without recording it.",
+  "Manage a writing habit or preference only through story-long-write or story-short-write and that writing Skill's references/author-memory.md and scripts/author_memory_commit.py; never keep it in a host or DSH memory. The story entry only routes memory requests. story-deslop and story-review consume only preferences already supplied by their caller and never query or record author memory themselves. Simply follow a one-off request without recording it.",
   "Never edit the bundled Skill files (SKILL.md, references/, scripts/). When a Skill script fails, stop and show the author the command you ran and its error instead of patching or working around it.",
   "</oh-story-dsh-integration>"
 ].join("\n");
@@ -37,16 +37,17 @@ const DSH_ANALYSIS_BATCHES = [
   "Run manage_analysis_run.py and the other bundled Python 3 scripts through the current DSH execution world, trying python3, python, then py -3. If none is available, stop and tell the author in plain words that this step needs Python 3 on the machine running DSH; never simulate a script's output or hand-write the files it owns.",
   "Keep concurrent oh_story_role calls modest. The default is upstream's 有限并行 tier: three batches per round, issued together, the next round only after all three are committed; an unasked, full, multi-book, or import run uses it. DSH runs calls from one step in parallel only up to the host's own limit and may run them one after another, so never promise more. Use 串行 or 不限批次顺序 only when the author chooses it, and under 不限批次顺序 halve the count on any rate limit, timeout, or child error."
 ].join(" ");
+const DSH_AUTHOR_MEMORY_WORKSPACE = "For author memory in DSH's usual single-book layout, where 正文/ and 设定/ sit directly in the workspace root, pass that same root as both --workspace and --book-root; the book store lives at .story/作者记忆/书级/. For a book in a subdirectory, --book-root names that book's directory. Keep --workspace explicit, pass --book-root on every command for a book, and include --kind on queries. Use this writing Skill's references/author-memory-maintenance.md for single-book layout recovery, organizing memories, or migrating old 本书： entries.";
 const DSH_SKILL_OVERRIDES: Readonly<Partial<Record<string, string>>> = {
   story: "The 小说 workspace is an official DSH conversation view. Never start or open a second web application.",
   "story-setup": "Initialize or validate novel project data only. DSH already supplies Skills, Roles, hooks, tools, permissions, sessions, and UI; never deploy Claude/OpenCode/Codex/Antigravity/ZCode/OpenClaw/Reasonix files or a .story-deployed marker.",
   "story-long-analyze": `Use oh_story_role for chapter extraction or specialist analysis. Never inspect platform agent directories or require a deployed external Agent definition. ${DSH_ANALYSIS_BATCHES}`,
-  "story-long-write": "All named Roles are provided through oh_story_role. Do not check platform agent files. Keep the upstream writing, Tracking, lint, outline, revision, and quality workflows. Create and assemble 正文/ chapter files only with the write and edit tools, never through shell redirection, cp, mv, tee, or a script, so that DSH's outline guard, its Tracking reminder, and the 小说 view observe the write; upstream's own in-place chapter fixes such as storyctl.py chapter check --fix-punctuation stay as upstream describes.",
+  "story-long-write": `All named Roles are provided through oh_story_role. Do not check platform agent files. Keep the upstream writing, Tracking, lint, outline, revision, and quality workflows. Create and assemble 正文/ chapter files only with the write and edit tools, never through shell redirection, cp, mv, tee, or a script, so that DSH's outline guard, its Tracking reminder, and the 小说 view observe the write; upstream's own in-place chapter fixes such as storyctl.py chapter check --fix-punctuation stay as upstream describes. ${DSH_AUTHOR_MEMORY_WORKSPACE}`,
   "story-review": "All named reviewer Roles are provided through oh_story_role. Do not check platform agent files; full/lean review may use the bundled Roles directly. When a review falls back to solo in DSH, the reason is that oh_story_role or DSH's spawn runtime is unavailable in this Session (Fallback agent tool unavailable -> solo) or a Role run failed (Fallback spawn failed -> solo); say that in one plain sentence. Never tell the author that the reviewers are not installed, missing, or outdated, and never tell them to run /story-setup.",
   "story-import": `All named Roles are provided through oh_story_role. Do not require story-setup to deploy them, never inspect platform agent directories or .story-deployed, and never offer the author Step 4's choice to install a writing environment with /story-setup: in DSH record 写作环境 in .story/work/导入记录.md as installed, with the analysis helper and story-architect both available. Phase 2 runs the story-long-analyze pipeline the DSH way below; an import counts as automatic continuation, so it uses the limited-parallel tier without asking. ${DSH_ANALYSIS_BATCHES} Run the scripts this Skill needs (build_outline_brief.py, tracking_commit.py init and check with Python 3; check-outline-contract.js with Node) the same way. Keep upstream's order: Phase 3-L Step 2 copies the manuscript into 正文/, Step 10 reverse-builds the 细纲 in batches, and Phase 4 initialises Tracking. DSH's prose guard mirrors the outline gate of upstream proseBlockReason for books with 大纲/ or 追踪/, so open an import window before Step 2 copies any chapter: create .story/work/导入中.md in the book directory (the workspace root in DSH's usual single-book layout) with one line naming the book being imported, and delete it right after Phase 4's tracking_commit.py init and check both succeed. The window only holds while 追踪/_tracking-state.json is absent. 导入中.md is DSH's own marker; keep upstream's 导入记录.md exactly as the Skill describes.`,
   "story-deslop": "Use the bundled narrative-writer Role through oh_story_role when specialist review is useful. Never inspect platform agent directories.",
   "story-short-analyze": "Use oh_story_role for specialist analysis. Never inspect platform agent directories or require external Agent deployment.",
-  "story-short-write": "All named Roles are provided through oh_story_role. Do not inspect platform agent files; preserve the upstream short-fiction workflow and quality gates.",
+  "story-short-write": `All named Roles are provided through oh_story_role. Do not inspect platform agent files; preserve the upstream short-fiction workflow and quality gates. ${DSH_AUTHOR_MEMORY_WORKSPACE}`,
   "browser-cdp": "Use only browser or web capabilities visible in the current DSH preset. Do not start a parallel browser host; if no compatible capability is visible, explain the limitation.",
   "story-cover": "Use only image-generation or HTTP capabilities visible in the current DSH preset. Never assume a separate Codex or Claude runtime."
 };
@@ -123,19 +124,11 @@ const DSH_NATIVE_SKILLS: Readonly<Partial<Record<string, string>>> = {
 - 封面：story-cover
 - 查本书的角色、伏笔、进度或设定：用 oh_story_role 调用 story-explorer；查外部资料：
   story-researcher。回答讲故事里的事，编号只跟着故事描述出现
-- 管理作者习惯（记住/查看/确认/替换/忘掉写作偏好）：加载本 skill 的
-  references/author-memory.md，只用本 skill 的 scripts/author_memory_commit.py 管理
-  两级作者记忆：全局、题材、流程条目在工作区 .story/作者记忆/（AP 编号），本书条目在
-  书级 store（BP 编号）。--workspace 必须显式传。DSH 的小说工作区通常就是书根
-  （正文/、设定/ 直接在工作区根）：此时 --workspace 与 --book-root 都传工作区本身，
-  书级 store 在 .story/作者记忆/书级/；书在子目录时 --book-root 传那本书的目录。
-  处理某本书时每条命令都带 --book-root（书级操作缺它直接报错），query 必须带
-  --kind（可重复）。只记作者明确说出的偏好，不从反复修改或成稿推断。工具未返回
-  Author Memory Receipt 前不得声称已记住；告诉作者时先用一句人话说记住了什么，
-  回执放最后一行。作者说「整理作者记忆」、回执提示习惯攒得太多、工具报单书布局错误，
-  或工作区画像里还有「本书：」条目（升级前写入的本书偏好，已不参与查询）时，再加载
-  references/author-memory-maintenance.md；迁移「本书：」条目就按它运行一次
-  migrate --workspace {工作区} --book-root {书目录} 把它们搬进书级 store。
+- 管理作者习惯（记住/查看/确认/替换/忘掉写作偏好）：按作者指定的长篇/短篇类型，
+  加载 story-long-write 或 story-short-write，由对应写作 skill 管理；未指定时按当前
+  书类型选择：正文/ 为长篇，正文.md 与小节大纲.md 或设定.md 为短篇。无当前书的
+  通用习惯默认交 story-long-write；只限定本书却无法定位时问哪本书，不要求先建书。
+  路由层不读写作者记忆文件。仅管理习惯时完成即停，不建书、不写正文。
 
 只说 /story、看不出意图时，不贴路由表，给四个白话选项：「开一本长篇或接着写」→
 story-long-write；「写一篇短篇」→ story-short-write；「把一章改得不那么 AI」→

@@ -11,13 +11,17 @@
 
 ## [Unreleased]
 
+## [0.1.16] - 2026-10-16
+
 ### Changed
 
-- 同步 NovelToGame **0.5.0** 后续文案修正（`bf0ffbc0cedf20b3f40ba9b60212af27f6713221`）：世界设计入口明确交付完整切片设计，原型构建由后续 build 阶段完成；不把设计说明写成已交付可玩版本。
-- 同步四套已审阅上游的技能文档：Oh Story **0.8.5**（`747b8e30d1e5993dbfb04f38593e1bf36847cab4`，13 Skills、7 Roles）、Drama Skills **0.9.0**（`dafe80ee390ec8be5a7ec8dd156a84d511f8e7dd`，11 Skills）、NovelToGame **0.5.0**（`25e264dc32a82ee2e481b21d22d40874ea84ab27`，7 Skills）及 video-recap-skills **0.6.2**（`5785c33d8b5172cfa2837a8a0d57eb4b87837475`，7 Skills）。文案、阶段交接与能力边界按各自已合并的精修结果更新，未手改固定副本。Drama 的旧作者模板随上游退役，创作继续按所需 Markdown 文档交接；不新增旧格式兼容。
+- 显式 alpha 宿主更新到 [DeepSeek Harness 0.2.1-alpha.4](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.1-alpha.4)，配套 Cordis / Schemastery 更新到 `4.0.5-alpha.2` / `3.18.5-alpha.2`；默认安装仍使用 npm `latest` 的 `0.2.0-rc.2`。新增 `engines.dsh`，与 DSH peer 的双线兼容范围一致，供新版宿主优先检查。
+- 同步 [Oh Story 0.8.6](https://github.com/zenstory-ai/oh-story-claudecode/releases/tag/v0.8.6)（`86a8000cc89048e441b906b3389f1f847aeb20cd`，`agents_version` 34 → 35，13 Skills、7 Roles）：去 AI 味流程分开检查合规、机械表达与场面写法，按作者授权范围修改；作者记忆由长篇、短篇写作 Skill 管理，独立审稿和去味不再自行查询或写入记忆。DSH 技能桥同步新的脚本归属，已有 `.story/作者记忆/` 数据继续使用。
+- 包含已审阅的 [Drama Skills 0.9.0](https://github.com/zenstory-ai/drama-skills/releases/tag/v0.9.0)（`dafe80ee390ec8be5a7ec8dd156a84d511f8e7dd`，11 Skills）、NovelToGame **0.5.0**（`bf0ffbc0cedf20b3f40ba9b60212af27f6713221`，7 Skills）及 video-recap-skills **0.6.2**（`5785c33d8b5172cfa2837a8a0d57eb4b87837475`，7 Skills）文档更新。Drama 的旧作者模板随上游退役，创作按所需 Markdown 文档交接；NovelToGame 世界设计入口明确交付完整切片设计，原型由后续 build 阶段构建。
 
 ### Fixed
 
+- 适配新版 DSH 的子角色启动接口，修复 `oh_story_role` 在新 alpha 上无法运行的问题；角色提示词与工具权限在首轮模型请求前生效，取消会停止并释放对应子角色，默认 rc 宿主继续使用原接口。
 - 双语 README、安装与升级说明按当前宿主线整理，区分技能目录发现与按需正文读取、短剧核心五文档与剪辑记录、付费媒体任务确认与普通模型调用；安全说明按实际 Session 文件系统、预览和并发写入边界校正。badcase、配对与真实样本保留。短剧 demo 字节与新固定来源完全一致，只更新来源提交登记，不重写历史输出。
 
 ## [0.1.15] - 2026-10-10
@@ -327,7 +331,8 @@
 - 提供 13 个 Oh Story 小说 Skills、7 个专业 Roles 与 10 个 Drama Skills。
 - 提供文件树、Markdown/JSONL 编辑预览与官方 DSH Chat 同屏的三栏工作台。
 
-[Unreleased]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.15...HEAD
+[Unreleased]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.16...HEAD
+[0.1.16]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.15...v0.1.16
 [0.1.15]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.14...v0.1.15
 [0.1.14]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.13...v0.1.14
 [0.1.13]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.12...v0.1.13

@@ -15,6 +15,8 @@ function portableRelative(root: string, path: string): string {
 export const ohStoryRoot = join(repoRoot, "packages/knowledge/oh-story");
 export const generatedRoot = join(repoRoot, "packages/knowledge/generated");
 const platformGlue = [
+  // Ignored local backup, not an upstream runtime asset.
+  "story-long-analyze.zip",
   "story/assets/",
   "story/scripts/dashboard-server.mjs",
   "browser-cdp/scripts/setup-cdp-chrome.js",

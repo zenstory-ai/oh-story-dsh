@@ -45,7 +45,8 @@ describe("Oh Story bundled skill provider", () => {
         "reply and report in the author's writing terms (book, chapter, outline, settings), never in script, field, or state names",
         "attach a raw error only when something failed",
         "A template block marked <!-- author-report --> is only a format reference: output its text directly, without that marker and without a code fence.",
-        "only through the story Skill's author memory, whose scripts/author_memory_commit.py writes .story/作者记忆/; never keep it in a host or DSH memory",
+        "only through story-long-write or story-short-write and that writing Skill's references/author-memory.md and scripts/author_memory_commit.py; never keep it in a host or DSH memory",
+        "story-deslop and story-review consume only preferences already supplied by their caller and never query or record author memory themselves",
         "Never edit the bundled Skill files (SKILL.md, references/, scripts/).",
         "When a Skill script fails, stop and show the author the command you ran and its error"
       ]) expect(bridged?.content, candidate.name).toContain(authorRule);
@@ -80,13 +81,9 @@ describe("Oh Story bundled skill provider", () => {
     const route = await provider.get(routeCandidate!, {});
     expect(route?.content).toContain("The 小说 workspace is an official DSH conversation view");
     expect(routeCandidate?.description).toContain("记住我的写作习惯");
-    expect(route?.content).toContain("scripts/author_memory_commit.py");
-    expect(route?.content).toContain("Author Memory Receipt");
-    for (const memoryRule of [".story/作者记忆/书级/", "--book-root", "--kind", "migrate --workspace {工作区} --book-root {书目录}", "「本书：」"]) {
-      expect(route?.content).toContain(memoryRule);
-    }
-    const memoryScript = await readFile(resolve(skillRoot, "story/scripts/author_memory_commit.py"), "utf8");
-    for (const flag of ["\"--book-root\"", "\"--kind\"", "\"migrate\""]) expect(memoryScript).toContain(flag);
+    expect(route?.content).toContain("无当前书的\n  通用习惯默认交 story-long-write");
+    expect(route?.content).toContain("路由层不读写作者记忆文件");
+    expect(route?.content).not.toContain("加载本 skill 的");
     for (const phrase of ["灵感库", "跨书灵感聚合", "更新灵感库", "不写正文", "「开一本长篇或接着写」", "「更多（拆书、扫榜、导入旧稿、审稿、封面）」"]) {
       expect(route?.content).toContain(phrase);
     }
@@ -158,6 +155,48 @@ describe("Oh Story bundled skill provider", () => {
     ]) expect(review?.content).toContain(reviewRule);
     // Upstream's solo template (references/solo.md since 0.8.2) suggests /story-setup, which the override above corrects.
     await expect(readFile(resolve(skillRoot, "story-review/references/solo.md"), "utf8")).resolves.toContain("运行 /story-setup 后可以四个视角审");
+  });
+
+  it("routes author memory to the writing Skills and packages their current resources", async () => {
+    const provider = createOhStorySkillProvider(skillRoot);
+    const candidates = await provider.list({});
+    if (!Array.isArray(candidates)) throw new Error("Expected a complete bundled catalog.");
+    for (const name of ["story-long-write", "story-short-write"]) {
+      const writing = await provider.get(candidates.find((candidate) => candidate.name === name)!, {});
+      for (const rule of [
+        "pass that same root as both --workspace and --book-root",
+        ".story/作者记忆/书级/",
+        "--kind on queries",
+        "references/author-memory-maintenance.md"
+      ]) expect(writing?.content, name).toContain(rule);
+      const protocol = await readFile(resolve(skillRoot, name, "references/author-memory.md"), "utf8");
+      expect(writing?.content).toContain("references/author-memory.md");
+      expect(protocol).toContain("Author Memory Receipt");
+      expect(writing?.content).toContain("仅管理习惯时完成即停，不建书、不写正文");
+      const memoryScript = await readFile(resolve(skillRoot, name, "scripts/author_memory_commit.py"), "utf8");
+      for (const flag of ["\"--book-root\"", "\"--kind\"", "\"migrate\""]) expect(memoryScript).toContain(flag);
+    }
+    for (const name of ["story", "story-deslop", "story-review"]) {
+      await expect(stat(resolve(skillRoot, name, "scripts/author_memory_commit.py"))).rejects.toMatchObject({ code: "ENOENT" });
+      await expect(stat(resolve(skillRoot, name, "references/author-memory.md"))).rejects.toMatchObject({ code: "ENOENT" });
+    }
+  });
+
+  it("makes the three deslop methods available to Skills and the native writer Role", async () => {
+    for (const name of ["story-deslop", "story-long-write", "story-short-write", "story-review", "story-setup/references/agent-references"]) {
+      const referenceRoot = name.endsWith("agent-references") ? resolve(skillRoot, name) : resolve(skillRoot, name, "references");
+      for (const method of ["expression.md", "narrative-focus.md", "story-logic.md"]) {
+        await expect(readFile(resolve(referenceRoot, method), "utf8")).resolves.toMatch(/\S/u);
+      }
+      await expect(stat(resolve(referenceRoot, "anti-ai-writing.md"))).rejects.toMatchObject({ code: "ENOENT" });
+    }
+    const deslop = await readFile(resolve(skillRoot, "story-deslop/SKILL.md"), "utf8");
+    expect(deslop).toContain("用户只要检测或标注时，只出诊断，不修改正文");
+    expect(deslop).toContain("作者已授权的剧情重写直接执行，不重复询问同一授权");
+    for (const name of ["story-deslop", "story-review"]) {
+      const source = await readFile(resolve(skillRoot, name, "SKILL.md"), "utf8");
+      expect(source).toContain("只接收调用方已有的作者偏好，不查询或记录作者记忆");
+    }
   });
 
   it("rejects missing frontmatter", () => {

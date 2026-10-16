@@ -12,6 +12,7 @@ if (JSON.stringify(actualFiles) !== JSON.stringify(manifest.files)) {
 }
 const forbiddenPortableAssets = manifest.files.filter(({ path }) =>
   path.includes("/__pycache__/") || path.endsWith(".pyc") || path.endsWith("/.DS_Store")
+    || path === "skills/story-long-analyze.zip"
     || path === "skills/story-setup/scripts/copy-path-safety.py"
     || path === "skills/story/scripts/dashboard-server.mjs"
     || path.startsWith("skills/story-setup/references/antigravity/")

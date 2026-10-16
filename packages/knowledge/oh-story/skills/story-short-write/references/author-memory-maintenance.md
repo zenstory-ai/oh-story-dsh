@@ -21,14 +21,14 @@
 
 ## 任务映射表
 
-各 skill 入口的 `query` 命令按此表选 kind；写入时的预算提醒也按这四类任务组合估算。
+写作流程的 `query` 按此表选 kind，后续去味与审稿使用写作调用方传入的结果，不独立查询或记录。写入时的预算提醒仍按这四类任务组合估算。
 
 | 任务 | query kinds | 注入位置 |
 |---|---|---|
 | 正文初稿 / 续写 | `prose_style` + `story_design` | 主会话与实际正文 agent |
-| 去 AI 味 / 改写 | `prose_style` | 主会话与实际改写 agent |
+| 写作中的去 AI 味 / 改写 | `prose_style` | 主会话与实际改写 agent |
 | 设定 / 大纲 | `story_design` + `workflow` + `interaction` | 主会话，不传正文 agent |
-| 审稿 | `delivery` + `interaction` + 必要的 `prose_style` | 主会话，不降低 rubric |
+| 写作中的审稿准备 | `delivery` + `interaction` + 必要的 `prose_style` | 主会话，不降低 rubric |
 
 审稿匹配项只用于交付格式、协作方式和“作者有意采用的表达选择”说明；问题严重度和 PASS/FAIL 仍由 rubric 决定。
 
@@ -62,7 +62,7 @@
 
 ## 其他命令
 
-先依次尝试 `python3`、`python`、`py -3` 找到 Python 3，再从当前 skill 根运行本地副本（`record` / `query` 见 author-memory.md）：
+先依次尝试 `python3`、`python`、`py -3` 找到 Python 3，再从当前写作 skill 根运行本地副本（`record` / `query` 见 author-memory.md）：
 
 ```text
 {PYTHON} {当前 skill 根}/scripts/author_memory_commit.py init    --workspace {工作区} [--book-root {书目录}]

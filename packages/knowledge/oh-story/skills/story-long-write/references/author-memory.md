@@ -1,6 +1,6 @@
 # 作者记忆协议
 
-作者记忆保存作者明确表达、可跨会话复用的创作偏好。新增、确认、替换和忘掉偏好按本文件执行；整理、容量、冲突、迁移与单书布局问题见 [author-memory-maintenance.md](author-memory-maintenance.md)。小说事实仍写进本书设定与追踪。
+作者记忆由长短篇写作 skill 管理，保存作者明确表达、可跨会话复用的创作偏好。新增、确认、替换和忘掉偏好按本文件执行；整理、容量、冲突、迁移与单书布局问题见 [author-memory-maintenance.md](author-memory-maintenance.md)。小说事实仍写进本书设定与追踪。
 
 ## 边界与优先级
 
@@ -28,7 +28,7 @@
 
 ## 查询
 
-各 skill 入口已写好本任务的 `query` 命令（长篇正文由组装脚本代查）；没写命令的长篇设定、大纲等任务查 `story_design` + `workflow` + `interaction`，结果只给主会话、不传正文 agent。四类任务的映射表见维护文件。state 存在才查（两级都不存在时返回空结果、零写入）；结果合并项目级与 `--book-root` 所指书级（不传就拿不到本书条目），`--kind` 必传；交给执行者的只有 `lines`（每条一行原话＋编号，单次查询 ≤2048 字节）。
+写作入口提供 `query` 命令（长篇正文由组装脚本代查）；没写命令的长篇设定、大纲等任务查 `story_design` + `workflow` + `interaction`，结果只给主会话、不传正文 agent。写作流程查询后把相关偏好与文风裁决交给去味、审稿；这些后续任务不自行查询或记录。映射表见维护文件。state 存在才查（两级都不存在时返回空结果、零写入）；结果合并项目级与 `--book-root` 所指书级（不传就拿不到本书条目），`--kind` 必传；交给执行者的只有 `lines`（每条一行原话＋编号，单次查询 ≤2048 字节）。
 
 普通创作只做一次本地 `query`，只把返回的 `lines` 交给执行者，完整画像、证据、候选和变更记录不进上下文。查询项作为低优先级倾向自然吸收，不为逐条命中牺牲连贯、节奏、字数或本书笔调。**`omitted_ids` 非空表示有偏好未装入本次上下文**：照 `omitted_summaries` 转告作者并建议「整理作者记忆」，不改读完整画像规避预算。待确认项不参与创作约束；作者主动查看、集中回顾候选或新偏好与 active 条目冲突时再呈现。
 
@@ -70,7 +70,7 @@
 
 ## 运行工具
 
-依次尝试 `python3`、`python`、`py -3` 找到 Python 3，从当前 skill 根运行本地副本：
+依次尝试 `python3`、`python`、`py -3` 找到 Python 3，从当前写作 skill 根运行本地副本：
 
 ```text
 {PYTHON} {当前 skill 根}/scripts/author_memory_commit.py record --workspace {工作区} [--book-root {书目录}] --input {工作区}/.story/work/作者记忆-事件.json

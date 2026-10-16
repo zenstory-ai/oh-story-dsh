@@ -1,6 +1,7 @@
 import { Context } from "@deepseek-ai/cordis";
 import type { Agent } from "@deepseek-ai/dsh-agent";
-import type { SubagentRuntime } from "@deepseek-ai/dsh-subagent";
+import type { SessionEvent, SessionId } from "@deepseek-ai/dsh-session";
+import type { SubagentActivationSpec, SubagentResult, SubagentRuntime } from "@deepseek-ai/dsh-subagent";
 import type { ToolDefinition, ToolRunContext, ToolRuntime } from "@deepseek-ai/dsh-tools";
 import { describe, expect, it, vi } from "vitest";
 import { createOhStoryRoleTool, OH_STORY_ROLE_TOOL_NAME, registerOhStoryRoleTool } from "../src/role-tool.js";
@@ -25,7 +26,7 @@ function completedRoleStart(runId: string): RoleStart {
   }));
 }
 
-async function createRoleContextTopology(start?: RoleStart): Promise<RoleContextTopology> {
+async function createRoleContextTopology(start?: RoleStart, managed = false): Promise<RoleContextTopology> {
   const root = new Context();
   const guard = vi.fn(() => () => {});
   let definition: ToolDefinition | undefined;
@@ -50,7 +51,7 @@ async function createRoleContextTopology(start?: RoleStart): Promise<RoleContext
       apply(context) {
         context.provide("subagents", {
           getProvider: vi.fn((name: string) => name === "spawn" ? { name } : undefined),
-          start
+          ...managed ? { startActivation: start } : { start }
         } as unknown as SubagentRuntime);
       }
     });
@@ -70,6 +71,23 @@ async function createRoleContextTopology(start?: RoleStart): Promise<RoleContext
     guard,
     registeredDefinition: () => definition
   };
+}
+
+function managedChild(id: SessionId, label = "oh-story:story-architect", historicalOverrides = false) {
+  const section = vi.fn();
+  const restrict = vi.fn();
+  const systemPrompt = { section, getSectionOrder: vi.fn(() => 10) };
+  const tools = { restrict, get: vi.fn(() => ({})) };
+  const agent = {
+    id,
+    session: {
+      ownEvents: () => [{ type: "subagent/descriptor", data: {
+        label, ...historicalOverrides ? { persona: "Historical persona", toolFilter: { allow: ["read"] } } : {}
+      } } as SessionEvent]
+    },
+    ctx: { get: (name: string) => name === "systemPrompt" ? systemPrompt : name === "tools" ? tools : undefined }
+  } as unknown as Agent;
+  return { agent, section, restrict };
 }
 
 function runContext(agent: Agent, id: string): ToolRunContext {
@@ -96,6 +114,91 @@ async function executeStoryArchitect(definition: ToolDefinition, agent: Agent, c
 }
 
 describe("oh_story_role Cordis Context contract", () => {
+  it("initializes a managed child once before execution and returns its result to the caller", async () => {
+    let child: ReturnType<typeof managedChild> | undefined;
+    const dispose = vi.fn(async () => {});
+    const start = vi.fn(async (spec: SubagentActivationSpec) => {
+      child = managedChild(spec.childId!);
+      await topology.root.serial("agent/created", { agent: child.agent, source: "startup" });
+      expect(child.section).toHaveBeenCalledOnce();
+      expect(child.restrict).toHaveBeenCalledWith({ allow: ["oh_story_bundled_reference", "read", "glob", "grep", "write", "edit"] });
+      return { childId: spec.childId, result: Promise.resolve({ output: [{ type: "text", text: "受限角色结果" }], stopReason: "completed" }), dispose };
+    });
+    const topology = await createRoleContextTopology(start, true);
+    try {
+      await topology.root.plugin({ name: "oh-story-managed-test", inject: ["tools", "subagents"], apply: registerOhStoryRoleTool });
+      const definition = topology.registeredDefinition()!;
+      await expect(executeStoryArchitect(definition, topology.agent, "call-managed"))
+        .resolves.toMatchObject({ role: "story-architect", runId: expect.any(String), content: [{ type: "text", text: "受限角色结果" }] });
+      expect(start).toHaveBeenCalledWith(expect.objectContaining({
+        provider: "spawn", label: "oh-story:story-architect", delivery: "caller",
+        request: { parent: topology.agent, prompt: [{ type: "text", text: "检查故事架构" }], maxDepth: 1 }
+      }));
+      expect(child!.section).toHaveBeenCalledWith(expect.objectContaining({
+        name: "deployment:persona-prefix", text: expect.stringContaining("OH_STORY_DSH_ROLE:story-architect")
+      }));
+      expect(dispose).toHaveBeenCalledOnce();
+    } finally { await topology.root.fiber.dispose(); }
+  });
+
+  it("cancels an admitted managed child when its calling tool is canceled", async () => {
+    let settle!: (value: SubagentResult) => void;
+    const result = new Promise<SubagentResult>((accept) => { settle = accept; });
+    const dispose = vi.fn(async () => { settle({ output: [], stopReason: "aborted" }); });
+    const start = vi.fn(async (spec: SubagentActivationSpec) => {
+      const child = managedChild(spec.childId!);
+      await topology.root.serial("agent/created", { agent: child.agent, source: "startup" });
+      return { childId: spec.childId, result, dispose };
+    });
+    const topology = await createRoleContextTopology(start, true);
+    const controller = new AbortController();
+    const addListener = vi.spyOn(controller.signal, "addEventListener");
+    try {
+      const definition = await createOhStoryRoleTool(topology.agent.ctx.get("subagents"));
+      const execution = definition.execute({ role: "story-architect", prompt: "检查故事架构" }, {
+        ...runContext(topology.agent, "call-cancel"), signal: controller.signal
+      });
+      const rejection = expect(execution).rejects.toThrow(/ended with aborted/u);
+      await vi.waitFor(() => { expect(addListener).toHaveBeenCalledWith("abort", expect.any(Function), { once: true }); });
+      controller.abort();
+      await rejection;
+      expect(dispose).toHaveBeenCalledOnce();
+    } finally { await topology.root.fiber.dispose(); }
+  });
+
+  it("rejects a managed backend that never initializes the reserved Role child", async () => {
+    const dispose = vi.fn(async () => {});
+    const start = vi.fn(async (spec: SubagentActivationSpec) => ({
+      childId: spec.childId, result: Promise.resolve({ output: [], stopReason: "completed" }), dispose
+    }));
+    const topology = await createRoleContextTopology(start, true);
+    try {
+      const definition = await createOhStoryRoleTool(topology.agent.ctx.get("subagents"));
+      await expect(executeStoryArchitect(definition, topology.agent, "call-uninitialized"))
+        .rejects.toThrow("DSH did not initialize the Oh Story Role child before publication.");
+      expect(dispose).toHaveBeenCalledOnce();
+    } finally { await topology.root.fiber.dispose(); }
+  });
+
+  it("restores the persona and tool restriction when DSH resumes a cataloged Role child", async () => {
+    const topology = await createRoleContextTopology(vi.fn(), true);
+    try {
+      await topology.root.plugin({ name: "oh-story-resume-test", inject: ["tools", "subagents"], apply: registerOhStoryRoleTool });
+      const child = managedChild("resumed-role" as SessionId);
+      const other = managedChild("unrelated-child" as SessionId, "ordinary task");
+      const historical = managedChild("historical-role" as SessionId, "oh-story:story-architect", true);
+      await topology.root.serial("agent/created", { agent: child.agent, source: "resume" });
+      await topology.root.serial("agent/created", { agent: other.agent, source: "resume" });
+      await topology.root.serial("agent/created", { agent: historical.agent, source: "resume" });
+      expect(child.section).toHaveBeenCalledOnce();
+      expect(child.restrict).toHaveBeenCalledWith({ allow: ["oh_story_bundled_reference", "read", "glob", "grep", "write", "edit"] });
+      expect(other.section).not.toHaveBeenCalled();
+      expect(other.restrict).not.toHaveBeenCalled();
+      expect(historical.section).not.toHaveBeenCalled();
+      expect(historical.restrict).not.toHaveBeenCalled();
+    } finally { await topology.root.fiber.dispose(); }
+  });
+
   it("uses the plugin runtime when the Agent Fiber intentionally does not inject subagents", async () => {
     const start = completedRoleStart("role-run-plugin");
     const topology = await createRoleContextTopology(start);

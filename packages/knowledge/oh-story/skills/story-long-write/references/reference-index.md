@@ -62,7 +62,7 @@
 | 质量检查 | `references/long-chapter-quality.md` + `references/reader-contract-and-progression.md` |
 | 禁用词扫描 | `references/banned-words.md` |
 | AI句式脚本复扫 | `scripts/check-ai-patterns.js` |
-| 去AI味 | `references/anti-ai-writing.md` |
+| 去AI味 | `references/deslop-gates.md`（三层方法路由） |
 
 ### 按主题快速定位（横切主题）
 
@@ -79,6 +79,6 @@
 | 反转 | **`references/long-reversal.md`**（单元/卷级/全书反转、铺垫、有效性自检） | `references/plot-core-methods.md`（假胜：先给希望再击碎） |
 | 人物 | **`references/character-basics.md`**（主角/配角/反派/动机模板速填） | `references/character-design-methods.md`（三层标签反差/九维深化）· `references/character-relations.md`（关系类型/感情线） |
 | 女频写作 | **`references/female-audience-writing.md`**（女频长篇：核心原则/文案/题材/感情线长线/平台） | `references/genre-readers.md`（读者心理/平台差异）· `references/character-relations.md`（感情线总框架） |
-| 去AI味 | **`references/anti-ai-writing.md`**（AI指纹/核心规则/Show Don't Tell） | `references/banned-words.md`（禁用词扫描）· `references/long-chapter-quality.md`（成稿检查） |
+| 去AI味 | **`references/deslop-gates.md`**（范围与方法） | `references/banned-words.md`（表达信号）· `references/long-chapter-quality.md`（成稿检查） |
 
 ---

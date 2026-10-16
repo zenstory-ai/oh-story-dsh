@@ -6,7 +6,7 @@
 
 `oh-story-dsh` 是基于 DeepSeek Harness（DSH）构建的社区小说、短剧、互动游戏与视频解说创作插件。以下清单对应当前源码；已发布包按各自的 manifest 固定上游提交。
 
-- 13 个 Oh Story 0.8.5 小说 Skills 与 7 个专业 Roles；
+- 13 个 Oh Story 0.8.6 小说 Skills 与 7 个专业 Roles；
 - 11 个 Drama Skills 0.9.0 短剧流程，每集按请求维护最多五份创作 Markdown（剧本、视觉设定、分镜、图片提示词、视频提示词），成片装配另写《剪辑单.md》；
 - 7 个 NovelToGame 0.5.0 Skills、`game-adaptations/<project>` 产物协议与《金瓶梅 · 风月总账》ADV 可玩构建；
 - 7 个 video-recap-skills 0.6.2 Skills（3 个用户入口）、`video-recaps/<project>` 项目约定与轻量视频预览工作台；
@@ -23,20 +23,20 @@
 安装命令会临时提供 pnpm；只安装 Node.js 的机器也能执行。DSH 的 `plugin add` 内部需要 pnpm，单独运行 `npx @deepseek-ai/dsh ... plugin add` 不会自动补上它。
 
 ```bash
-npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.0-rc.2 dsh plugin --profile web add @oh-story/dsh@0.1.15 &&
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.0-rc.2 dsh plugin --profile web add @oh-story/dsh@0.1.16 &&
 npx -y @deepseek-ai/dsh@0.2.0-rc.2 web
 ```
 
 也可以直接安装 GitHub Release 中的预构建包：
 
 ```bash
-npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.0-rc.2 dsh plugin --profile web add https://github.com/zenstory-ai/oh-story-dsh/releases/download/v0.1.15/oh-story-dsh-0.1.15.tgz &&
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.0-rc.2 dsh plugin --profile web add https://github.com/zenstory-ai/oh-story-dsh/releases/download/v0.1.16/oh-story-dsh-0.1.16.tgz &&
 npx -y @deepseek-ai/dsh@0.2.0-rc.2 web
 ```
 
 保持终端运行。若浏览器未自动打开，访问终端打印的完整 `http://127.0.0.1:3080/?token=...` 链接完成首次认证。
 
-本页默认命令固定使用 `0.2.0-rc.2`。也可把安装、启动两条命令中的版本同时改为 `0.2.1-alpha.1` 试用 alpha；插件接受 `>=0.2.0-rc.2 <0.2.1-0` 或 `>=0.2.1-alpha.1 <0.2.2-0`，两条线不要混装。
+本页默认命令固定使用 `0.2.0-rc.2`。也可把安装、启动两条命令中的版本同时改为 `0.2.1-alpha.4` 试用 alpha；插件接受 `>=0.2.0-rc.2 <0.2.1-0` 或 `>=0.2.1-alpha.1 <0.2.2-0`，两条线不要混装。
 
 需要 Node.js 24+。开始 AI 创作前需要在 DSH 的「设置 → 模型」中添加 Provider 并填入 API Key，或在启动前设置环境变量 `DEEPSEEK_API_KEY`。
 
@@ -76,6 +76,8 @@ Drama Skills 0.6.0 不支持把 v0.5 结构化项目原地升级为 creator-firs
 
 0.8.1 的角色参考音频必须绑定具体角色，并通过严格的 `reference_roles`、身份与禁控校验；音频不会出现在图片参考选择器里。NovelToGame 0.5.0 的 ADV 示例不迁移旧存档，升级后清除旧站点存储并重新开始。video-recap 0.6.1 改用 QC schema 2，删除旧 QC 标志/路径；升级既有 `work/` 时可能重新生成 ASR、剪辑、TTS 与索引，不得沿用或伪造旧 PASS。0.6.2 起 dub（英译中原声复刻）必须带 `--confirm-voice-rights`，包括旧 `work/` 打印的续跑命令；没有 `MIMO_API_KEY` 时旁白评审直接退出，不再外发稿件。
 
+Oh Story 0.8.6 的作者习惯由长篇、短篇写作入口管理，沿用已有记忆数据；独立审稿与去味只消费本次提供的偏好，检测或标注不会改正文。Drama 0.9 继续按当前需要维护 Markdown 创作文档，旧模板不再补建。
+
 ## 没看到界面时
 
 - **安装报 `pnpm not found on PATH`**：重新执行上面带 `--package pnpm@11.7.0` 的完整安装命令，确认安装成功后再启动。
@@ -88,7 +90,7 @@ Drama Skills 0.6.0 不支持把 v0.5 结构化项目原地升级为 creator-firs
 插件装进哪个 profile，那个 profile 的每个 Session 都能发现创作 Skills，具体指令在使用时读取；工作台只在有创作项目时显示。想让原版 `web` 保持干净、只在创作时打开工作台，就装进独立 profile：
 
 ```bash
-npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.0-rc.2 dsh plugin --profile story add @oh-story/dsh@0.1.15
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.0-rc.2 dsh plugin --profile story add @oh-story/dsh@0.1.16
 ```
 
 新 profile 默认没有界面。编辑 `~/.dsh/profiles/story/package.json`，把 `dsh.profile.bundles` 改成 `["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-web-app", "@oh-story/dsh"]`。
