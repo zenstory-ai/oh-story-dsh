@@ -1,6 +1,28 @@
 # Validation
 
-Released: `@oh-story/dsh` 0.1.15 on DeepSeek Harness `0.2.0-rc.2`, with explicit `0.2.1-alpha.1` coverage. Local aggregate acceptance passed on 2026-10-10; 0.1.13 evidence below remains the latest credentialed browser and paid-provider observation.
+Released: `@oh-story/dsh` 0.1.16 on DeepSeek Harness `0.2.0-rc.2`, with explicit `0.2.1-alpha.4` coverage. Local aggregate acceptance and paid-provider review passed on 2026-10-16.
+
+## 0.1.16 release evidence
+
+### Local evidence
+
+- Oh Story 0.8.6 (`86a8000cc890`), 13 Skills, 7 Roles and `agents_version` 35: all 365 bundled files pass parity. Author-memory resources belong to the long- and short-form writing Skills; the ignored local ZIP is excluded by the synchronizer and rejected by parity. Drama 0.9.0 (`dafe80ee390e`), NovelToGame 0.5.0 (`bf0ffbc0cedf`) and video-recap 0.6.2 (`5785c33d8b51`) retain their reviewed pins.
+- The first local aggregate command encountered unrelated old checkouts under `.claude/worktrees/` during ESLint. Verification uses a clean export of committed source; no local checkout or lint exclusion was changed to hide a source failure.
+- The first alpha.4 browser run exposed the obsolete global-single-blank-session assumption. The test now binds the welcome guide to its selected Session ID and checks that Session's blank state and canonical default-workspace path.
+
+- A later alpha.4 run reached streaming Todo geometry but encountered an invisible auxiliary tail node. The smoke now measures the last visible semantic row in its own flow and checks its full viewport/Composer bounds and padding in one snapshot; product CSS and visibility thresholds are unchanged.
+
+- On 2026-10-16, the clean-source `pnpm verify:release` completed successfully: lint, typecheck, four parity checks, the DSH boundary, 16 release tests, 3 upstream-update tests, 179 unit/contract tests across 23 files and the build. Packaged Chrome on both DSH `0.2.1-alpha.4` and `0.2.0-rc.2` returned `"ok": true`, with Role streaming, mixed composition, ADV save/restore, compact 500 px layouts and 20-writer atomic CAS enabled. Main and tag workflows repeat the full suite on the final submitted source.
+
+### Paid provider
+
+- On 2026-10-16, `pnpm test:dsh:real` against the packed runtime from `44b9b7e` passed on DSH `0.2.1-alpha.4`, using `deepseek-official/deepseek-flash`. Both `story-review` and `short-drama-review` resolved to the installed plugin. The Session logs contain 3 Role calls; the two required Roles (`story-explorer` and `consistency-checker`) each returned a correlated, non-error, non-empty tool result. Story and drama produced 109 and 68 durable events respectively; the project digest remained unchanged.
+- This is paid review/Role compatibility evidence. The README browser GIFs remain the 0.1.13 recordings, and no new paid media production is claimed. The temporary credential stayed outside the repository, was not exposed in DSH logs, and its local file was removed after the run.
+
+### Release gates
+
+- **Local aggregate acceptance — PASSED 2026-10-16:** full `pnpm verify:release`, with successful packaged Chrome on alpha.4 and rc.2.
+- **Paid provider — PASSED 2026-10-16:** native Story/Drama review and both required Role results on alpha.4; the separately recorded browser integration uses the fixture provider.
 
 ## 0.1.15 release evidence
 

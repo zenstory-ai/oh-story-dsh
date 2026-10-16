@@ -45,3 +45,5 @@ Drama 保持 `dafe80ee`：它是 v0.9.0 正式标签之后的已审 main 提交�
 用户另行授权用临时 Key 验证真实 DeepSeek 模型。凭据只存于权限 0600 的临时文件，通过现有 `DEEPSEEK_API_KEY_FILE` 读取，验证完成后删除本地副本，并提醒用户撤销临时 Key。真实模型测试另检查必需 Role 的工具结果成功，避免仅发生调用即误判通过。
 
 真实模型验证：2026-10-16 在 `44b9b7e` 打包运行时上执行 `pnpm test:dsh:real`，DSH `0.2.1-alpha.4`、`deepseek-official/deepseek-flash` 返回 `ok: true`。小说/短剧均使用随包 Skill，3 次 Role 调用中两个必需角色均有成功非空结果；持久事件分别 109 / 68，项目 digest 不变。临时凭据文件已在进程成功退出后删除，已通知用户可撤销。之后改动仅涉及浏览器测试与验证文档，未改变该付费运行所测的插件逻辑。
+
+最终本地验收：干净源码副本运行 `pnpm verify:release` 成功退出（0），lint、typecheck、四套 parity、DSH boundary、16 项发布测试、3 项更新监测测试、23 文件共 179 项单元/契约测试及构建全通过；DSH alpha.4 与默认 rc.2 的完整打包 Chrome JSON 均为 `ok: true`，包括 Role、流式写文件、混合装配、ADV 存取档、500px 布局及 20 writer CAS。后续发布沿用受保护 PR、精确 main CI、Tag 与双渠道验证。
