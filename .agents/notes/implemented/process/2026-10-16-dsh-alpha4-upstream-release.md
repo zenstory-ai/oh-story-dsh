@@ -24,7 +24,7 @@ DSH 官方 alpha.2 移除 `both` 工具展示模式，并将内置子代理工�
 
 ## Verification
 
-第二轮 alpha.4 smoke 已通过 Role、工作台切换与长答复多尺寸尾部检查，Todo 断言却把 `flow.lastElementChild` 当成最后一条可见内容，得到零矩形后又在另一次读取取得 null。官方 ChatFlow 分别标记内容行 `data-chat-flow-key` 与运行行 `data-chat-running`，折叠结构及辅助尾节点不保证有可见矩形。Todo 检查改为同一顶层 flow 中最后一个有实际矩形的语义内容或运行行，并在同一次测量核对其上下边界、Composer 座位与完整留白；保留尾行必须位于视口内且在 Composer 上方的要求，不修改已通过长答复检查的产品布局。
+第二轮 alpha.4 smoke 已通过 Role、工作台切换与长答复多尺寸尾部检查，Todo 断言却把 `flow.lastElementChild` 当成最后一条可见内容，得到零矩形后又在另一次读取取得 null。官方 ChatFlow 分别标记内容行 `data-chat-flow-key` 与运行行 `data-chat-running`，折叠结构及辅助尾节点不保证有可见矩形。Todo 检查改为同一顶层 flow 中最后一个有实际矩形的语义内容或运行行，并在同一次测量核对其上下边界、Composer 座位与完整留白；保留尾行必须位于视口内且在 Composer 上方的要求，不修改已通过长答复检查的产品布局。后续同一轮适配中的三种宽度几何检查也改为此语义行选择，允许 `conversation.chat.flow` 包装层，排除嵌套工作过程及隐藏行；原来的 Composer 边界、留白与列内位置断言全部保留。
 
 alpha.4 打包 smoke 首轮暴露默认工作区可保留多条空白会话，原先「全局只有一条 blank」的假设失效。官方 `SessionListRequest` 只接收 cursor，列表仍是全局；新建接口仅在显式 sessionId 时尝试复用指定空白会话。测试以使用引导所在主对话的 `data-conversation-session` 读取当前身份，再同时核对该条 global list 记录的 blank 与默认工作区规范路径，只启动当前可见会话并验证引导消失。
 
@@ -43,3 +43,5 @@ Drama 保持 `dafe80ee`：它是 v0.9.0 正式标签之后的已审 main 提交�
 根目录首次 `pnpm verify:release` 的 ESLint 扫进 `.claude/worktrees/` 中的本地旧 checkout，错误路径全部属于这些旧副本。发布验证在仅含已提交源码的临时干净副本中运行，保留用户原有工作区与旧 checkout；不因此修改 lint 规则。
 
 用户另行授权用临时 Key 验证真实 DeepSeek 模型。凭据只存于权限 0600 的临时文件，通过现有 `DEEPSEEK_API_KEY_FILE` 读取，验证完成后删除本地副本，并提醒用户撤销临时 Key。真实模型测试另检查必需 Role 的工具结果成功，避免仅发生调用即误判通过。
+
+真实模型验证：2026-10-16 在 `44b9b7e` 打包运行时上执行 `pnpm test:dsh:real`，DSH `0.2.1-alpha.4`、`deepseek-official/deepseek-flash` 返回 `ok: true`。小说/短剧均使用随包 Skill，3 次 Role 调用中两个必需角色均有成功非空结果；持久事件分别 109 / 68，项目 digest 不变。临时凭据文件已在进程成功退出后删除，已通知用户可撤销。之后改动仅涉及浏览器测试与验证文档，未改变该付费运行所测的插件逻辑。

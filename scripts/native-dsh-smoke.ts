@@ -11,6 +11,8 @@ const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const dshVersion = process.env.DSH_TEST_VERSION ?? process.argv[2] ?? "0.2.1-alpha.4";
 /** Exact WebSocket route carrying every Typert Remote stream. */
 const REMOTE_STREAM_MUX_PATH = "/api/remote.mux";
+/** ChatFlow may wrap rows in its slot; nested process rows do not belong to the main tail. */
+const CHAT_FLOW_ROW_SELECTOR = ":is([data-chat-flow-key], [data-chat-running]):not([data-step-process-content] *)";
 const demoFramesDirectory = process.env.OH_STORY_DEMO_FRAMES_DIR;
 const gameEvidenceDirectory = process.env.OH_STORY_GAME_E2E_DIR;
 const useRealDeepSeek = process.env.OH_STORY_DEMO_USE_REAL_DEEPSEEK === "1";
@@ -532,7 +534,7 @@ async function assertChatAnchorContract(
   await page.waitForFunction((layout) => (
     document.querySelector("[data-conversation-scroll]")?.getAttribute("data-oh-story-layout") === layout
   ), expectedLayout);
-  const anchor = page.locator("[data-chat-flow]:not([data-step-process-content]) > [data-chat-flow-key]:not([hidden])").last();
+  const anchor = chat.locator(`${CHAT_FLOW_ROW_SELECTOR}:visible`).last();
   let measurement: {
     readonly anchorBox: Awaited<ReturnType<Locator["boundingBox"]>>;
     readonly composerBox: Awaited<ReturnType<Locator["boundingBox"]>>;
@@ -1903,7 +1905,7 @@ async function main(): Promise<void> {
         await todo.waitFor({ state: "visible", timeout: 30_000 });
         await todo.getByRole("button").click();
         await todo.locator("li").last().waitFor({ state: "attached", timeout: 20_000 });
-        const measureTodoLayout = () => page.evaluate(() => {
+        const measureTodoLayout = () => page.evaluate((rowSelector) => {
           const scroller = Array.from(document.querySelectorAll<HTMLElement>("[data-conversation-scroll]"))
             .find((element) => element.dataset.ohStoryWorkbench === "drama" && element.getBoundingClientRect().width > 0);
           const flow = scroller?.querySelector<HTMLElement>("[data-chat-flow]:not([data-step-process-content])");
@@ -1913,7 +1915,7 @@ async function main(): Promise<void> {
           // DSH may retain hidden/folding rows or auxiliary nodes at the end.
           // Measure the final rendered row in this flow, including its running status.
           const tail = flow === null || flow === undefined ? undefined : Array.from(
-            flow.querySelectorAll<HTMLElement>("[data-chat-flow-key], [data-chat-running]")
+            flow.querySelectorAll<HTMLElement>(rowSelector)
           ).filter((element) => element.closest("[data-chat-flow]") === flow
             && element.getBoundingClientRect().width > 0 && element.getBoundingClientRect().height > 0).at(-1);
           if (!(tail instanceof HTMLElement) || seat === undefined || flow === null || flow === undefined || scroller === undefined) {
@@ -1938,7 +1940,7 @@ async function main(): Promise<void> {
             tail: `${tail.tagName}.${tail.className}`,
             fromBottom: Math.round(scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight)
           };
-        });
+        }, CHAT_FLOW_ROW_SELECTOR);
         let todoLayout = await measureTodoLayout();
         for (const deadline = Date.now() + 10_000; !todoLayout.ready && Date.now() < deadline;) {
           await page.waitForTimeout(100);
