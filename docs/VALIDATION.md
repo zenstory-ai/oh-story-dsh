@@ -1,6 +1,23 @@
 # Validation
 
-Released: `@oh-story/dsh` 0.1.18 on DeepSeek Harness `0.2.1-rc.2`, with the earlier `0.2.0-rc.2` line covered. Local aggregate acceptance passed on 2026-10-19; the new-user product audit and paid-provider review are the 0.1.17 evidence below.
+Candidate: `@oh-story/dsh` 0.1.19 on DeepSeek Harness `0.2.1-rc.4`, with `0.2.1-rc.2` (npm `latest`) and the earlier `0.2.0-rc.2` line covered. Local aggregate acceptance passed on 2026-10-27.
+
+## 0.1.19 release evidence
+
+0.1.19 moves the default host to DSH `0.2.1-rc.4` and syncs Oh Story 0.9.1, Drama Skills 0.9.2 and NovelToGame 0.6.1. video-recap 0.6.2 keeps its pin.
+
+### Local evidence
+
+- Oh Story 0.9.1 (`70d1cf426f8c`), 13 Skills, 7 Roles and `agents_version` 37; Drama Skills 0.9.2 (`fdb7b7c58017`), 11 Skills; NovelToGame 0.6.1 (`c3075f35cc14`), 7 Skills. All three were synced from clean clones of the release tags with the existing exclusion rules.
+- Drama 0.9.1 no longer bundles the legacy JSON checkers, so only the six Skills that ship scripts carry a selftest. Drama parity now requires a passing selftest for every Skill with scripts, and all six pass. The drama demo fixture was re-copied from the pinned `examples/creator-first/EP001` and passes the bundled `creator_markdown_check.py`.
+- Between DSH `0.2.1-rc.2` and `0.2.1-rc.4`, 18 of the plugin's 20 DSH peer packages are byte-identical. `dsh-api-session-controller` changes one doc comment. `dsh-client-ui-conversation` only adds a View-tab More menu, `ComposerSubmission.newSession` and a `whenDraftExists` draft option, none of which the plugin imports. The `@deepseek-ai/dsh` dependency set is unchanged.
+- On 2026-10-27, `pnpm verify:release` passed in a clean clone of the candidate (`e723653`) with the three upstream release checkouts: lint, typecheck, four parity checks, the DSH boundary, release and upstream-update tests, 198 unit/contract tests across 25 files, and the build. Packaged Chrome on DSH `0.2.1-rc.4` and `0.2.0-rc.2` returned `"ok": true`; a separate packaged Chrome run on `0.2.1-rc.2` also returned `"ok": true`.
+
+### Release gates
+
+- **Local aggregate acceptance:** passed 2026-10-27.
+- **Paid provider:** passed 2026-10-27. `pnpm test:dsh:real` on the candidate source ran on DSH `0.2.1-rc.4` with `deepseek-official/deepseek-flash`. Both review Skills resolved to the installed plugin. There were 2 Role calls, and both required Roles returned successful, non-empty results. Story and drama produced 118 and 86 durable events, and the project digest remained unchanged. The operator-authorized credential was read from a 0600 temporary file, deleted after the run, and never appeared in logs. The account balance dropped 0.89 CNY during the run, an upper bound because other traffic shares the account.
+- **New-user audit:** not rerun. 0.1.19 changes no workbench surface; the 0.1.17 audit below still describes the product flow.
 
 ## 0.1.18 release evidence
 

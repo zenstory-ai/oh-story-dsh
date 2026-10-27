@@ -28,7 +28,7 @@ describe("Oh Story bundled skill provider", () => {
       expect(skill?.content).toContain(platformPath);
     }
     expect(skill?.content).toContain("Oh Story Roles are reached only through oh_story_role");
-    for (const generic of ["DSH's subagent or subagent_fork tools", "subagent_type, agent_type, agent, or TypeName"]) {
+    for (const generic of ["DSH's subagent or subagent_fork tools", "not an Agent tool", "subagent_type, agent_type, agent, or TypeName"]) {
       expect(skill?.content).toContain(generic);
     }
     expect(skill?.content).toContain("Keep the upstream writing, Tracking, lint, outline, revision, and quality workflows");

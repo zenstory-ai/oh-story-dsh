@@ -1,6 +1,6 @@
 # agent-calls.md：spawn 子代理的调用方式
 
-只在要 spawn 对应 agent 时读；主会话自己写正文、自己排纲时不读。调用时机见各流程；下列 prompt 列明必传内容。Antigravity 用 `invoke_subagent` + 同名 `TypeName`。
+派出 agent 时才读。下文只给目标角色与 prompt；调用参数按 SKILL 顶部的当前宿主映射，不照搬其他宿主工具字段。
 
 ## narrative-writer：写一章
 
@@ -19,8 +19,8 @@ Prompt：`项目目录：{dir}\n任务包：{任务包路径}\n先完整读取�
 ## story-architect、character-designer：题材定位与角色细化（可选）
 
 定方向以和作者来回讨论为主，默认主会话自己做；复杂世界观、多线结构、强反转工程或作者明确要求时才派：
-- `Agent(subagent_type: "story-architect", prompt: "项目目录：{dir}\n任务类型：题材定位\n查询参数：{作者选定的方向与对标信息}")`
-- `Agent(subagent_type: "character-designer", prompt: "项目目录：{dir}\n任务类型：角色设定\n查询参数：{主角设定信息}")` — 辅助角色设定和语言风格档案
+- `story-architect`，Prompt：`项目目录：{dir}\n任务类型：题材定位\n查询参数：{作者选定的方向与对标信息}`
+- `character-designer`，Prompt：`项目目录：{dir}\n任务类型：角色设定\n查询参数：{主角设定信息}` — 辅助角色设定和语言风格档案
 
 ## consistency-checker：写正文后的事实核对
 

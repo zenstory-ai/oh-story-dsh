@@ -109,11 +109,17 @@ for (const expected of dramaFixture.files) {
     throw new Error(`Drama demo fixture ${expected.path} differs from its recorded upstream content.`);
   }
 }
+// v0.9.1 dropped the legacy JSON checkers, and with them the selftests of Skills that now ship
+// no scripts; every Skill that still ships scripts must still ship and pass its selftest.
+const scriptedSkills = [...new Set(manifest.files
+  .map(({ path }) => /^skills\/([^/]+)\/scripts\/[^/]+\.py$/u.exec(path)?.[1])
+  .filter((skill) => skill !== undefined))].sort();
 const selftests = manifest.files
   .map(({ path }) => path)
   .filter((path) => path.endsWith("/scripts/selftest.py"));
-if (selftests.length !== manifest.skills.length) {
-  throw new Error(`Expected one Drama selftest per Skill, found ${String(selftests.length)}.`);
+const missingSelftests = scriptedSkills.filter((skill) => !paths.has(`skills/${skill}/scripts/selftest.py`));
+if (scriptedSkills.length === 0 || missingSelftests.length > 0) {
+  throw new Error(`Every Drama Skill with scripts needs a selftest; missing: ${missingSelftests.join(", ") || "all"}.`);
 }
 const python = await dramaPython();
 for (const selftest of selftests) {
@@ -138,4 +144,4 @@ if (process.env.DRAMA_SKILLS_UPSTREAM_DIR !== undefined && (await stat(source).c
     if (!upstream.equals(local)) throw new Error(`Drama demo fixture ${expected.path} differs from the pinned upstream example.`);
   }
 }
-process.stdout.write(`Drama parity OK: ${String(manifest.skills.length)} bundled skills and selftests at ${manifest.upstream.commit.slice(0, 12)}.\n`);
+process.stdout.write(`Drama parity OK: ${String(manifest.skills.length)} bundled skills and ${String(selftests.length)} selftests at ${manifest.upstream.commit.slice(0, 12)}.\n`);

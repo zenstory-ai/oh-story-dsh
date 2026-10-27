@@ -214,7 +214,8 @@ SHOT_MATCH_SAMPLE = "fps=4,scale=64:-2"
 STORYBOARD_DOCUMENT = "分镜.md"
 SHOT_HEADING = re.compile(r"^##\s+(SHOT-[^\s·]+)")
 SHOT_REFERENCE = re.compile(r"SHOT-[A-Za-z0-9-]+")
-SCENE_ID = re.compile(r"[A-Za-z]+[0-9]+-SC[0-9]+")
+# The same scene-id shape the cross-document checker accepts, season prefix included.
+SCENE_ID = re.compile(r"(?:[A-Za-z0-9]+-)+SC[0-9]+")
 # verify reads the delivered film at this size in grey, one value per pixel.
 FRAME_PROBE_SIZE = (90, 160)
 # A frame is suspect when it differs from both neighbours by more than this
@@ -1533,11 +1534,32 @@ def render(
             "".join(f"file '{segment.as_posix()}'\n" for segment in segments), encoding="utf-8"
         )
         joined = output_root / "成片-未混音.mp4"
-        # AAC encoder priming starts before zero. Keep that timestamp rather
-        # than shifting the video by one audio packet (and duplicating a frame
-        # when downstream tools decode at the delivery frame rate).
-        _run([ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-copyts",
-              "-f", "concat", "-safe", "0", "-i", str(listing), "-c", "copy", str(joined)])
+        # Pictures are stream-copied, but sound is not: every AAC segment opens
+        # with an encoder-priming frame, and copying the segments end to end
+        # left that frame as a ~32 ms dropout at each cut. The segments are
+        # decoded to PCM, joined sample-exact, and encoded once.
+        picture_track = Path(scratch) / "pictures.mp4"
+        _run([ffmpeg, "-hide_banner", "-loglevel", "error", "-y",
+              "-f", "concat", "-safe", "0", "-i", str(listing), "-map", "0:v",
+              "-c", "copy", str(picture_track)])
+        sound_listing = Path(scratch) / "sound.txt"
+        pieces = []
+        for index, (segment, length) in enumerate(zip(segments, spans)):
+            piece = Path(scratch) / f"{index:04d}.wav"
+            # A decoded AAC segment also runs into its last frame's padding;
+            # cut (or pad) every piece to the length its picture holds.
+            _run([ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-i", str(segment),
+                  "-map", "0:a", "-af", "apad", "-t", f"{length:.6f}",
+                  "-c:a", "pcm_s16le", str(piece)])
+            pieces.append(piece)
+        sound_listing.write_text(
+            "".join(f"file '{piece.as_posix()}'\n" for piece in pieces), encoding="utf-8"
+        )
+        _run([ffmpeg, "-hide_banner", "-loglevel", "error", "-y",
+              "-i", str(picture_track),
+              "-f", "concat", "-safe", "0", "-i", str(sound_listing),
+              "-map", "0:v", "-map", "1:a", "-c:v", "copy",
+              "-c:a", "aac", "-b:a", "192k", str(joined)])
 
         effects: list[Placed] = []
         placed = (

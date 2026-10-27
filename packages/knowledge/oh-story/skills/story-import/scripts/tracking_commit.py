@@ -45,6 +45,8 @@ CONTEXT_TARGET_BYTES = 8192
 CONTEXT_MAX_BYTES = 12288
 SNAPSHOT_TARGET_BYTES = 4096
 SNAPSHOT_MAX_BYTES = 8192
+# 下一章热上下文里列出的活跃角色，不是核心角色总数；体积仍由 CONTEXT_MAX_BYTES 兜底。
+ACTIVE_CHARACTER_MAX = 20
 
 CONTEXT_HEADINGS = (
     "## 当前位置",
@@ -663,7 +665,10 @@ def validate_context_input(value: object, *, include_initial_fields: bool) -> di
             context.get("continuity_risks", []), "context.continuity_risks", maximum=5
         ),
     }
-    require(len(normalized["active_character_names"]) <= 6, "context.active_character_names may contain at most 6 names")
+    require(
+        len(normalized["active_character_names"]) <= ACTIVE_CHARACTER_MAX,
+        f"context.active_character_names may contain at most {ACTIVE_CHARACTER_MAX} names",
+    )
     require(
         len({portable_name_key(name) for name in normalized["active_character_names"]})
         == len(normalized["active_character_names"]),

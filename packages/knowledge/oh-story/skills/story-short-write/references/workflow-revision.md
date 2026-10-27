@@ -14,7 +14,7 @@
 
 #### Agent 调用：narrative-writer（去AI味）+ consistency-checker
 
-已部署对应 agent 时可派出：narrative-writer 去味的 prompt 见 [agent-calls.md](agent-calls.md)「精修去味」；一致性检查派 `Agent(subagent_type: "consistency-checker", prompt: "项目目录：{dir}\n检查范围：{正文文件}\n检查类型：事实冲突+伏笔断线+角色属性不一致")`。agent 不可用时主会话直接执行。
+按 SKILL 顶部的当前宿主角色来源确认可用时再派出：narrative-writer 去味的 prompt 见 [agent-calls.md](agent-calls.md)「精修去味」；一致性检查派 `consistency-checker`，Prompt：`项目目录：{dir}\n检查范围：{正文文件}\n检查类型：事实冲突+伏笔断线+角色属性不一致`。agent 不可用时主会话直接执行。
 
 **正文洁净规则**：自检结果只在对话中说明，不另存或附正文；正文不得出现 `<!-- 自检 -->` 等检查标记。
 

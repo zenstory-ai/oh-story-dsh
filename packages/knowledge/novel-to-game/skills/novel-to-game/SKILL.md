@@ -21,14 +21,14 @@ description: "Turn a novel into a fully playable game on the selected target pla
 ## 模式
 
 - `quick`：默认；用推荐草案推进，比较有效替代后自动选择并完成全流程。
-- `director`：在概念方向、白盒试玩后的内容取舍和视觉目标候选三处给出候选与推荐后停靠，等待用户选择；
-  已有明确选择时不重复停靠。
+- `director`：在概念方向、白盒试玩后的内容取舍（可在此请目标玩家试玩）和视觉目标候选（仅制作视觉目标包时）
+  给出候选与推荐后停靠，等待用户选择；已有明确选择时不重复停靠。
 - `resume`：读取 `_progress.md` 和实际产物，从最早未完成的交接继续。
 
 ## 流程
 
 1. 建立工作区，记录来源、模式、当前阶段和未确认假设。
-2. 生成 `PRODUCT_BRIEF.md`；高风险歧义未解决时才停靠。
+2. 生成 `PRODUCT_BRIEF.md`。
 3. 调用 `novel-game-analyze` 生成有原文依据的 `SOURCE_BIBLE.md`。
 4. 调用 `game-concept` 比较仍开放的方向并选定 `CONCEPT.md`；自然语言专属命令按玩法需要选择，
    不适用时明确 `N/A`；`director` 的待决方向在此停靠。
@@ -39,7 +39,7 @@ description: "Turn a novel into a fully playable game on the selected target pla
 7. 调用 `game-art-direction` 生成 `ART_DIRECTION.md`；只有高风险歧义或目标成色需要时再制作视觉目标包，目标图选定后
    才进入批量资产生产。
 8. 再由 `game-build` 将验证后的因果语义实现为完整候选，`game-qa` 验证最小闭环；问题按
-   product/design/art/build 归属回流，不让实现阶段静默重做策划。
+   product/design/art/build 归属回流。
 
 ## 语言与文化
 

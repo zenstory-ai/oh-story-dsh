@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "upstream": {
     "repository": "https://github.com/zenstory-ai/novel-to-game.git",
-    "commit": "7758caa8d9578f19780349e7b4e4115ef831fd7a",
-    "releaseVersion": "0.6.0"
+    "commit": "c3075f35cc14d4bc94e2829df2bfcc0d9971229e",
+    "releaseVersion": "0.6.1"
   },
-  "generatedAt": "2026-10-19T08:12:54.284Z",
+  "generatedAt": "2026-10-27T08:36:13.586Z",
   "skills": [
     "game-art-direction",
     "game-build",
@@ -26,23 +26,23 @@
     },
     {
       "path": "README.md",
-      "sha256": "dc046f8d7f8cee9af8cc3882b51b274ba04b51d04ff3b3eafaf555b1cc10f1e0",
-      "bytes": 38777
+      "sha256": "e3db2db40799e4460f6ebee77794cb0ae43ee28a3a01069e9f54155133af49b1",
+      "bytes": 37861
     },
     {
       "path": "README_ZH.md",
-      "sha256": "5332bdb07c7744e8b556d253d28d1c3edd8e7feb04990d8a109fe19a643ff6ca",
-      "bytes": 34810
+      "sha256": "088e801663994bcd3b60b58b33b8e99345ccc3470afbb1d0aeb561cea3ca768d",
+      "bytes": 34100
     },
     {
       "path": "VERSION",
-      "sha256": "97a5d6e540a6120d09c39ddb667e0e8e2bac7fcc2ffef813b82e08fd60365bce",
+      "sha256": "87b241b275c591694846560e9879f50c9da3150f854efdabd782c539772f3033",
       "bytes": 6
     },
     {
       "path": "examples/jin-ping-mei/build/BUILD_BRIEF.md",
-      "sha256": "ae93c757143d37375018ae2ab5d437fd431c7eb23a1f4626a2814b96bbc2e339",
-      "bytes": 2403
+      "sha256": "b6dbed37f9faac97dcfb0f125471a5eee703789b26371af64dcac7dbb58da3ab",
+      "bytes": 2208
     },
     {
       "path": "examples/jin-ping-mei/build/app/.gitignore",
@@ -466,8 +466,8 @@
     },
     {
       "path": "examples/jin-ping-mei/build/app/js/audio.js",
-      "sha256": "80be0ddde3e810c25bbfb6b418cdf8dc84c1d558c355b10d92d235e3753253b6",
-      "bytes": 8930
+      "sha256": "bc55efbca94be03723911ea61e34459f2f0344b55f4c995b84d18340af8967e8",
+      "bytes": 8745
     },
     {
       "path": "examples/jin-ping-mei/build/app/js/main.js",
@@ -566,8 +566,8 @@
     },
     {
       "path": "examples/jin-ping-mei/qa/README.md",
-      "sha256": "866e798b79f05bf3eee81fc96e5fe9723e548b139494a4f7d08adb81abe04694",
-      "bytes": 956
+      "sha256": "0091b4301d58ca7633f8db0a51dbb1ad7551303d0494044fabd1caeb4d7c2b3c",
+      "bytes": 923
     },
     {
       "path": "examples/jin-ping-mei/qa/verification.json",
@@ -576,8 +576,8 @@
     },
     {
       "path": "skills/game-art-direction/SKILL.md",
-      "sha256": "73f95a5e747709a4f35b2703fabc2f00f48fb63b93a1aff002251e9af06dff6a",
-      "bytes": 3245
+      "sha256": "6c4a04515e0df31c60e8288d97e024a0b0dd93312df2ec5640b1e067923dee6e",
+      "bytes": 3218
     },
     {
       "path": "skills/game-art-direction/agents/openai.yaml",
@@ -601,38 +601,38 @@
     },
     {
       "path": "skills/game-build/references/baked-sprite-workflow.md",
-      "sha256": "aa7cbf2c255bae747a65b4d8eaef060ec77a4e3da137636d090e1b4583e390a5",
-      "bytes": 1671
+      "sha256": "13652d58eab4e15693839cb6ef9c4bf4a878a1b55a29e4f9452cc9f14a1283f6",
+      "bytes": 1490
     },
     {
       "path": "skills/game-build/references/blender-asset-workflow.md",
-      "sha256": "6fbf2e11f74ca2be1d2e3d3644dfc9ed82f04a6f0d92b67b2267894a710a4a42",
-      "bytes": 1834
+      "sha256": "51cf1851709fb22b31c56a31a6d61f8160b060fc28e66f88209a1c526108732d",
+      "bytes": 1559
     },
     {
       "path": "skills/game-build/references/build-brief-contract.md",
-      "sha256": "574c8178a126480aba77ff019ceef8b630937a2be36ab0f2215e143986d20f1f",
-      "bytes": 3618
+      "sha256": "ccc9f1a953c041f6e3075fd131088ba3d5ae13170e0a438edd83f622bc052efe",
+      "bytes": 3564
     },
     {
       "path": "skills/game-build/references/generative-media-pipeline.md",
-      "sha256": "afcc211cde3fcadd42125d4fa45540765abb7279a52d69e0e5cdbe4500e6cd09",
-      "bytes": 1507
+      "sha256": "f3051882b7c874d0e74ec4aa585a091323eb5d610ab4cbbf286b924858b5152a",
+      "bytes": 1231
     },
     {
       "path": "skills/game-build/references/playable-model-contract.md",
-      "sha256": "ae50db8faf6713d5df5fabf875d4b17e1d38dbd442262ffb5a4dcf0495822f25",
-      "bytes": 2711
+      "sha256": "a0321d605c18388b5805de033d1b2e621c11d09af223d6c1e1dd3975f88a9297",
+      "bytes": 2556
     },
     {
       "path": "skills/game-build/references/tts-production-contract.md",
-      "sha256": "ceb860341a91d27781ce3a2f0ed54dae887e4f3b15e50db1e1b0efd81b8f442e",
-      "bytes": 1426
+      "sha256": "8962b0d6a08c61ebf0936b4a97e4e91a55c6333f5b122e510d3769925f0aa1f0",
+      "bytes": 1249
     },
     {
       "path": "skills/game-concept/SKILL.md",
-      "sha256": "bce6fadcf21c57ce279dcb90af6f3d15ea9328410f291977a1c9cae4d3d6de20",
-      "bytes": 3436
+      "sha256": "d5cadc51bee106ca94a521e928595eababadbb676e39925a0b6966cd5de63425",
+      "bytes": 3403
     },
     {
       "path": "skills/game-concept/agents/openai.yaml",
@@ -646,8 +646,8 @@
     },
     {
       "path": "skills/game-qa/SKILL.md",
-      "sha256": "03bebbe8f6179a40ef2eb08f9840e01b188668894811389a353d8657bc8a4200",
-      "bytes": 2655
+      "sha256": "1e6d00e38abd689fe2f94cc426abc13e5d9df5c979fe60fcfd0dfa4e0d10bcbc",
+      "bytes": 2521
     },
     {
       "path": "skills/game-qa/agents/openai.yaml",
@@ -656,13 +656,13 @@
     },
     {
       "path": "skills/game-qa/references/qa-contract.md",
-      "sha256": "996387404cad4a22555c9e752cb7ccfa8a4e5a40550942fc53893b45c6109e45",
-      "bytes": 3067
+      "sha256": "6f00ec2e380094f5fad017281e018ae524196e3ad612bd016ddaa97c63b215c9",
+      "bytes": 3039
     },
     {
       "path": "skills/game-qa/references/test-design-method.md",
-      "sha256": "fa6597233fed41464bec16b9253c54357d2391a1ca5791b223049a7e2a3dad9c",
-      "bytes": 3771
+      "sha256": "2b9c4a7331c8302f1d0894178eb9cf1bd39633a69512bfd2481006db786693b4",
+      "bytes": 3635
     },
     {
       "path": "skills/game-world-design/SKILL.md",
@@ -691,8 +691,8 @@
     },
     {
       "path": "skills/novel-game-analyze/SKILL.md",
-      "sha256": "193253249ebcf75e065837565e96dec13808aba0fbf77e1e61d55163817a05e3",
-      "bytes": 5096
+      "sha256": "4595ec966ee2cbcf46ca75daa534a790beb29c669d348b09e16254e30893894a",
+      "bytes": 4879
     },
     {
       "path": "skills/novel-game-analyze/agents/openai.yaml",
@@ -701,13 +701,13 @@
     },
     {
       "path": "skills/novel-game-analyze/references/gameability-protocol.md",
-      "sha256": "6954dbe3421f3e6aae27e181097cd8a16a9ecde382a344b44ba10c20c896ec5a",
-      "bytes": 4175
+      "sha256": "dd1a2bfd560e21af69bcd9f3783db64295f4bffb1a05a872024d60f6e8f78b39",
+      "bytes": 4087
     },
     {
       "path": "skills/novel-to-game/SKILL.md",
-      "sha256": "b8ed42dd6d6e2d0a38f8f4014948b3d5a35f95199e364054878a256413105258",
-      "bytes": 4485
+      "sha256": "62b35309ba32c01f006deb4a7156e304839f57d77cc5264d3a7b9a697588dd61",
+      "bytes": 4470
     },
     {
       "path": "skills/novel-to-game/agents/openai.yaml",
@@ -716,13 +716,13 @@
     },
     {
       "path": "skills/novel-to-game/references/intake-method.md",
-      "sha256": "6ded64de535ed03f996e336fcc413adf358b454cc2b3e04331d83400b7daffae",
-      "bytes": 3112
+      "sha256": "f1081101aa21f0ec8ad61fbb4ad1cb1d2531bb4158bbe4889a65b6ef54ea7e37",
+      "bytes": 2902
     },
     {
       "path": "skills/novel-to-game/references/pipeline-contract.md",
-      "sha256": "ce943fec9b9de37914b4ae949b76ce82e774f154ec0ac5a63e6fae6b2044962d",
-      "bytes": 3998
+      "sha256": "60c90580a613e9a8dbd0a87f2c87476061e43551842f25168e0ce09ee1113f2a",
+      "bytes": 3278
     }
   ]
 }

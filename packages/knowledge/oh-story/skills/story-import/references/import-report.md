@@ -62,4 +62,4 @@ Phase 5 只读本文件和导入记录（`{书目录}/.story/work/导入记录.m
 
 - 设置 `.active-book` 指向导入的书名/标题目录，在导入记录勾「汇报与激活」。
 - 确认目录符合对应写作 skill 的识别规则：长篇为 `正文/` 与 `大纲/`，短篇为 `正文.md`、`设定.md` 与 `小节大纲.md`。
-- 可选验证：如果当前运行时的 canonical 目录已部署 story-explorer agent，可 spawn 交叉验证迁移数据完整性；Antigravity 检查 `.agents/agents/story-explorer/agent.md` 并用 `invoke_subagent` + `TypeName: "story-explorer"`。Prompt：`项目目录：{dir}\n查询类型：progress\n查询参数：导入验证`
+- 可选验证：按 SKILL.md 顶部的当前宿主角色来源确认 story-explorer 可用时（ZCode 查插件注册角色），可 spawn 交叉验证迁移数据完整性；Antigravity 检查 `.agents/agents/story-explorer/agent.md` 并用 `invoke_subagent` + `TypeName: "story-explorer"`。Prompt：`项目目录：{dir}\n查询类型：progress\n查询参数：导入验证`
