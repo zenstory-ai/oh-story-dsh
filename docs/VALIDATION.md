@@ -16,7 +16,7 @@ Candidate: `@oh-story/dsh` 0.1.19 on DeepSeek Harness `0.2.1-rc.4`, with `0.2.1-
 ### Release gates
 
 - **Local aggregate acceptance:** passed 2026-10-27.
-- **Paid provider:** not executed. No `DEEPSEEK_API_KEY` was available locally or as a repository secret, so this is not a pass.
+- **Paid provider:** passed 2026-10-27. `pnpm test:dsh:real` on the candidate source ran on DSH `0.2.1-rc.4` with `deepseek-official/deepseek-flash`. Both review Skills resolved to the installed plugin. There were 2 Role calls, and both required Roles returned successful, non-empty results. Story and drama produced 118 and 86 durable events, and the project digest remained unchanged. The operator-authorized credential was read from a 0600 temporary file, deleted after the run, and never appeared in logs. The account balance dropped 0.89 CNY during the run, an upper bound because other traffic shares the account.
 - **New-user audit:** not rerun. 0.1.19 changes no workbench surface; the 0.1.17 audit below still describes the product flow.
 
 ## 0.1.18 release evidence
