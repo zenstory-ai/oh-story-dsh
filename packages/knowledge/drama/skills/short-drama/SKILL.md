@@ -48,7 +48,7 @@ license: MIT
 4. 范围完成后一次回报完成内容、关键决定、真实未决项和可选下一步。
 5. 不自动开始用户没点名的审查、归档或生产。
 6. 请求横跨视觉设定、图片提示词、分镜或视频提示词时，结束前核对当前已有文档的视觉依赖；
-   图片提示词和分镜并行完成时，也要同步两支的引用。五份文档齐备后再运行完整跨文档检查，不为检查补造文件。
+   图片提示词和分镜并行完成时，也要同步两支的引用。每写完一份文档就带 `--partial` 运行跨文档检查，只核对已有文档；五份齐备后再运行完整检查。不为检查补造文件。
 7. 视频提示词请求遇到「输入参考图：无」或仍带「待补参考图」时，先路由分镜 owner 检查项目已有图片并刷新绑定。有匹配图就同请求续跑；有必要图缺失就列表停下。
    停下时把三条路一起给出：把已有图片放进项目绑成 `REF-...`；由创作者在自己的工具里出图、本轮先用
    `PLAN-...` 写出逐镜挂图计划并照常产出视频提示词；或者明确改走文生视频。用本套件生产参考图需要项目外的
@@ -93,6 +93,14 @@ python3 {技能目录}/scripts/project_tool.py set-authority <project> \
 
 各字段取值由命中的模型方言给出：`$short-drama-video-prompts` 的 MiniMax H3 / Seedance / Wan 3.0 方言文件都写了
 推荐档案。写完用 `status` 复核 `video_model_profile` 是否已经出现。
+
+语速 `format.pacing` 和集数 `format.episode_count` 走同样的决策写入：`--field /format/pacing`，
+`accepted_value` 写 `{"spoken_characters_per_second": <每秒可发声字数>, "seconds_per_action_paragraph": <每段动作秒数>}`，
+两项都要给；画面文字多、要按读字时间计时的项目，可再加 `"on_screen_text_characters_per_second"`。
+`--field /format/episode_count`，`accepted_value` 写正整数。没有语速时写作阶段算不出秒数。
+`status` 的 `profile_notes` 会列出各自有效、合在一起却做不到的设定，例如平均镜长低于目标模型原生最短时长，
+或设了单集目标时长却没有语速；看到就交创作者决定，不要等到分镜才发现。创作者选择用多镜容器解决镜长冲突时，
+在生产档案 `choices` 里加 `"multi_shot_containers": true`（同一条决策写入），这条提示随之消失。
 
 项目定位与安全写入见 [运行预检](references/runtime-preflight.md)。用户明确要求 Dashboard 时运行：
 

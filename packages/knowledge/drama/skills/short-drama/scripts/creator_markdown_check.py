@@ -8,7 +8,7 @@ import json
 import re
 import sys
 from pathlib import Path, PurePosixPath
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from typing import NamedTuple, Optional
 
 
@@ -28,7 +28,8 @@ REQUIRED_DOCUMENTS = (
     "分镜.md",
     "视频提示词.md",
 )
-SECTION_RE = re.compile(r"^## ((?:SHOT|MOTION)-[A-Z0-9-]+)\b", re.MULTILINE)
+SECTION_RE = re.compile(r"^## ((?:SHOT|MOTION|GROUP)-[A-Z0-9-]+)\b", re.MULTILINE)
+ANY_SECTION_RE = re.compile(r"^## ", re.MULTILINE)
 IMG_RE = re.compile(r"\b(IMG-[A-Z0-9-]+)《([^》]+)》（控制：([^）]+)）")
 # 用途 is optional in the pattern on purpose: a declaration written before this
 # field existed still parses, so the creator gets "REF 缺少用途" instead of the
@@ -105,7 +106,8 @@ SCREENPLAY_DIALOGUE_RE = re.compile(
     r"(?:（[^（）\r\n]+）)?：(?P<text>\S[\s\S]*)$"
 )
 SCREENPLAY_VOICE_TAG_RE = re.compile(
-    r"^\[(?:VO|OS)\]\s*(?P<speaker>[^\s：（）:\[\]#]{1,40})：(?P<text>\S[\s\S]*)$"
+    r"^\[(?:VO|OS)\]\s*(?P<speaker>[^\s：（）:\[\]#]{1,40})"
+    r"(?:（[^（）\r\n]+）)?：(?P<text>\S[\s\S]*)$"
 )
 # A later line of a paragraph that starts another block (the index's
 # ASCII_DIALOGUE_RE, ANY_TAG_RE and MALFORMED_TAG_RE): the paragraph is missing
@@ -128,6 +130,8 @@ SCENE_HEADING_RE = re.compile(
     r"^## (" + SCENE_ID_PATTERN + r")\b", re.MULTILINE
 )
 SCENE_ID_RE = re.compile(SCENE_ID_PATTERN)
+# A quoted span of the source line, 「…」 or 『…』.
+QUOTE_RE = re.compile(r"「[^」]*」|『[^』]*』")
 # A scene the storyboard decided not to film. SHT-01 has always allowed the
 # omission and always required a reason; without a place to write it the
 # omission and an oversight look identical in the finished document.
@@ -189,6 +193,7 @@ OFFSCREEN_ENTRY_RE = re.compile(
 # line -- any list marker, any leading whitespace -- is captured here and then
 # has to parse, so a creator who indents the bullet under 识别锚点 gets an error
 # instead of silent non-enforcement.
+IN_FRAME_SCOPE = "入画"
 LOCK_LINE_RE = re.compile(r"^[ \t\u3000]*[-*+][ \t\u3000]*连续性锁[：:].*$", re.MULTILINE)
 LOCK_RE = re.compile(
     r"^[ \t\u3000]*[-*+][ \t\u3000]*连续性锁：(LOCK-[A-Z0-9-]+)《([^》\n]+)》"
@@ -214,19 +219,20 @@ NEGATION_RE = re.compile(
 
 
 def _sections(document: str, kind: str) -> dict[str, str]:
-    matches = [
-        match
-        for match in SECTION_RE.finditer(document)
-        if match.group(1).startswith(f"{kind}-")
-    ]
-    return {
-        match.group(1): document[
-            match.start() : matches[index + 1].start()
-            if index + 1 < len(matches)
-            else None
-        ]
-        for index, match in enumerate(matches)
-    }
+    """Each `## <kind>-...` entry, running up to the next second-level heading.
+
+    The entry stops at *any* `## ` heading, not only the next entry of its own
+    kind: a report or a delivery group written after the last shot would
+    otherwise be read as that shot's fields.
+    """
+    headings = [match.start() for match in ANY_SECTION_RE.finditer(document)]
+    sections: dict[str, str] = {}
+    for match in SECTION_RE.finditer(document):
+        if not match.group(1).startswith(f"{kind}-"):
+            continue
+        end = next((start for start in headings if start > match.start()), None)
+        sections.setdefault(match.group(1), document[match.start() : end])
+    return sections
 
 
 def _fields(section: str, *, owner: str, errors: list[str]) -> dict[str, str]:
@@ -261,7 +267,7 @@ def _contains_slot_token(value: str) -> bool:
 
 def _is_none(value: str) -> bool:
     # `[^）]+` would stop at the first closing bracket, so a gap list that names
-    # an entry in brackets -- 「江晨人物图（IMG-...）」 -- fell through to the REF
+    # an entry in brackets -- 「许棠人物图（IMG-...）」 -- fell through to the REF
     # syntax error, whose obvious repair is deleting the gap record. That is the
     # silent downgrade this contract exists to prevent, so the note takes any
     # content as long as it is bracketed.
@@ -358,8 +364,10 @@ def _inside(path: Path, root: Path) -> bool:
 class EntryIndex(NamedTuple):
     """The document entries a `PLAN-...` locator is allowed to name."""
 
-    images: dict[str, str]
-    shots: frozenset
+    # None when that document is not part of a partial check: its locators
+    # cannot be resolved, so they are not reported as missing either.
+    images: Optional[dict[str, str]]
+    shots: Optional[frozenset]
 
 
 def _slot_matches(value: str) -> list:
@@ -379,7 +387,7 @@ def _slot_matches(value: str) -> list:
 def _references(
     value: str,
     owner: str,
-    project_root: Path,
+    project_root: Optional[Path],
     errors: list[str],
     entries: Optional[EntryIndex] = None,
 ) -> frozenset:
@@ -403,7 +411,7 @@ def _references(
     trailing = reference_value[cursor:]
     # Counted as slot heads on the same text the slots were matched in. A bare
     # token count would read the `ref-` in a real path like
-    # `输入/参考图/ref-江晨.png` as a second slot and reject a correct declaration.
+    # `输入/参考图/ref-许棠.png` as a second slot and reject a correct declaration.
     declared = len(SLOT_HEAD_RE.findall(reference_value))
     kinds = frozenset(item[2] for item in matches)
     if (
@@ -480,11 +488,17 @@ def _references(
 
 
 def _check_project_file(
-    locator: str, owner: str, project_root: Path, errors: list[str]
+    locator: str, owner: str, project_root: Optional[Path], errors: list[str]
 ) -> None:
-    """A REF locator names a readable file inside the project, or it is a defect."""
+    """A REF locator names a readable file inside the project, or it is a defect.
+
+    Without a project root (a reader that only has the documents' text) the
+    path's shape is still checked; whether the file exists is not.
+    """
     if not _portable_path(locator):
         errors.append(f"{owner}: REF 路径不是安全的项目相对路径: {locator}")
+        return
+    if project_root is None:
         return
     reference_path = project_root / locator
     if not _inside(reference_path, project_root):
@@ -630,23 +644,29 @@ class VoiceContext(NamedTuple):
     dialogue: list[SpokenLine]
     # Every name a clause may use for a 人物 entry: its name and 画面代称.
     names: dict[str, list[str]]
+    # False when that document is not part of a partial check: the checks
+    # that read it are skipped instead of reporting every name as unknown.
+    has_visual: bool = True
+    has_screenplay: bool = True
 
 
 def _audio_references(
     value: str,
     owner: str,
-    project_root: Path,
+    project_root: Optional[Path],
     errors: list[str],
     *,
     image_slots: list[str],
     prompt: Optional[str],
     voices: VoiceContext,
-    scenes: list[str],
+    scenes: Optional[list[str]],
 ) -> None:
     """Validate one MOTION's 参考音频 line against the character it names."""
     if _is_none(value):
         return
     # A line said in another scene is not evidence for this shot.
+    # None: no storyboard says which scenes this MOTION films, so who speaks a
+    # line cannot be told apart and attribution is skipped.
     in_scope = [line for line in voices.dialogue if not scenes or line.scene in scenes]
     quotes = _quote_speakers(prompt, in_scope, voices.names)
     plain = value.strip()
@@ -685,13 +705,15 @@ def _audio_references(
             errors.append(f"{owner}: REF 控制与不得控制范围冲突: {slot}")
         if not {"台词", "语气", "情绪"} <= prohibited:
             errors.append(f"{owner}: 参考音频不得控制至少包含台词、语气、情绪: {slot}")
-        if name not in voices.characters:
+        if voices.has_visual and name not in voices.characters:
             errors.append(
                 f"{owner}: 参考音频的角色不是《视觉设定.md》里的人物条目: {name}"
             )
             continue
         shared = [span for span, speakers in quotes if name in speakers]
-        if any(speakers == {name} for _, speakers in quotes):
+        if scenes is None or not (voices.has_screenplay and voices.has_visual) or any(
+            speakers == {name} for _, speakers in quotes
+        ):
             pass
         elif shared:
             others = sorted(
@@ -707,6 +729,8 @@ def _audio_references(
                 f"{owner}: 人物「{name}」在本镜可复制提示词里没有说出《剧本.md》记在其名下的台词；"
                 "不说话的人物不绑定参考音频"
             )
+        if not voices.has_visual:
+            continue
         record = voices.records.get(name)
         recorded = VOICE_RECORD_PATH_RE.match(record.strip()) if record else None
         if record is None:
@@ -744,11 +768,15 @@ def _plan_locator(
     if entries is None:
         return
     if locator.startswith("IMG-"):
+        if entries.images is None:
+            return
         if locator not in entries.images:
             errors.append(f"{owner}: PLAN 指向不存在的 IMG 条目: {locator}")
         elif label != entries.images[locator]:
             errors.append(f"{owner}: PLAN 中文名称与 IMG 标题不一致: {slot}")
     elif locator.startswith("SHOT-"):
+        if entries.shots is None:
+            return
         if locator not in entries.shots:
             errors.append(f"{owner}: PLAN 指向不存在的 SHOT 条目: {locator}")
         elif purpose == "起始帧":
@@ -917,8 +945,8 @@ def _named_entries(
 ) -> set[tuple[str, str]]:
     """Which declared entries does this frozen keyframe actually call by name?
 
-    Longer designators win: a keyframe that shows 「江晨手机」 names the prop, and
-    the 人物「江晨」 substring inside it is not a second, unrelated claim.
+    Longer designators win: a keyframe that shows 「许棠手机」 names the prop, and
+    the 人物「许棠」 substring inside it is not a second, unrelated claim.
     """
     haystack = re.sub(r"\s+", " ", prompt).strip()
     if fold_case:
@@ -1125,13 +1153,26 @@ class ContinuityLock(NamedTuple):
     surface: str
     shots: list[str]
     images: list[str]
+    # The 人物/造型/地点/道具 entry the lock line sits under. `镜头：入画` scopes
+    # the lock to every shot whose 视觉依据 lists that entry, so the lock can
+    # be written before any shot exists.
+    entry: Optional[tuple[str, str]] = None
 
 
 def _continuity_locks(document: str, errors: list[str]) -> list[ContinuityLock]:
     """Parse the declared continuity locks of one 视觉设定.md."""
     locks: list[ContinuityLock] = []
     seen: set[str] = set()
-    for line in LOCK_LINE_RE.findall(document):
+    sections = [match.start() for match in ANY_SECTION_RE.finditer(document)]
+    for found in LOCK_LINE_RE.finditer(document):
+        line = found.group(0)
+        # Only the section the line actually sits in owns it; a lock under a
+        # report or note heading belongs to no entry.
+        start = next((at for at in reversed(sections) if at < found.start()), None)
+        owner = (
+            VISUAL_SETTING_HEADING_RE.match(document, start) if start is not None else None
+        )
+        entry = (owner.group(1), owner.group(2).strip()) if owner else None
         match = LOCK_RE.match(line)
         if match is None:
             errors.append(
@@ -1155,8 +1196,26 @@ def _continuity_locks(document: str, errors: list[str]) -> list[ContinuityLock]:
         if not shots:
             errors.append(f"{lock_id}: 连续性锁缺少镜头范围")
             continue
+        malformed = [
+            item
+            for item in shots
+            if item not in ("全集", IN_FRAME_SCOPE) and not re.fullmatch(r"SHOT-[A-Z0-9-]+", item)
+        ]
+        if malformed:
+            errors.append(
+                f"{lock_id}: 连续性锁的镜头范围只能写入画、全集或 SHOT-... 列表: {'、'.join(malformed)}"
+            )
+            continue
         if "全集" in shots and len(shots) != 1:
             errors.append(f"{lock_id}: 连续性锁的镜头范围不能把全集与具体镜头混写")
+            continue
+        if IN_FRAME_SCOPE in shots and len(shots) != 1:
+            errors.append(f"{lock_id}: 连续性锁的镜头范围写「入画」时不能再列其他镜头")
+            continue
+        if shots == [IN_FRAME_SCOPE] and entry is None:
+            errors.append(
+                f"{lock_id}: 镜头范围写「入画」的锁必须写在某个人物、造型、地点或道具条目下"
+            )
             continue
         images: list[str] = []
         if image_scope is not None and not _is_none(image_scope):
@@ -1168,17 +1227,19 @@ def _continuity_locks(document: str, errors: list[str]) -> list[ContinuityLock]:
             if any(not item.startswith("IMG-") for item in images):
                 errors.append(f"{lock_id}: 连续性锁的图片提示词项必须使用 IMG-  ID")
                 continue
-        locks.append(ContinuityLock(lock_id, surface, shots, images))
+        locks.append(ContinuityLock(lock_id, surface, shots, images, entry))
     return locks
 
 
-def _prompt_language(project_root: Path) -> str:
+def _prompt_language(project_root: Optional[Path]) -> str:
     """The language a copyable prompt body is written in.
 
     Mirrors the skills' own routing: the project's declared prompt language,
     falling back to `en` when there is no `short-drama.json` -- which is what
     the storyboard skill tells the keyframe author to assume.
     """
+    if project_root is None:
+        return ""
     configuration = project_root / "short-drama.json"
     if not configuration.is_file():
         return "en"
@@ -1204,7 +1265,7 @@ def _prompt_language(project_root: Path) -> str:
 
 
 def _check_language_designators(
-    project_root: Path, *, entries: list[VisualEntry], errors: list[str]
+    project_root: Optional[Path], *, entries: list[VisualEntry], errors: list[str]
 ) -> None:
     """Every character must be nameable in the prompt body's language.
 
@@ -1217,7 +1278,9 @@ def _check_language_designators(
     rounds: a document missing 视觉依据 got one error, and only after fixing it
     did the missing 画面代称 appear.
     """
-    if _prompt_language(project_root).casefold().startswith("zh"):
+    if project_root is None or _prompt_language(project_root).casefold().startswith("zh"):
+        # Without a project root the prompt language is unknown; validate_documents
+        # promises to skip what needs the disk rather than guess a language.
         return
     for entry in entries:
         if entry.category != "人物":
@@ -1244,25 +1307,51 @@ def _declared_seconds(value: str) -> Optional[float]:
 def _check_continuity_locks(
     locks: list[ContinuityLock],
     *,
-    shots: dict[str, str],
+    shots: Optional[dict[str, str]],
     motion_by_shot: dict[str, tuple[str, str, Optional[str]]],
-    image_prompts: dict[str, Optional[str]],
+    image_prompts: Optional[dict[str, Optional[str]]],
     errors: list[str],
+    in_frame: Optional[dict[str, set[tuple[str, str]]]] = None,
+    groups: Optional[dict[str, tuple[list[str], Optional[str]]]] = None,
 ) -> None:
-    """Require every declared lock surface to be present where it was scoped."""
+    """Require every declared lock surface to be present where it was scoped.
+
+    ``shots`` or ``image_prompts`` is None when that document is not part of a
+    partial check; that half of the lock is skipped.
+    """
     for lock in locks:
         lock_id = lock.lock_id
         surface = lock.surface
-        targets = sorted(shots) if lock.shots == ["全集"] else lock.shots
+        if shots is None:
+            # Without 分镜.md: explicit shots and 全集 still reach the MOTION and
+            # GROUP bodies through each MOTION's 分镜 field; 入画 needs the
+            # storyboard's 视觉依据 and waits for it.
+            if lock.shots == ["全集"]:
+                targets: list[str] = sorted(motion_by_shot)
+            elif lock.shots == [IN_FRAME_SCOPE]:
+                targets = []
+            else:
+                targets = lock.shots
+        elif lock.shots == ["全集"]:
+            targets = sorted(shots)
+        elif lock.shots == [IN_FRAME_SCOPE]:
+            targets = sorted(
+                shot_id
+                for shot_id, declared in (in_frame or {}).items()
+                if lock.entry in declared
+            )
+        else:
+            targets = lock.shots
         for shot_id in targets:
-            if shot_id not in shots:
-                errors.append(f"{lock_id}: 连续性锁指向不存在的镜头: {shot_id}")
-                continue
-            keyframe = _copyable_prompt(shots[shot_id], heading=r"冻结关键帧提示词")
-            if keyframe is None:
-                errors.append(f"{lock_id}: {shot_id} 缺少可读的冻结关键帧提示词")
-            elif not _carries_surface(keyframe, surface):
-                errors.append(f"{lock_id}: {shot_id} 冻结关键帧提示词缺少锁面")
+            if shots is not None:
+                if shot_id not in shots:
+                    errors.append(f"{lock_id}: 连续性锁指向不存在的镜头: {shot_id}")
+                    continue
+                keyframe = _copyable_prompt(shots[shot_id], heading=r"冻结关键帧提示词")
+                if keyframe is None:
+                    errors.append(f"{lock_id}: {shot_id} 缺少可读的冻结关键帧提示词")
+                elif not _carries_surface(keyframe, surface):
+                    errors.append(f"{lock_id}: {shot_id} 冻结关键帧提示词缺少锁面")
             motion = motion_by_shot.get(shot_id)
             if motion is None:
                 continue
@@ -1271,13 +1360,106 @@ def _check_continuity_locks(
                 copyable_prompt, surface
             ):
                 errors.append(f"{lock_id}: {motion_id} 可复制提示词缺少锁面")
+        # A delivery group's body is what is actually submitted, so a lock that
+        # covers any member shot has to reach it too.
+        for group_id, (members, group_prompt) in (groups or {}).items():
+            if group_prompt is None or not set(members) & set(targets):
+                continue
+            if not _carries_surface(group_prompt, surface):
+                errors.append(f"{lock_id}: {group_id} 可复制提示词缺少锁面")
         for image_id in lock.images:
+            if image_prompts is None:
+                break
             if image_id not in image_prompts:
                 errors.append(f"{lock_id}: 连续性锁指向不存在的 IMG 条目: {image_id}")
                 continue
             image_prompt = image_prompts[image_id]
             if image_prompt is not None and not _carries_surface(image_prompt, surface):
                 errors.append(f"{lock_id}: {image_id} 可复制提示词缺少锁面")
+
+
+def _group_members(value: str) -> list[str]:
+    """A GROUP's 成员 field exactly as written, repeats and typos included."""
+    return [item.strip() for item in re.split(r"[、,，]", _plain(value)) if item.strip()]
+
+def _check_delivery_groups(
+    groups: dict[str, str],
+    *,
+    video: str,
+    motions: dict[str, str],
+    motion_duration: dict[str, str],
+    shot_order: Optional[list[str]],
+    shot_scenes: dict[str, list],
+    spoken_sources: "Optional[tuple]",
+    errors: list[str],
+) -> dict[str, tuple[list[str], Optional[str]]]:
+    """Check the multi-shot delivery groups of 视频提示词.md (VID-13, VID-15).
+
+    A group's copyable body is the text actually submitted, so it answers to
+    the same quote rule as a MOTION body; its members, order, scene and length
+    are arithmetic on the accepted shots. Returns each group's member shots and
+    body for the continuity-lock check.
+    """
+    result: dict[str, tuple[list[str], Optional[str]]] = {}
+    owner_of: dict[str, str] = {}
+    titled = dict(re.findall(r"^## (GROUP-[A-Z0-9-]+) · ([^\n]+)$", video, re.MULTILINE))
+    shot_of_motion = {
+        motion_id: _plain(_fields(body, owner=motion_id, errors=[]).get("分镜", ""))
+        for motion_id, body in motions.items()
+    }
+    for group_id, body in groups.items():
+        if not re.search(r"[\u3400-\u9fff]", titled.get(group_id, "")):
+            errors.append(f"{group_id}: 交付分组标题缺少中文名称")
+        fields = _fields(body, owner=group_id, errors=errors)
+        listed = _group_members(fields.get("成员", ""))
+        members = _unique(listed)
+        if len(members) != len(listed):
+            errors.append(f"{group_id}: 成员重复；一次交付里每个镜头只出现一次")
+        prompt = _copyable_prompt(body)
+        if prompt is None:
+            errors.append(
+                f"{group_id}: 缺少唯一且非空的可复制提示词" + _copyable_prompt_cause(body)
+            )
+        elif spoken_sources is not None:
+            _check_spoken_lines(prompt, group_id, spoken_sources, errors)
+        if not members:
+            errors.append(f"{group_id}: 缺少成员字段")
+            continue
+        unknown = [item for item in members if item not in motions]
+        for item in unknown:
+            errors.append(f"{group_id}: 成员不是已有的 MOTION 条目: {item}")
+        for item in members:
+            if item in owner_of:
+                errors.append(f"{group_id}: {item} 已属于 {owner_of[item]}，一个镜头只能进一个交付分组")
+            owner_of.setdefault(item, group_id)
+        if unknown:
+            continue
+        member_shots = [shot_of_motion[item] for item in members]
+        result[group_id] = (member_shots, prompt)
+        seconds = [_declared_seconds(motion_duration.get(shot, "")) for shot in member_shots]
+        known = [value for value in seconds if value is not None]
+        for shot, value in zip(member_shots, seconds):
+            if value is None:
+                errors.append(f"{group_id}: 成员 {shot} 没有可解析的时长，无法核对分组时长")
+        declared = _declared_seconds(_plain(fields.get("时长", "")))
+        if declared is None:
+            errors.append(f"{group_id}: 缺少可解析的时长")
+        elif len(known) == len(seconds) and abs(declared - sum(known)) > 1e-6:
+            errors.append(
+                f"{group_id}: 分组时长 {declared:g} 秒不等于成员时长之和 {sum(known):g} 秒"
+            )
+        if shot_order is not None:
+            positions = [shot_order.index(shot) for shot in member_shots if shot in shot_order]
+            if len(positions) == len(member_shots) and positions != list(
+                range(positions[0], positions[0] + len(positions))
+            ):
+                errors.append(f"{group_id}: 成员必须是分镜里按顺序相邻的镜头")
+            scenes = {scene for shot in member_shots for scene in shot_scenes.get(shot, [])}
+            if len(scenes) > 1:
+                errors.append(
+                    f"{group_id}: 交付分组不能跨场次: {'、'.join(sorted(scenes))}"
+                )
+    return result
 
 
 def _storyboard_head(storyboard: str) -> str:
@@ -1287,9 +1469,13 @@ def _storyboard_head(storyboard: str) -> str:
 
 
 def _shot_sources(
-    value: str, owner: str, scenes: "frozenset", errors: list[str]
+    value: str, owner: str, scenes: "Optional[frozenset]", errors: list[str]
 ) -> list:
-    """Resolve one shot's 来源 against the scene ids that exist in 剧本.md."""
+    """Resolve one shot's 来源 against the scene ids that exist in 剧本.md.
+
+    ``scenes`` is None when 剧本.md is not part of a partial check; the ids are
+    then taken as written.
+    """
     plain = _plain(value)
     if not plain:
         errors.append(f"{owner}: 缺少来源字段")
@@ -1303,8 +1489,11 @@ def _shot_sources(
         )
         return []
     resolved = []
-    for scene_id in _unique(SCENE_ID_RE.findall(plain)):
-        if scene_id not in scenes:
+    # A quote may itself mention another scene (「…与 EP001-SC001 同一客厅…」);
+    # that id is quoted text, not a scene this shot carries.
+    unquoted = QUOTE_RE.sub("", plain)
+    for scene_id in _unique(SCENE_ID_RE.findall(unquoted)):
+        if scenes is not None and scene_id not in scenes:
             errors.append(f"{owner}: 来源场景不在《剧本.md》中: {scene_id}")
         else:
             resolved.append(scene_id)
@@ -1386,23 +1575,73 @@ def _check_spoken_lines(
             )
 
 
-def validate_episode(episode: Path, project_root: Optional[Path] = None) -> list[str]:
-    """Return all deterministic contract errors for ``episode``."""
-    episode = episode.resolve()
-    project_root = (project_root or episode.parent.parent).resolve()
-    errors: list[str] = []
-    missing = [name for name in REQUIRED_DOCUMENTS if not (episode / name).is_file()]
-    if missing:
-        return [f"缺少创作文档: {', '.join(missing)}"]
+def missing_documents(episode: Path) -> list[str]:
+    """The creator documents an episode directory does not have yet."""
+    return [name for name in REQUIRED_DOCUMENTS if not (episode / name).is_file()]
 
-    images = (episode / "图片提示词.md").read_text(encoding="utf-8")
-    storyboard = (episode / "分镜.md").read_text(encoding="utf-8")
-    video = (episode / "视频提示词.md").read_text(encoding="utf-8")
-    visual = (episode / "视觉设定.md").read_text(encoding="utf-8")
-    screenplay = (episode / "剧本.md").read_text(encoding="utf-8")
+
+def validate_episode(
+    episode: Path, project_root: Optional[Path] = None, *, partial: bool = False
+) -> list[str]:
+    """Return all deterministic contract errors for ``episode``.
+
+    By default all five documents are required. ``partial`` checks only the
+    documents that exist: rules that need a missing document are skipped, never
+    reported as passing or failing.
+    """
+    episode = episode.resolve()
+    texts = {
+        name: (episode / name).read_text(encoding="utf-8")
+        for name in REQUIRED_DOCUMENTS
+        if (episode / name).is_file()
+    }
+    return validate_documents(
+        texts, (project_root or episode.parent.parent).resolve(), partial=partial
+    )
+
+
+def validate_documents(
+    texts: "Mapping[str, Optional[str]]",
+    project_root: Optional[Path],
+    *,
+    partial: bool = False,
+) -> list[str]:
+    """The same rules over document text already in hand, keyed by file name.
+
+    A missing or None entry is a missing document. ``project_root`` None skips
+    only what needs the disk: whether a REF file exists, and the project's
+    prompt language.
+    """
+    errors: list[str] = []
+    missing = [name for name in REQUIRED_DOCUMENTS if texts.get(name) is None]
+    if missing and not partial:
+        return [f"缺少创作文档: {', '.join(missing)}"]
+    present = frozenset(REQUIRED_DOCUMENTS) - frozenset(missing)
+    if not present:
+        # A partial check before any document exists has nothing to fail on;
+        # the CLI says so instead of reporting an error the creator cannot fix.
+        return []
+
+    def read(name: str) -> str:
+        return texts.get(name) or ""
+
+    has_screenplay = "剧本.md" in present
+    has_visual = "视觉设定.md" in present
+    has_images = "图片提示词.md" in present
+    has_storyboard = "分镜.md" in present
+    has_video = "视频提示词.md" in present
+    images = read("图片提示词.md")
+    storyboard = read("分镜.md")
+    video = read("视频提示词.md")
+    visual = read("视觉设定.md")
+    screenplay = read("剧本.md")
     scene_headings = SCENE_HEADING_RE.findall(screenplay)
     scenes = frozenset(scene_headings)
-    if not scenes:
+    known_scenes = scenes if has_screenplay else None
+    # A quote may come from any of the three; with one missing, an unmatched
+    # quote is unverifiable rather than invented.
+    quote_sources_complete = has_screenplay and has_visual and has_storyboard
+    if has_screenplay and not scenes:
         errors.append(
             "剧本.md: 没有可解析的场景标题；场景标题写成 ## <场景 ID> 内|外 · 地点 · 时间"
         )
@@ -1413,8 +1652,14 @@ def validate_episode(episode: Path, project_root: Optional[Path] = None) -> list
         _spoken_key(visual),
         _spoken_key(storyboard),
     )
-    unfilmed = _unfilmed_scenes(storyboard, scenes, errors)
+    unfilmed = (
+        _unfilmed_scenes(storyboard, scenes, errors)
+        if has_storyboard and has_screenplay
+        else {}
+    )
     claimed_scenes: set = set()
+    in_frame: dict[str, set[tuple[str, str]]] = {}
+    shot_scene_map: dict[str, list] = {}
     locks = _continuity_locks(visual, errors)
     visual_entries = _visual_entries(visual, errors)
     voices = VoiceContext(
@@ -1428,6 +1673,8 @@ def validate_episode(episode: Path, project_root: Optional[Path] = None) -> list
             for entry in visual_entries
             if entry.category == "人物"
         },
+        has_visual=has_visual,
+        has_screenplay=has_screenplay,
     )
     other_headings = {
         match.group(2).strip(): match.group(1).strip()
@@ -1439,7 +1686,10 @@ def validate_episode(episode: Path, project_root: Optional[Path] = None) -> list
     image_headings = dict(image_pairs)
     # A planned picture names the board or keyframe that already decides what it
     # depicts, so both indexes have to exist before any declaration is read.
-    entries = EntryIndex(images=image_headings, shots=frozenset(shots))
+    entries = EntryIndex(
+        images=image_headings if has_images else None,
+        shots=frozenset(shots) if has_storyboard else None,
+    )
     all_image_headings = re.findall(r"^## (IMG-[A-Z0-9-]+)\b", images, re.MULTILINE)
     if len(image_pairs) != len(all_image_headings):
         errors.append("图片提示词.md: IMG 标题必须包含中文名称")
@@ -1486,6 +1736,9 @@ def validate_episode(episode: Path, project_root: Optional[Path] = None) -> list
         errors.append("分镜.md: SHOT 标题 ID 重复")
     if len(motion_ids) != len(set(motion_ids)):
         errors.append("视频提示词.md: MOTION 标题 ID 重复")
+    group_ids = re.findall(r"^## (GROUP-[A-Z0-9-]+)\b", video, re.MULTILINE)
+    if len(group_ids) != len(set(group_ids)):
+        errors.append("视频提示词.md: GROUP 标题 ID 重复")
     named_shots = re.findall(
         r"^## (SHOT-[A-Z0-9-]+) · ([^\n]+)$", storyboard, re.MULTILINE
     )
@@ -1502,9 +1755,9 @@ def validate_episode(episode: Path, project_root: Optional[Path] = None) -> list
     for motion_id, label in named_motions:
         if not re.search(r"[\u3400-\u9fff]", label):
             errors.append(f"{motion_id}: MOTION 标题缺少中文名称")
-    if not shots:
+    if has_storyboard and not shots:
         errors.append("分镜.md: 没有 SHOT 条目")
-    if not motions:
+    if has_video and not motions:
         errors.append("视频提示词.md: 没有 MOTION 条目")
 
     motion_by_shot: dict[str, tuple[str, str, Optional[str]]] = {}
@@ -1528,14 +1781,80 @@ def validate_episode(episode: Path, project_root: Optional[Path] = None) -> list
                 + _copyable_prompt_cause(body)
             )
 
-    if set(motion_by_shot) != set(shots):
+    if has_storyboard and has_video and set(motion_by_shot) != set(shots):
         errors.append("分镜.md/视频提示词.md: SHOT 与 MOTION 未一一对应")
+
+    def check_motion(
+        motion_id: str,
+        motion_body: str,
+        copyable_prompt: Optional[str],
+        governing_input: str,
+        scenes: Optional[list],
+    ) -> tuple[dict[str, str], str]:
+        """MOTION rules that need only the MOTION itself and its governing input.
+
+        With 分镜.md the governing 输入参考图 is the shot's, which the MOTION must
+        copy; in a partial check without it, the MOTION's own declaration.
+        """
+        motion_fields = _fields(motion_body, owner=motion_id, errors=errors)
+        if copyable_prompt is not None and quote_sources_complete:
+            _check_spoken_lines(
+                copyable_prompt, motion_id, spoken_sources, errors
+            )
+        motion_input = motion_fields.get("输入参考图", "")
+        _references(motion_input, motion_id, project_root, errors, entries)
+        if "参考音频" in motion_fields:
+            _audio_references(
+                motion_fields["参考音频"],
+                motion_id,
+                project_root,
+                errors,
+                image_slots=[
+                    item[3][0]
+                    for item in _slot_matches(
+                        PENDING_REFERENCE_SUFFIX_RE.sub("", motion_input.strip())
+                    )
+                ],
+                prompt=copyable_prompt,
+                voices=voices,
+                scenes=scenes,
+            )
+
+        if _has_pending_references(governing_input):
+            errors.append(f"{motion_id}: 仍有待补参考图，不能生成最终视频提示词")
+
+        # A `PLAN-...` slot is not a file, but the prompt is still written for
+        # image-conditioned generation: the creator attaches those pictures at
+        # generation time. What decides 生成方式 is whether the shot sends
+        # pictures at all, not whether this suite can read them.
+        sends_pictures = not _is_none(governing_input)
+        expected_mode = "图生视频" if sends_pictures else "文生视频"
+        if _plain(motion_fields.get("生成方式", "")) != expected_mode:
+            errors.append(f"{motion_id}: 生成方式应为{expected_mode}")
+        anchor = _plain(motion_fields.get("静态视觉锚点", ""))
+        if not sends_pictures:
+            if not _is_explicit_text_to_video(governing_input):
+                errors.append(
+                    f"{motion_id}: 无真实输入参考图时不能静默降级为文生视频；"
+                    "请先绑定已有图片、列出待补图片，或记录创作者已明确选择文生视频"
+                )
+            if not anchor or anchor == "无":
+                errors.append(f"{motion_id}: 文生视频缺少静态视觉锚点")
+            if (
+                copyable_prompt is not None
+                and anchor
+                and anchor != "无"
+                and anchor not in copyable_prompt
+            ):
+                errors.append(f"{motion_id}: 可复制提示词没有包含静态视觉锚点")
+        return motion_fields, anchor
 
     for shot_id, shot_body in shots.items():
         fields = _fields(shot_body, owner=shot_id, errors=errors)
         source_value = fields.get("来源", "")
-        shot_scenes = _shot_sources(source_value, shot_id, scenes, errors)
+        shot_scenes = _shot_sources(source_value, shot_id, known_scenes, errors)
         claimed_scenes.update(shot_scenes)
+        shot_scene_map[shot_id] = shot_scenes
         shot_seconds = _declared_seconds(_plain(fields.get("时长", "")))
         motion_seconds = _declared_seconds(motion_duration.get(shot_id, ""))
         if (
@@ -1561,6 +1880,8 @@ def validate_episode(episode: Path, project_root: Optional[Path] = None) -> list
         ):
             errors.append(f"{shot_id}: 图片提示词项语法不完整")
         for image_id, label, _ in image_refs:
+            if not has_images:
+                continue
             if image_id not in image_headings:
                 errors.append(f"{shot_id}: IMG 标题不存在: {image_id}")
             elif label != image_headings[image_id]:
@@ -1579,10 +1900,16 @@ def validate_episode(episode: Path, project_root: Optional[Path] = None) -> list
         if not basis_value:
             errors.append(f"{shot_id}: 缺少视觉依据字段")
             basis = VisualBasis(False, set(), set())
+        elif not has_visual:
+            # Without 视觉设定.md the entries cannot be resolved, and every
+            # coverage check below would report a name that may well exist.
+            basis = VisualBasis(False, set(), set())
         else:
             basis = _visual_basis(
                 basis_value, shot_id, visual_entries, other_headings, errors
             )
+        if basis.parsed:
+            in_frame[shot_id] = basis.declared
         # The keyframe is the only place the frame's contents exist as text, so a
         # shot without one would make the coverage check below vacuous.
         keyframe = _copyable_prompt(shot_body, heading=r"冻结关键帧提示词")
@@ -1630,70 +1957,32 @@ def validate_episode(episode: Path, project_root: Optional[Path] = None) -> list
         if not motion:
             continue
         motion_id, motion_body, copyable_prompt = motion
-        motion_fields = _fields(motion_body, owner=motion_id, errors=errors)
-        if copyable_prompt is not None:
-            _check_spoken_lines(
-                copyable_prompt, motion_id, spoken_sources, errors
-            )
+        motion_fields, anchor = check_motion(
+            motion_id, motion_body, copyable_prompt, shot_input, shot_scenes
+        )
         motion_input = motion_fields.get("输入参考图", "")
-        _references(motion_input, motion_id, project_root, errors, entries)
         if _plain(motion_input) != _plain(shot_input):
             errors.append(f"{motion_id}: 输入参考图与 {shot_id} 不一致")
-        if "参考音频" in motion_fields:
-            _audio_references(
-                motion_fields["参考音频"],
-                motion_id,
-                project_root,
-                errors,
-                image_slots=[
-                    item[3][0]
-                    for item in _slot_matches(
-                        PENDING_REFERENCE_SUFFIX_RE.sub("", motion_input.strip())
-                    )
-                ],
-                prompt=copyable_prompt,
-                voices=voices,
-                scenes=shot_scenes,
+        if not _is_none(shot_input):
+            continue
+        # In text-to-video the anchor carries the appearance the keyframe
+        # would otherwise have carried, so it is the same claim about the
+        # same frame and answers to the same visual basis. The rest of the
+        # motion body is not checked: it may legitimately name an offscreen
+        # speaker, which SHT-22 excludes.
+        if anchor and anchor != "无" and basis.parsed:
+            _check_named_coverage(
+                anchor, motion_id, "静态视觉锚点", basis, visual_entries, errors
             )
 
-        if _has_pending_references(shot_input):
-            errors.append(f"{motion_id}: 仍有待补参考图，不能生成最终视频提示词")
+    if not has_storyboard:
+        # A partial check without 分镜.md still owes each MOTION the rules that
+        # read only the MOTION; its own 输入参考图 governs them.
+        for motion_id, motion_body in motions.items():
+            own_input = _fields(motion_body, owner=motion_id, errors=[]).get("输入参考图", "")
+            check_motion(motion_id, motion_body, _copyable_prompt(motion_body), own_input, None)
 
-        # A `PLAN-...` slot is not a file, but the prompt is still written for
-        # image-conditioned generation: the creator attaches those pictures at
-        # generation time. What decides 生成方式 is whether the shot sends
-        # pictures at all, not whether this suite can read them.
-        sends_pictures = not _is_none(shot_input)
-        expected_mode = "图生视频" if sends_pictures else "文生视频"
-        if _plain(motion_fields.get("生成方式", "")) != expected_mode:
-            errors.append(f"{motion_id}: 生成方式应为{expected_mode}")
-        if not sends_pictures:
-            if not _is_explicit_text_to_video(shot_input):
-                errors.append(
-                    f"{motion_id}: 无真实输入参考图时不能静默降级为文生视频；"
-                    "请先绑定已有图片、列出待补图片，或记录创作者已明确选择文生视频"
-                )
-            anchor = _plain(motion_fields.get("静态视觉锚点", ""))
-            if not anchor or anchor == "无":
-                errors.append(f"{motion_id}: 文生视频缺少静态视觉锚点")
-            if (
-                copyable_prompt is not None
-                and anchor
-                and anchor != "无"
-                and anchor not in copyable_prompt
-            ):
-                errors.append(f"{motion_id}: 可复制提示词没有包含静态视觉锚点")
-            # In text-to-video the anchor carries the appearance the keyframe
-            # would otherwise have carried, so it is the same claim about the
-            # same frame and answers to the same visual basis. The rest of the
-            # motion body is not checked: it may legitimately name an offscreen
-            # speaker, which SHT-22 excludes.
-            if anchor and anchor != "无" and basis.parsed:
-                _check_named_coverage(
-                    anchor, motion_id, "静态视觉锚点", basis, visual_entries, errors
-                )
-
-    for scene_id in scene_headings:
+    for scene_id in scene_headings if has_storyboard else ():
         if scene_id in claimed_scenes or scene_id in unfilmed:
             continue
         errors.append(
@@ -1703,15 +1992,28 @@ def validate_episode(episode: Path, project_root: Optional[Path] = None) -> list
     for scene_id in sorted(set(unfilmed) & claimed_scenes):
         errors.append(f"分镜.md: 场景 {scene_id} 既被镜头承载又记为未拍")
 
+    group_members = _check_delivery_groups(
+        _sections(video, "GROUP"),
+        video=video,
+        motions=motions,
+        motion_duration=motion_duration,
+        shot_order=list(shots) if has_storyboard else None,
+        shot_scenes=shot_scene_map,
+        spoken_sources=spoken_sources if quote_sources_complete else None,
+        errors=errors,
+    )
+
     _check_language_designators(
         project_root, entries=visual_entries, errors=errors
     )
     _check_continuity_locks(
         locks,
-        shots=shots,
+        shots=shots if has_storyboard else None,
         motion_by_shot=motion_by_shot,
-        image_prompts=image_prompts,
+        image_prompts=image_prompts if has_images else None,
         errors=errors,
+        in_frame=in_frame,
+        groups=group_members,
     )
     return errors
 
@@ -1720,6 +2022,11 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("episode", type=Path, help="包含五份 Markdown 的剧集目录")
     parser.add_argument("--project-root", type=Path, help="用于解析 REF 项目相对路径")
+    parser.add_argument(
+        "--partial",
+        action="store_true",
+        help="只核对已有的文档；缺少的文档相关规则跳过，不算通过也不算失败",
+    )
     args = parser.parse_args()
     # 诊断与剧集路径都是中文。stdout 重定向时 Windows 用 ANSI 代码页，默认的
     # strict 处理器会在打印这一步抛错；stderr 早就是 backslashreplace，这里让
@@ -1727,12 +2034,18 @@ def main() -> int:
     reconfigure = getattr(sys.stdout, "reconfigure", None)
     if reconfigure is not None:
         reconfigure(errors="backslashreplace")
-    errors = validate_episode(args.episode, args.project_root)
+    errors = validate_episode(args.episode, args.project_root, partial=args.partial)
     if errors:
         for error in errors:
             print(f"ERROR: {error}")
         return 1
-    print(f"OK: {args.episode}")
+    missing = missing_documents(args.episode) if args.partial else []
+    if len(missing) == len(REQUIRED_DOCUMENTS):
+        print(f"OK（局部）: {args.episode}；还没有创作文档，没有可核对的内容")
+    elif missing:
+        print(f"OK（局部）: {args.episode}；未核对与这些文档相关的规则: {', '.join(missing)}")
+    else:
+        print(f"OK: {args.episode}")
     return 0
 
 

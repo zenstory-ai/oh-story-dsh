@@ -11,15 +11,15 @@
     {
       "kind": "drama",
       "repository": "https://github.com/zenstory-ai/drama-skills",
-      "commit": "dafe80ee390ec8be5a7ec8dd156a84d511f8e7dd",
+      "commit": "fdb7b7c58017e3eae64eca382c2a85ede368dab0",
       "sourcePath": "examples/creator-first/EP001",
       "localPath": "drama/让你管账号/剧集/EP001",
       "files": [
         { "path": "剧本.md", "sha256": "216d3fdbf414df8e91313f11c397ca0c7fd755afaa095a97eb0c48c3bbb4011d", "bytes": 2374 },
-        { "path": "视觉设定.md", "sha256": "3af5900bd62eb5fa655169e8745c40d3e453d40338ecda2db804a5818b0866f2", "bytes": 3644 },
-        { "path": "分镜.md", "sha256": "24edc340e971dda5553e34123d52dc280cd8f52806ffa17fd2a81893fd0d7a65", "bytes": 38412 },
-        { "path": "图片提示词.md", "sha256": "8dd55f91ec8aba7ded5c7384078920f086749500a61814ba4fa5cc353aa5d4aa", "bytes": 3917 },
-        { "path": "视频提示词.md", "sha256": "dd0ca0fdea119fc991d716ca9028291bc522bae5523e04a5662a7e1a79cf71ac", "bytes": 38839 }
+        { "path": "视觉设定.md", "sha256": "11b4056a59b7b1edc55ba61a2eafb24f86cab490126c0d0b24ba3dda7296762d", "bytes": 3746 },
+        { "path": "分镜.md", "sha256": "362c3658d96b948c038a8d912d9ddfdcbe68850afa7f6b6ec8ce97d0accc363d", "bytes": 39418 },
+        { "path": "图片提示词.md", "sha256": "f42af99f9f6a97cefede6d39defd02e2d0252ee207615eb37e790603ce9d5b23", "bytes": 4124 },
+        { "path": "视频提示词.md", "sha256": "014e458adbe2c3126594b424eee02665350496c5e4263d03633f6eadcdbdb8a5", "bytes": 39448 }
       ]
     }
   ],

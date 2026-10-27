@@ -11,6 +11,21 @@
 
 ## [Unreleased]
 
+## [0.1.19] - 2026-10-27
+
+### Changed
+
+- 默认宿主更新到 npm `next` 的 [DeepSeek Harness 0.2.1-rc.4](https://www.npmjs.com/package/@deepseek-ai/dsh/v/0.2.1-rc.4)，安装命令改用 `0.2.1-rc.4`。npm `latest` 的 `0.2.1-rc.2` 与更早的 `0.2.0-rc.2` 继续支持，发布前都做了打包浏览器验证；插件声明的兼容范围与 Cordis / Schemastery 版本不变。
+- 同步 [Oh Story 0.9.1](https://github.com/zenstory-ai/oh-story-claudecode/releases/tag/v0.9.1)（`70d1cf426f8cbe3d374e2b06e4c2cbdbd986da06`，`agents_version` 36 → 37，13 Skills、7 Roles）：续写状态卡的活跃角色上限从 6 人提高到 20 人，追踪数据格式不变；其余改动是 ZCode 插件助手调度与 Windows 写作守卫的 Git 窗口，DSH 里照旧通过 `oh_story_role` 调用 Roles。书稿、设定、追踪和作者记忆不用迁移。
+- 同步 [Drama Skills 0.9.2](https://github.com/zenstory-ai/drama-skills/releases/tag/v0.9.2)（`fdb7b7c58017e3eae64eca382c2a85ede368dab0`，含 0.9.1，11 Skills）：分镜可为多镜场次先写「场景站位」；跨文档检查加 `--partial`，每写完一份文档就能只核对已有文档；视频提示词可为多镜容器写 `GROUP-...` 条目；连续性锁的镜头范围可写 `入画`；时长相关约束在定档时提示；Seedance 2.0 补充一镜容量、参考图取舍与首尾帧转场。旧 JSON/JSONL 检查器、自测与示例不再随包，结构检查统一用 `creator_markdown_check.py`。
+- 同步 [NovelToGame 0.6.1](https://github.com/zenstory-ai/novel-to-game/releases/tag/v0.6.1)（`c3075f35cc14d4bc94e2829df2bfcc0d9971229e`，7 Skills）：写明 `director` 模式在哪几处停下；各 Skill 内重复的规则只保留一处；《金瓶梅》示例去掉不会触发的防御代码与重复说明。
+- DSH 技能桥：Oh Story Roles 也不能经由其他宿主的 `Agent` 工具启动；短剧桥不再提「旧维护脚本仍随包」，改为说明结构检查只用 `creator_markdown_check.py`。
+
+### Fixed
+
+- 短剧剪辑渲染的成片在每个切点不再有约 30 毫秒的掉音（随 Drama Skills 0.9.2）。
+- 短剧剧本索引接受带括号提示的 `[OS]`、`[VO]` 台词；时长估算按去掉标点的发声字数换算（随 Drama Skills 0.9.2）。
+
 ## [0.1.18] - 2026-10-19
 
 0.1.17 新用户审计里插件侧 P2/P3 问题的收尾。上游 Skills 与默认宿主不变。
@@ -365,7 +380,10 @@
 - 提供 13 个 Oh Story 小说 Skills、7 个专业 Roles 与 10 个 Drama Skills。
 - 提供文件树、Markdown/JSONL 编辑预览与官方 DSH Chat 同屏的三栏工作台。
 
-[Unreleased]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.16...HEAD
+[Unreleased]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.19...HEAD
+[0.1.19]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.18...v0.1.19
+[0.1.18]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.17...v0.1.18
+[0.1.17]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.16...v0.1.17
 [0.1.16]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.15...v0.1.16
 [0.1.15]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.14...v0.1.15
 [0.1.14]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.13...v0.1.14

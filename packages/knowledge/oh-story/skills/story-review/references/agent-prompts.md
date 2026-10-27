@@ -2,11 +2,11 @@
 
 只有实际模式仍是 full/lean 时才读本文件。
 
-使用当前运行时的 Agent 工具并行调用（Codex 原生子代理使用 `agent_type`，Claude Code 使用 `subagent_type`，OpenCode 使用 `subagent` 工具的 `agent` 参数，Antigravity 使用 `invoke_subagent` + 同名 `TypeName`；实际字段以当前 CLI 暴露的工具为准）。每个 Agent 不继承父对话上下文，prompt 必须自包含项目路径、审查范围、文件路径、必要摘录和统一 Findings Schema。结构、角色、文字三个视角的 prompt 还要内联审查基准包摘要与 Rubric Source，使子 Agent 能直接开审；prompt 不写本 Skill 的资料路径，各 reviewer 按自己模板里的读取表加载方法资料。consistency-checker 按自己的检查项核对事实，不带内容评分基准包。所有 reviewer 只读：不改任何文件，只输出结果。
+使用当前运行时的 Agent 工具并行调用（Codex 原生子代理使用 `agent_type`，Claude Code 使用 `subagent_type`，OpenCode 使用 `subagent` 工具的 `agent` 参数，Antigravity 使用 `invoke_subagent` + 同名 `TypeName`，ZCode 用 `Agent` 派发注册角色；实际字段以当前 CLI 暴露的工具为准）。每个 Agent 不继承父对话上下文，prompt 必须自包含项目路径、审查范围、文件路径、必要摘录和统一 Findings Schema。结构、角色、文字三个视角的 prompt 还要内联审查基准包摘要与 Rubric Source，使子 Agent 能直接开审；prompt 不写本 Skill 的资料路径，各 reviewer 按自己模板里的读取表加载方法资料。consistency-checker 按自己的检查项核对事实，不带内容评分基准包。所有 reviewer 只读：不改任何文件，只输出结果。
 
 **追踪修订号**：长篇工程（有 `追踪/_tracking-state.json`）派 consistency-checker 前，先跑本 skill 的 `scripts/tracking_commit.py check --project {项目根}`，把输出的 `last_committed_chapter`、`state_revision` 填进它的 prompt；check 报错时这一栏写「check 失败，派生视图不可信：{报错首行}」，报告「没法判断的地方」用白话写明追踪记录和正文对不上、这次没据它核对。短篇不填。
 
-**story-explorer 预查询（可选）**。仅当 `Effective Mode` 仍为 `full`/`lean`、当前允许 spawn 且当前运行时的 Agent 工具可用时，才可在对应 canonical agent 目录下确认 `story-explorer` 已部署并 spawn；Antigravity 检查 `.agents/agents/story-explorer/agent.md`，用 `invoke_subagent` + `TypeName: "story-explorer"`。`solo` 或子代理递归保护场景下不得 spawn，只能直接读取/检索。Prompt 示例：
+**story-explorer 预查询（可选）**。仅当 `Effective Mode` 仍为 `full`/`lean`、当前允许 spawn 且当前运行时的 Agent 工具可用时，才可按 Phase 0 的当前宿主来源确认 `story-explorer` 可用并 spawn（ZCode 查插件注册角色）；Antigravity 检查 `.agents/agents/story-explorer/agent.md`，用 `invoke_subagent` + `TypeName: "story-explorer"`。`solo` 或子代理递归保护场景下不得 spawn，只能直接读取/检索。Prompt 示例：
 
 ```text
 项目目录：{dir}
@@ -14,7 +14,7 @@
 查询参数：{审查涉及的设定关键词}
 ```
 
-**Agent 1: story-architect**（subagent_type: story-architect）
+**Agent 1: story-architect**
 - full/lean 均调用。
 - 审查视角：主题对齐、大纲结构、钩子/反转质量、范围控制、平台期待。
 - 提示指令：
@@ -50,7 +50,7 @@
   RECOMMENDATIONS: [修改建议]
   ```
 
-**Agent 2: character-designer**（subagent_type: character-designer）
+**Agent 2: character-designer**
 - full 模式调用。
 - 审查视角：角色语言风格一致性、对话质量、人物弧线、关系推进。
 - 提示指令：
@@ -80,7 +80,7 @@
   RECOMMENDATIONS: [修改建议]
   ```
 
-**Agent 3: narrative-writer**（subagent_type: narrative-writer）
+**Agent 3: narrative-writer**
 - full 模式调用。
 - 审查视角：三层去味诊断（表达、用笔、故事因果与变化）、情绪烈度（够不够爽/会不会太保守）、格式合规、节奏均匀度、文字自然度。
 - 提示指令：
@@ -113,7 +113,7 @@
   RECOMMENDATIONS: [修改建议]
   ```
 
-**Agent 4: consistency-checker**（subagent_type: consistency-checker）
+**Agent 4: consistency-checker**
 - full/lean 均调用。
 - 审查视角：grep-first + 推理型一致性检测，输出 S1-S4 报告。
 - 提示指令：
@@ -146,7 +146,7 @@
 
 1. 收集实际执行的 reviewer VERDICT 和 FINDINGS。
 2. 合并去重：按 `severity` 排序（S1 > S2 > S3 > S4），同级内按影响范围排序。
-3. **可选事实核查**：如果审查内容涉及需要验证的外部事实（历史年代、地理方位、职业细节等），只有在 `Effective Mode` 仍为 `full`/`lean`、当前不是子 Agent、当前运行时的 Agent 工具可用且对应 canonical agent 目录下的 `story-researcher` 已部署时，才可额外 spawn；Antigravity 检查 `.agents/agents/story-researcher/agent.md`，用 `invoke_subagent` + `TypeName: "story-researcher"`。`solo`、missing/malformed/spawn failed 降级或子代理递归保护场景下不得 spawn，只能在报告中标记“需人工事实核查”。
+3. **可选事实核查**：如果审查内容涉及需要验证的外部事实（历史年代、地理方位、职业细节等），只有在 `Effective Mode` 仍为 `full`/`lean`、当前不是子 Agent、当前运行时的 Agent 工具可用且按 Phase 0 的当前宿主来源确认 `story-researcher` 可用时（ZCode 查插件注册角色），才可额外 spawn；Antigravity 检查 `.agents/agents/story-researcher/agent.md`，用 `invoke_subagent` + `TypeName: "story-researcher"`。`solo`、missing/malformed/spawn failed 降级或子代理递归保护场景下不得 spawn，只能在报告中标记“需人工事实核查”。
 4. **分歧呈现**：如果 reviewer 间有冲突意见，明确呈现分歧让用户裁决；不要自动妥协。
 5. 按 SKILL.md「报告面向作者」输出综合审查报告：开头说明审查方式与范围，证据不足项写成作者能补的材料，执行路径只进技术备注行。
 

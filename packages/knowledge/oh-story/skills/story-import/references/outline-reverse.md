@@ -16,7 +16,7 @@
 
 ## Step 2：写本批细纲
 
-- **有 story-architect**（导入记录写着可用，按 SKILL.md 顶部的 Agent 兼容性检查 canonical 目录）：主会话只取任务包路径，不读包的内容。Prompt：`项目目录：{dir}\n任务包：{任务包路径}\n先完整读取任务包，按包里的规则与模板完成；作者已定的事在 .story/work/导入记录.md，对话内容不会传给你\n交付后只回任务包开头要求的几项`。Antigravity 用 `invoke_subagent` + `TypeName: "story-architect"`。
+- **有 story-architect**（导入记录写着可用，按 SKILL.md 顶部的当前宿主角色来源检查，ZCode 查插件注册角色）：主会话只取任务包路径，不读包的内容。Prompt：`项目目录：{dir}\n任务包：{任务包路径}\n先完整读取任务包，按包里的规则与模板完成；作者已定的事在 .story/work/导入记录.md，对话内容不会传给你\n交付后只回任务包开头要求的几项`。Antigravity 用 `invoke_subagent` + `TypeName: "story-architect"`。
 - **没有**：主会话完整读取任务包，按包内规则写本批；不另读包外写作技法，也不整读拆文库摘要。
 
 ## Step 3：验收与交接
