@@ -34,4 +34,5 @@ Oh Story 0.9.1、Drama 0.9.2 与 NovelToGame 0.6.1 都从发布标签的干净�
 
 - rc.2 → rc.4：插件声明为 peer 的 20 个 `@deepseek-ai/dsh-*` 包里 18 个逐字节一致；`dsh-api-session-controller` 只改了一行注释；`dsh-client-ui-conversation` 新增 View 标签 More 菜单与 pin、`ComposerSubmission.newSession`、`whenDraftExists` 草稿选项，插件只导入 `ToolCallBlock`、`IConversation`、`PartialAssistant`、`RunningToolCall`，这几个类型没有变化。`@deepseek-ai/dsh` 的依赖集合不变。
 - `pnpm verify`（带三套上游目录）退出 0：四个 parity、198 个单元/契约测试与构建全部通过。
-- 打包 Chrome 与最终 `pnpm verify:release` 结果见本次 PR。
+- 候选源码 `e723653` 在干净克隆中 `pnpm verify:release` 退出 0，打包 Chrome 在 `0.2.1-rc.4` 与 `0.2.0-rc.2` 均 `"ok": true`；另跑一次 `0.2.1-rc.2` 打包 Chrome 也是 `"ok": true`。
+- 真实 provider（`pnpm test:dsh:real`）未执行：本机与仓库 Secrets 都没有 `DEEPSEEK_API_KEY`。
