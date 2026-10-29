@@ -1,6 +1,22 @@
 # Validation
 
-Candidate: `@oh-story/dsh` 0.1.19 on DeepSeek Harness `0.2.1-rc.4`, with `0.2.1-rc.2` (npm `latest`) and the earlier `0.2.0-rc.2` line covered. Local aggregate acceptance passed on 2026-10-27.
+Candidate: `@oh-story/dsh` 0.1.20 on DeepSeek Harness `0.2.1-rc.4`, with `0.2.1-rc.2` (npm `latest`), the earlier `0.2.0-rc.2` and the `0.2.2-alpha.2` trial line covered. Local aggregate acceptance passed on 2026-10-29.
+
+## 0.1.20 release evidence
+
+0.1.20 widens the declared DSH range to the 0.2.2 prerelease line. The default host, development host and upstream Skill pins are unchanged from 0.1.19.
+
+### Local evidence
+
+- `engines.dsh` and the DSH peers add `>=0.2.2-alpha.2 <0.2.3-0`, and the Cordis and Schemastery peers add `^4.0.6-alpha.1` / `^3.18.6-alpha.1`. With the `semver` package, `0.2.0-rc.2`, `0.2.1-rc.2`, `0.2.1-rc.4`, `0.2.2-alpha.2` and `0.2.2-rc.1` satisfy the new range, and `0.2.3-alpha.1` does not.
+- Compared with `0.2.1-rc.4`, 17 of the plugin's 20 DSH peer packages change their type declarations. A scratch copy with development dependencies and overrides on `0.2.2-alpha.2`, Cordis `4.0.6-alpha.1`, Schemastery `3.18.6-alpha.1` and the matching Cordis plugin alphas passed typecheck, 198 unit tests, 7 real-Cordis contract tests, the DSH boundary and the build.
+- On 2026-10-29, `pnpm verify:release` passed in a clean clone of the candidate (`585f401`) with the three upstream release checkouts: lint, typecheck, four parity checks, the DSH boundary, release and upstream-update tests, 198 unit/contract tests, and the build. Packaged Chrome on DSH `0.2.1-rc.4`, `0.2.0-rc.2` and `0.2.2-alpha.2` returned `"ok": true`.
+
+### Release gates
+
+- **Local aggregate acceptance:** passed 2026-10-29.
+- **Paid provider:** not rerun. The Skills, bridge and default host are unchanged since the 0.1.19 run on `0.2.1-rc.4` below; the `0.2.2-alpha.2` line has deterministic packaged evidence only.
+- **New-user audit:** not rerun.
 
 ## 0.1.19 release evidence
 

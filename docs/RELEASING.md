@@ -33,9 +33,10 @@ removed.
 1. Update the root and package versions, installation examples, and
    `CHANGELOG.md` for the intended release.
 2. Run `pnpm verify:release` locally. For 0.1.13 and later, retain fresh packaged
-   Chrome E2E evidence on both the default DSH `0.2.1-rc.4` line and the earlier
-   `0.2.0-rc.2` line; a host line must not be announced from peer metadata or
-   unit tests alone.
+   Chrome E2E evidence on the default DSH `0.2.1-rc.4` line, the earlier
+   `0.2.0-rc.2` line and, from 0.1.20, the `0.2.2-alpha.2` trial line
+   (`pnpm test:dsh:alpha`, run locally by `verify:release` but not in CI); a
+   host line must not be announced from peer metadata or unit tests alone.
 3. Merge the release branch through a protected Pull Request after all four
    required CI checks pass, then wait for the newest main-push CI run for that
    exact merge commit to pass all four jobs.
@@ -141,14 +142,14 @@ metadata and manifest integrity rather than resubmit while processing.
 Do not announce a release until the registry reports the exact version:
 
 ```bash
-VERSION=0.1.19
+VERSION=0.1.20
 npm view "@oh-story/dsh@$VERSION" version dist.integrity
 npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.1-rc.4 dsh plugin --profile web add "@oh-story/dsh@$VERSION"
 ```
 
 The default public smoke pins DSH `0.2.1-rc.4`. After it passes,
 repeat the isolated install/start/browser smoke with
-`@deepseek-ai/dsh@0.2.0-rc.2`; never mix host versions within one profile or
+`@deepseek-ai/dsh@0.2.0-rc.2` and `@deepseek-ai/dsh@0.2.2-alpha.2`; never mix host versions within one profile or
 describe a host line as supported before its Chrome run passes.
 
 The GitHub Release tarball remains a registry-independent installation path:

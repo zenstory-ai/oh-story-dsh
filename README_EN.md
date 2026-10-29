@@ -44,7 +44,7 @@ The table describes the current source. Published packages pin their upstream co
 | Game | [NovelToGame 0.6.1](https://github.com/zenstory-ai/novel-to-game) · 7 Skills · playable 《金瓶梅》 ADV sample (18+) | `/novel-to-game quick`, `/game-build`, `/game-qa` |
 | Video | [video-recap-skills 0.6.2](https://github.com/zenstory-ai/video-recap-skills/releases/tag/v0.6.2) · 7 Skills (3 user entry points) | `/video-recap`, `/video-script`, `/video-reference` |
 
-> Latest release **v0.1.19** (2026-10-27). The default install pins DeepSeek Harness `0.2.1-rc.4`; `0.2.1-rc.2` (the npm `latest`) and the earlier `0.2.0-rc.2` remain supported. See [CHANGELOG.md](CHANGELOG.md) and [Releases](https://github.com/zenstory-ai/oh-story-dsh/releases); upgrade steps are in the FAQ entry [“What do I do after upgrading?”](#what-do-i-do-after-upgrading).
+> Latest release **v0.1.20** (2026-10-29). The default install pins DeepSeek Harness `0.2.1-rc.4`; `0.2.1-rc.2` (the npm `latest`), the earlier `0.2.0-rc.2` and `0.2.2-alpha.2` (the npm `alpha`) are also supported. See [CHANGELOG.md](CHANGELOG.md) and [Releases](https://github.com/zenstory-ai/oh-story-dsh/releases); upgrade steps are in the FAQ entry [“What do I do after upgrading?”](#what-do-i-do-after-upgrading).
 
 ## The four workbenches
 
@@ -87,11 +87,11 @@ Boundaries and protocols for each workbench are in the [architecture notes](docs
 Requires Node.js 24+. The install command provides pnpm temporarily, so a machine with only Node.js can run it:
 
 ```bash
-npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.1-rc.4 dsh plugin --profile web add @oh-story/dsh@0.1.19 &&
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.1-rc.4 dsh plugin --profile web add @oh-story/dsh@0.1.20 &&
 npx -y @deepseek-ai/dsh@0.2.1-rc.4 web
 ```
 
-Keep the terminal running; the browser opens automatically by default. If it does not, copy the full `http://127.0.0.1:3080/?token=...` link printed in the terminal — first-time authentication needs the token in the link. Closing the terminal stops the service. Use the same dsh version for install and start. The commands on this page pin `0.2.1-rc.4`, the npm `next`; `0.2.1-rc.2`, the npm `latest`, is verified as well. The plugin accepts `>=0.2.0-rc.2 <0.2.1-0` and `>=0.2.1-alpha.1 <0.2.2-0`. If you stay on `0.2.0-rc.2`, use `@deepseek-ai/dsh@0.2.0-rc.2` in both the install and start commands; do not mix host versions. DSH checks compatibility while adding and loading the plugin and reports mismatches (`dsh plugin allow-version` overrides it at your own risk).
+Keep the terminal running; the browser opens automatically by default. If it does not, copy the full `http://127.0.0.1:3080/?token=...` link printed in the terminal — first-time authentication needs the token in the link. Closing the terminal stops the service. Use the same dsh version for install and start. The commands on this page pin `0.2.1-rc.4`, the npm `next`; `0.2.1-rc.2`, the npm `latest`, is verified as well. The plugin accepts `>=0.2.0-rc.2 <0.2.1-0`, `>=0.2.1-alpha.1 <0.2.2-0` and `>=0.2.2-alpha.2 <0.2.3-0`. If you stay on `0.2.0-rc.2`, or want to try `0.2.2-alpha.2` (which needs Node.js 24.9+), use that same version in both the install and start commands; do not mix host versions. DSH checks compatibility while adding and loading the plugin and reports mismatches (`dsh plugin allow-version` overrides it at your own risk).
 
 Before creating with AI, add a Provider and API key under DSH's Settings → Models, or set the `DEEPSEEK_API_KEY` environment variable before starting. To only browse existing work, choose "Configure later" in the first-run guide.
 
@@ -101,7 +101,7 @@ Before creating with AI, add a Provider and API key under DSH's Settings → Mod
 The prebuilt package in the GitHub Release passes the same test suite:
 
 ```bash
-npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.1-rc.4 dsh plugin --profile web add https://github.com/zenstory-ai/oh-story-dsh/releases/download/v0.1.19/oh-story-dsh-0.1.19.tgz &&
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.1-rc.4 dsh plugin --profile web add https://github.com/zenstory-ai/oh-story-dsh/releases/download/v0.1.20/oh-story-dsh-0.1.20.tgz &&
 npx -y @deepseek-ai/dsh@0.2.1-rc.4 web
 ```
 
@@ -145,7 +145,7 @@ Voice references require an explicit capability declaration: generated generic p
 Whichever profile the plugin is installed into, every Session of that profile loads the creation Skills. To keep the stock `web` profile clean, install into a separate profile:
 
 ```bash
-npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.1-rc.4 dsh plugin --profile story add @oh-story/dsh@0.1.19
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.1-rc.4 dsh plugin --profile story add @oh-story/dsh@0.1.20
 ```
 
 A new profile has no UI by default. Edit `~/.dsh/profiles/story/package.json` and set `dsh.profile.bundles` to:
@@ -306,7 +306,7 @@ Update the plugin using Installation and restart DSH. If the current version sti
 
 ### The workbench is blank after installing — no panel and no "创作工作台" button?
 
-Check the plugin and DSH versions, then follow [Installation](#installation) using one supported host line: `0.2.1-rc.4` by default, or `0.2.1-rc.2` or the earlier `0.2.0-rc.2`. Use that version for both installation and startup, and check that the plugin is loaded in the same profile. If the workbench is still blank, report the versions and terminal error. The historical Queue failure is recorded in [#50](https://github.com/zenstory-ai/oh-story-dsh/issues/50).
+Check the plugin and DSH versions, then follow [Installation](#installation) using one supported host line: `0.2.1-rc.4` by default, or `0.2.1-rc.2`, the earlier `0.2.0-rc.2`, or the trial `0.2.2-alpha.2`. Use that version for both installation and startup, and check that the plugin is loaded in the same profile. If the workbench is still blank, report the versions and terminal error. The historical Queue failure is recorded in [#50](https://github.com/zenstory-ai/oh-story-dsh/issues/50).
 
 ### I also installed Oh Story for Codex or OpenCode — which copy does DSH use?
 
@@ -331,6 +331,8 @@ Yes. The type, asset, unit-test and build gate runs on both macOS and Windows in
 ### What do I do after upgrading?
 
 Rerun the install command with the target version after `@oh-story/dsh@`, then restart DSH. Use the same host version for installation and startup; see [Installation](#installation) for the supported range. Skills and Roles ship with the plugin and need no redeployment into projects.
+
+Version 0.1.20 lets the plugin load on the DSH 0.2.2 prerelease line (verified on `0.2.2-alpha.2`); the default host and the upstream Skills are unchanged, so it needs no migration, only a reinstall and restart.
 
 Version 0.1.19 includes Oh Story 0.9.1, Drama Skills 0.9.2 and NovelToGame 0.6.1, and the default host is now DSH `0.2.1-rc.4`; it needs no migration, only a reinstall and restart. Oh Story's continuation status card now lists up to 20 active characters (previously 6). Short drama can check just the documents written so far after each one, multi-shot containers can be written as `GROUP-...` entries, and rendered cuts no longer drop audio at cut points; the legacy JSON checkers are no longer bundled, and `creator_markdown_check.py` is the one structural check.
 
