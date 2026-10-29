@@ -23,20 +23,20 @@
 安装命令会临时提供 pnpm；只安装 Node.js 的机器也能执行。DSH 的 `plugin add` 内部需要 pnpm，单独运行 `npx @deepseek-ai/dsh ... plugin add` 不会自动补上它。
 
 ```bash
-npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.1-rc.4 dsh plugin --profile web add @oh-story/dsh@0.1.19 &&
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.1-rc.4 dsh plugin --profile web add @oh-story/dsh@0.1.20 &&
 npx -y @deepseek-ai/dsh@0.2.1-rc.4 web
 ```
 
 也可以直接安装 GitHub Release 中的预构建包：
 
 ```bash
-npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.1-rc.4 dsh plugin --profile web add https://github.com/zenstory-ai/oh-story-dsh/releases/download/v0.1.19/oh-story-dsh-0.1.19.tgz &&
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.1-rc.4 dsh plugin --profile web add https://github.com/zenstory-ai/oh-story-dsh/releases/download/v0.1.20/oh-story-dsh-0.1.20.tgz &&
 npx -y @deepseek-ai/dsh@0.2.1-rc.4 web
 ```
 
 保持终端运行。若浏览器未自动打开，访问终端打印的完整 `http://127.0.0.1:3080/?token=...` 链接完成首次认证。
 
-本页默认命令固定使用 npm `next` 的 `0.2.1-rc.4`，npm `latest` 的 `0.2.1-rc.2` 同样验证过。仍在用 `0.2.0-rc.2` 时把安装、启动两条命令中的版本同时改回它；插件接受 `>=0.2.0-rc.2 <0.2.1-0` 或 `>=0.2.1-alpha.1 <0.2.2-0`，不要混装宿主版本。
+本页默认命令固定使用 npm `next` 的 `0.2.1-rc.4`，npm `latest` 的 `0.2.1-rc.2` 同样验证过。仍在用 `0.2.0-rc.2` 时把安装、启动两条命令中的版本同时改回它；插件接受 `>=0.2.0-rc.2 <0.2.1-0`、`>=0.2.1-alpha.1 <0.2.2-0` 或 `>=0.2.2-alpha.2 <0.2.3-0`（试用 `0.2.2-alpha.2` 需要 Node.js 24.9+），不要混装宿主版本。
 
 需要 Node.js 24+。开始 AI 创作前需要在 DSH 的「设置 → 模型」中添加 Provider 并填入 API Key，或在启动前设置环境变量 `DEEPSEEK_API_KEY`。
 
@@ -90,7 +90,7 @@ Oh Story 0.9.0 按写书步骤重整参考资料，书稿、设定、追踪和�
 插件装进哪个 profile，那个 profile 的每个 Session 都能发现创作 Skills，具体指令在使用时读取；工作台只在有创作项目时显示。想让原版 `web` 保持干净、只在创作时打开工作台，就装进独立 profile：
 
 ```bash
-npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.1-rc.4 dsh plugin --profile story add @oh-story/dsh@0.1.19
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.1-rc.4 dsh plugin --profile story add @oh-story/dsh@0.1.20
 ```
 
 新 profile 默认没有界面。编辑 `~/.dsh/profiles/story/package.json`，把 `dsh.profile.bundles` 改成 `["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-web-app", "@oh-story/dsh"]`。

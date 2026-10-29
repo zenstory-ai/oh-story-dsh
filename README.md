@@ -42,7 +42,7 @@
 | 游戏 | [NovelToGame 0.6.1](https://github.com/zenstory-ai/novel-to-game) · 7 Skills · 《金瓶梅》ADV 可玩示例（18+） | `/novel-to-game quick`、`/game-build`、`/game-qa` |
 | 视频 | [video-recap-skills 0.6.2](https://github.com/zenstory-ai/video-recap-skills/releases/tag/v0.6.2) · 7 Skills（3 个用户入口） | `/video-recap`、`/video-script`、`/video-reference` |
 
-> 最新版本 **v0.1.19**（2026-10-27）。默认安装固定使用 DeepSeek Harness `0.2.1-rc.4`；npm `latest` 的 `0.2.1-rc.2` 与更早的 `0.2.0-rc.2` 仍受支持。变更见 [CHANGELOG.md](CHANGELOG.md) 与 [Releases](https://github.com/zenstory-ai/oh-story-dsh/releases)；升级步骤见常见问题[「升级到新版本后要做什么」](#升级到新版本后要做什么)。
+> 最新版本 **v0.1.20**（2026-10-29）。默认安装固定使用 DeepSeek Harness `0.2.1-rc.4`；npm `latest` 的 `0.2.1-rc.2`、更早的 `0.2.0-rc.2` 与 npm `alpha` 的 `0.2.2-alpha.2` 也受支持。变更见 [CHANGELOG.md](CHANGELOG.md) 与 [Releases](https://github.com/zenstory-ai/oh-story-dsh/releases)；升级步骤见常见问题[「升级到新版本后要做什么」](#升级到新版本后要做什么)。
 
 ## 四个工作台
 
@@ -85,11 +85,11 @@
 需要 Node.js 24+。安装命令会临时提供 pnpm，只装了 Node.js 的机器也能执行：
 
 ```bash
-npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.1-rc.4 dsh plugin --profile web add @oh-story/dsh@0.1.19 &&
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.1-rc.4 dsh plugin --profile web add @oh-story/dsh@0.1.20 &&
 npx -y @deepseek-ai/dsh@0.2.1-rc.4 web
 ```
 
-保持终端运行，浏览器默认自动打开；没有自动打开就复制终端打印的完整 `http://127.0.0.1:3080/?token=...` 链接访问，首次认证需要链接里的 token。关闭终端会停止服务。安装与启动请使用同一个 dsh 版本。本页默认命令固定使用 npm `next` 的 `0.2.1-rc.4`，npm `latest` 的 `0.2.1-rc.2` 同样验证过；本插件接受 `>=0.2.0-rc.2 <0.2.1-0` 与 `>=0.2.1-alpha.1 <0.2.2-0`。仍在用 `0.2.0-rc.2` 时，安装与启动两条命令都要换成 `@deepseek-ai/dsh@0.2.0-rc.2`；不要把两个宿主版本混用。DSH 会在安装与加载时检查版本，不匹配时给出明确提示（`dsh plugin allow-version` 可自担风险放行）。
+保持终端运行，浏览器默认自动打开；没有自动打开就复制终端打印的完整 `http://127.0.0.1:3080/?token=...` 链接访问，首次认证需要链接里的 token。关闭终端会停止服务。安装与启动请使用同一个 dsh 版本。本页默认命令固定使用 npm `next` 的 `0.2.1-rc.4`，npm `latest` 的 `0.2.1-rc.2` 同样验证过；本插件接受 `>=0.2.0-rc.2 <0.2.1-0`、`>=0.2.1-alpha.1 <0.2.2-0` 与 `>=0.2.2-alpha.2 <0.2.3-0`。仍在用 `0.2.0-rc.2`，或想试 `0.2.2-alpha.2`（需要 Node.js 24.9+）时，安装与启动两条命令都要换成同一个版本；不要把两个宿主版本混用。DSH 会在安装与加载时检查版本，不匹配时给出明确提示（`dsh plugin allow-version` 可自担风险放行）。
 
 开始 AI 创作前，在 DSH 的「设置 → 模型」中添加 Provider 并填入 API Key，或在启动前设置环境变量 `DEEPSEEK_API_KEY`。只查看已有作品可在首次引导中选择「稍后配置 / Configure later」。
 
@@ -99,7 +99,7 @@ npx -y @deepseek-ai/dsh@0.2.1-rc.4 web
 GitHub Release 中的预构建包经过同一套测试：
 
 ```bash
-npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.1-rc.4 dsh plugin --profile web add https://github.com/zenstory-ai/oh-story-dsh/releases/download/v0.1.19/oh-story-dsh-0.1.19.tgz &&
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.1-rc.4 dsh plugin --profile web add https://github.com/zenstory-ai/oh-story-dsh/releases/download/v0.1.20/oh-story-dsh-0.1.20.tgz &&
 npx -y @deepseek-ai/dsh@0.2.1-rc.4 web
 ```
 
@@ -143,7 +143,7 @@ npx -y @deepseek-ai/dsh@0.2.1-rc.4 web
 插件装进哪个 profile，那个 profile 的每个 Session 就都会加载创作 Skills。想让原版 `web` 保持干净，就把插件装进独立 profile：
 
 ```bash
-npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.1-rc.4 dsh plugin --profile story add @oh-story/dsh@0.1.19
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.1-rc.4 dsh plugin --profile story add @oh-story/dsh@0.1.20
 ```
 
 新 profile 默认没有界面。编辑 `~/.dsh/profiles/story/package.json`，把 `dsh.profile.bundles` 改成：
@@ -296,7 +296,7 @@ IMG-JIANGCHEN-SHEET 在当前集内重复，后出现的条目会遮蔽前一条
 
 ### 装好后工作台一片空白，面板和「创作工作台」按钮都不出现？
 
-先核对插件与 DSH 版本，再按[安装](#安装)使用同一条受支持的宿主线：默认 `0.2.1-rc.4`，或 `0.2.1-rc.2`、更早的 `0.2.0-rc.2`。安装和启动两条命令都要一致。检查同一 profile 中是否已加载插件；仍然空白时，附版本号和终端错误开 Issue。历史 Queue 接口故障见 [#50](https://github.com/zenstory-ai/oh-story-dsh/issues/50)。
+先核对插件与 DSH 版本，再按[安装](#安装)使用同一条受支持的宿主线：默认 `0.2.1-rc.4`，或 `0.2.1-rc.2`、更早的 `0.2.0-rc.2`、试用的 `0.2.2-alpha.2`。安装和启动两条命令都要一致。检查同一 profile 中是否已加载插件；仍然空白时，附版本号和终端错误开 Issue。历史 Queue 接口故障见 [#50](https://github.com/zenstory-ai/oh-story-dsh/issues/50)。
 
 ### 我另外给 Codex 或 OpenCode 装过 Oh Story，DSH 里用的是哪一份？
 
@@ -321,6 +321,8 @@ DSH 的 `plugin add` 内部需要 pnpm，单独运行 `npx @deepseek-ai/dsh ... 
 ### 升级到新版本后要做什么？
 
 重新执行安装命令，把 `@oh-story/dsh@` 后的版本号换成目标版本，再重启 DSH。安装与启动使用同一个宿主版本；当前支持范围见[安装](#安装)。Skills 与 Roles 随插件打包，无需在项目里重新部署。
+
+0.1.20 让插件能装进 DSH 0.2.2 预发布线（已验证 `0.2.2-alpha.2`）；默认宿主和上游 Skills 不变，不用迁移，重装后重启即可。
 
 0.1.19 带来 Oh Story 0.9.1、Drama Skills 0.9.2 与 NovelToGame 0.6.1，默认宿主改为 DSH `0.2.1-rc.4`，不用迁移，重装后重启即可。Oh Story 的续写状态卡最多列 20 个活跃角色（原来 6 个）。短剧每写完一份文档就能只核对已有文档，多镜容器可写 `GROUP-...` 条目，剪辑成片的切点不再掉音；旧 JSON 检查器不再随包，结构检查统一用 `creator_markdown_check.py`。
 

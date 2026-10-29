@@ -11,6 +11,12 @@
 
 ## [Unreleased]
 
+## [0.1.20] - 2026-10-29
+
+### Changed
+
+- 插件可以装进 [DeepSeek Harness 0.2.2-alpha.2](https://www.npmjs.com/package/@deepseek-ai/dsh/v/0.2.2-alpha.2)（npm `alpha`）。`engines.dsh` 与 DSH peer 范围加上 `>=0.2.2-alpha.2 <0.2.3-0`，Cordis / Schemastery peer 接受 0.2.2 宿主带的 `4.0.6` / `3.18.6` alpha；以前 0.2.2 宿主会以版本不兼容拒绝加载插件。试用 0.2.2 需要 Node.js 24.9+。默认安装仍是 `0.2.1-rc.4`，`0.2.1-rc.2` 与 `0.2.0-rc.2` 继续支持；上游 Skills 不变。
+
 ## [0.1.19] - 2026-10-27
 
 ### Changed
@@ -380,7 +386,8 @@
 - 提供 13 个 Oh Story 小说 Skills、7 个专业 Roles 与 10 个 Drama Skills。
 - 提供文件树、Markdown/JSONL 编辑预览与官方 DSH Chat 同屏的三栏工作台。
 
-[Unreleased]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.19...HEAD
+[Unreleased]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.20...HEAD
+[0.1.20]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.19...v0.1.20
 [0.1.19]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.18...v0.1.19
 [0.1.18]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.17...v0.1.18
 [0.1.17]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.16...v0.1.17

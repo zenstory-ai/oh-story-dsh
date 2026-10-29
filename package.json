@@ -1,6 +1,6 @@
 {
   "name": "oh-story-dsh",
-  "version": "0.1.19",
+  "version": "0.1.20",
   "private": true,
   "description": "A DSH plugin for fiction, short-drama, playable game, and video-recap production",
   "license": "MIT",
@@ -38,9 +38,10 @@
     "dsh:boundary": "tsx scripts/check-dsh-boundary.ts",
     "verify": "pnpm lint && pnpm typecheck && pnpm assets:check && pnpm dsh:boundary && pnpm test:release && pnpm test:upstream-updates && pnpm test:unit && pnpm build",
     "verify:portable": "pnpm typecheck && pnpm assets:check && pnpm test:release && pnpm test:unit && pnpm build",
-    "verify:release": "pnpm verify && pnpm test:dsh && pnpm test:dsh:rc",
+    "verify:release": "pnpm verify && pnpm test:dsh && pnpm test:dsh:rc && pnpm test:dsh:alpha",
     "pack:release": "pnpm --filter @oh-story/dsh pack --pack-destination release",
-    "test:dsh:rc": "tsx scripts/native-dsh-smoke.ts 0.2.0-rc.2"
+    "test:dsh:rc": "tsx scripts/native-dsh-smoke.ts 0.2.0-rc.2",
+    "test:dsh:alpha": "tsx scripts/native-dsh-smoke.ts 0.2.2-alpha.2"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
