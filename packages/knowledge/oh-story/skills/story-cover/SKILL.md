@@ -1,12 +1,14 @@
 ---
 name: story-cover
 version: 1.0.0
-description: "小说封面生成。根据书名、作者名自动分析题材风格，调用 GPT-Image-2 生成含标题和署名的专业级网文封面；Codex CLI 优先使用内置 ImageGen，无需单独 API Key。触发方式：/story-cover、/封面、「帮我做个封面」「生成封面图」「做个小说封面」「封面设计」。"
+description: "小说封面生成与提示词设计。根据书名、作者名和题材构建封面提示词；用户只要提示词时不生图，要求封面图时调用 GPT-Image-2，Codex CLI 优先使用内置 ImageGen。触发方式：/story-cover、/封面、「帮我做个封面」「生成封面图」「封面提示词」「封面设计」。"
 metadata: {"openclaw":{"requires":{"env":["GPT_IMAGE_API_KEY"],"bins":["curl","jq","base64"]},"primaryEnv":"GPT_IMAGE_API_KEY","source":"https://github.com/zenstory-ai/oh-story-claudecode"}}
 ---
 # story-cover：小说封面生成
 
 根据书名和题材生成包含书名、笔名的完整封面，让读者一眼看出题材和氛围。
+
+**仅提示词模式**：用户只要提示词，或 `story-publish` 选了仅提示词时，只做 Step 1-3，交付完整提示词，不需要生图工具、API Key 或输出目录；要封面图才继续 Step 4-6。由 `story-publish` 调用时，它传来的已确认书名、简介、笔名、平台和题材不再重问；结束时返回完整提示词原文，生图成功再附图片路径和质量检查结果，失败就说明原因。
 
 ---
 
@@ -24,7 +26,7 @@ metadata: {"openclaw":{"requires":{"env":["GPT_IMAGE_API_KEY"],"bins":["curl","j
 - 长篇：`设定/题材定位.md`「基本信息」的书名、题材类型、目标平台、核心梗；
 - 短篇：`设定.md`「基本信息」的标题、目标平台、目标情绪，以及「一句话梗概」「题材招式」。
 
-已有字段不再问；笔名不在这些文件里，每次都要问。没有书目录或缺项时，用宿主可用的提问方式一次问齐：书名、笔名、目标平台。
+已有或调用方传入的已确认字段不再问；笔名没有明确提供时才问。没有书目录或缺项时，用宿主可用的提问方式一次问齐缺少的书名、笔名、目标平台。
 
 > **书名和笔名是封面必需信息**：缺任一时先请作者补全，不得编造或留空。
 
@@ -37,6 +39,8 @@ metadata: {"openclaw":{"requires":{"env":["GPT_IMAGE_API_KEY"],"bins":["curl","j
 ### Step 2：题材判定
 
 在 [references/cover-styles.md](references/cover-styles.md) 的「风格库」里选一个题材：
+
+仅提示词模式没有题材依据时先问作者，不用下面第 2 条的「都市」兜底。
 
 1. 有「题材类型」（长篇）或梗概、题材招式（短篇）时，按内容选风格库中最接近的一节。
 2. 没有，或对不上风格库任何一节（如年代、种田、无限流、电竞）时，用书名（必要时简介）对照「题材推断规则」：只命中一个题材就用它；命中多个按该表下方的优先级取一；都没命中先用「都市」。
@@ -66,6 +70,8 @@ Author name '{笔名}' at bottom center in [笔名字体].
 [色彩指令]. [光效指令].
 Professional book cover, high detail digital painting, portrait [平台比例：番茄=3:4，默认=2:3] ratio, keep title and author name inside the central safe area away from edges (inner ~85%), no watermark
 ```
+
+仅提示词模式在这里交付 1-3 个完整提示词方案后结束；还没确认的画面细节写成可选方向，不当成小说里的事实。
 
 写法要点：
 - 人物描述写清服饰、姿态、发型、表情、道具，不要只写 `a man`；

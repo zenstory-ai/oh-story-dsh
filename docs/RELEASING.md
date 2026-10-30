@@ -33,7 +33,7 @@ removed.
 1. Update the root and package versions, installation examples, and
    `CHANGELOG.md` for the intended release.
 2. Run `pnpm verify:release` locally. For 0.1.13 and later, retain fresh packaged
-   Chrome E2E evidence on the default DSH `0.2.1-rc.4` line, the earlier
+   Chrome E2E evidence on the default DSH `0.2.1-rc.5` line, the earlier
    `0.2.0-rc.2` line and, from 0.1.20, the `0.2.2-alpha.2` trial line
    (`pnpm test:dsh:alpha`, run locally by `verify:release` but not in CI); a
    host line must not be announced from peer metadata or unit tests alone.
@@ -142,12 +142,12 @@ metadata and manifest integrity rather than resubmit while processing.
 Do not announce a release until the registry reports the exact version:
 
 ```bash
-VERSION=0.1.20
+VERSION=0.1.21
 npm view "@oh-story/dsh@$VERSION" version dist.integrity
-npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.1-rc.4 dsh plugin --profile web add "@oh-story/dsh@$VERSION"
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.1-rc.5 dsh plugin --profile web add "@oh-story/dsh@$VERSION"
 ```
 
-The default public smoke pins DSH `0.2.1-rc.4`. After it passes,
+The default public smoke pins DSH `0.2.1-rc.5`. After it passes,
 repeat the isolated install/start/browser smoke with
 `@deepseek-ai/dsh@0.2.0-rc.2` and `@deepseek-ai/dsh@0.2.2-alpha.2`; never mix host versions within one profile or
 describe a host line as supported before its Chrome run passes.
@@ -155,5 +155,5 @@ describe a host line as supported before its Chrome run passes.
 The GitHub Release tarball remains a registry-independent installation path:
 
 ```bash
-npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.1-rc.4 dsh plugin --profile web add "https://github.com/zenstory-ai/oh-story-dsh/releases/download/v$VERSION/oh-story-dsh-$VERSION.tgz"
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.1-rc.5 dsh plugin --profile web add "https://github.com/zenstory-ai/oh-story-dsh/releases/download/v$VERSION/oh-story-dsh-$VERSION.tgz"
 ```

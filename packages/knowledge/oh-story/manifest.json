@@ -2,11 +2,11 @@
   "schemaVersion": 2,
   "upstream": {
     "repository": "https://github.com/zenstory-ai/oh-story-claudecode.git",
-    "commit": "70d1cf426f8cbe3d374e2b06e4c2cbdbd986da06",
-    "releaseVersion": "0.9.1",
-    "agentsVersion": 37
+    "commit": "f08a66ddd5995e4c02e1c9f9c04dca25d957cb37",
+    "releaseVersion": "0.9.2",
+    "agentsVersion": 38
   },
-  "generatedAt": "2026-10-27T08:36:12.470Z",
+  "generatedAt": "2026-10-30T07:16:48.049Z",
   "skills": [
     "browser-cdp",
     "story",
@@ -16,6 +16,7 @@
     "story-long-analyze",
     "story-long-scan",
     "story-long-write",
+    "story-publish",
     "story-review",
     "story-setup",
     "story-short-analyze",
@@ -79,8 +80,8 @@
     },
     {
       "path": "skills/story-cover/SKILL.md",
-      "sha256": "78bb12754981af4fae554c3bd615da56dddd3bf3a729362705a2538b4d0b6774",
-      "bytes": 9656
+      "sha256": "65a3bb19970c10f680b52b93a06116175c1175e7113f9435aa48d917c37d9147",
+      "bytes": 10385
     },
     {
       "path": "skills/story-cover/references/api-fallback.md",
@@ -94,7 +95,7 @@
     },
     {
       "path": "skills/story-deslop/SKILL.md",
-      "sha256": "b82bb526611511525e97f1c0782789ab52ab3db8e15036b593a83f05bb0c189d",
+      "sha256": "f2d5afbce2232e65bb57e1215d422952f9b7146bb3f9582c1010345b9bc36522",
       "bytes": 11930
     },
     {
@@ -154,7 +155,7 @@
     },
     {
       "path": "skills/story-import/SKILL.md",
-      "sha256": "630e500f07ce027ff886c2803751017540e96a26936cf72f3a15616267b2eec5",
+      "sha256": "8b22983e22f400ffba366c84a170b6609259858ef5068e2569afaacc6fc326c6",
       "bytes": 11738
     },
     {
@@ -244,7 +245,7 @@
     },
     {
       "path": "skills/story-long-analyze/SKILL.md",
-      "sha256": "037f98431e263013ff8c4b884bca437bcceba15b8b35470c9c4959d0871c887c",
+      "sha256": "a2836b12cbf22b186de637730fff48a2d915d0a15ef1a03ae25a45f2f5f8500c",
       "bytes": 11151
     },
     {
@@ -409,7 +410,7 @@
     },
     {
       "path": "skills/story-long-write/SKILL.md",
-      "sha256": "5ef090e95bd5e4011bfc4f8806c8924b052deecb74d9942a7c29189a3c2556ce",
+      "sha256": "a614c5ff0d8e4f91ed2061d3617318ad254200d85396fed529d7abe2d1fcb670",
       "bytes": 14458
     },
     {
@@ -858,8 +859,43 @@
       "bytes": 18338
     },
     {
+      "path": "skills/story-publish/SKILL.md",
+      "sha256": "fdf1a5f822b27e8f80e7f028f73700caef05bf2388c3b342745ecb39ce4ba802",
+      "bytes": 7769
+    },
+    {
+      "path": "skills/story-publish/references/fanqie-content-tags.md",
+      "sha256": "3e36430f20e668cc9e0b9fc67b925a8342f867142a71014a22adc60a8f469181",
+      "bytes": 4565
+    },
+    {
+      "path": "skills/story-publish/references/fanqie-reading-female.md",
+      "sha256": "0b05e75427a6d72b3a4dbec73b8a65ffbabd9041ba8d839fab2eeacf17aa7a83",
+      "bytes": 2583
+    },
+    {
+      "path": "skills/story-publish/references/fanqie-reading-male.md",
+      "sha256": "54c894711311be51caac2a5f5eb025f25f88088f8ba57419a99c5e05eed2452c",
+      "bytes": 2246
+    },
+    {
+      "path": "skills/story-publish/references/fanqie-short.md",
+      "sha256": "a9d3988c012987cab741993f048fa6913d9126c8e97b34e850a08ac74da368e2",
+      "bytes": 3145
+    },
+    {
+      "path": "skills/story-publish/references/fanqie.md",
+      "sha256": "e5e8b16aacce39ff4f01e07fa9b63df70a2851b52916e591a39b6fb7a0e7f421",
+      "bytes": 3432
+    },
+    {
+      "path": "skills/story-publish/scripts/check-publish-format.py",
+      "sha256": "ae398dcdada8ab6f17be54b84d82395adc0268536ba4c379f199c7a9610d6ed1",
+      "bytes": 10385
+    },
+    {
       "path": "skills/story-review/SKILL.md",
-      "sha256": "ea87e7aa4519b563b4c44279abb1caad11ef6d0750993b516cb73605bfadce00",
+      "sha256": "55b7f97cb43c07abd43d8f8411f8df3d0a2d6b842fca82de4c487fd2975a9e2a",
       "bytes": 21128
     },
     {
@@ -969,7 +1005,7 @@
     },
     {
       "path": "skills/story-setup/SKILL.md",
-      "sha256": "e0f79674c02932bb65202e19a43c3cc5e96abec36ef1cd245e05ba134bec6304",
+      "sha256": "e3cc7361632824d5de0711226efc05f44b72952a4e9932466d8478affd2617d3",
       "bytes": 17843
     },
     {
@@ -1449,7 +1485,7 @@
     },
     {
       "path": "skills/story-short-write/SKILL.md",
-      "sha256": "e78b261c623f185eb08158cbd12bf0d2a2f4d8bd59b62076f18089edd0baf26f",
+      "sha256": "82d280de2bad9c4016823427f4bb68a1c84353916642a27b70295ed2dc6d5f61",
       "bytes": 10845
     },
     {
@@ -1674,12 +1710,12 @@
     },
     {
       "path": "skills/story/SKILL.md",
-      "sha256": "1b286eb40bf5939f5c78e442b6daca414c2ea400d4cc5ad417d16a5e31216b65",
-      "bytes": 13712
+      "sha256": "6bec8ffbfd35ab0fddce7513f480d43bebded4a1dde0775dc1dd2f99ed8b1dc0",
+      "bytes": 14125
     },
     {
       "path": "skills/story/VERSION",
-      "sha256": "179a5390966e85c2071a87c1b31de13df67460665196f6529f8c4986842f81e5",
+      "sha256": "f34248c2449a022d41c918d1e995ad85859a1e9f0e6f89d0af23ae4a55519f71",
       "bytes": 6
     }
   ]

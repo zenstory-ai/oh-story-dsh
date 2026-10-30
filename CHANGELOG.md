@@ -11,6 +11,23 @@
 
 ## [Unreleased]
 
+## [0.1.21] - 2026-10-30
+
+### Added
+
+- 小说新增 `/story-publish`（随 [Oh Story 0.9.2](https://github.com/zenstory-ai/oh-story-claudecode/releases/tag/v0.9.2)）：从已有的设定和大纲整理番茄小说长篇或短故事的书名、简介、签约模式、主角、标签或分类，按平台规则核对后存成书目录下的 `发布资料-番茄小说.md`。只有你确认过的内容才写进字段，候选放在「待作者确认」；在 DSH 里也不会替你登录作者后台、填表或发布，即使当前 Preset 有浏览器工具。说「整理发布资料」「填建书表单」即可进入，只说「开书」照常进长篇写作。
+- `/story-cover` 可以只出封面提示词，不需要生图工具；当前 Preset 没有生图能力时，会先提出只给提示词，而不是改用付费 API。
+
+### Changed
+
+- 默认宿主更新到 [DeepSeek Harness 0.2.1-rc.5](https://www.npmjs.com/package/@deepseek-ai/dsh/v/0.2.1-rc.5)，它现在同时是 npm `latest` 与 `next`；安装命令改用 `0.2.1-rc.5`。`0.2.0-rc.2` 与试用的 `0.2.2-alpha.2` 继续支持，插件声明的兼容范围不变。
+- 同步 Oh Story 0.9.2（`f08a66ddd5995e4c02e1c9f9c04dca25d957cb37`，`agents_version` 37 → 38，14 Skills、7 Roles）。书稿、设定、追踪和作者记忆不用迁移，DSH 里也不用重跑 `/story-setup`。
+- 同步 [Drama Skills 0.10.0](https://github.com/zenstory-ai/drama-skills/releases/tag/v0.10.0)（`d22979578d3508d24fe44483969dfb5e8abb09b7`，11 Skills）：分镜按回合拆打戏，打到人的一下用同侧机位遮住接触点；剪辑把反应压在台词上，多人场景不再一人一句轮流；项目里还没有参考图时，分镜写 `PLAN-...` 挂图计划、视频提示词照常交付，投产前仍要放入真实图片并改绑 `REF-...`；写作新增非中文台词的写法。
+
+### Fixed
+
+- 短剧剧本时长估算按词计英文台词，不再把每个字母当成一个字、估出约 3 倍的秒数（随 Drama Skills 0.10.0）。
+
 ## [0.1.20] - 2026-10-29
 
 ### Changed
@@ -386,7 +403,8 @@
 - 提供 13 个 Oh Story 小说 Skills、7 个专业 Roles 与 10 个 Drama Skills。
 - 提供文件树、Markdown/JSONL 编辑预览与官方 DSH Chat 同屏的三栏工作台。
 
-[Unreleased]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.20...HEAD
+[Unreleased]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.21...HEAD
+[0.1.21]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.20...v0.1.21
 [0.1.20]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.19...v0.1.20
 [0.1.19]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.18...v0.1.19
 [0.1.18]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.17...v0.1.18

@@ -1,6 +1,23 @@
 # Validation
 
-Candidate: `@oh-story/dsh` 0.1.20 on DeepSeek Harness `0.2.1-rc.4`, with `0.2.1-rc.2` (npm `latest`), the earlier `0.2.0-rc.2` and the `0.2.2-alpha.2` trial line covered. Local aggregate acceptance passed on 2026-10-29.
+Candidate: `@oh-story/dsh` 0.1.21 on DeepSeek Harness `0.2.1-rc.5`, with the earlier `0.2.0-rc.2` and the `0.2.2-alpha.2` trial line covered. Local aggregate acceptance passed on 2026-10-30.
+
+## 0.1.21 release evidence
+
+0.1.21 moves the default host to DSH `0.2.1-rc.5` (the npm `latest` and `next`) and syncs Oh Story 0.9.2 and Drama Skills 0.10.0. NovelToGame 0.6.1 and video-recap 0.6.2 keep their pins.
+
+### Local evidence
+
+- Oh Story 0.9.2 (`f08a66ddd599`), 14 Skills, 7 Roles and `agents_version` 38; Drama Skills 0.10.0 (`d22979578d35`), 11 Skills with 6 passing selftests. Both were synced from clean checkouts of the release tags. The drama demo fixture files are unchanged; only their provenance commit moved.
+- The new `story-publish` Skill is listed and routed by the DSH `story` entry, and its DSH bridge forbids operating a platform author backend. `story-cover` offers the prompt-only mode when no image capability is visible. Unit tests assert the 14-Skill catalog, the route and both bridge sentences.
+- Between DSH `0.2.1-rc.4` and `0.2.1-rc.5`, 19 of the plugin's 20 DSH peer packages are byte-identical; `dsh-client-ui-chat` only adds `rawText` to the reasoning-body Slot, which the plugin does not use.
+- On 2026-10-30, `pnpm verify:release` passed in a clean clone of the candidate (`84294ff`) with the upstream release checkouts: lint, typecheck, four parity checks, the DSH boundary, release and upstream-update tests, 198 unit/contract tests, and the build. Packaged Chrome on DSH `0.2.1-rc.5`, `0.2.0-rc.2` and `0.2.2-alpha.2` returned `"ok": true`.
+
+### Release gates
+
+- **Local aggregate acceptance:** passed 2026-10-30.
+- **Paid provider:** passed 2026-10-30. `pnpm test:dsh:real` ran on DSH `0.2.1-rc.5` with `deepseek-official/deepseek-flash`: 2 Role calls, both required Roles successful and non-empty, 94 and 68 durable events, project digest unchanged. The operator-authorized credential was read from a 0600 temporary file, deleted after the run, and never appeared in logs; the shared account balance dropped 0.15 CNY. The run covers the review chain, not `story-publish`.
+- **New-user audit:** not rerun.
 
 ## 0.1.20 release evidence
 
