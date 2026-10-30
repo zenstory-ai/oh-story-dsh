@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import { chromium, type Locator, type Page } from "@playwright/test";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const dshVersion = process.env.DSH_TEST_VERSION ?? process.argv[2] ?? "0.2.1-rc.4";
+const dshVersion = process.env.DSH_TEST_VERSION ?? process.argv[2] ?? "0.2.1-rc.5";
 /** Exact WebSocket route carrying every Typert Remote stream. */
 const REMOTE_STREAM_MUX_PATH = "/api/remote.mux";
 /** ChatFlow may wrap rows in its slot; nested process rows do not belong to the main tail. */
@@ -795,7 +795,7 @@ async function main(): Promise<void> {
     const videoSkills = catalog.skills.filter((skill) => [
       "video-recap", "video-reference", "video-understanding", "video-script", "video-cut", "video-voiceover", "video-assemble"
     ].includes(skill.name));
-    if (ohStorySkills.length !== 13) throw new Error(`Expected 13 Oh Story Skills, found ${String(ohStorySkills.length)}.`);
+    if (ohStorySkills.length !== 14) throw new Error(`Expected 14 Oh Story Skills, found ${String(ohStorySkills.length)}.`);
     if (dramaSkills.length !== 11) throw new Error(`Expected 11 Drama Skills, found ${String(dramaSkills.length)}.`);
     if (gameSkills.length !== 7) throw new Error(`Expected 7 NovelToGame Skills, found ${String(gameSkills.length)}.`);
     if (JSON.stringify(videoSkills.map((skill) => skill.name).sort()) !== JSON.stringify(["video-recap", "video-reference", "video-script"])) {

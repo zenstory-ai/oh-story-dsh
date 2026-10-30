@@ -30,8 +30,8 @@ const skills = (await readdir(join(ohStoryRoot, "skills"), { withFileTypes: true
   .filter((entry) => entry.isDirectory())
   .map((entry) => entry.name)
   .sort();
-if (skills.length !== 13 || JSON.stringify(skills) !== JSON.stringify(manifest.skills)) {
-  throw new Error(`Expected 13 pinned skills, found ${skills.length}.`);
+if (skills.length !== 14 || JSON.stringify(skills) !== JSON.stringify(manifest.skills)) {
+  throw new Error(`Expected 14 pinned skills, found ${skills.length}.`);
 }
 const releaseVersion = (await readFile(join(ohStoryRoot, "skills/story/VERSION"), "utf8")).trim();
 if (releaseVersion !== manifest.upstream.releaseVersion) {

@@ -15,7 +15,7 @@ describe("Oh Story bundled skill provider", () => {
     const listed = await provider.list({});
     if (!Array.isArray(listed)) throw new Error("Expected a complete bundled catalog.");
     const candidates = listed;
-    expect(candidates).toHaveLength(13);
+    expect(candidates).toHaveLength(14);
     expect(candidates.map((candidate) => candidate.name)).toContain("story-long-write");
     expect(candidates.every((candidate) => candidate.source === "bundled" && candidate.invocation.modelInvocable)).toBe(true);
     const selected = candidates.find((candidate) => candidate.name === "story-long-write");
@@ -89,9 +89,16 @@ describe("Oh Story bundled skill provider", () => {
       expect(route?.content).toContain(phrase);
     }
     expect(route?.content).not.toContain("加载本 skill 的");
-    for (const phrase of ["灵感库", "跨书灵感聚合", "更新灵感库", "不写正文", "「开一本长篇或接着写」", "「更多（拆书、扫榜、导入旧稿、审稿、封面）」"]) {
+    for (const phrase of ["灵感库", "跨书灵感聚合", "更新灵感库", "不写正文", "「开一本长篇或接着写」", "「更多（拆书、扫榜、导入旧稿、审稿、封面、发布资料）」"]) {
       expect(route?.content).toContain(phrase);
     }
+    // Oh Story 0.9.2: listing material has its own Skill; 开书 still routes to long-form writing.
+    expect(route?.content).toContain("story-publish；只说「开书」");
+    const publish = await provider.get(candidates.find((candidate) => candidate.name === "story-publish")!, {});
+    expect(publish?.content).toContain("# story-publish");
+    expect(publish?.content).toContain("Never sign in to, fill in, or submit anything on a platform's author backend");
+    const cover = await provider.get(candidates.find((candidate) => candidate.name === "story-cover")!, {});
+    expect(cover?.content).toContain("offer the upstream prompt-only mode instead of a paid API");
     expect(route?.content).not.toContain("还没部署过");
     expect(route?.content).not.toContain("dashboard-server.mjs");
     const browserCandidate = candidates.find((candidate) => candidate.name === "browser-cdp");

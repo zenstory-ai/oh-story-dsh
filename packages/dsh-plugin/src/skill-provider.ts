@@ -49,7 +49,8 @@ const DSH_SKILL_OVERRIDES: Readonly<Partial<Record<string, string>>> = {
   "story-short-analyze": "Use oh_story_role for specialist analysis. Never inspect platform agent directories or require external Agent deployment.",
   "story-short-write": `All named Roles are provided through oh_story_role. Do not inspect platform agent files; preserve the upstream short-fiction workflow and quality gates. ${DSH_AUTHOR_MEMORY_WORKSPACE}`,
   "browser-cdp": "Use only browser or web capabilities visible in the current DSH preset. Do not start a parallel browser host; if no compatible capability is visible, explain the limitation.",
-  "story-cover": "Use only image-generation or HTTP capabilities visible in the current DSH preset. Never assume a separate Codex or Claude runtime."
+  "story-cover": "Use only image-generation or HTTP capabilities visible in the current DSH preset. Never assume a separate Codex or Claude runtime. When no such capability is visible, offer the upstream prompt-only mode instead of a paid API.",
+  "story-publish": "Prepare the listing file only. Never sign in to, fill in, or submit anything on a platform's author backend, even when a browser tool is visible in the current DSH preset; hand the author the saved 发布资料 file instead."
 };
 const DSH_DRAMA_BRIDGE = [
   "<short-drama-dsh-integration>",
@@ -126,7 +127,9 @@ const DSH_NATIVE_SKILLS: Readonly<Partial<Record<string, string>>> = {
 - 导入已有作品：story-import。导完长篇说 /story-long-write 写第N章（N 是导入后的下一章）
   续写；导完短篇用 /story-short-write 补完构思
 - 审稿与去 AI 味：story-review、story-deslop
-- 封面：story-cover
+- 封面：story-cover（只要封面提示词、不生图时也走它）
+- 整理平台建书资料（发布资料、建书表单、平台书名/简介/标签）：story-publish；只说「开书」
+  照常进 story-long-write
 - 查本书的角色、伏笔、进度或设定：用 oh_story_role 调用 story-explorer；查外部资料：
   story-researcher。助手返回的英文字段和缺口说明由你翻成白话再说；回答讲故事里的事，
   编号只跟着故事描述出现
@@ -145,7 +148,7 @@ node_modules、拆文库/、对标/，含 追踪/、正文/ 子目录或 正文.
 
 只说 /story、看不出意图时，不贴路由表，给四个白话选项：「开一本长篇或接着写」→
 story-long-write；「写一篇短篇」→ story-short-write；「把一章改得不那么 AI」→
-story-deslop；「更多（拆书、扫榜、导入旧稿、审稿、封面）」→ 再列进阶项。意图明确时
+story-deslop；「更多（拆书、扫榜、导入旧稿、审稿、封面、发布资料）」→ 再列进阶项。意图明确时
 直接进入对应 Skill；只差一个会改变流程的选择时只问这一个问题。项目文件、Agent、
 模型、权限、Session Log 和 UI 均由当前 DSH 会话管理。小说文件通过“小说”视图查看，
 Agent 过程通过右侧动态栏或官方 Chat 查看。禁止启动独立 Dashboard。`,
