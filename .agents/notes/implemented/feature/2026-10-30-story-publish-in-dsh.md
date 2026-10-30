@@ -35,4 +35,5 @@ Drama 0.10.0 加了打戏、群戏的写法，缺参考图时默认写 `PLAN-...
 
 - DSH rc.4 → rc.5：插件 20 个 DSH peer 包中 19 个逐字节一致；`dsh-client-ui-chat` 只在思考正文 Slot 增加 `rawText`，插件不使用；`@deepseek-ai/dsh` 依赖集合不变。
 - 四个 parity 通过：Oh Story 0.9.2（14 Skills、`agents_version` 38）、Drama 0.10.0（6 个 selftest）。`pnpm verify` 退出 0。
-- 打包 Chrome 与真实 provider 结果见本次 PR。
+- 候选源码 `84294ff` 在干净克隆中 `pnpm verify:release` 退出 0，打包 Chrome 在 `0.2.1-rc.5`、`0.2.0-rc.2` 与 `0.2.2-alpha.2` 均 `"ok": true`。
+- `pnpm test:dsh:real`：DSH `0.2.1-rc.5`、`deepseek-flash` 返回 `ok: true`，2 个必需 Role 均成功，项目摘要不变；凭据只在 0600 临时文件中，跑完即删；花费约 0.15 元。
