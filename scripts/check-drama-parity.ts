@@ -27,8 +27,8 @@ const actualFiles = await currentDramaFiles();
 if (JSON.stringify(actualFiles) !== JSON.stringify(manifest.files)) {
   throw new Error("Bundled Drama Skills files differ from manifest; run pnpm assets:sync:drama.");
 }
-if (manifest.skills.length !== 11 || !manifest.skills.every((name) => name === "short-drama" || name.startsWith("short-drama-"))) {
-  throw new Error(`Expected 11 pinned Drama Skills, found ${String(manifest.skills.length)}.`);
+if (manifest.skills.length !== 12 || !manifest.skills.every((name) => name === "short-drama" || name.startsWith("short-drama-"))) {
+  throw new Error(`Expected 12 pinned Drama Skills, found ${String(manifest.skills.length)}.`);
 }
 if (!manifest.skills.includes("short-drama-edit")) {
   throw new Error("Bundled Drama Skills are missing the v0.7 assembly stage short-drama-edit.");
@@ -38,6 +38,7 @@ for (const required of [
   "skills/short-drama/references/creator-documents.md",
   "skills/short-drama-storyboard/references/comic-keyframe-lexicon.md",
   "skills/short-drama-edit/scripts/edit_tool.py",
+  "skills/short-drama-breakdown/scripts/breakdown_tool.py",
   "skills/short-drama-edit/references/still-cuts.md",
   "skills/short-drama-edit/references/delivery-verify.md"
 ]) {

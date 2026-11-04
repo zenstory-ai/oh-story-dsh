@@ -125,7 +125,15 @@ SPEECH_RATES = ("spoken_characters_per_second", "spoken_words_per_second")
 EPISODE_COUNT_POINTER = "/format/episode_count"
 # The episode count is often settled only once the episode map exists, after
 # init; without a pointer it could only be hand-edited into the manifest.
-FORMAT_POINTERS = (EPISODE_LENGTH_POINTER, PACING_POINTER, EPISODE_COUNT_POINTER)
+ASPECT_RATIO_POINTER = "/format/aspect_ratio"
+# init writes a placeholder ratio; the router asks the creator once, and the
+# answer usually arrives after init, so it needs a decision path too.
+FORMAT_POINTERS = (
+    EPISODE_LENGTH_POINTER,
+    PACING_POINTER,
+    EPISODE_COUNT_POINTER,
+    ASPECT_RATIO_POINTER,
+)
 RHYTHM_PROFILE_TOKENS = [AUTHORITY_ROOT_TOKEN, "rhythm_profile"]
 # The project rhythm profile: what develop proposes and the creator accepts, so
 # that later stages can do arithmetic on accepted numbers. Only types and ranges
@@ -280,6 +288,9 @@ def project_video_model_profile(project: Mapping[str, Any]) -> dict[str, Any]:
         # The creator's choice to pack adjacent short shots into one
         # generation; it answers the shot-length note below once made.
         "multi_shot_containers",
+        # How continuation segments are executed when the built-in production
+        # path cannot bind the previous segment's video: asked once, then read.
+        "continuation_route",
     )
     return {field: choices[field] for field in fields if field in choices}
 
@@ -1712,6 +1723,10 @@ def set_creator_authority(
             isinstance(value, int) and not isinstance(value, bool) and value > 0
         ):
             raise ValueError("episode_count must be a positive integer")
+        if field == ASPECT_RATIO_POINTER and not (
+            isinstance(value, str) and re.fullmatch(r"[1-9][0-9]*:[1-9][0-9]*", value)
+        ):
+            raise ValueError("aspect_ratio must be written as width:height, e.g. 16:9")
         project_path = root / PROJECT_FILE
         project = json.loads(project_path.read_text(encoding="utf-8"))
         if not isinstance(project, dict):
@@ -2572,6 +2587,10 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    # 创作者在终端里直接读输出：中文照原样打印；控制台编码不了时退成 \uXXXX，JSON 仍可解析。
+    reconfigure = getattr(sys.stdout, "reconfigure", None)
+    if reconfigure is not None:
+        reconfigure(errors="backslashreplace")
     try:
         if args.command == "init":
             result = initialize_project(
@@ -2636,9 +2655,9 @@ def main(argv: list[str] | None = None) -> int:
         else:
             result = verify_delivery_package(Path(args.path), episode=args.episode)
             if result["status"] != "verified":
-                print(json.dumps(result, ensure_ascii=True, sort_keys=True))
+                print(json.dumps(result, ensure_ascii=False, sort_keys=True))
                 return 1
-        print(json.dumps(result, ensure_ascii=True, sort_keys=True))
+        print(json.dumps(result, ensure_ascii=False, sort_keys=True))
         return 0
     except (KeyError, OSError, ValueError, ProjectConflictError, PackageBlockedError) as exc:
         print(str(exc), file=sys.stderr)

@@ -11,6 +11,25 @@
 
 ## [Unreleased]
 
+## [0.1.22] - 2026-11-03
+
+### Added
+
+- 短剧新增 `/short-drama-breakdown`（对标拆解，随 [Drama Skills 0.10.2](https://github.com/zenstory-ai/drama-skills/releases/tag/v0.10.2)）：用 ffmpeg 量你放进项目或在会话里指定的标杆剧——每集多长、平均几秒一个镜头、多少时间有人说话、开场与集尾怎么接——再用同样的口径量自己的剧本、分镜或成片，列出差距交给对应技能。在 DSH 里它只量你提供的材料，不会自己上网搜或下载对标视频；宿主缺 ffmpeg/ffprobe 时直接说明，不凭眼估。
+
+### Changed
+
+- 同步 [Oh Story 0.10.0](https://github.com/zenstory-ai/oh-story-claudecode/releases/tag/v0.10.0)（`95c698a73a71874ec9e1cb9b0af99b36926d5160`，`agents_version` 38 → 39，14 Skills、7 Roles）：卷纲、细纲、题材定位、短篇设定和小节大纲改用大白话，老书的卷纲细纲照样能读能写；开书多一份 `设定/全书梗概.md`；每章检查用白话给出能不能交，并报碎度供参考；前三章安排一次赌注够大的正面冲突；汇报只说故事；写作技法不再鼓励碎句，引号里的省略号保留。书稿、设定和追踪不用迁移，DSH 里也不用重跑 `/story-setup`。
+- 作者记忆只用你确认过的条目（随 Oh Story 0.10.0）：不再生成「待确认」清单，之前记下却没确认过的习惯不再生效，想保留的再说一次。文风裁决、灵感库召回、正文分两批写和每章契约四问已移除。
+- 同步 Drama Skills 0.10.1 与 0.10.2（`c8f90a79032da8dd3deeec2da3abd2b063939fe5`，12 Skills）：审生成素材时小瑕疵默认交给剪辑，只有补不回来的段落才要求重生成；续接段在内置生产工具里提交不了时会问一次改用逐段起始帧还是交给你的工具；剪辑 `verify` 提示前后音量差超过 10 dB 的切点；成片响度落在容差内就算完成；漫剧默认平均镜长按 9 部连播漫剧实测改为 2.6 秒起；没说画幅时先问一次。
+- 同一张参考图在文档里只占一个槽位（随 Drama Skills 0.10.1）。检查报「同一张图只能占一个槽位」时，把两个槽位合并成一个，再重新准备生产任务。
+- 试用线换成 [DeepSeek Harness 0.2.2-alpha.3](https://www.npmjs.com/package/@deepseek-ai/dsh/v/0.2.2-alpha.3)（npm `alpha`），`pnpm test:dsh:alpha` 改在 alpha.3 上跑。默认宿主仍是 `0.2.1-rc.5`，兼容范围不变。
+
+### Fixed
+
+- 小说视图的 Markdown 预览不再把 `<!-- -->` 注释原样显示出来。Oh Story 0.10.0 的卷纲在每段剧情标题末尾写 `<!-- L1-01 -->` 这样的编号注释，模板里也有说明注释；现在和常见的 Markdown 渲染一样隐藏，行内代码和代码块里的照常显示。
+- 短剧 `project_tool.py` 直接输出中文，不再打印 `\u5267\u96c6` 这样的转义（随 Drama Skills 0.10.2）。
+
 ## [0.1.21] - 2026-10-30
 
 ### Added
@@ -403,7 +422,8 @@
 - 提供 13 个 Oh Story 小说 Skills、7 个专业 Roles 与 10 个 Drama Skills。
 - 提供文件树、Markdown/JSONL 编辑预览与官方 DSH Chat 同屏的三栏工作台。
 
-[Unreleased]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.21...HEAD
+[Unreleased]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.22...HEAD
+[0.1.22]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.21...v0.1.22
 [0.1.21]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.20...v0.1.21
 [0.1.20]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.19...v0.1.20
 [0.1.19]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.18...v0.1.19
