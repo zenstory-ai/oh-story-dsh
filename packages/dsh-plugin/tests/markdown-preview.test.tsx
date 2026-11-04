@@ -34,6 +34,36 @@ describe("MarkdownPreview", () => {
     ]);
   });
 
+  it("hides HTML comments outside code, as rendered Markdown does", () => {
+    // Oh Story 0.10.0 outlines anchor each plot segment with a heading comment and carry template comments.
+    const content = [
+      "# 第一卷",
+      "",
+      "<!-- 脚本按名读取的字段，改名会读不到 -->",
+      "",
+      "### 第一段剧情：主角入局 <!-- L1-01 -->",
+      "",
+      "开场<!-- 待补 -->一段。",
+      "<!-- 跨行",
+      "注释 -->",
+      "收尾 `<!-- 保留 -->`。",
+      "",
+      "```markdown",
+      "### 示例 <!-- L1-02 -->",
+      "```"
+    ].join("\n");
+    const html = renderToStaticMarkup(<MarkdownPreview content={content} label="卷纲.md" />);
+    expect(html).toContain("<h3>第一段剧情：主角入局</h3>");
+    expect(html).not.toContain("L1-01");
+    expect(html).not.toContain("脚本按名读取");
+    expect(html).not.toContain("待补");
+    expect(html).not.toContain("跨行");
+    expect(html).toContain("开场一段。");
+    expect(html).toContain("<code>&lt;!-- 保留 --&gt;</code>");
+    expect(html).toContain("### 示例 &lt;!-- L1-02 --&gt;");
+    expect(parseMarkdownBlocks(content).map((block) => block.kind)).toEqual(["heading", "heading", "paragraph", "paragraph", "code"]);
+  });
+
   it("keeps raw HTML inert and only activates safe web links", () => {
     const content = '<script>alert(1)</script> [官网](https://example.com) [脚本](javascript:alert(1))';
     const html = renderToStaticMarkup(<MarkdownPreview content={content} label="安全.md" />);

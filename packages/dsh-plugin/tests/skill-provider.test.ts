@@ -52,9 +52,9 @@ describe("Oh Story bundled skill provider", () => {
         "When a Skill script fails, stop and show the author the command you ran and its error"
       ]) expect(bridged?.content, candidate.name).toContain(authorRule);
     }
-    // Oh Story 0.8.2 moved the 细纲 plot-point table from workflow-setup.md into workflow-outline.md.
-    const workflowOutline = await readFile(resolve(skillRoot, "story-long-write/references/workflow-outline.md"), "utf8");
-    expect(workflowOutline).toContain("| # | 情节点（谁做了什么） | 功能标签 | 执行边界（禁＋放） |");
+    // Oh Story 0.10.0 moved the 细纲 plot-point table into outline-template.md and cut it to three columns.
+    const outlineTemplate = await readFile(resolve(skillRoot, "story-long-write/references/outline-template.md"), "utf8");
+    expect(outlineTemplate).toContain("| # | 情节点（谁做了什么） | 作用 |");
     expect(skill?.content.startsWith("---")).toBe(false);
     const setupCandidate = candidates.find((candidate) => candidate.name === "story-setup");
     const setup = await provider.get(setupCandidate!, {});
@@ -187,12 +187,15 @@ describe("Oh Story bundled skill provider", () => {
         "pass that same root as both --workspace and --book-root",
         ".story/作者记忆/书级/",
         "--kind on queries",
-        "references/author-memory-maintenance.md"
+        "also covers organizing memories and migrating old 本书： entries"
       ]) expect(writing?.content, name).toContain(rule);
       const protocol = await readFile(resolve(skillRoot, name, "references/author-memory.md"), "utf8");
       expect(writing?.content).toContain("references/author-memory.md");
       expect(protocol).toContain("Author Memory Receipt");
-      expect(writing?.content).toContain("仅管理习惯时完成即停，不建书、不写正文");
+      // Oh Story 0.10.0 merged author-memory-maintenance.md into author-memory.md.
+      expect(protocol).toContain("author_memory_commit.py migrate --workspace");
+      await expect(stat(resolve(skillRoot, name, "references/author-memory-maintenance.md"))).rejects.toMatchObject({ code: "ENOENT" });
+      expect(writing?.content).toContain("完成即停，不建书、不写正文");
       const memoryScript = await readFile(resolve(skillRoot, name, "scripts/author_memory_commit.py"), "utf8");
       for (const flag of ["\"--book-root\"", "\"--kind\"", "\"migrate\""]) expect(memoryScript).toContain(flag);
     }
@@ -205,7 +208,9 @@ describe("Oh Story bundled skill provider", () => {
   it("makes the three deslop methods available to Skills and the native writer Role", async () => {
     // Oh Story 0.9.0 dropped story-long-write's copies; its writer Role still reads them from agent-references.
     await expect(stat(resolve(skillRoot, "story-long-write/references/expression.md"))).rejects.toMatchObject({ code: "ENOENT" });
-    for (const name of ["story-deslop", "story-short-write", "story-review", "story-setup/references/agent-references"]) {
+    // Oh Story 0.10.0 dropped story-short-write's copies too: a full deslop goes to story-deslop.
+    await expect(stat(resolve(skillRoot, "story-short-write/references/expression.md"))).rejects.toMatchObject({ code: "ENOENT" });
+    for (const name of ["story-deslop", "story-review", "story-setup/references/agent-references"]) {
       const referenceRoot = name.endsWith("agent-references") ? resolve(skillRoot, name) : resolve(skillRoot, name, "references");
       for (const method of ["expression.md", "narrative-focus.md", "story-logic.md"]) {
         await expect(readFile(resolve(referenceRoot, method), "utf8")).resolves.toMatch(/\S/u);
@@ -252,10 +257,14 @@ describe("Drama Skills bundled provider", () => {
     const provider = createDramaSkillProvider(dramaRoot);
     const listed = await provider.list({});
     if (!Array.isArray(listed)) throw new Error("Expected a complete Drama Skills catalog.");
-    expect(listed).toHaveLength(11);
+    expect(listed).toHaveLength(12);
     expect(listed.map((candidate) => candidate.name)).toEqual(expect.arrayContaining([
-      "short-drama", "short-drama-write", "short-drama-storyboard", "short-drama-produce", "short-drama-edit"
+      "short-drama", "short-drama-write", "short-drama-storyboard", "short-drama-produce", "short-drama-edit", "short-drama-breakdown"
     ]));
+    // Drama 0.10.2: benchmark breakdown measures only creator-supplied media with the host ffmpeg.
+    const breakdown = await provider.get(listed.find((candidate) => candidate.name === "short-drama-breakdown")!, {});
+    expect(breakdown?.content).toContain("never search for or download a benchmark through a browser or web tool");
+    expect(breakdown?.content).toContain("instead of estimating cuts or durations by eye");
     for (const candidate of listed) {
       const skill = await provider.get(candidate, {});
       expect(skill?.content).toContain("each episode keeps only the requested documents, up to five creator-facing sources");

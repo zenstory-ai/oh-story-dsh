@@ -796,7 +796,7 @@ async function main(): Promise<void> {
       "video-recap", "video-reference", "video-understanding", "video-script", "video-cut", "video-voiceover", "video-assemble"
     ].includes(skill.name));
     if (ohStorySkills.length !== 14) throw new Error(`Expected 14 Oh Story Skills, found ${String(ohStorySkills.length)}.`);
-    if (dramaSkills.length !== 11) throw new Error(`Expected 11 Drama Skills, found ${String(dramaSkills.length)}.`);
+    if (dramaSkills.length !== 12) throw new Error(`Expected 12 Drama Skills, found ${String(dramaSkills.length)}.`);
     if (gameSkills.length !== 7) throw new Error(`Expected 7 NovelToGame Skills, found ${String(gameSkills.length)}.`);
     if (JSON.stringify(videoSkills.map((skill) => skill.name).sort()) !== JSON.stringify(["video-recap", "video-reference", "video-script"])) {
       throw new Error(`Expected the three user-invocable video-recap entries, found ${videoSkills.map((skill) => skill.name).join(", ")}.`);

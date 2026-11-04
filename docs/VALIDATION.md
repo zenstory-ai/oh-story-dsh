@@ -1,6 +1,24 @@
 # Validation
 
-Candidate: `@oh-story/dsh` 0.1.21 on DeepSeek Harness `0.2.1-rc.5`, with the earlier `0.2.0-rc.2` and the `0.2.2-alpha.2` trial line covered. Local aggregate acceptance passed on 2026-10-30.
+Candidate: `@oh-story/dsh` 0.1.22 on DeepSeek Harness `0.2.1-rc.5`, with the earlier `0.2.0-rc.2` and the `0.2.2-alpha.3` trial line covered. Local aggregate acceptance passed on 2026-11-03.
+
+## 0.1.22 release evidence
+
+0.1.22 syncs Oh Story 0.10.0 and Drama Skills 0.10.2 and moves the trial line to DSH `0.2.2-alpha.3`. The default host stays `0.2.1-rc.5`; NovelToGame 0.6.1 and video-recap 0.6.2 keep their pins.
+
+### Local evidence
+
+- Oh Story 0.10.0 (`95c698a73a71`), 14 Skills, 7 Roles and `agents_version` 39; Drama Skills 0.10.2 (`c8f90a79032d`), 12 Skills with 7 passing selftests including the new `short-drama-breakdown`. Both were synced from clean clones of the release tags.
+- Every upstream file, command and step the DSH bridge, native hooks and Role code cite was checked against 0.10.0. `references/author-memory-maintenance.md` was merged upstream into `references/author-memory.md`, and the author-memory bridge now points there. The upstream `story_hook_core.js` is unchanged, so the native outline gate still mirrors it.
+- The Markdown preview now hides HTML comments outside code; a new unit test covers 0.10.0's `<!-- L1-01 -->` heading anchors, template comments and preserved code.
+- A scratch copy with dependencies on `0.2.2-alpha.3`, Cordis `4.0.6-alpha.2` and Schemastery `3.18.6-alpha.2` passed typecheck, 199 unit tests, 7 real-Cordis contract tests, the DSH boundary and the build.
+- On 2026-11-03, `pnpm verify:release` passed in a clean clone of the candidate (`970389a`) with the upstream release checkouts: lint, typecheck, four parity checks, the DSH boundary, release and upstream-update tests, 199 unit/contract tests, and the build. Packaged Chrome on DSH `0.2.1-rc.5`, `0.2.0-rc.2` and `0.2.2-alpha.3` returned `"ok": true`.
+
+### Release gates
+
+- **Local aggregate acceptance:** passed 2026-11-03.
+- **Paid provider:** passed 2026-11-03. `pnpm test:dsh:real` on the candidate ran on DSH `0.2.1-rc.5` with `deepseek-official/deepseek-flash`: 2 Role calls, both required Roles successful and non-empty, 86 and 48 durable events, project digest unchanged. The operator-authorized credential was read from a 0600 temporary file, deleted after the run, and never appeared in logs; the shared account balance dropped 0.16 CNY. The run covers the review chain, not `short-drama-breakdown` or `story-publish`.
+- **New-user audit:** not rerun.
 
 ## 0.1.21 release evidence
 

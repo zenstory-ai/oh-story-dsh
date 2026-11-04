@@ -77,8 +77,57 @@ function beginsBlock(lines: readonly string[], index: number): boolean {
     || (line.includes("|") && tableAlignments(lines[index + 1] ?? "") !== undefined);
 }
 
+const FENCE = /^(`{3,}|~{3,})\s*[\w-]*\s*$/u;
+
+/**
+ * Hide HTML comments the way rendered Markdown does, outside fenced code and inline code. Oh Story
+ * 0.10.0 outlines carry script anchors such as `### 第一段剧情：… <!-- L1-01 -->`; other raw HTML
+ * stays inert text.
+ */
+function withoutHtmlComments(lines: readonly string[]): string[] {
+  const output: string[] = [];
+  let fence: string | undefined;
+  let inComment = false;
+  for (const line of lines) {
+    if (fence !== undefined) {
+      output.push(line);
+      if (new RegExp(`^${fence[0] ?? "`"}{${String(fence.length)},}\\s*$`, "u").test(line)) fence = undefined;
+      continue;
+    }
+    if (!inComment && FENCE.test(line)) {
+      fence = /^(`{3,}|~{3,})/u.exec(line)?.[1];
+      output.push(line);
+      continue;
+    }
+    let kept = "";
+    let rest = line;
+    while (rest !== "") {
+      if (inComment) {
+        const end = rest.indexOf("-->");
+        if (end < 0) break;
+        rest = rest.slice(end + 3);
+        inComment = false;
+        continue;
+      }
+      const code = /`[^`\n]+`/u.exec(rest);
+      const start = rest.indexOf("<!--");
+      if (start < 0) { kept += rest; break; }
+      if (code !== null && code.index < start) {
+        kept += rest.slice(0, code.index + code[0].length);
+        rest = rest.slice(code.index + code[0].length);
+        continue;
+      }
+      kept += rest.slice(0, start);
+      rest = rest.slice(start + 4);
+      inComment = true;
+    }
+    output.push(kept === line ? line : kept.trimEnd());
+  }
+  return output;
+}
+
 export function parseMarkdownBlocks(markdown: string): MarkdownBlock[] {
-  const lines = markdown.replaceAll("\r\n", "\n").split("\n");
+  const lines = withoutHtmlComments(markdown.replaceAll("\r\n", "\n").split("\n"));
   const result: MarkdownBlock[] = [];
   for (let index = 0; index < lines.length;) {
     const line = lines[index] ?? "";
