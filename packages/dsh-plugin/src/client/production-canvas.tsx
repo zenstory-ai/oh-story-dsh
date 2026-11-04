@@ -1,20 +1,21 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
 import type { DramaDocumentTarget, DramaEpisodeProduction } from "./drama-production.js";
-import type { CanvasPoint } from "./production-runtime.js";
+import { selectedVersionForTarget, type CanvasPoint, type ProductionJob, type ProductionMediaVersion } from "./production-runtime.js";
 import {
-  CANVAS_NODE_HEIGHT,
-  CANVAS_NODE_WIDTH,
   DEFAULT_CANVAS_VIEWPORT,
-  centerOn,
-  fitNodes,
-  nodeVisible,
+  centerOnRect,
+  fitRects,
+  initialReadableViewport,
+  rectVisible,
   wheelZoomFactor,
   zoomAt,
+  type CanvasRect,
   type CanvasSize,
   type CanvasViewport
 } from "./canvas-viewport.js";
+import { productionCanvasEdges, productionCanvasNodes, type ProductionCanvasNode } from "./production-canvas-model.js";
 
-interface Props {
+export interface ProductionCanvasProps {
   readonly production: DramaEpisodeProduction;
   readonly selectedId: string | undefined;
   readonly canvas: Readonly<Record<string, CanvasPoint>>;
@@ -24,13 +25,15 @@ interface Props {
   readonly onNavigate: (target: DramaDocumentTarget) => void;
   readonly onCanvasChange: (canvas: Record<string, CanvasPoint>) => void;
   readonly onViewportChange: (viewport: CanvasViewport) => void;
-}
-
-interface CanvasNode {
-  readonly id: string;
-  readonly label: string;
-  readonly type: "asset" | "shot";
-  readonly initial: CanvasPoint;
+  /** Existing DSH-owned media only. The canvas never invents generated results. */
+  readonly versions?: readonly ProductionMediaVersion[] | undefined;
+  readonly jobs?: readonly ProductionJob[] | undefined;
+  readonly selections?: Readonly<Record<string, string>> | undefined;
+  readonly documents?: Readonly<Record<string, string>> | undefined;
+  readonly onSelectionsChange?: ((value: Record<string, string>) => void) | undefined;
+  readonly onPrepare?: ((targetId: string, kind: "image" | "video", prompt: string) => void | Promise<void>) | undefined;
+  readonly onOpenMedia?: ((path: string) => void) | undefined;
+  readonly onContinueInChat?: ((targetId: string) => void) | undefined;
 }
 
 /** Pointer travel below this many pixels is a click, not a drag. */
@@ -39,30 +42,29 @@ const BUTTON_ZOOM_STEP = 1.2;
 /** Wheel bursts update locally and reach the Store once they settle. */
 const WHEEL_COMMIT_DELAY = 160;
 
-export function canvasNodes(production: DramaEpisodeProduction): CanvasNode[] {
-  const assets = [...production.assets, ...production.visualAssets].map((asset, index): CanvasNode => ({ id: asset.id, label: asset.title, type: "asset", initial: { x: 80, y: 80 + index * 150 } }));
-  const shots = production.shots.map((shot, index): CanvasNode => ({ id: shot.id, label: shot.title, type: "shot", initial: { x: 640, y: 80 + index * 180 } }));
-  return [...assets, ...shots];
-}
+/** Kept as a compatibility export for callers/tests that used the old helper. */
+export const canvasNodes = productionCanvasNodes;
 
-export function ProductionCanvas(props: Props) {
-  const nodes = useMemo(() => canvasNodes(props.production), [props.production]);
+export function ProductionCanvas(props: ProductionCanvasProps) {
+  const nodes = useMemo(() => productionCanvasNodes(props.production, props.documents), [props.production, props.documents]);
+  const edges = useMemo(() => productionCanvasEdges(props.production), [props.production]);
+  const versions = props.versions ?? [];
+  const selections = props.selections ?? {};
   const viewportRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState<CanvasSize>({ width: 0, height: 0 });
-  // Drags, pans and wheel bursts render from local state and commit once, so a pointer move
-  // re-renders the canvas rather than the whole workbench.
   const [liveViewport, setLiveViewport] = useState<CanvasViewport>();
   const [liveNode, setLiveNode] = useState<{ readonly id: string; readonly point: CanvasPoint }>();
   const [panning, setPanning] = useState(false);
   const wheelCommit = useRef<ReturnType<typeof setTimeout>>(undefined);
-  /** A selection made by clicking a node is already in view and must not move the canvas. */
   const selectedHere = useRef<string>(undefined);
-  /** The selection the view last followed; resizes and re-parses must not snap back to it. */
   const followed = useRef<string>(undefined);
+  const followedSize = useRef<CanvasSize>(undefined);
 
   const positions: Record<string, CanvasPoint> = Object.fromEntries(nodes.map((node) => [node.id, props.canvas[node.id] ?? node.initial]));
   if (liveNode !== undefined) positions[liveNode.id] = liveNode.point;
-  const committedViewport = props.viewport ?? (size.width > 0 ? fitNodes(Object.values(positions), size) : DEFAULT_CANVAS_VIEWPORT);
+  const rects = nodeRects(nodes, positions);
+  const readableRects = nodeRects(readableNodes(nodes), positions);
+  const committedViewport = props.viewport ?? (size.width > 0 ? initialReadableViewport(readableRects, size) : DEFAULT_CANVAS_VIEWPORT);
   const viewport = liveViewport ?? committedViewport;
 
   const latest = useRef({ viewport, committedViewport, props, nodes, size });
@@ -78,7 +80,6 @@ export function ProductionCanvas(props: Props) {
     return () => { observer.disconnect(); };
   }, []);
 
-  // React registers wheel listeners as passive, which cannot stop the panel from scrolling.
   useEffect(() => {
     const element = viewportRef.current;
     if (element === null) return;
@@ -101,31 +102,31 @@ export function ProductionCanvas(props: Props) {
     };
   }, []);
 
-  // The first view of an episode frames its nodes once; later layout edits never re-fit it.
   const measured = size.width > 0;
   useEffect(() => {
     const { committedViewport: initial, props: currentProps } = latest.current;
     if (measured && currentProps.viewport === undefined) currentProps.onViewportChange(initial);
   }, [measured]);
 
-  // A target selected elsewhere (another tab, or the Agent focusing it) is brought into view.
   useEffect(() => {
     const { viewport: current, props: currentProps, nodes: currentNodes, size: currentSize } = latest.current;
     const id = currentProps.selectedId;
-    if (!measured || id === followed.current) return;
+    const resized = followedSize.current?.width !== currentSize.width || followedSize.current.height !== currentSize.height;
+    if (!measured || (id === followed.current && !resized)) return;
     followed.current = id;
+    followedSize.current = currentSize;
     if (id === undefined) return;
     if (id === selectedHere.current) {
       selectedHere.current = undefined;
-      return;
+      if (!resized) return;
     }
     const node = currentNodes.find((candidate) => candidate.id === id);
     if (node === undefined) return;
     const point = currentProps.canvas[id] ?? node.initial;
-    if (!nodeVisible(current, point, currentSize)) currentProps.onViewportChange(centerOn(current, point, currentSize));
-  }, [measured, props.selectedId]);
+    const rect = { ...point, width: node.width, height: node.height };
+    if (!rectVisible(current, rect, currentSize)) currentProps.onViewportChange(centerOnRect(current, rect, currentSize));
+  }, [measured, props.selectedId, size.width, size.height]);
 
-  /** Lands a wheel burst still waiting to commit, so a pan or button starts from what is shown. */
   const flushWheel = () => {
     if (wheelCommit.current === undefined) return;
     clearTimeout(wheelCommit.current);
@@ -216,15 +217,14 @@ export function ProductionCanvas(props: Props) {
     element.addEventListener("pointercancel", end);
   };
 
-  const navigate = (id: string) => {
-    const target = props.production.targets.get(id);
-    if (target !== undefined) props.onNavigate(target);
+  const navigate = (node: ProductionCanvasNode) => {
+    if (node.target !== undefined) props.onNavigate(node.target);
   };
 
-  const onNodeKeyDown = (event: ReactKeyboardEvent<HTMLElement>, id: string) => {
+  const onNodeKeyDown = (event: ReactKeyboardEvent<HTMLElement>, node: ProductionCanvasNode) => {
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
-      navigate(id);
+      navigate(node);
       return;
     }
     const step = event.shiftKey ? 40 : 10;
@@ -232,11 +232,11 @@ export function ProductionCanvas(props: Props) {
     if (delta === undefined) return;
     event.preventDefault();
     event.stopPropagation();
-    const origin = positions[id] ?? { x: 0, y: 0 };
+    const origin = positions[node.id] ?? { x: 0, y: 0 };
     const point = { x: origin.x + delta.x, y: origin.y + delta.y };
-    props.onCanvasChange({ ...props.canvas, [id]: point });
-    // Keyboard moves can walk a node off screen; the view follows it like a selection does.
-    if (size.width > 0 && !nodeVisible(viewport, point, size)) commitViewport(centerOn(viewport, point, size));
+    props.onCanvasChange({ ...props.canvas, [node.id]: point });
+    const rect = { ...point, width: node.width, height: node.height };
+    if (size.width > 0 && !rectVisible(viewport, rect, size)) commitViewport(centerOnRect(viewport, rect, size));
   };
 
   const onViewportKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
@@ -253,23 +253,23 @@ export function ProductionCanvas(props: Props) {
       zoomAtCenter(1 / BUTTON_ZOOM_STEP);
     } else if (event.key === "0") {
       event.preventDefault();
-      commitViewport(fitNodes(Object.values(positions), size));
+      commitViewport(fitRects(rects, size));
     }
   };
 
-  const connections = props.production.shots.flatMap((shot) => shot.references.map((reference) => [reference, shot.id] as const));
+  const selectedNode = nodes.find((node) => node.id === props.selectedId);
   const gridSize = 20 * viewport.zoom;
 
-  return <section className="oh-story-canvas-shell" aria-label="短剧素材与镜头关系画布">
+  return <section className="oh-story-canvas-shell" aria-label="短剧故事与镜头无限画布">
     <div className="oh-story-canvas-toolbar">
-    <div className="oh-story-canvas-help" id="oh-story-canvas-help">拖动空白处平移 · 滚轮缩放 · 方向键移动节点 · Enter 打开原文 · 布局只在本页保留</div>
-    <div className="oh-story-canvas-controls">
-      <button type="button" aria-label="缩小画布" onClick={() => { zoomAtCenter(1 / BUTTON_ZOOM_STEP); }}>−</button>
-      <span aria-live="polite">{Math.round(viewport.zoom * 100)}%</span>
-      <button type="button" aria-label="放大画布" onClick={() => { zoomAtCenter(BUTTON_ZOOM_STEP); }}>＋</button>
-      <button type="button" onClick={() => { commitViewport(fitNodes(Object.values(positions), size)); }}>适应</button>
-      <button type="button" onClick={() => { props.onCanvasChange({}); commitViewport(fitNodes(nodes.map((node) => node.initial), size)); }}>复位</button>
-    </div>
+      <div className="oh-story-canvas-help" id="oh-story-canvas-help">拖动空白处平移 · 滚轮缩放 · 方向键移动卡片 · 双击打开原文</div>
+      <div className="oh-story-canvas-controls">
+        <button type="button" aria-label="缩小画布" onClick={() => { zoomAtCenter(1 / BUTTON_ZOOM_STEP); }}>−</button>
+        <span aria-live="polite">{Math.round(viewport.zoom * 100)}%</span>
+        <button type="button" aria-label="放大画布" onClick={() => { zoomAtCenter(BUTTON_ZOOM_STEP); }}>＋</button>
+        <button type="button" onClick={() => { commitViewport(fitRects(rects, size)); }}>适应</button>
+        <button type="button" onClick={() => { props.onCanvasChange({}); commitViewport(fitRects(nodeRects(nodes, Object.fromEntries(nodes.map((node) => [node.id, node.initial]))), size)); }}>复位</button>
+      </div>
     </div>
     <div
       ref={viewportRef}
@@ -285,36 +285,163 @@ export function ProductionCanvas(props: Props) {
       onKeyDown={onViewportKeyDown}
     >
       <div className="oh-story-canvas" style={{ transform: `translate(${String(viewport.x)}px, ${String(viewport.y)}px) scale(${String(viewport.zoom)})` }}>
-        <svg aria-hidden="true">{connections.map(([from, to]) => {
-          const a = positions[from];
-          const b = positions[to];
-          if (a === undefined || b === undefined) return null;
-          const y1 = a.y + CANVAS_NODE_HEIGHT / 2;
-          const y2 = b.y + CANVAS_NODE_HEIGHT / 2;
-          const x1 = a.x + CANVAS_NODE_WIDTH;
+        <CanvasGroupLabels nodes={nodes} />
+        <svg aria-hidden="true">{edges.map((edge) => {
+          const from = nodes.find((node) => node.id === edge.from);
+          const to = nodes.find((node) => node.id === edge.to);
+          const a = from === undefined ? undefined : positions[from.id];
+          const b = to === undefined ? undefined : positions[to.id];
+          if (a === undefined || b === undefined || from === undefined || to === undefined) return null;
+          const y1 = a.y + from.height / 2;
+          const y2 = b.y + to.height / 2;
+          const x1 = a.x + from.width;
           const bend = Math.max(60, Math.abs(b.x - x1) / 2);
-          return <path key={`${from}:${to}`} data-active={to === props.selectedId || from === props.selectedId || undefined} d={`M ${String(x1)} ${String(y1)} C ${String(x1 + bend)} ${String(y1)}, ${String(b.x - bend)} ${String(y2)}, ${String(b.x)} ${String(y2)}`} />;
+          const active = edge.to === props.selectedId || edge.from === props.selectedId;
+          return <g data-edge-kind={edge.kind} key={`${edge.kind}:${edge.from}:${edge.to}`}>
+            <path className="oh-story-canvas-edge" data-active={active || undefined} d={`M ${String(x1)} ${String(y1)} C ${String(x1 + bend)} ${String(y1)}, ${String(b.x - bend)} ${String(y2)}, ${String(b.x)} ${String(y2)}`} />
+            <text className="oh-story-canvas-edge-label" data-active={active || undefined} x={(x1 + b.x) / 2} y={(y1 + y2) / 2 - 7}>{edge.label}</text>
+          </g>;
         })}</svg>
-        {nodes.map((node) => {
-          const references = connections.filter(([from, to]) => from === node.id || to === node.id).length;
-          return <article
-            key={node.id}
-            tabIndex={0}
-            role="button"
-            aria-label={`${node.type === "asset" ? "素材" : "镜头"} ${node.label}，${String(references)} 条关系`}
-            aria-pressed={node.id === props.selectedId}
-            data-node-type={node.type}
-            data-selected={node.id === props.selectedId || undefined}
-            data-dragging={liveNode?.id === node.id || undefined}
-            style={{ left: positions[node.id]?.x, top: positions[node.id]?.y }}
-            onKeyDown={(event) => { onNodeKeyDown(event, node.id); }}
-            onPointerDown={(event) => { startDrag(event, node.id); }}
-            onDoubleClick={() => { navigate(node.id); }}
-          ><small>{node.type === "asset" ? "素材" : "镜头"}</small><strong>{node.label}</strong><span>{node.id}</span></article>;
-        })}
+        {nodes.map((node) => <CanvasNodeCard
+          key={node.id}
+          node={node}
+          point={positions[node.id] ?? node.initial}
+          selected={node.id === props.selectedId}
+          dragging={liveNode?.id === node.id}
+          relations={edges.filter((edge) => edge.from === node.id || edge.to === node.id).length}
+          versions={versions.filter((version) => version.targetId === node.id)}
+          job={props.jobs?.findLast((job) => job.targetId === node.id)}
+          selections={selections}
+          onSelectionsChange={props.onSelectionsChange}
+          onPrepare={props.onPrepare === undefined ? undefined : (targetId, kind, prompt) => {
+            props.onSelect(targetId);
+            return props.onPrepare?.(targetId, kind, prompt);
+          }}
+          onOpenMedia={props.onOpenMedia}
+          onKeyDown={onNodeKeyDown}
+          onPointerDown={startDrag}
+          onNavigate={navigate}
+        />)}
       </div>
     </div>
+    {selectedNode !== undefined && <div className="oh-story-canvas-context" aria-live="polite">
+      <div className="oh-story-canvas-context-copy"><small>已选中</small><strong>{selectedNode.title}</strong></div>
+      {selectedNode.target !== undefined && <button type="button" onClick={() => { navigate(selectedNode); }}>打开原文</button>}
+      {props.onContinueInChat !== undefined && <button type="button" onClick={() => { props.onContinueInChat?.(selectedNode.id); }}>在 Chat 中继续</button>}
+    </div>}
   </section>;
+}
+
+function CanvasNodeCard(props: {
+  readonly node: ProductionCanvasNode;
+  readonly point: CanvasPoint;
+  readonly selected: boolean;
+  readonly dragging: boolean;
+  readonly relations: number;
+  readonly versions: readonly ProductionMediaVersion[];
+  readonly job: ProductionJob | undefined;
+  readonly selections: Readonly<Record<string, string>>;
+  readonly onSelectionsChange?: ((value: Record<string, string>) => void) | undefined;
+  readonly onPrepare?: ProductionCanvasProps["onPrepare"];
+  readonly onOpenMedia?: ProductionCanvasProps["onOpenMedia"];
+  readonly onKeyDown: (event: ReactKeyboardEvent<HTMLElement>, node: ProductionCanvasNode) => void;
+  readonly onPointerDown: (event: ReactPointerEvent<HTMLElement>, id: string) => void;
+  readonly onNavigate: (node: ProductionCanvasNode) => void;
+}) {
+  const selectedVersion = selectedVersionForTarget(props.node.id, props.versions, props.selections);
+  return <article
+    className="oh-story-canvas-node"
+    tabIndex={0}
+    role="button"
+    aria-label={`${kindLabel(props.node.kind)} ${props.node.title}，${String(props.relations)} 条关系`}
+    title={`来源条目：${props.node.id}`}
+    aria-pressed={props.selected}
+    data-node-type={props.node.kind}
+    data-selected={props.selected || undefined}
+    data-dragging={props.dragging || undefined}
+    style={{ left: props.point.x, top: props.point.y, width: props.node.width, height: props.node.height }}
+    onKeyDown={(event) => { props.onKeyDown(event, props.node); }}
+    onPointerDown={(event) => { props.onPointerDown(event, props.node.id); }}
+    onDoubleClick={() => { props.onNavigate(props.node); }}
+  >
+    <header className="oh-story-canvas-node-head"><div><small>{props.node.eyebrow}</small><strong>{props.node.title}</strong></div><span>{props.relations} 条关系</span></header>
+    {props.node.kind !== "story" && <div className="oh-story-canvas-node-media">
+      {selectedVersion === undefined
+        ? <div className="oh-story-canvas-node-placeholder" aria-hidden="true">{props.node.kind === "shot" ? "待准备画面" : "待准备素材"}</div>
+        : <MediaPreview version={selectedVersion} interactive />}
+    </div>}
+    <div className="oh-story-canvas-node-copy">{props.node.description !== undefined && <p>{props.node.description}</p>}</div>
+    <div className="oh-story-canvas-node-meta"><span>{canvasNodeStatus(props.node, selectedVersion, props.job)}</span>{props.versions.length > 0 && <span>{props.versions.length} 个版本</span>}</div>
+    {props.versions.length > 1 && <div className="oh-story-canvas-node-versions" aria-label={`${props.node.title} 成果版本`}>{props.versions.map((version, index) => <button
+      type="button"
+      key={version.id}
+      aria-label={`选择 ${props.node.title} 版本 ${String(index + 1)}`}
+      aria-pressed={version.id === selectedVersion?.id}
+      data-selected={version.id === selectedVersion?.id || undefined}
+      onPointerDown={stopPointer}
+      onClick={(event) => { event.stopPropagation(); props.onSelectionsChange?.({ ...props.selections, [props.node.id]: version.id }); }}
+    ><MediaPreview version={version} /><span>V{String(index + 1)}</span></button>)}</div>}
+    <footer className="oh-story-canvas-node-actions">
+      {props.node.prompt !== undefined && props.onPrepare !== undefined && <button type="button" onPointerDown={stopPointer} onClick={(event) => { event.stopPropagation(); void props.onPrepare?.(props.node.id, "image", props.node.prompt!); }}>{props.node.kind === "shot" ? "准备关键帧" : "准备素材"}</button>}
+      {props.node.videoPrompt !== undefined && props.onPrepare !== undefined && <button type="button" onPointerDown={stopPointer} onClick={(event) => { event.stopPropagation(); void props.onPrepare?.(props.node.id, "video", props.node.videoPrompt!); }}>准备视频</button>}
+      {selectedVersion?.path !== undefined && props.onOpenMedia !== undefined && <button type="button" onPointerDown={stopPointer} onClick={(event) => { event.stopPropagation(); props.onOpenMedia?.(selectedVersion.path!); }}>打开文件</button>}
+    </footer>
+  </article>;
+}
+
+function CanvasGroupLabels({ nodes }: { readonly nodes: readonly ProductionCanvasNode[] }) {
+  const labels = (["story", "asset", "shot"] as const).flatMap((kind) => {
+    const group = nodes.filter((node) => node.kind === kind);
+    if (group.length === 0) return [];
+    return [{ kind, x: Math.min(...group.map((node) => node.initial.x)), y: Math.min(...group.map((node) => node.initial.y)) - 34 }];
+  });
+  return <>{labels.map((label) => <div className="oh-story-canvas-group-label" data-group={label.kind} key={label.kind} style={{ left: label.x, top: label.y }}>{kindLabel(label.kind)}</div>)}</>;
+}
+
+function MediaPreview({ version, interactive = false }: { readonly version: ProductionMediaVersion; readonly interactive?: boolean }) {
+  return version.kind === "image"
+    ? <img className="oh-story-media-preview" src={version.url} alt={version.targetId} loading="lazy" draggable={false} />
+    : <video className="oh-story-media-preview" src={version.url} controls={interactive} muted={!interactive} preload="metadata" onPointerDown={interactive ? stopPointer : undefined} onClick={interactive ? stopClick : undefined} />;
+}
+
+export function canvasNodeStatus(node: ProductionCanvasNode, version: ProductionMediaVersion | undefined, job?: ProductionJob): string {
+  if (job !== undefined) {
+    if (job.status === "awaiting_confirmation") return "等待确认";
+    if (job.status === "pending") return "等待生成";
+    if (job.status === "running") return "正在生成";
+    if (job.status === "dispatched_unknown") return "成果待核对";
+    if (job.status === "failed") return "生成失败，请查看记录";
+    if (job.status === "canceled") return "已停止生成";
+  }
+  if (version !== undefined) return version.kind === "video" ? "已有视频" : "已有画面";
+  if (node.kind === "story") return "来自剧本";
+  return node.kind === "shot" ? "等待画面" : "等待素材";
+}
+
+function readableNodes(nodes: readonly ProductionCanvasNode[]): ProductionCanvasNode[] {
+  return [
+    nodes.find((node) => node.kind === "story"),
+    nodes.find((node) => node.kind === "asset"),
+    ...nodes.filter((node) => node.kind === "shot").slice(0, 1)
+  ].filter((node): node is ProductionCanvasNode => node !== undefined);
+}
+
+function nodeRects(nodes: readonly ProductionCanvasNode[], positions: Readonly<Record<string, CanvasPoint>>): CanvasRect[] {
+  return nodes.map((node) => ({ ...(positions[node.id] ?? node.initial), width: node.width, height: node.height }));
+}
+
+function kindLabel(kind: ProductionCanvasNode["kind"]): string {
+  if (kind === "story") return "故事";
+  if (kind === "asset") return "人物与场景";
+  return "镜头";
+}
+
+function stopPointer(event: ReactPointerEvent<HTMLElement>) {
+  event.stopPropagation();
+}
+
+function stopClick(event: ReactMouseEvent<HTMLElement>) {
+  event.stopPropagation();
 }
 
 function arrowDelta(key: string, step: number): CanvasPoint | undefined {

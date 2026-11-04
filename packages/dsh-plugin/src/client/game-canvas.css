@@ -1,0 +1,140 @@
+.oh-game-canvas-shell {
+  --oh-game-canvas-accent: var(--dsw-alias-state-business-primary);
+  --oh-game-canvas-border: var(--dsw-alias-border-l2);
+  position: relative;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  flex: 1;
+  flex-direction: column;
+  overflow: hidden;
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-bg-base);
+  font-family: var(--dsw-font-family);
+}
+
+.oh-game-canvas-toolbar {
+  z-index: 4;
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0 14px 0 18px;
+  border-bottom: 1px solid var(--oh-game-canvas-border);
+  background: var(--dsw-alias-bg-base);
+}
+
+.oh-game-canvas-help { color: var(--dsw-alias-label-secondary); font-size: 12px; }
+.oh-game-canvas-controls { display: flex; align-items: center; gap: 3px; }
+.oh-game-canvas-controls span { min-width: 42px; color: var(--dsw-alias-label-secondary); text-align: center; font-size: 11px; font-variant-numeric: tabular-nums; }
+.oh-game-canvas-controls button,
+.oh-game-canvas-context button,
+.oh-game-canvas-node footer button,
+.oh-game-canvas-empty button {
+  min-height: 28px;
+  border: 1px solid var(--oh-game-canvas-border);
+  border-radius: 7px;
+  padding: 3px 9px;
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-bg-base);
+  cursor: pointer;
+  font: 12px/1.4 var(--dsw-font-family);
+}
+.oh-game-canvas-controls button { min-width: 28px; padding-inline: 7px; }
+.oh-game-canvas-controls button:hover,
+.oh-game-canvas-context button:hover,
+.oh-game-canvas-node footer button:hover,
+.oh-game-canvas-empty button:hover { background: var(--dsw-alias-interactive-bg-hover); }
+.oh-game-canvas-controls button:focus-visible,
+.oh-game-canvas-context button:focus-visible,
+.oh-game-canvas-node:focus-visible,
+.oh-game-canvas-node footer button:focus-visible,
+.oh-game-canvas-empty button:focus-visible { outline: 2px solid var(--oh-game-canvas-accent); outline-offset: 2px; }
+
+.oh-game-canvas-viewport {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  flex: 1;
+  overflow: hidden;
+  outline: none;
+  background-color: var(--dsw-alias-bg-layer-1);
+  background-image: radial-gradient(circle, color-mix(in srgb, var(--dsw-alias-label-secondary) 28%, transparent) 1px, transparent 1px);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+.oh-game-canvas-viewport[data-panning="true"] { cursor: grabbing; }
+.oh-game-canvas-viewport:focus-visible { box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--oh-game-canvas-accent) 70%, transparent); }
+
+.oh-game-canvas-stage { position: absolute; inset: 0 auto auto 0; width: 1px; height: 1px; transform-origin: 0 0; }
+.oh-game-canvas-stage > svg { position: absolute; inset: 0; width: 1px; height: 1px; overflow: visible; pointer-events: none; }
+.oh-game-canvas-edge { fill: none; stroke: color-mix(in srgb, var(--dsw-alias-label-secondary) 32%, transparent); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+.oh-game-canvas-edge[data-active="true"] { stroke: var(--oh-game-canvas-accent); stroke-width: 2; }
+.oh-game-canvas-edge-label { fill: var(--dsw-alias-label-secondary); paint-order: stroke; stroke: var(--dsw-alias-bg-layer-1); stroke-width: 8px; stroke-linejoin: round; text-anchor: middle; font: 11px/1 var(--dsw-font-family); }
+.oh-game-canvas-edge-label[data-active="true"] { fill: var(--oh-game-canvas-accent); }
+
+.oh-game-canvas-node {
+  position: absolute;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--oh-game-canvas-border);
+  border-radius: 12px;
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-bg-base);
+  box-shadow: 0 5px 18px rgb(0 0 0 / 5%);
+  cursor: grab;
+  transform: translateZ(0);
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+.oh-game-canvas-node:hover { border-color: color-mix(in srgb, var(--dsw-alias-label-secondary) 54%, transparent); box-shadow: 0 8px 22px rgb(0 0 0 / 8%); }
+.oh-game-canvas-node[data-selected="true"] { border-color: var(--oh-game-canvas-accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--oh-game-canvas-accent) 16%, transparent), 0 8px 24px rgb(0 0 0 / 8%); }
+.oh-game-canvas-node[data-dragging="true"] { cursor: grabbing; box-shadow: 0 12px 30px rgb(0 0 0 / 13%); }
+.oh-game-canvas-node[data-kind="brief"] { background: color-mix(in srgb, #fff6d8 30%, var(--dsw-alias-bg-base)); }
+.oh-game-canvas-node[data-kind="preview"] { border-color: color-mix(in srgb, var(--oh-game-canvas-accent) 38%, var(--oh-game-canvas-border)); background: linear-gradient(145deg, color-mix(in srgb, var(--oh-game-canvas-accent) 8%, var(--dsw-alias-bg-base)), var(--dsw-alias-bg-base) 66%); }
+.oh-game-canvas-node > header { display: flex; min-height: 38px; align-items: center; justify-content: space-between; padding: 0 14px; border-bottom: 1px solid var(--oh-game-canvas-border); }
+.oh-game-canvas-node > header small { color: var(--dsw-alias-label-secondary); font-size: 11px; font-weight: 500; }
+.oh-game-canvas-node > header span { color: var(--dsw-alias-label-secondary); font-size: 10px; letter-spacing: 1px; }
+.oh-game-canvas-node-copy { min-height: 0; flex: 1; padding: 16px 16px 10px; }
+.oh-game-canvas-node-copy strong { display: block; overflow: hidden; font-size: 16px; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
+.oh-game-canvas-node-copy p { display: -webkit-box; overflow: hidden; margin: 10px 0 0; color: var(--dsw-alias-label-secondary); font-size: 12px; line-height: 1.7; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
+.oh-game-canvas-node[data-kind="preview"] .oh-game-canvas-node-copy::before { content: "▶"; display: grid; width: 36px; height: 36px; margin-bottom: 12px; place-items: center; border-radius: 50%; color: var(--oh-game-canvas-accent); background: color-mix(in srgb, var(--oh-game-canvas-accent) 12%, transparent); font-size: 12px; }
+.oh-game-canvas-node > footer { display: flex; min-height: 42px; align-items: center; gap: 6px; padding: 6px 10px; border-top: 1px solid var(--oh-game-canvas-border); }
+.oh-game-canvas-node > footer button { overflow: hidden; min-width: 0; flex: 0 1 auto; border-color: transparent; padding-inline: 7px; color: var(--dsw-alias-label-secondary); text-overflow: ellipsis; white-space: nowrap; }
+.oh-game-canvas-node > footer button:first-child { color: var(--oh-game-canvas-accent); background: color-mix(in srgb, var(--oh-game-canvas-accent) 8%, transparent); }
+
+.oh-game-canvas-context {
+  z-index: 5;
+  display: flex;
+  min-height: 48px;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-top: 1px solid var(--oh-game-canvas-border);
+  background: var(--dsw-alias-bg-base);
+  box-shadow: 0 -8px 24px rgb(0 0 0 / 4%);
+}
+.oh-game-canvas-context > span { display: flex; min-width: 0; flex: 1; flex-direction: column; }
+.oh-game-canvas-context small { color: var(--dsw-alias-label-secondary); font-size: 10px; }
+.oh-game-canvas-context strong { overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+
+.oh-game-canvas-empty { position: absolute; z-index: 3; inset: 50% auto auto 50%; display: flex; width: min(360px, calc(100% - 40px)); box-sizing: border-box; flex-direction: column; align-items: center; gap: 8px; padding: 28px; border: 1px solid var(--oh-game-canvas-border); border-radius: 14px; background: color-mix(in srgb, var(--dsw-alias-bg-base) 92%, transparent); box-shadow: 0 10px 36px rgb(0 0 0 / 7%); text-align: center; transform: translate(-50%, -50%); }
+.oh-game-canvas-empty strong { font-size: 15px; }
+.oh-game-canvas-empty span { color: var(--dsw-alias-label-secondary); font-size: 12px; line-height: 1.6; }
+.oh-game-canvas-empty button { margin-top: 5px; color: var(--oh-game-canvas-accent); }
+
+@media (max-width: 720px) {
+  .oh-game-canvas-toolbar { min-height: 40px; padding-inline: 10px; }
+  .oh-game-canvas-help { display: none; }
+  .oh-game-canvas-controls { width: 100%; justify-content: flex-end; }
+  .oh-game-canvas-context { overflow-x: auto; }
+  .oh-game-canvas-context > span { min-width: 120px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .oh-game-canvas-node { transition: none; }
+}

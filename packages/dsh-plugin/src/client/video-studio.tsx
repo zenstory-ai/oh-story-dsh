@@ -1,288 +1,231 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
+import type { VideoNarrativeProjection, VideoNarrativeSegment, VideoTimeRange } from "../video-narrative.js";
+import type { VideoPreviewAsset } from "../video-project.js";
 import { workbenchLabel, type WorkbenchMode } from "./file-activity.js";
+import { CreativeCanvas, type CreativeCanvasState } from "./creative-canvas.js";
+import type { GameDocumentEditor } from "./game-documents.js";
+import type { GameWorkspaceFile } from "./game-workspace-types.js";
+import { VideoDetails } from "./video-details.js";
+import { VideoDocuments } from "./video-documents.js";
 import { endpoint, handleTabKey } from "./workbench-ui.js";
+import { videoCanvasModel, videoCreativeDocuments, videoDraftText, videoSourceRange, videoRange, videoTime, type VideoCanvasNode, type VideoProject, type VideoWorkspaceTab } from "./video-workspace-model.js";
 
-export interface VideoPreviewAsset {
-  readonly role: "source" | "edited" | "final";
-  readonly label: string;
-  readonly path: string;
-  readonly bytes: number;
-  readonly version: string;
-  readonly mimeType: string;
-}
-
-export interface VideoArtifactSummary {
-  readonly label: string;
-  readonly path: string;
-  readonly version: string;
-  readonly kind: "plan" | "script" | "subtitle" | "quality" | "manifest";
-}
-
-export interface VideoProject {
-  readonly id: string;
-  readonly root: string;
-  readonly title: string;
-  readonly state: "not-started" | "working" | "waiting" | "ready";
-  readonly stage: string;
-  readonly stageLabel: string;
-  readonly nextArtifact?: string | undefined;
-  readonly previews: readonly VideoPreviewAsset[];
-  readonly artifacts: readonly VideoArtifactSummary[];
-}
-
-interface FilePayload { readonly content: string }
-export interface VideoPreflight {
-  readonly python: { readonly ok: boolean; readonly version?: string; readonly minimum: string };
-  readonly ffmpeg: { readonly ok: boolean; readonly subtitles: boolean };
-  readonly ffprobe: { readonly ok: boolean };
-  readonly credentials: { readonly mimo: boolean; readonly fish: boolean; readonly indexTts: boolean; readonly ttsProvider: string };
-}
+export type { VideoProject, VideoWorkspaceTab } from "./video-workspace-model.js";
+export type { VideoPreviewAsset, VideoArtifactSummary } from "../video-project.js";
+export { VideoEnvironmentReport, type VideoPreflight } from "./video-environment.js";
 
 function preferredPreview(project: VideoProject): VideoPreviewAsset | undefined {
-  return project.previews.find((item) => item.role === "final")
-    ?? project.previews.find((item) => item.role === "edited")
-    ?? project.previews.find((item) => item.role === "source");
+  return project.previews.find((item) => item.role === "final") ?? project.previews.find((item) => item.role === "edited") ?? project.previews.find((item) => item.role === "source");
+}
+function roleLabel(role: VideoPreviewAsset["role"]): string { return { source: "原片", edited: "剪后画面", final: "成片" }[role]; }
+function mediaUrl(sessionId: string, asset: VideoPreviewAsset, revision = 0): string {
+  return `${endpoint("media", sessionId, asset.path)}&version=${encodeURIComponent(asset.version)}&reload=${String(revision)}`;
+}
+function sameAsset(a: VideoPreviewAsset | undefined, b: VideoPreviewAsset | undefined): boolean { return a?.path === b?.path && a?.version === b?.version; }
+function EmptyVideo({ project, onChat }: { readonly project?: VideoProject | undefined; readonly onChat: (prompt: string) => void }) {
+  return <div className="oh-video-preview-empty"><span aria-hidden>▷</span><strong>{project === undefined ? "把这段故事，讲给更多人听" : "先看看原片，想想怎么讲"}</strong><p>在 Chat 中提供想处理的视频，一起讨论主线、解说和想保留的原声。</p><button type="button" onClick={() => { onChat(project === undefined ? "我想制作一段视频解说，请先和我讨论素材、观众和想讲的故事。" : `我想讨论《${project.title}》怎么讲，先看看已有素材和解说想法。`); }}>聊聊解说想法</button><div className="oh-video-prompt-example"><span>可以这样开始</span><q>做一段让人想看完的解说，保留最动人的原声，结尾再回到开场的问题。</q></div></div>;
 }
 
-function readableBytes(bytes: number): string {
-  if (bytes < 1_024 * 1_024) return `${(bytes / 1_024).toFixed(1)} KB`;
-  if (bytes < 1_024 * 1_024 * 1_024) return `${(bytes / (1_024 * 1_024)).toFixed(1)} MB`;
-  return `${(bytes / (1_024 * 1_024 * 1_024)).toFixed(2)} GB`;
-}
-
-function ActionIcon({ name }: { readonly name: "reload" | "fullscreen" | "external" }) {
-  const paths = {
-    reload: <><path d="M20 11a8 8 0 1 0-2.34 5.66"/><path d="M20 4v7h-7"/></>,
-    fullscreen: <><path d="M8 3H3v5M16 3h5v5M8 21H3v-5M16 21h5v-5"/></>,
-    external: <><path d="M14 3h7v7M21 3l-9 9"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></>
-  };
-  return <svg aria-hidden viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
-}
-
-function preferredArtifact(project: VideoProject): VideoArtifactSummary | undefined {
-  return project.artifacts.find((item) => item.path.endsWith("final_qc.json"))
-    ?? project.artifacts.find((item) => item.path.endsWith("assembly_qc.json"))
-    ?? project.artifacts.find((item) => item.kind === "quality")
-    ?? project.artifacts.at(-1);
-}
-
-function artifactKindLabel(kind: VideoArtifactSummary["kind"]): string {
-  return { plan: "方案", script: "文稿", subtitle: "字幕", quality: "质检", manifest: "清单" }[kind];
-}
-
-function VideoPreview({ project, sessionId, running }: { readonly project: VideoProject; readonly sessionId: string; readonly running: boolean }) {
-  const shellRef = useRef<HTMLDivElement>(null);
-  const initial = preferredPreview(project);
-  const [role, setRole] = useState<VideoPreviewAsset["role"] | undefined>(initial?.role);
-  const selected = project.previews.find((item) => item.role === role) ?? preferredPreview(project);
-  const [loaded, setLoaded] = useState(initial);
-  const [revision, setRevision] = useState(0);
-  const [ready, setReady] = useState(false);
-  const [error, setError] = useState(false);
-  if (selected === undefined || loaded === undefined) return <div className="oh-video-preview-empty">
-    <span aria-hidden>▶</span>
-    <strong>还没有可预览的视频</strong>
-    <p>把原片导入 <code>video-recaps/&lt;项目&gt;/sources/</code>，然后在右侧 Chat 使用 <code>/video-recap</code>。剪后片和最终成片会自动出现在这里。</p>
-    <div className="oh-video-prompt-example"><span>描述示例</span><q>把这段视频做成 3 分钟中文解说，保留关键原声，字幕烧进画面。</q></div>
-  </div>;
-  const pending = selected.path !== loaded.path || selected.version !== loaded.version;
-  const load = (asset: VideoPreviewAsset): void => {
-    setRole(asset.role);
-    setLoaded(asset);
-    setReady(false);
-    setError(false);
-    setRevision((value) => value + 1);
-  };
-  const runtimeState = error ? "视频载入失败 · 可重新载入"
-    : running ? "Agent 正在更新项目 · 当前播放保持不变"
-      : pending ? "新版本已就绪 · 由你决定何时载入"
-        : ready ? `${loaded.label}已载入 · ${readableBytes(loaded.bytes)}` : "正在读取视频信息…";
-  const mediaUrl = `${endpoint("media", sessionId, loaded.path)}&version=${encodeURIComponent(loaded.version)}&reload=${String(revision)}`;
-  return <div ref={shellRef} className="oh-video-preview-shell" data-state={error ? "error" : running ? "building" : ready ? "ready" : "loading"}>
-    <div className="oh-video-stagebar">
-      <div className="oh-video-version-tabs" role="tablist" aria-label="预览版本">
-        {project.previews.map((asset) => <button
-          type="button"
-          role="tab"
-          key={asset.role}
-          aria-selected={asset.role === selected.role}
-          tabIndex={asset.role === selected.role ? 0 : -1}
-          onKeyDown={(event) => { handleTabKey(event, project.previews.map((item) => item.role), selected.role, (next) => {
-            const asset = project.previews.find((item) => item.role === next);
-            if (asset !== undefined) load(asset);
-          }); }}
-          onClick={() => { load(asset); }}
-        >{asset.label}</button>)}
-      </div>
-      <span className="oh-video-runtime-state" role="status" aria-live="polite"><i aria-hidden /><em>{runtimeState}</em></span>
-      <div className="oh-video-preview-actions">
-        {pending && <button type="button" onClick={() => { load(selected); }}>载入新版本</button>}
-        <button type="button" title="重新载入" aria-label="重新载入视频" onClick={() => { load(loaded); }}><ActionIcon name="reload" /></button>
-        <button type="button" title="全屏" aria-label="全屏预览" onClick={() => { void shellRef.current?.requestFullscreen(); }}><ActionIcon name="fullscreen" /></button>
-        <a href={mediaUrl} target="_blank" rel="noreferrer" title="在新窗口打开" aria-label="在新窗口打开视频"><ActionIcon name="external" /></a>
-      </div>
-    </div>
-    <div className="oh-video-player-stage">
-      <video
-        key={`${loaded.path}:${loaded.version}:${String(revision)}`}
-        src={mediaUrl}
-        controls
-        preload="metadata"
-        playsInline
-        onLoadedMetadata={() => { setReady(true); setError(false); }}
-        onError={() => { setError(true); setReady(false); }}
-      />
-    </div>
-  </div>;
-}
-
-/** The host-process readiness rows; values never leave the process, only whether each is set. */
-export function VideoEnvironmentReport({ preflight }: { readonly preflight: VideoPreflight }) {
-  // auto voices with MiMo when its key is set and falls back to Fish Audio otherwise.
-  const fish = preflight.credentials.ttsProvider === "fish-audio" || (preflight.credentials.ttsProvider === "auto" && !preflight.credentials.mimo);
-  return <>
-    <span data-ready={preflight.python.ok || undefined}>Python {preflight.python.version ?? "未找到"}{preflight.python.ok ? "" : ` · 需要 ${preflight.python.minimum}+`}</span>
-    <span data-ready={(preflight.ffmpeg.ok && preflight.ffmpeg.subtitles) || undefined}>ffmpeg {!preflight.ffmpeg.ok ? "未找到" : preflight.ffmpeg.subtitles ? "· libass" : "· 缺字幕滤镜"}</span>
-    <span data-ready={preflight.ffprobe.ok || undefined}>ffprobe {preflight.ffprobe.ok ? "可用" : "未找到"}</span>
-    <span data-ready={preflight.credentials.mimo || undefined}>MiMo Key {preflight.credentials.mimo ? "已配置" : "未配置"}</span>
-    {fish && <span data-ready={preflight.credentials.fish || undefined}>Fish Key {preflight.credentials.fish ? "已配置" : "未配置"}</span>}
-    {preflight.credentials.ttsProvider === "index-tts"
-      && <span data-ready={preflight.credentials.indexTts || undefined}>IndexTTS {preflight.credentials.indexTts ? "已配置" : "缺 INDEX_TTS_ENDPOINT / INDEX_TTS_VOICE"}</span>}
-    <em>Key 与 PATH 在启动 DSH 的终端里设置，重启 DSH 后生效。这里检查 DSH Host 进程；Agent 执行世界以 <code>video-recap --doctor</code> 为准。</em>
-  </>;
-}
-
-/**
- * Runs the check on mount: the Studio itself mounts only once the creator opens 视频, so the
- * probe never runs for a Session that never looks at video. The route caches it for 30 s.
- */
-function VideoEnvironment({ sessionId }: { readonly sessionId: string }) {
-  const [preflight, setPreflight] = useState<VideoPreflight | "failed">();
-  const [attempt, setAttempt] = useState(0);
-  useEffect(() => {
-    const controller = new AbortController();
-    void fetch(endpoint("video-preflight", sessionId), { signal: controller.signal }).then(async (response) => {
-      if (!response.ok) throw new Error(`HTTP ${String(response.status)}`);
-      const summary = await response.json() as VideoPreflight;
-      if (!controller.signal.aborted) setPreflight(summary);
-    }).catch(() => { if (!controller.signal.aborted) setPreflight("failed"); });
-    return () => { controller.abort(); };
-  }, [attempt, sessionId]);
-  return <div className="oh-video-environment" role="group" aria-label="视频运行环境">
-    <strong>运行环境</strong>
-    {typeof preflight === "object" ? <VideoEnvironmentReport preflight={preflight} />
-      : preflight === "failed" ? <button type="button" onClick={() => { setPreflight(undefined); setAttempt((value) => value + 1); }}>环境检查失败 · 重试</button>
-        : <em>正在检查 Python、ffmpeg 与 MiMo Key…</em>}
-  </div>;
-}
-
-function VideoArtifacts({ project, sessionId }: { readonly project: VideoProject; readonly sessionId: string }) {
-  const [selected, setSelected] = useState(preferredArtifact(project)?.path);
-  const [content, setContent] = useState<string>();
-  const [error, setError] = useState<string>();
-  useEffect(() => { setSelected(preferredArtifact(project)?.path); }, [project.id]);
-  useEffect(() => {
-    if (selected === undefined) { setContent(undefined); return; }
-    const controller = new AbortController();
-    setContent(undefined);
-    setError(undefined);
-    void fetch(endpoint("file", sessionId, selected), { signal: controller.signal })
-      .then(async (response) => {
-        const payload = await response.json() as FilePayload & { readonly error?: string };
-        if (!response.ok) throw new Error(payload.error ?? `HTTP ${String(response.status)}`);
-        setContent(payload.content);
-      })
-      .catch((reason: unknown) => { if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : String(reason)); });
-    return () => { controller.abort(); };
-  }, [selected, sessionId]);
-  const selectedArtifact = project.artifacts.find((item) => item.path === selected);
-  return <div className="oh-video-artifacts">
-    <aside aria-label="视频项目产物">
-      <div className="oh-video-artifacts-heading"><strong>项目产物</strong><span>{project.artifacts.length}</span></div>
-      <VideoEnvironment sessionId={sessionId} />
-      <nav>
-        {project.artifacts.length === 0 && <p>流水线启动后，关键产物会出现在这里。</p>}
-        {project.artifacts.map((artifact) => <button
-          type="button"
-          key={artifact.path}
-          aria-current={artifact.path === selected ? "page" : undefined}
-          onClick={() => { setSelected(artifact.path); }}
-        ><span>{artifact.label}</span><small>{artifact.path.split("/").at(-1)}</small></button>)}
-      </nav>
-    </aside>
-    <section>
-      {selectedArtifact !== undefined && <header className="oh-video-artifact-header">
-        <div><strong>{selectedArtifact.label}</strong><span>{selectedArtifact.path.split("/").at(-1)}</span></div>
-        <em>{artifactKindLabel(selectedArtifact.kind)}</em>
-      </header>}
-      <div className="oh-video-artifact-content">{project.artifacts.length === 0 ? <div className="oh-video-artifacts-empty">故事方案、解说词、字幕和质检报告会按上游流水线写入这里。</div>
-        : error !== undefined ? <div className="oh-story-error">{error}</div>
-        : content === undefined ? <div className="oh-video-artifacts-empty">正在载入产物…</div>
-          : <pre>{content}</pre>}</div>
-    </section>
-  </div>;
-}
-
-export function VideoStudio({
-  sessionId,
-  projects,
-  running,
-  projectId,
-  tab,
-  hidden,
-  workbenches,
-  paneId,
-  labelledBy,
-  onProject,
-  onTab,
-  onWorkbench,
-  onCollapse
-}: {
+interface VideoStudioProps {
   readonly sessionId: string;
   readonly projects: readonly VideoProject[];
+  readonly files: readonly GameWorkspaceFile[];
   readonly running: boolean;
   readonly projectId: string | undefined;
-  readonly tab: "preview" | "artifacts";
+  readonly tab: VideoWorkspaceTab;
   readonly hidden: boolean;
   readonly workbenches: readonly WorkbenchMode[];
   readonly paneId: string;
   readonly labelledBy: string;
   readonly onProject: (id: string) => void;
-  readonly onTab: (tab: "preview" | "artifacts") => void;
+  readonly onTab: (tab: VideoWorkspaceTab) => void;
   readonly onWorkbench: (mode: WorkbenchMode) => void;
   readonly onCollapse: () => void;
-}) {
-  const project = projects.find((item) => item.id === projectId) ?? projects[0];
+  readonly chatOpen: boolean;
+  readonly onChatOpen: (visible: boolean) => void;
+  readonly onContinueInChat: (prompt: string) => void;
+  readonly editor: GameDocumentEditor;
+  readonly canvasByProject: Readonly<Record<string, CreativeCanvasState>>;
+  readonly onCanvasChange: (id: string, value: CreativeCanvasState) => void;
+}
+
+export function VideoStudio(props: VideoStudioProps) {
+  const project = props.projects.find((item) => item.id === props.projectId) ?? props.projects[0];
+  const [details, setDetails] = useState(false);
   const tabsId = useId();
-  useEffect(() => { if (project !== undefined && project.id !== projectId) onProject(project.id); }, [onProject, project, projectId]);
-  const tabs = ["preview", "artifacts"] as const;
-  return <main id={paneId} className="oh-video-studio" role="tabpanel" aria-labelledby={labelledBy} hidden={hidden}>
+  useEffect(() => { if (project !== undefined && project.id !== props.projectId) props.onProject(project.id); }, [props.onProject, project, props.projectId]);
+  const tabs = ["preview", "canvas", "docs"] as const;
+  const labels = { preview: "预览", canvas: "创作画布", docs: "文稿" };
+  return <main id={props.paneId} className="oh-video-studio" role="tabpanel" aria-labelledby={props.labelledBy} hidden={props.hidden} data-chat-open={props.chatOpen}>
     <header className="oh-video-toolbar">
-      <div className="oh-workbench-cluster">
-        <div className="oh-video-mode-tabs" role="tablist" aria-label="创作工作台">{workbenches.map((mode) => <button
-          type="button" role="tab" key={mode} aria-selected={mode === "video"} tabIndex={mode === "video" ? 0 : -1}
-          onKeyDown={(event) => { handleTabKey(event, workbenches, "video", onWorkbench); }} onClick={() => { onWorkbench(mode); }}
-        >{workbenchLabel(mode)}</button>)}</div>
-        <button className="oh-workbench-collapse" type="button" title="收起创作工作台" aria-label="收起创作工作台" onClick={onCollapse}>×</button>
-      </div>
-      <label className="oh-video-project"><span>视频项目</span><select aria-label="视频项目" value={project?.id ?? ""} disabled={project === undefined} onChange={(event) => { onProject(event.target.value); }}>
-        {projects.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}
-      </select></label>
-      {project !== undefined && <span className="oh-video-stage" data-state={project.state}><i aria-hidden />{project.stageLabel}</span>}
-      <div className="oh-video-tabs" role="tablist" aria-label="视频工作台">{tabs.map((item) => <button
-        type="button" role="tab" key={item} id={`${tabsId}-${item}-tab`} aria-controls={`${tabsId}-${item}-panel`}
-        aria-selected={tab === item} tabIndex={tab === item ? 0 : -1}
-        onKeyDown={(event) => { handleTabKey(event, tabs, tab, onTab); }} onClick={() => { onTab(item); }}
-      >{item === "preview" ? "预览" : "产物"}</button>)}</div>
+      <div className="oh-workbench-cluster"><div className="oh-video-mode-tabs" role="tablist" aria-label="创作工作台">{props.workbenches.map((mode) => <button type="button" role="tab" key={mode} aria-selected={mode === "video"} tabIndex={mode === "video" ? 0 : -1} onKeyDown={(event) => { handleTabKey(event, props.workbenches, "video", props.onWorkbench); }} onClick={() => { props.onWorkbench(mode); }}>{workbenchLabel(mode)}</button>)}</div><button className="oh-workbench-collapse" type="button" aria-label="收起创作工作台" onClick={props.onCollapse}>×</button></div>
+      <label className="oh-video-project"><span>视频项目</span><select aria-label="视频项目" value={project?.id ?? ""} disabled={project === undefined} onChange={(event) => { props.onProject(event.target.value); }}>{props.projects.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}</select></label>
+      <div className="oh-video-tabs" role="tablist" aria-label="视频工作台">{tabs.map((item) => <button type="button" role="tab" key={item} id={`${tabsId}-${item}-tab`} aria-controls={`${tabsId}-${item}-panel`} aria-selected={props.tab === item} tabIndex={props.tab === item ? 0 : -1} onKeyDown={(event) => { handleTabKey(event, tabs, props.tab, props.onTab); }} onClick={() => { props.onTab(item); if (item === "canvas") props.onChatOpen(false); }}>{labels[item]}</button>)}</div>
+      <div className="oh-video-workspace-actions"><button type="button" aria-pressed={props.chatOpen} onClick={() => { props.onChatOpen(!props.chatOpen); }}>Chat</button><button type="button" onClick={() => { setDetails(true); }}>制作详情</button></div>
     </header>
-    {project === undefined ? <div className="oh-video-preview-empty">
-      <span aria-hidden>▶</span>
-      <strong>还没有视频项目</strong>
-      <p>在右侧 Chat 告诉 Agent 要处理的视频；项目会创建在 <code>video-recaps/&lt;项目&gt;/</code>。开始前先看下面的运行环境：缺项时流水线会在处理前停下。</p>
-      <VideoEnvironment sessionId={sessionId} />
-    </div> : <div className="oh-video-panels">
-      <div role="tabpanel" id={`${tabsId}-preview-panel`} aria-labelledby={`${tabsId}-preview-tab`} hidden={tab !== "preview"}><VideoPreview key={project.id} project={project} sessionId={sessionId} running={running} /></div>
-      <div role="tabpanel" id={`${tabsId}-artifacts-panel`} aria-labelledby={`${tabsId}-artifacts-tab`} hidden={tab !== "artifacts"}><VideoArtifacts project={project} sessionId={sessionId} /></div>
-    </div>}
+    {project === undefined ? <EmptyVideo onChat={props.onContinueInChat} /> : <VideoWorkspace key={project.id} {...props} project={project} tabsId={tabsId} />}
+    {details && <VideoDetails key={project?.id ?? "empty"} sessionId={props.sessionId} project={project} onClose={() => { setDetails(false); }} />}
   </main>;
+}
+
+interface LoadedPreview { readonly asset: VideoPreviewAsset; readonly narrative?: VideoNarrativeProjection | undefined; readonly narrationPath?: string | undefined; readonly narrationVersion?: string | undefined }
+interface SeekRequest { readonly role: VideoPreviewAsset["role"]; readonly time: number; readonly range?: VideoTimeRange | undefined }
+function snapshot(project: VideoProject, asset: VideoPreviewAsset): LoadedPreview { return { asset, narrative: project.narrative, narrationPath: project.narrationPath, narrationVersion: project.narrationVersion }; }
+
+function VideoWorkspace(props: VideoStudioProps & { readonly project: VideoProject; readonly tabsId: string }) {
+  const { project, sessionId } = props;
+  const initial = preferredPreview(project);
+  const [loaded, setLoaded] = useState<LoadedPreview | undefined>(() => initial === undefined ? undefined : snapshot(project, initial));
+  const [revision, setRevision] = useState(0);
+  const [ready, setReady] = useState(false);
+  const [error, setError] = useState(false);
+  const [selectedId, setSelectedId] = useState<string>();
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [showScript, setShowScript] = useState(false);
+  const [scriptCollapsed, setScriptCollapsed] = useState(false);
+  const [range, setRange] = useState<VideoTimeRange>();
+  const [notice, setNotice] = useState<string>();
+  const [exporting, setExporting] = useState(false);
+  const acknowledgedRoles = useRef(new Set(project.previews.map((asset) => asset.role)));
+  const discovered = [...project.previews].reverse().find((asset) => !acknowledgedRoles.current.has(asset.role) && asset.role !== "source");
+  const video = useRef<HTMLVideoElement>(null);
+  const roleTimes = useRef<Partial<Record<VideoPreviewAsset["role"], number>>>({});
+  const scriptList = useRef<HTMLDivElement>(null);
+  const scriptScrolledAt = useRef(0);
+  const playerShell = useRef<HTMLDivElement>(null);
+  const pendingSeek = useRef<SeekRequest>();
+  const currentAsset = project.previews.find((asset) => asset.role === loaded?.asset.role);
+  const pending = loaded !== undefined && currentAsset !== undefined && !sameAsset(loaded.asset, currentAsset);
+  const loadedSegments = loaded?.narrative?.segments ?? [];
+  const narrative = loaded?.narrative;
+  const selected = loadedSegments.find((segment) => segment.id === selectedId);
+  const canvas = props.canvasByProject[project.id] ?? { positions: {} };
+  const draftContent = project.narrationPath === undefined ? undefined : props.editor.buffers[project.narrationPath]?.content;
+  const loadedDraft = loaded?.narrationPath === undefined ? undefined : props.editor.buffers[loaded.narrationPath]?.content;
+  const canvasModel = useMemo(() => {
+    const model = videoCanvasModel(project, project.narrative, props.files);
+    return { ...model, nodes: model.nodes.map((node) => node.segment === undefined ? node : { ...node, excerpt: videoDraftText(node.segment, draftContent) }) };
+  }, [project, draftContent, props.files]);
+  const active = !props.hidden && props.tab === "preview";
+  useEffect(() => {
+    if (!active || selectedId === undefined || video.current?.paused !== false || performance.now() - scriptScrolledAt.current < 4000) return;
+    const list = scriptList.current;
+    const row = Array.from(list?.querySelectorAll<HTMLElement>("[data-segment-id]") ?? []).find((item) => item.dataset.segmentId === selectedId);
+    if (list === null || row === undefined) return;
+    const bounds = list.getBoundingClientRect(), rect = row.getBoundingClientRect();
+    if (rect.top < bounds.top || rect.bottom > bounds.bottom) list.scrollTo({ top: list.scrollTop + rect.top - bounds.top - 12, behavior: globalThis.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" });
+  }, [active, selectedId]);
+  useEffect(() => { if (!active) { video.current?.pause(); setShowScript(false); } }, [active]);
+  useEffect(() => { if (props.chatOpen) setShowScript(false); }, [props.chatOpen]);
+  useEffect(() => { if (!showScript) return; const escape = (event: KeyboardEvent) => { if (event.key === "Escape") setShowScript(false); }; globalThis.addEventListener("keydown", escape); return () => { globalThis.removeEventListener("keydown", escape); }; }, [showScript]);
+  useEffect(() => { if (loaded === undefined && initial !== undefined) setLoaded(snapshot(project, initial)); }, [initial, loaded, project]);
+  const load = (asset: VideoPreviewAsset, seek?: SeekRequest): void => {
+    if (loaded !== undefined) roleTimes.current[loaded.asset.role] = video.current?.currentTime ?? currentTime;
+    video.current?.pause();
+    acknowledgedRoles.current.add(asset.role);
+    pendingSeek.current = seek;
+    setLoaded(snapshot(project, asset)); setReady(false); setError(false); setDuration(0); setCurrentTime(0); setRange(seek?.range); setNotice(undefined); setRevision((value) => value + 1);
+  };
+  const seekLoaded = (request: SeekRequest): void => {
+    const element = video.current;
+    if (element === null || element.readyState === 0) { pendingSeek.current = request; return; }
+    if (request.time >= element.duration) { setNotice("这段文稿超出当前视频范围，可以先核对文稿或载入新版。"); return; }
+    element.currentTime = Math.max(0, request.time); setRange(request.range); setNotice(undefined);
+  };
+  const requestSeek = (request: SeekRequest): void => {
+    const asset = project.previews.find((item) => item.role === request.role);
+    if (asset === undefined) { setNotice("这份视频还没有准备好，先继续核对文稿。"); return; }
+    props.onTab("preview"); setShowScript(false);
+    if (loaded?.asset.role === request.role) seekLoaded(request);
+    else load(asset, request);
+  };
+  const canSource = (segment: VideoNarrativeSegment): boolean => narrative?.authoredClock !== "unknown" && videoSourceRange(project, segment, props.files) !== undefined;
+  const switchPreview = (asset: VideoPreviewAsset): void => {
+    if (asset.role === loaded?.asset.role) return;
+    const time = video.current?.currentTime ?? 0;
+    let target = roleTimes.current[asset.role] ?? 0;
+    let mapped = false;
+    if (asset.role !== "source" && loaded?.asset.role !== "source") { target = time; mapped = true; }
+    else if (asset.role === "source") {
+      const paragraph = loadedSegments.find((item) => time >= item.output.start && time < item.output.end && canSource(item));
+      const original = paragraph?.sourceRanges[0];
+      if (paragraph !== undefined && original !== undefined) { target = original.start + (time - paragraph.output.start) * (original.end - original.start) / (paragraph.output.end - paragraph.output.start); mapped = true; }
+    } else {
+      const paragraph = loadedSegments.find((item) => canSource(item) && item.sourceRanges.some((span) => time >= span.start && time < span.end));
+      const original = paragraph?.sourceRanges[0];
+      if (paragraph !== undefined && original !== undefined) { target = paragraph.output.start + (time - original.start) * (paragraph.output.end - paragraph.output.start) / (original.end - original.start); mapped = true; }
+    }
+    load(asset, { role: asset.role, time: target });
+    if (!mapped) setNotice(target > 0 ? "当前片段没有可靠对应，已回到这份视频上次的位置。" : "当前片段没有可靠对应，可以从这份视频开头核对。");
+  };
+  const canOutput = (segment: VideoNarrativeSegment): boolean => narrative?.authoredClock !== "unknown" && narrative !== undefined && (project.previews.some((asset) => asset.role !== "source") || canSource(segment));
+  const locate = (segment: VideoNarrativeSegment, source = false): void => {
+    setSelectedId(segment.id);
+    if (source) { const original = segment.sourceRanges[0]; if (original !== undefined && canSource(segment)) requestSeek({ role: "source", time: original.start, range: original }); return; }
+    const role = loaded?.asset.role === "edited" ? "edited" : project.previews.some((asset) => asset.role === "final") ? "final" : project.previews.some((asset) => asset.role === "edited") ? "edited" : "source";
+    const span = role === "source" ? segment.sourceRanges[0] : segment.output;
+    if (span !== undefined && canOutput(segment)) requestSeek({ role, time: span.start });
+  };
+  const openDocument = (path?: string): void => {
+    const next = path ?? project.narrationPath ?? videoCreativeDocuments(project)[0]?.path;
+    if (next !== undefined) props.editor.onSelect(next);
+    props.editor.onMode("preview"); props.onTab("docs");
+  };
+  const discuss = (segment?: VideoNarrativeSegment): void => {
+    video.current?.pause();
+    const role = loaded?.asset.role;
+    const context = segment === undefined ? `当前${role === undefined ? "预览" : roleLabel(role)} ${videoTime(currentTime)}` : `${segment.kind === "original" ? "原声" : "解说段落"}，输出 ${videoRange(segment.output)}${segment.sourceRanges.length === 0 ? "" : `；原片 ${segment.sourceRanges.map(videoRange).join("、")}`}\n文稿：${videoDraftText(segment, loadedDraft) ?? "保留原片声音"}`;
+    props.onContinueInChat(`我想调整《${project.title}》的${context}。\n${loaded === undefined ? "" : `正在预览：${loaded.asset.path}，版本 ${loaded.asset.version}。\n`}请先讨论画面、解说与声音的修改思路。`);
+  };
+  const onNodeOpen = (node: VideoCanvasNode): void => {
+    if (node.segment !== undefined) {
+      if (project.narrative?.authoredClock === "unknown") { openDocument(); return; }
+      props.onTab("preview");
+      if (pending || (project.narrationVersion !== loaded?.narrationVersion && !loadedSegments.some((segment) => segment.id === node.segment?.id && segment.output.start === node.segment.output.start && segment.output.end === node.segment.output.end))) { setNotice("文稿或视频已有更新。先载入新版本，再核对这段内容；当前播放保持原样。"); return; }
+      const existing = loadedSegments.find((segment) => segment.id === node.segment?.id);
+      if (existing !== undefined) locate(existing, loaded?.asset.role === "source" && canSource(existing));
+      else setNotice("先在文稿里核对这段的时间，再继续定位。");
+    } else if (node.id === "source") requestSeek({ role: "source", time: 0 });
+    else if (node.id === "preview") { const asset = preferredPreview(project); if (asset !== undefined && asset.role !== loaded?.asset.role) requestSeek({ role: asset.role, time: roleTimes.current[asset.role] ?? 0 }); else props.onTab("preview"); }
+    else openDocument(node.path);
+  };
+  const downloadSubtitles = async (): Promise<void> => {
+    const file = project.artifacts.find((item) => item.path.endsWith("/subtitles.srt"));
+    if (file === undefined) return;
+    setExporting(true);
+    try {
+      const response = await fetch(endpoint("file", sessionId, file.path));
+      const payload = await response.json() as { readonly content?: string; readonly error?: string };
+      if (!response.ok || payload.content === undefined) throw new Error(payload.error ?? "字幕暂时无法导出");
+      const url = URL.createObjectURL(new Blob([payload.content], { type: "application/x-subrip;charset=utf-8" }));
+      const link = document.createElement("a"); link.href = url; link.download = `${project.title}.srt`; link.click(); globalThis.setTimeout(() => { URL.revokeObjectURL(url); }, 1000);
+    } catch (reason) { setNotice(reason instanceof Error ? reason.message : String(reason)); }
+    finally { setExporting(false); }
+  };
+  const renderSegment = (segment: VideoNarrativeSegment, index: number) => <article className="oh-video-script-segment" key={segment.id} data-segment-id={segment.id} data-selected={selectedId === segment.id} data-kind={segment.kind}>
+    <button className="oh-video-segment-jump" type="button" disabled={!canOutput(segment)} onClick={() => { locate(segment); }}><span>{segment.kind === "original" ? "保留原声" : `解说 ${String((segment.index ?? index) + 1).padStart(2, "0")}`}<small>{narrative?.authoredClock === "unknown" ? "文稿时间" : "输出"} {videoRange(segment.output)}</small></span><p>{videoDraftText(segment, loadedDraft) ?? "听一听原片里值得留下的声音。"}{videoDraftText(segment, loadedDraft) !== segment.text && <small className="oh-video-draft-wording">改稿文案 · 配音未更新</small>}</p></button>
+    <footer>{canSource(segment) ? <button type="button" onClick={() => { locate(segment, true); }}>原片 {videoRange(segment.sourceRanges[0]!)}</button> : <span>{segment.sourceRanges.length > 1 ? "对应多段原片" : "原片对应待核对"}</span>}<div>{segment.kind === "narration" && <button type="button" onClick={() => { openDocument(loaded?.narrationPath); props.editor.onMode("source"); }}>改稿</button>}<button type="button" aria-label={`讨论第 ${String(index + 1)} 段`} onClick={() => { discuss(segment); }}>Chat</button></div></footer>
+  </article>;
+  return <div className="oh-video-panels">
+    <section role="tabpanel" id={`${props.tabsId}-preview-panel`} aria-labelledby={`${props.tabsId}-preview-tab`} hidden={props.tab !== "preview"}>
+      <div className="oh-video-preview-layout" data-script-open={showScript} data-script-collapsed={scriptCollapsed}>
+        <div className="oh-video-preview-main"><header className="oh-video-heading"><div><small>视频解说</small><h2>{project.title}</h2></div><div><button type="button" aria-expanded={showScript || (!props.chatOpen && !scriptCollapsed && (playerShell.current?.closest(".oh-video-studio")?.clientWidth ?? 0) > 800)} onClick={() => { if (props.chatOpen || (playerShell.current?.closest(".oh-video-studio")?.clientWidth ?? 0) <= 800) setShowScript((value) => !value); else setScriptCollapsed((value) => !value); }}>解说稿</button><button type="button" onClick={() => { discuss(); }}>讨论当前画面</button></div></header>
+          {loaded === undefined ? <EmptyVideo project={project} onChat={props.onContinueInChat} /> : <div ref={playerShell} className="oh-video-preview-shell" data-state={error ? "error" : props.running ? "building" : ready ? "ready" : "loading"}>
+            <div className="oh-video-stagebar"><div className="oh-video-version-tabs" role="tablist" aria-label="预览版本">{project.previews.map((asset) => <button type="button" role="tab" key={asset.role} aria-selected={asset.role === loaded.asset.role} tabIndex={asset.role === loaded.asset.role ? 0 : -1} onClick={() => { switchPreview(asset); }} onKeyDown={(event) => { handleTabKey(event, project.previews.map((item) => item.role), loaded.asset.role, (role) => { const next = project.previews.find((item) => item.role === role); if (next !== undefined) switchPreview(next); }); }}>{roleLabel(asset.role)}</button>)}</div><div className="oh-video-preview-actions"><a href={mediaUrl(sessionId, loaded.asset, revision)} download={`${project.title}-${roleLabel(loaded.asset.role)}.${loaded.asset.path.split(".").at(-1) ?? "mp4"}`}>导出视频</a><button type="button" aria-label="全屏预览" onClick={() => { void playerShell.current?.requestFullscreen().catch(() => { setNotice("当前环境暂不支持全屏，可以在新窗口打开视频。"); }); }}>⛶</button></div></div>
+            <div className="oh-video-player-stage"><video key={`${loaded.asset.path}:${loaded.asset.version}:${String(revision)}`} ref={video} src={mediaUrl(sessionId, loaded.asset, revision)} controls preload="metadata" playsInline onLoadedMetadata={() => { setReady(true); setError(false); setDuration(video.current?.duration ?? 0); const request = pendingSeek.current; pendingSeek.current = undefined; if (request !== undefined) seekLoaded(request); }} onError={() => { setError(true); setReady(false); }} onTimeUpdate={() => { const element = video.current; if (element === null) return; setCurrentTime(element.currentTime); if (range !== undefined && element.currentTime >= range.end) { element.pause(); setRange(undefined); } if (loaded.asset.role !== "source") { const paragraph = loadedSegments.find((item) => element.currentTime >= item.output.start && element.currentTime < item.output.end); if (paragraph !== undefined) setSelectedId(paragraph.id); } else { const matches = loadedSegments.filter((item) => canSource(item) && item.sourceRanges.some((span) => element.currentTime >= span.start && element.currentTime < span.end)); if (matches.length === 1) setSelectedId(matches[0]?.id); } }} />{error && <div className="oh-video-media-error" role="alert"><strong>暂时无法播放这段视频</strong><button type="button" onClick={() => { load(loaded.asset); }}>重新读取视频</button><a href={mediaUrl(sessionId, loaded.asset, revision)} target="_blank" rel="noreferrer">在新窗口打开</a></div>}</div>
+            <div className="oh-video-player-caption"><span>{roleLabel(loaded.asset.role)} · {videoTime(currentTime)} / {videoTime(duration)}{range === undefined ? "" : ` · 核对 ${videoRange(range)}`}</span><span role="status">{props.running ? "正在继续制作 · 当前视频保留" : ready ? "已载入" : "正在读取视频…"}</span></div>
+          </div>}
+          {loaded !== undefined && currentAsset === undefined && <p className="oh-video-notice" role="status">当前视频已从项目移除，已打开的画面保留；可以选择其他视频继续核对。</p>}
+          {(pending || discovered !== undefined) && <div className="oh-video-version-notice" role="status"><div><strong>新版本已准备好</strong><span>当前视频保留，准备好后再载入。</span></div><button type="button" onClick={() => { const next = pending ? currentAsset : discovered; if (next !== undefined) load(next); }}>载入新版本</button></div>}
+          {notice !== undefined && <p className="oh-video-notice" role="status">{notice}</p>}
+          {loadedSegments.length > 0 && <div className="oh-video-sequence"><header><strong>段落概览</strong><button type="button" onClick={() => { props.onTab("canvas"); props.onChatOpen(false); }}>在画布里看故事 →</button></header><div>{loadedSegments.map((segment, index) => <button type="button" key={segment.id} aria-label={`定位第 ${String(index + 1)} 段`} aria-pressed={selectedId === segment.id} disabled={!canOutput(segment)} onClick={() => { locate(segment); }}><span>{segment.kind === "original" ? "原声" : String((segment.index ?? index) + 1).padStart(2, "0")}</span><small>{videoTime(segment.output.start)}</small></button>)}</div></div>}
+          {selected !== undefined && <div className="oh-video-current-segment"><span>{selected.kind === "original" ? "保留原声" : "正在核对这段解说"} · {videoRange(selected.output)}</span><button type="button" onClick={() => { discuss(selected); }}>讨论这一段</button></div>}
+        </div>
+        <aside className="oh-video-script-panel" aria-label="分段解说稿"><header><div><h3>解说稿 <small>{loadedSegments.length > 0 ? `${String(loadedSegments.length)} 段` : ""}</small></h3><p>边看画面，边想怎么讲。</p></div><button type="button" aria-label="收起解说稿" onClick={() => { setShowScript(false); setScriptCollapsed(true); }}>×</button></header><div ref={scriptList} className="oh-video-segment-list" onWheel={() => { scriptScrolledAt.current = performance.now(); }} onTouchMove={() => { scriptScrolledAt.current = performance.now(); }}>{loadedSegments.length > 0 ? loadedSegments.map(renderSegment) : <div className="oh-video-script-empty"><strong>先想清楚，怎么讲</strong><p>原片可以先看起来，一起讨论主线和想保留的声音。</p><button type="button" onClick={() => { props.onContinueInChat(`我想讨论《${project.title}》的解说方向，请先梳理主线和原声。`); }}>聊聊解说方向</button></div>}</div><footer><span>文稿用于定位和讨论，实际声音以当前视频为准。</span><button type="button" onClick={() => { openDocument(); }}>完整文稿 →</button></footer></aside>
+      </div>
+    </section>
+    <section role="tabpanel" id={`${props.tabsId}-canvas-panel`} aria-labelledby={`${props.tabsId}-canvas-tab`} hidden={props.tab !== "canvas"}><CreativeCanvas<VideoCanvasNode> nodes={canvasModel.nodes} edges={canvasModel.edges} state={canvas} onChange={(value) => { props.onCanvasChange(project.id, value); }} title="创作画布" description="看清故事、解说和原片的关系。" ariaLabel="视频创作无限画布" helpText="把观众的疑问、画面与解说放在一起想。" empty={{ title: "先从想讲的故事开始", description: "和 AI 讨论主线，已有文稿和媒体会出现在这里。", actionLabel: "聊聊解说想法", onAction: () => { props.onContinueInChat(`我想讨论《${project.title}》的故事主线和解说方向。`); } }} onOpen={onNodeOpen} onContinueInChat={(node) => { if (node.segment !== undefined) discuss(node.segment); else props.onContinueInChat(`我想继续调整《${project.title}》的「${node.title}」。${node.path === undefined ? "" : `内容：${node.path}。`}请先讨论思路。`); }} renderNodeMedia={(node) => { const asset = node.id === "source" ? project.previews.find((item) => item.role === "source") : node.id === "preview" ? preferredPreview(project) : undefined; return asset === undefined || props.tab !== "canvas" ? null : <video className="oh-video-canvas-thumbnail" src={mediaUrl(sessionId, asset)} preload="metadata" muted playsInline tabIndex={-1} aria-hidden />; }} renderNodeActions={(node) => <button type="button" onClick={() => { onNodeOpen(node); }}>{node.segment !== undefined ? project.narrative?.authoredClock === "unknown" ? "打开文稿" : "定位这段" : node.id === "source" ? "看原片" : node.id === "preview" ? "回到预览" : "打开文稿"}</button>} renderContextActions={(node) => <><button type="button" onClick={() => { onNodeOpen(node); }}>{node.segment === undefined ? "打开内容" : "定位这段"}</button>{node.segment !== undefined && <button type="button" onClick={() => { openDocument(); }}>打开文稿</button>}</>} /></section>
+    <section role="tabpanel" id={`${props.tabsId}-docs-panel`} aria-labelledby={`${props.tabsId}-docs-tab`} hidden={props.tab !== "docs"}>{!props.hidden && props.tab === "docs" && <VideoDocuments project={project} editor={props.editor} onChat={props.onContinueInChat} />}<div className="oh-video-document-export">{project.artifacts.some((artifact) => artifact.path.endsWith("/subtitles.srt")) && <button type="button" disabled={exporting} onClick={() => { void downloadSubtitles(); }}>{exporting ? "正在导出…" : "导出项目字幕"}</button>}</div></section>
+  </div>;
 }

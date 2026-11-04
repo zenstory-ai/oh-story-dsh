@@ -1,4 +1,7 @@
 import { basename, extname } from "node:path";
+import { projectVideoNarrative, type VideoNarrativeProjection } from "./video-narrative.js";
+
+export type { VideoCreativeSummary, VideoNarrativeKind, VideoNarrativeProjection, VideoNarrativeSegment, VideoTimeRange } from "./video-narrative.js";
 
 export const VIDEO_DIRECTORY = "video-recaps";
 
@@ -36,6 +39,9 @@ export interface VideoProjectSummary {
   readonly nextArtifact?: string | undefined;
   readonly previews: readonly VideoPreviewAsset[];
   readonly artifacts: readonly VideoArtifactSummary[];
+  readonly narrative?: VideoNarrativeProjection | undefined;
+  readonly narrationPath?: string | undefined;
+  readonly narrationVersion?: string | undefined;
 }
 
 const VIDEO_EXTENSIONS = new Set([".mp4", ".mov", ".mkv", ".webm"]);
@@ -150,6 +156,10 @@ export function summarizeVideoProject(
     readonly project?: unknown;
     readonly runManifest?: unknown;
     readonly assembly?: unknown;
+    readonly narration?: unknown;
+    readonly validatedClips?: unknown;
+    readonly visualAudioBoard?: unknown;
+    readonly storyPlan?: unknown;
   } = {}
 ): VideoProjectSummary {
   const id = root.slice(`${VIDEO_DIRECTORY}/`.length);
@@ -201,6 +211,20 @@ export function summarizeVideoProject(
     const meta = ARTIFACT_META[name];
     return meta === undefined ? [] : [{ ...meta, path: file.path, version: file.version }];
   }).sort((left, right) => left.path.localeCompare(right.path, "zh-Hans-CN"));
+  const narrationFiles = projectFiles.filter((file) => file.path.split("/").at(-1) === "narration.json");
+  const narrationFile = narrationFiles.length === 1 ? narrationFiles[0] : undefined;
+  const narrative = metadata.narration === undefined
+    && metadata.validatedClips === undefined
+    && metadata.visualAudioBoard === undefined
+    && metadata.storyPlan === undefined
+    ? undefined
+    : projectVideoNarrative({
+      narration: metadata.narration,
+      validatedClips: metadata.validatedClips,
+      visualAudioBoard: metadata.visualAudioBoard,
+      storyPlan: metadata.storyPlan,
+      editMode: cutMode ? "cut" : settings?.edit_mode
+    });
   return {
     id,
     root,
@@ -210,6 +234,9 @@ export function summarizeVideoProject(
     stageLabel,
     nextArtifact,
     previews,
-    artifacts
+    artifacts,
+    narrative,
+    narrationPath: narrationFile?.path,
+    narrationVersion: narrationFile?.version
   };
 }

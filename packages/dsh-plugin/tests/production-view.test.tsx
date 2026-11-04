@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { compositionSources, SequenceBoard } from "../src/client/drama-production-view.js";
+import { compositionSources, DramaProductionView, productionCanvasAvailable, SequenceBoard, targetDisplayName } from "../src/client/drama-production-view.js";
 import { parseEpisodeProduction } from "../src/client/drama-production.js";
 import type { ProductionMediaVersion } from "../src/client/production-runtime.js";
 
@@ -11,6 +11,86 @@ const versions: ProductionMediaVersion[] = [
 ];
 
 describe("production sequence view", () => {
+  it("keeps the infinite canvas available when the screenplay exists before storyboard cards", () => {
+    const episode = "剧集/EP001";
+    const documents = { [`${episode}/剧本.md`]: "## SCENE-EP001-001 · 门外\n江辰停在门前。" };
+    const production = parseEpisodeProduction(documents, episode);
+    expect(production.shots).toHaveLength(0);
+    expect(productionCanvasAvailable(production, documents)).toBe(true);
+    expect(productionCanvasAvailable(production, { [`${episode}/剧本.md`]: "  " })).toBe(false);
+  });
+
+  it("presents the canvas workflow as the primary navigation and keeps technical setup collapsed", () => {
+    const episode = "剧集/EP001";
+    const production = parseEpisodeProduction({
+      [`${episode}/分镜.md`]: "## SHOT-EP001-001 · 门外停步\n- 时长：4s"
+    }, episode);
+    const html = renderToStaticMarkup(<DramaProductionView
+      sessionId="session-1"
+      production={production}
+      sessionRunning={false}
+      queue={[]}
+      section="tasks"
+      selectedId={undefined}
+      jobs={[]}
+      versions={[]}
+      libraryVersions={[]}
+      selections={{}}
+      manualReferences={{}}
+      sequence={[]}
+      canvas={{}}
+      viewport={undefined}
+      onSectionChange={() => undefined}
+      onSelect={() => undefined}
+      onNavigate={() => undefined}
+      onJobsChange={() => undefined}
+      onSelectionsChange={() => undefined}
+      onManualReferencesChange={() => undefined}
+      onOpenMedia={() => undefined}
+      onSequenceChange={() => undefined}
+      onCanvasChange={() => undefined}
+      onViewportChange={() => undefined}
+      onDispatchPrompt={async () => undefined}
+      onCancelTurn={async () => undefined}
+      onRemoveQueued={async () => undefined}
+      onRefresh={() => undefined}
+    />);
+    expect(html.match(/role="tab"/gu)).toHaveLength(4);
+    expect(html).toContain(">画布</button>");
+    expect(html).toContain(">素材</button>");
+    expect(html).toContain('aria-selected="true">生成记录</button>');
+    expect(html).toContain(">成片</button>");
+    expect(html).toContain('aria-expanded="false"');
+    expect(html).toContain("制作详情");
+    expect(html).not.toContain("供应商已配置");
+    expect(html).not.toContain("Adapter 配置");
+  });
+
+  it("uses creator-facing names while keeping production identifiers available to the data model", () => {
+    const episode = "剧集/EP001";
+    const production = parseEpisodeProduction({
+      [`${episode}/分镜.md`]: "## SHOT-EP001-001 · 门外停步\n- 时长：4s\n\n## SHOT-EP001-002 · 推门入室\n- 时长：2.5s",
+      [`${episode}/图片提示词.md`]: "## IMG-EP001-CARD · 泛黄卡片\n\n### 可复制提示词\n> 一张泛黄卡片"
+    }, episode);
+
+    expect(targetDisplayName(production, "SHOT-EP001-001")).toBe("门外停步");
+    expect(targetDisplayName(production, "IMG-EP001-CARD")).toBe("泛黄卡片");
+    expect(targetDisplayName(production, "BATCH-VIDEOS")).toBe("批量镜头视频");
+
+    const html = renderToStaticMarkup(<SequenceBoard
+      production={production}
+      jobs={[]}
+      sequence={[{ shotId: "SHOT-EP001-001", versionId: "still" }, { shotId: "SHOT-EP001-002", versionId: "video" }]}
+      versions={versions}
+      episodeDirectory={episode}
+      onSequenceChange={() => undefined}
+      onCompose={() => undefined}
+    />);
+    expect(html).toContain(">门外停步</strong>");
+    expect(html).toContain("选择 门外停步 成片素材");
+    expect(html).toContain("泛黄卡片 · 静帧 · card.webp");
+  });
+
   it("maps selected media to exact MOTION, SHOT and IMG composition sources", () => {
     const episode = "剧集/EP001";
     const production = parseEpisodeProduction({

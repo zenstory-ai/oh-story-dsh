@@ -42,6 +42,7 @@ import {
 } from "./drama-production.js";
 import { DramaProductionView } from "./drama-production-view.js";
 import type { CanvasViewport } from "./canvas-viewport.js";
+import { productionCanvasNodes } from "./production-canvas-model.js";
 import { createPendingJob, type
   CanvasPoint,
   mediaTargetFromPath,
@@ -53,7 +54,7 @@ import { createPendingJob, type
 } from "./production-runtime.js";
 import { settledProductionIntents, type SettledProductionIntent } from "./production-intents.js";
 import { OH_STORY_PRODUCTION_TOOL_NAME } from "../production-intent.js";
-import { VideoStudio, type VideoProject } from "./video-studio.js";
+import { VideoStudio, type VideoProject, type VideoWorkspaceTab } from "./video-studio.js";
 import {
   hasCreativeProject,
   readWorkbenchPreference,
@@ -62,7 +63,17 @@ import {
   writeWorkbenchPreference,
   type WorkbenchPreference
 } from "./workbench-presence.js";
+import { GameCanvas } from "./game-canvas.js";
+import { gameCreativeDocuments } from "./game-canvas-model.js";
+import { GameDocuments, type GameDocumentEditor } from "./game-documents.js";
+import { GamePlaytestNotes } from "./game-playtest-notes.js";
+import { EMPTY_GAME_CANVAS, type GameCanvasState, type GameProject, type GameWorkspaceTab } from "./game-workspace-types.js";
+import { videoCreativeDocuments } from "./video-workspace-model.js";
+import videoStudioStyles from "./video-studio.css?inline";
+import gameCanvasStyles from "./game-canvas.css?inline";
+import gamePlaytestNotesStyles from "./game-playtest-notes.css?inline";
 import { gamePreviewStatus, previewUrls } from "./game-preview-state.js";
+import { focusChatContext } from "./chat-context.js";
 import { endpoint, handleTabKey } from "./workbench-ui.js";
 import styles from "./plugin.css?inline";
 
@@ -91,15 +102,6 @@ interface WorkspacePayload {
   readonly metadataErrors: readonly string[];
   readonly mode: "dsh-session";
 }
-interface GameProject {
-  readonly id: string;
-  readonly root: string;
-  readonly title: string;
-  readonly source: "workspace" | "example";
-  readonly previewReady: boolean;
-  readonly previewUrl?: string | undefined;
-  readonly previewVersion: string;
-}
 interface FilePayload {
   readonly path: string;
   readonly content: string;
@@ -125,13 +127,21 @@ interface WorkbenchMemory {
   buffers: Record<string, FileBuffer>;
   workbenchPreference: WorkbenchPreference | undefined;
   editorMode: "preview" | "source" | "production";
+  dramaPane: "canvas" | "documents";
+  dramaFilesOpen: boolean;
+  dramaChatOpen: boolean;
+  dramaEpisode: string | undefined;
   expanded: Record<string, boolean>;
   selected: string | undefined;
   workbench: WorkbenchMode;
-  gameTab: "preview" | "design";
+  gameTab: GameWorkspaceTab;
+  gameChatOpen: boolean;
+  gameCanvas: Record<string, GameCanvasState>;
   gameProjectId: string | undefined;
   gamePane: "studio" | "chat";
-  videoTab: "preview" | "artifacts";
+  videoTab: VideoWorkspaceTab;
+  videoChatOpen: boolean;
+  videoCanvas: Record<string, GameCanvasState>;
   videoProjectId: string | undefined;
   videoPane: "studio" | "chat";
   productionSection: DramaProductionSection;
@@ -172,16 +182,24 @@ function createWorkbenchStore() {
       buffers: {},
       workbenchPreference: undefined,
       editorMode: "preview",
+      dramaPane: "canvas",
+      dramaFilesOpen: false,
+      dramaChatOpen: false,
+      dramaEpisode: undefined,
       expanded: {},
       selected: undefined,
       workbench: "story",
       gameTab: "preview",
+      gameChatOpen: true,
+      gameCanvas: {},
       gameProjectId: undefined,
       gamePane: "studio",
       videoTab: "preview",
+      videoChatOpen: false,
+      videoCanvas: {},
       videoProjectId: undefined,
       videoPane: "studio",
-      productionSection: "shots",
+      productionSection: "canvas",
       productionSelectedIds: {},
       productionJobs: {},
       productionSelections: {},
@@ -214,6 +232,10 @@ function createWorkbenchStore() {
       setEditorMode: (draft, update: Update<WorkbenchMemory["editorMode"]>) => {
         draft.editorMode = applyUpdate(draft.editorMode, update);
       },
+      setDramaPane: (draft, pane: WorkbenchMemory["dramaPane"]) => { draft.dramaPane = pane; },
+      setDramaFilesOpen: (draft, open: boolean) => { draft.dramaFilesOpen = open; },
+      setDramaChatOpen: (draft, open: boolean) => { draft.dramaChatOpen = open; },
+      setDramaEpisode: (draft, episode: string | undefined) => { draft.dramaEpisode = episode; },
       setExpanded: (draft, update: Update<Record<string, boolean>>) => {
         draft.expanded = applyUpdate(draft.expanded, update);
       },
@@ -226,6 +248,8 @@ function createWorkbenchStore() {
       setGameTab: (draft, update: Update<WorkbenchMemory["gameTab"]>) => {
         draft.gameTab = applyUpdate(draft.gameTab, update);
       },
+      setGameChatOpen: (draft, open: boolean) => { draft.gameChatOpen = open; },
+      setGameCanvas: (draft, update: Update<WorkbenchMemory["gameCanvas"]>) => { draft.gameCanvas = applyUpdate(draft.gameCanvas, update); },
       setGameProjectId: (draft, update: Update<string | undefined>) => {
         draft.gameProjectId = applyUpdate(draft.gameProjectId, update);
       },
@@ -235,6 +259,8 @@ function createWorkbenchStore() {
       setVideoTab: (draft, update: Update<WorkbenchMemory["videoTab"]>) => {
         draft.videoTab = applyUpdate(draft.videoTab, update);
       },
+      setVideoChatOpen: (draft, open: boolean) => { draft.videoChatOpen = open; },
+      setVideoCanvas: (draft, update: Update<WorkbenchMemory["videoCanvas"]>) => { draft.videoCanvas = applyUpdate(draft.videoCanvas, update); },
       setVideoProjectId: (draft, update: Update<string | undefined>) => {
         draft.videoProjectId = applyUpdate(draft.videoProjectId, update);
       },
@@ -424,7 +450,7 @@ function PreviewProbe({ href, onResult }: { readonly href: string; readonly onRe
   return null;
 }
 
-function GamePreview({ project, building }: { readonly project: GameProject; readonly building: boolean }) {
+function GamePreview({ project, building, onVersion, onDiscuss }: { readonly project: GameProject; readonly building: boolean; readonly onVersion: (version: string) => void; readonly onDiscuss: () => void }) {
   const shellRef = useRef<HTMLDivElement>(null);
   const fullscreenButtonRef = useRef<HTMLButtonElement>(null);
   const restoreFullscreenFocus = useRef(false);
@@ -433,7 +459,15 @@ function GamePreview({ project, building }: { readonly project: GameProject; rea
   const [loadError, setLoadError] = useState(false);
   const [probe, setProbe] = useState<{ readonly href: string; readonly result: "ok" | "failed" }>();
   const [revision, setRevision] = useState(0);
-  const [loadedVersion, setLoadedVersion] = useState(project.previewVersion);
+  const lastPlayable = useRef<GameProject>(project);
+  if (project.previewReady) lastPlayable.current = project;
+  const [acceptedVersion, setLoadedVersion] = useState<string | undefined>(project.previewReady ? project.previewVersion : undefined);
+  const loadedVersion = acceptedVersion ?? project.previewVersion;
+  useEffect(() => {
+    if (project.previewReady && acceptedVersion === undefined) setLoadedVersion(project.previewVersion);
+  }, [acceptedVersion, project.previewReady, project.previewVersion]);
+  const [device, setDevice] = useState<"desktop" | "phone">("desktop");
+  useEffect(() => { if (lastPlayable.current.previewReady) onVersion(loadedVersion); }, [loadedVersion, onVersion]);
   useEffect(() => {
     const document = shellRef.current?.ownerDocument;
     if (document === undefined) return;
@@ -445,14 +479,16 @@ function GamePreview({ project, building }: { readonly project: GameProject; rea
     document.addEventListener("fullscreenchange", restore);
     return () => { document.removeEventListener("fullscreenchange", restore); };
   }, []);
-  if (!project.previewReady || project.previewUrl === undefined) return <div className="oh-game-preview-empty">
+  const playable = lastPlayable.current;
+  if (!playable.previewReady || playable.previewUrl === undefined) return <div className="oh-game-preview-empty">
     <span aria-hidden>◫</span>
     <strong>还没有可试玩版本</strong>
-    <p>在右侧 Chat 使用 <code>/novel-to-game quick</code>，产物写入 <code>game-adaptations/&lt;project&gt;/build/app/</code> 后会自动出现在这里。</p>
+    <p>故事已经有了轮廓。可以继续完善创作设定，也可以先做一小段能玩的体验。</p>
+    <button type="button" onClick={onDiscuss}>和 AI 做一段试玩</button>
     <div className="oh-game-prompt-example"><span>描述示例</span><q>把《作品名》改编成网页互动游戏，目标玩家是……，核心玩法是……，希望整体风格……</q></div>
   </div>;
-  const preview = previewUrls(project.previewUrl, loadedVersion, revision, globalThis.location.origin);
-  const pending = project.previewVersion !== loadedVersion;
+  const preview = previewUrls(playable.previewUrl, loadedVersion, revision, globalThis.location.origin);
+  const pending = project.previewReady && project.previewVersion !== loadedVersion;
   /** Accept the newer build the creator just chose. */
   const reload = (): void => {
     setLoaded(false);
@@ -482,14 +518,16 @@ function GamePreview({ project, building }: { readonly project: GameProject; rea
     restoreFullscreenFocus.current = true;
     void shell.requestFullscreen().catch(() => { restoreFullscreenFocus.current = false; });
   };
-  return <div ref={shellRef} className="oh-game-preview-shell" data-state={status.tone}>
+  return <div ref={shellRef} className="oh-game-preview-shell" data-state={status.tone} data-device={device} data-update={pending && !building ? "pending" : undefined}>
+    {pending && !building && <div className="oh-game-new-version" role="status"><div><strong>新的试玩版本已准备好</strong><span>可以先玩完这里，再选择载入更新。</span></div><button type="button" onClick={reload}>载入新版本</button></div>}
     <div className="oh-game-preview-status">
       <span className="oh-game-runtime-state" role="status" aria-live="polite" title={runtimeState}><i aria-hidden /><em>{runtimeState}</em></span>
       {/* In the status bar, not over the stage: a game's own corner controls stay visible. */}
       <span className="oh-game-focus-hint" data-focused={focused || undefined}>{focused ? "游戏正在接收键鼠输入" : "点击画面进入试玩"}</span>
       <div>
-        {pending && !building && <button type="button" onClick={reload}>载入新版本</button>}
-        <button className="oh-game-reload" type="button" onClick={refresh} aria-label="重新载入游戏"><span aria-hidden>↻</span><b>刷新</b></button>
+        <button type="button" className="oh-game-device" aria-label="桌面预览" aria-pressed={device === "desktop"} onClick={() => { setDevice("desktop"); }}><svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden><rect x="2" y="3" width="16" height="11" rx="1" /><path d="M10 14v3M6 17h8" /></svg></button>
+        <button type="button" className="oh-game-device" aria-label="手机预览" aria-pressed={device === "phone"} onClick={() => { setDevice("phone"); }}><svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden><rect x="6" y="2" width="8" height="16" rx="1" /><path d="M9 15h2" /></svg></button>
+        <button className="oh-game-reload" type="button" disabled={pending || building || !project.previewReady} title={pending ? "请通过载入新版本更新试玩" : undefined} onClick={refresh} aria-label="重新载入游戏"><span aria-hidden>↻</span><b>刷新</b></button>
         <button ref={fullscreenButtonRef} type="button" onClick={fullscreen}>全屏试玩</button>
       </div>
     </div>
@@ -512,153 +550,93 @@ function GamePreview({ project, building }: { readonly project: GameProject; rea
   </div>;
 }
 
-function GameDesign({
-  project,
-  files,
-  selected,
-  sessionId,
-  onSelect
-}: {
-  readonly project: GameProject;
-  readonly files: readonly WorkspaceFile[];
-  readonly selected: string | undefined;
-  readonly sessionId: string;
-  readonly onSelect: (path: string) => void;
-}) {
-  const documents = useMemo(() => files.filter((file) => file.path.startsWith(`${project.root}/`) && (
-    /\.(?:md|txt|json|jsonl|html|css|[cm]?js|tsx?|jsx)$/iu.test(file.path)
-  )), [files, project.root]);
-  const preferred = selected !== undefined && documents.some((file) => file.path === selected)
-    ? selected
-    : documents.find((file) => file.path === `${project.root}/PRODUCT_BRIEF.md`)?.path ?? documents[0]?.path;
-  const [path, setPath] = useState(preferred);
-  const [content, setContent] = useState<string>();
-  const [error, setError] = useState<string>();
-  useEffect(() => { setPath(preferred); }, [preferred, project.id]);
-  useEffect(() => {
-    if (path === undefined || project.source === "example") { setContent(undefined); return; }
-    const controller = new AbortController();
-    setContent(undefined);
-    setError(undefined);
-    void fetch(endpoint("file", sessionId, path), { signal: controller.signal })
-      .then((response) => json<FilePayload>(response))
-      .then((file) => { setContent(file.content); })
-      .catch((reason: unknown) => { if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : String(reason)); });
-    return () => { controller.abort(); };
-  }, [path, project.source, sessionId]);
-  if (project.source === "example") return <div className="oh-game-design-empty">
-    <strong>内置完整示例</strong>
-    <p>《金瓶梅 · 风月总账》的完整可玩构建与 QA 校验结果随插件打包，可直接在左侧试玩。上游的产品简报、分析、概念、设计与源小说不随包分发，可在 novel-to-game 仓库查看完整创作过程。</p>
-    <code>novel-to-game/examples/jin-ping-mei</code>
-  </div>;
-  if (documents.length === 0 || path === undefined) return <div className="oh-game-design-empty">当前项目还没有可检查的设计或源文件。</div>;
-  const markdown = path.toLocaleLowerCase().endsWith(".md");
-  return <div className="oh-game-design">
-    <label>项目文件<select value={path} onChange={(event) => {
-      setPath(event.target.value);
-      onSelect(event.target.value);
-    }}>{documents.map((file) => <option value={file.path} key={file.path}>{file.path.slice(project.root.length + 1)}</option>)}</select></label>
-    {error !== undefined ? <div className="oh-story-error">{error}</div>
-      : content === undefined ? <div className="oh-game-design-empty">正在载入文件…</div>
-        : markdown ? <MarkdownPreview content={content} label={path} />
-          : <pre className="oh-game-source" aria-label={`${path} 源码`}>{content}</pre>}
-  </div>;
-}
-
-function GameStudio({
-  sessionId,
-  workspace,
-  building,
-  selected,
-  gameTab,
-  gameProjectId,
-  hidden,
-  onGameTab,
-  onGameProject,
-  workbenches,
-  paneId,
-  labelledBy,
-  onWorkbench,
-  onCollapse,
-  onSelect
-}: {
+function GameStudio({ sessionId, workspace, building, gameTab, gameProjectId, hidden, onGameTab, onGameProject, workbenches, paneId, labelledBy, onWorkbench, onCollapse, editor, canvasByProject, onCanvasChange, chatOpen, compactPane, onChatOpen, onRefresh, onContinueInChat }: {
   readonly sessionId: string;
   readonly workspace: WorkspacePayload;
   readonly building: boolean;
-  readonly selected: string | undefined;
-  readonly gameTab: WorkbenchMemory["gameTab"];
+  readonly gameTab: GameWorkspaceTab;
   readonly gameProjectId: string | undefined;
   readonly hidden: boolean;
-  readonly onGameTab: (tab: WorkbenchMemory["gameTab"]) => void;
+  readonly onGameTab: (tab: GameWorkspaceTab) => void;
   readonly onGameProject: (id: string) => void;
   readonly workbenches: readonly WorkbenchMode[];
   readonly paneId: string;
   readonly labelledBy: string;
   readonly onWorkbench: (mode: WorkbenchMode) => void;
   readonly onCollapse: () => void;
-  readonly onSelect: (path: string) => void;
+  readonly editor: GameDocumentEditor;
+  readonly canvasByProject: Readonly<Record<string, GameCanvasState>>;
+  readonly onCanvasChange: (projectId: string, value: GameCanvasState) => void;
+  readonly chatOpen: boolean;
+  readonly compactPane: "studio" | "chat";
+  readonly onChatOpen: (open: boolean) => void;
+  readonly onRefresh: () => void;
+  readonly onContinueInChat: (prompt: string) => void;
 }) {
-  const project = workspace.games.find((value) => value.id === gameProjectId) ?? workspace.games[0];
+  const project = gameProjectId === "" ? undefined : workspace.games.find((item) => item.id === gameProjectId) ?? workspace.games.find((item) => item.source === "workspace");
+  const example = workspace.games.find((item) => item.source === "example");
   const studioRef = useRef<HTMLElement>(null);
+  const [compact, setCompact] = useState(false);
+  const [notesOpen, setNotesOpen] = useState(false);
+  const [displayedVersions, setDisplayedVersions] = useState<Readonly<Record<string, string>>>({});
   const tabsId = useId();
+  const onPreviewVersion = useCallback((version: string) => {
+    if (project === undefined) return;
+    setDisplayedVersions((current) => current[project.id] === version ? current : { ...current, [project.id]: version });
+  }, [project?.id]);
   useLayoutEffect(() => {
     const studio = studioRef.current;
     if (studio === null) return;
-    const publishWidth = () => {
+    const scroller = studio.closest<HTMLElement>("[data-conversation-scroll]");
+    const measure = () => {
       studio.toggleAttribute("data-oh-game-narrow", studio.clientWidth <= 300);
+      setCompact((scroller?.clientWidth ?? studio.clientWidth) < 720);
     };
-    publishWidth();
-    const observer = new ResizeObserver(publishWidth);
+    measure();
+    const observer = new ResizeObserver(measure);
     observer.observe(studio);
+    if (scroller !== null) observer.observe(scroller);
     return () => { observer.disconnect(); };
   }, []);
+  useEffect(() => { if (project !== undefined && project.id !== gameProjectId) onGameProject(project.id); }, [gameProjectId, onGameProject, project]);
+  useEffect(() => { setNotesOpen(false); }, [project?.id]);
   useEffect(() => {
-    if (project !== undefined && project.id !== gameProjectId) onGameProject(project.id);
-  }, [gameProjectId, onGameProject, project]);
-  if (project === undefined) return <main ref={studioRef} id={paneId} className="oh-game-studio" role="tabpanel" aria-labelledby={labelledBy} hidden={hidden}><div className="oh-game-design-empty">游戏能力正在载入…</div></main>;
-  const tabs = ["preview", "design"] as const;
-  return <main ref={studioRef} id={paneId} className="oh-game-studio" data-source={project.source} role="tabpanel" aria-labelledby={labelledBy} hidden={hidden}>
+    if (hidden || project === undefined || gameTab !== "design" || project.source !== "workspace" || editor.selected?.startsWith(`${project.root}/`) === true) return;
+    const first = gameCreativeDocuments(project, workspace.files)[0]?.path;
+    if (first !== undefined) editor.onSelect(first);
+  }, [editor.selected, gameTab, hidden, project?.id, workspace.files]);
+  const selectTab = (tab: GameWorkspaceTab) => {
+    onGameTab(tab);
+    if (tab === "canvas") onChatOpen(false);
+    if (tab === "design" && project !== undefined && editor.selected?.startsWith(`${project.root}/`) !== true) {
+      const first = gameCreativeDocuments(project, workspace.files)[0]?.path;
+      if (first !== undefined) editor.onSelect(first);
+    }
+  };
+  const canRecordNotes = project !== undefined && (project.previewReady || displayedVersions[project.id] !== undefined);
+  const shownChat = compact ? compactPane === "chat" : chatOpen;
+  const documents = Object.fromEntries(Object.entries(editor.buffers).filter(([, value]) => value.missing !== true).map(([path, value]) => [path, value.content]));
+  const canvasDocumentsReady = project === undefined || gameCreativeDocuments(project, workspace.files).every(({ path }) => editor.buffers[path] !== undefined || editor.errors[path] !== undefined);
+  const tabLabels = { preview: "试玩", canvas: "创作画布", design: "文稿" } as const;
+  const tabs = ["preview", "canvas", "design"] as const;
+  return <main ref={studioRef} id={paneId} className="oh-game-studio" data-source={project?.source ?? "empty"} role="tabpanel" aria-labelledby={labelledBy} hidden={hidden}>
     <header className="oh-game-toolbar">
-      <div className="oh-workbench-cluster">
-        {workbenches.length > 1 && <div className="oh-game-mode-tabs" role="tablist" aria-label="创作工作台">
-          {workbenches.map((mode) => <button
-            type="button"
-            role="tab"
-            key={mode}
-            aria-selected={mode === "game"}
-            tabIndex={mode === "game" ? 0 : -1}
-            onKeyDown={(event) => { handleTabKey(event, workbenches, "game", onWorkbench); }}
-            onClick={() => { onWorkbench(mode); }}
-          >{workbenchLabel(mode)}</button>)}
-        </div>}
-        <button className="oh-workbench-collapse" type="button" title="收起创作工作台" aria-label="收起创作工作台" onClick={onCollapse}>×</button>
-      </div>
-      <label className="oh-game-project" title="切换项目将重新载入试玩"><span>游戏项目</span><select aria-label="游戏项目；切换将重新载入试玩" value={project.id} onChange={(event) => { onGameProject(event.target.value); }}>
-        {workspace.games.some((item) => item.source === "workspace") && <optgroup label="我的项目">{workspace.games.filter((item) => item.source === "workspace").map((item) => <option value={item.id} key={item.id}>{`我的项目 · ${item.title}`}</option>)}</optgroup>}
-        {workspace.games.some((item) => item.source === "example") && <optgroup label="内置示例">{workspace.games.filter((item) => item.source === "example").map((item) => <option value={item.id} key={item.id}>{`内置示例 · ${item.title}`}</option>)}</optgroup>}
-      </select></label>
-      <div className="oh-game-tabs" role="tablist" aria-label="游戏工作台">
-        {tabs.map((tab) => <button
-          key={tab}
-          type="button"
-          role="tab"
-          tabIndex={gameTab === tab ? 0 : -1}
-          aria-selected={gameTab === tab}
-          id={`${tabsId}-${tab}-tab`}
-          aria-controls={`${tabsId}-${tab}-panel`}
-          onKeyDown={(event) => { handleTabKey(event, tabs, gameTab, onGameTab); }}
-          onClick={() => { onGameTab(tab); }}
-        >{tab === "preview" ? "试玩" : project.source === "example" ? "说明" : "项目文件"}</button>)}
-      </div>
+      <div className="oh-workbench-cluster"><strong className="oh-game-plugin-brand">✦ Oh Story</strong>{workbenches.length > 1 && <div className="oh-game-mode-tabs" role="tablist" aria-label="创作工作台">{workbenches.map((mode) => <button type="button" role="tab" key={mode} aria-selected={mode === "game"} tabIndex={mode === "game" ? 0 : -1} onKeyDown={(event) => { handleTabKey(event, workbenches, "game", onWorkbench); }} onClick={() => { onWorkbench(mode); }}>{workbenchLabel(mode)}</button>)}</div>}</div>
+      <label className="oh-game-project" title="切换项目将重新载入试玩"><span>游戏项目</span><select aria-label="游戏项目；切换将重新载入试玩" value={project?.id ?? ""} onChange={(event) => { onGameProject(event.target.value); }}><option value="">新建游戏想法</option>{workspace.games.some((item) => item.source === "workspace") && <optgroup label="我的项目">{workspace.games.filter((item) => item.source === "workspace").map((item) => <option value={item.id} key={item.id}>{`我的项目 · ${item.title}`}</option>)}</optgroup>}{example !== undefined && <optgroup label="内置示例"><option value={example.id}>{`内置示例 · ${example.title}`}</option></optgroup>}</select></label>
+      <div className="oh-game-toolbar-actions">{canRecordNotes && <button type="button" onClick={() => { setNotesOpen(true); }}>试玩笔记</button>}<button type="button" className="oh-game-chat-toggle" aria-label={shownChat ? "收起原生 Chat" : "展开原生 Chat"} aria-expanded={shownChat} onClick={() => { onChatOpen(!shownChat); }}>Chat</button><button className="oh-workbench-collapse" type="button" title="收起创作工作台" aria-label="收起创作工作台" onClick={onCollapse}>×</button></div>
+      <div className="oh-game-tabs" role="tablist" aria-label="游戏工作台">{tabs.map((tab) => <button key={tab} type="button" role="tab" tabIndex={gameTab === tab ? 0 : -1} aria-selected={gameTab === tab} id={`${tabsId}-${tab}-tab`} aria-controls={`${tabsId}-${tab}-panel`} onKeyDown={(event) => { handleTabKey(event, tabs, gameTab, selectTab); }} onClick={() => { selectTab(tab); }}>{tabLabels[tab]}</button>)}</div>
     </header>
-    <div className="oh-game-panels">
-      <div className="oh-game-panel" role="tabpanel" id={`${tabsId}-preview-panel`} aria-labelledby={`${tabsId}-preview-tab`} hidden={gameTab !== "preview"}>
-        <GamePreview key={`${project.id}:${String(project.previewReady)}`} project={project} building={building} />
-      </div>
-      <div className="oh-game-panel" role="tabpanel" id={`${tabsId}-design-panel`} aria-labelledby={`${tabsId}-design-tab`} hidden={gameTab !== "design"}>
-        <GameDesign project={project} files={workspace.files} selected={selected} sessionId={sessionId} onSelect={onSelect} />
-      </div>
-    </div>
+    {project === undefined ? <div className="oh-game-create-empty"><span aria-hidden>◫</span><small>一个故事，可以有很多种玩法</small><h2>把你的故事，变成能玩的世界。</h2><p>带来一部小说、一个人物，或者一个刚冒出来的念头。<br />先聊聊你希望玩家经历什么。</p><div><button type="button" onClick={() => { onContinueInChat("我想做一段可以选择结局的故事，先聊聊玩家会经历什么。"); }}>一段可以选择的故事</button><button type="button" onClick={() => { onContinueInChat("我想围绕小说里的人物做一款轻策略游戏，先和我讨论核心玩法。"); }}>围绕人物的轻策略</button><button type="button" onClick={() => { onContinueInChat("我想把小说里的地点做成可以探索的世界，先讨论可玩的体验。"); }}>可以探索的世界</button></div><button type="button" className="oh-game-primary" onClick={() => { onContinueInChat("我有一个游戏想法，想先聊聊故事和玩家的体验。"); }}>和 AI 讨论游戏想法</button>{example !== undefined && <button type="button" onClick={() => { onGameProject(example.id); onGameTab("preview"); }}>试玩内置示例</button>}</div>
+      : <div className="oh-game-panels">
+        <div className="oh-game-panel oh-game-play-panel" role="tabpanel" id={`${tabsId}-preview-panel`} aria-labelledby={`${tabsId}-preview-tab`} hidden={gameTab !== "preview"}>
+          <div className="oh-game-project-heading"><div><small>{project.source === "example" ? "内置示例" : "正在创作"}</small><h2>{project.title}</h2></div><button type="button" onClick={() => { selectTab("canvas"); }}>看看创作画布 →</button></div>
+          <GamePreview key={project.id} project={project} building={building} onVersion={onPreviewVersion} onDiscuss={() => { onContinueInChat(`先把「${project.title}」做成一小段可以玩的体验，请先和我核对故事、玩法和范围。`); }} />
+          {canRecordNotes && <div className="oh-game-feedback-strip"><div><strong>边玩边想，想法留在这里</strong><span>哪个选择不够动人，哪段节奏还可以更好？</span></div><button type="button" onClick={() => { setNotesOpen(true); }}>记一条试玩笔记 ＋</button></div>}
+        </div>
+        <div className="oh-game-panel" role="tabpanel" id={`${tabsId}-canvas-panel`} aria-labelledby={`${tabsId}-canvas-tab`} hidden={gameTab !== "canvas"}>{canvasDocumentsReady ? <GameCanvas key={project.id} project={project} files={workspace.files} documents={documents} state={canvasByProject[project.id] ?? EMPTY_GAME_CANVAS} onChange={(value) => { onCanvasChange(project.id, value); }} onOpenDocument={(path) => { editor.onSelect(path); onGameTab("design"); editor.onMode("preview"); }} onContinueInChat={(title, path) => { onContinueInChat(`我想继续讨论「${title}」。${path === undefined ? "" : `文稿：${path}`} 请先和我讨论玩家体验，不直接开始制作。`); }} onPlay={() => { onGameTab("preview"); }} /> : <div className="oh-game-design-empty" role="status">正在整理创作画布…</div>}</div>
+        <div className="oh-game-panel" role="tabpanel" id={`${tabsId}-design-panel`} aria-labelledby={`${tabsId}-design-tab`} hidden={gameTab !== "design"}><GameDocuments project={project} files={workspace.files} editor={editor} onChat={onContinueInChat} /></div>
+      </div>}
+    {project !== undefined && <GamePlaytestNotes key={project.id} sessionId={sessionId} project={project} previewVersion={displayedVersions[project.id] ?? project.previewVersion} open={notesOpen && !hidden} onClose={() => { setNotesOpen(false); }} onContinueInChat={onContinueInChat} onSaved={onRefresh} />}
   </main>;
 }
 
@@ -674,6 +652,7 @@ function CreativeWorkbench({
   productionQueue,
   productionIntents,
   sendProductionPrompt,
+  focusProductionChat,
   cancelProduction,
   removeQueuedProduction,
   workspace,
@@ -706,7 +685,7 @@ function CreativeWorkbench({
   readonly creativeProject: boolean;
   /** A blank Session over a workspace without creative work: the first thing a fresh DSH shows. */
   readonly welcome: boolean;
-} & Pick<WorkbenchSlotProps, "useStore" | "actions" | "sendProductionPrompt" | "cancelProduction" | "removeQueuedProduction">) {
+} & Pick<WorkbenchSlotProps, "useStore" | "actions" | "sendProductionPrompt" | "focusProductionChat" | "cancelProduction" | "removeQueuedProduction">) {
   const activities = useMemo(
     () => fileMutations(runningCalls, partial, undispatched),
     [partial, runningCalls, undispatched]
@@ -717,6 +696,8 @@ function CreativeWorkbench({
   }), [activities, workspace?.cwd]);
   const primaryActivity = normalizedActivities.at(-1);
   const activityPaths = useMemo(() => new Set(normalizedActivities.map((value) => value.path)), [normalizedActivities]);
+  const latestActivityPaths = useRef(activityPaths);
+  latestActivityPaths.current = activityPaths;
   const settledPath = settledMutation === undefined
     ? undefined
     : creativeRelativePath(settledMutation.slice(settledMutation.indexOf("\0") + 1), workspace?.cwd);
@@ -725,6 +706,8 @@ function CreativeWorkbench({
   const workbench = useStore((memory) => memory.workbench);
   const setWorkbench = actions.setWorkbench;
   const gameTab = useStore((memory) => memory.gameTab);
+  const gameChatOpen = useStore((memory) => memory.gameChatOpen);
+  const gameCanvasByProject = useStore((memory) => memory.gameCanvas);
   const setGameTab = actions.setGameTab;
   const gameProjectId = useStore((memory) => memory.gameProjectId);
   const setGameProjectId = actions.setGameProjectId;
@@ -734,8 +717,15 @@ function CreativeWorkbench({
   const setVideoTab = actions.setVideoTab;
   const videoProjectId = useStore((memory) => memory.videoProjectId);
   const setVideoProjectId = actions.setVideoProjectId;
+  const videoChatOpen = useStore((memory) => memory.videoChatOpen);
   const videoPane = useStore((memory) => memory.videoPane);
   const setVideoPane = actions.setVideoPane;
+  const videoCanvasByProject = useStore((memory) => memory.videoCanvas);
+  const dramaPane = useStore((memory) => memory.dramaPane);
+  const dramaFilesOpen = useStore((memory) => memory.dramaFilesOpen);
+  const dramaChatOpen = useStore((memory) => memory.dramaChatOpen);
+  const dramaEpisode = useStore((memory) => memory.dramaEpisode);
+  const dramaCanvasActive = workbench === "drama" && dramaPane === "canvas";
   const selected = useStore((memory) => memory.selected);
   const setSelected = actions.setSelected;
   const buffers = useStore((memory) => memory.buffers);
@@ -743,6 +733,41 @@ function CreativeWorkbench({
   const buffersRef = useRef<Record<string, FileBuffer>>({});
   const expanded = useStore((memory) => memory.expanded);
   const setExpanded = actions.setExpanded;
+  const [manualChatContext, setManualChatContext] = useState<string>();
+  const [contextCopyStatus, setContextCopyStatus] = useState<string>();
+  const [gameLoadAttempt, setGameLoadAttempt] = useState(0);
+  const [gameReadErrors, setGameReadErrors] = useState<Readonly<Record<string, string>>>({});
+  const activeGame = gameProjectId === "" ? undefined : workspace?.games.find((project) => project.id === gameProjectId) ?? workspace?.games.find((project) => project.source === "workspace");
+  const gameDocuments = useMemo(() => activeGame === undefined ? [] : gameCreativeDocuments(activeGame, workspace?.files ?? []), [activeGame, workspace?.files]);
+  const activeVideo = workspace?.videos.find((project) => project.id === videoProjectId) ?? workspace?.videos[0];
+  const videoDocuments = useMemo(() => activeVideo === undefined ? [] : videoCreativeDocuments(activeVideo), [activeVideo]);
+  const creativeDocuments = workbench === "video" ? videoDocuments : gameDocuments;
+  useEffect(() => {
+    if (workbench !== "video" && (workbench !== "game" || activeGame?.source !== "workspace")) return;
+    const missing = creativeDocuments.filter(({ path }) => {
+      const current = buffersRef.current[path];
+      const file = workspace?.files.find((item) => item.path === path);
+      return !activityPaths.has(path) && (current === undefined || current.source === "agent" || (current.version !== file?.version && current.content === current.saved));
+    });
+    if (missing.length === 0) return;
+    const controller = new AbortController();
+    void Promise.all(missing.map(async ({ path }) => {
+      try {
+        const file = await json<FilePayload>(await fetch(endpoint("file", sessionId, path), { signal: controller.signal }));
+        if (controller.signal.aborted) return;
+        setBuffers((current) => {
+          const existing = current[path];
+          if (existing?.source === "human" && existing.content !== existing.saved) return current;
+          if (latestActivityPaths.current.has(path)) return current;
+          return { ...current, [path]: { content: file.content, saved: file.content, source: "disk", version: file.version } };
+        });
+        setGameReadErrors((current) => { const next = { ...current }; delete next[path]; return next; });
+      } catch (reason) {
+        if (!controller.signal.aborted) setGameReadErrors((current) => ({ ...current, [path]: reason instanceof Error ? reason.message : String(reason) }));
+      }
+    }));
+    return () => { controller.abort(); };
+  }, [activeGame?.id, activeVideo?.id, activityPaths, creativeDocuments, gameLoadAttempt, sessionId, setBuffers, workbench, workspace?.files]);
   const productionSection = useStore((memory) => memory.productionSection);
   const setProductionSection = actions.setProductionSection;
   const productionSelectedIds = useStore((memory) => memory.productionSelectedIds);
@@ -754,6 +779,15 @@ function CreativeWorkbench({
   const productionViewportByEpisode = useStore((memory) => memory.productionViewport);
   const productionIntentCalls = useStore((memory) => memory.productionIntentCalls);
   const surfaceRef = useRef<HTMLDivElement>(null);
+  const followWorkbenchTabFocus = useRef(false);
+  useLayoutEffect(() => {
+    if (!followWorkbenchTabFocus.current) return;
+    followWorkbenchTabFocus.current = false;
+    // Drama moves the same navigation into its workspace toolbar. Keep keyboard
+    // focus on the newly mounted selected tab, not its detached predecessor.
+    const tabs = surfaceRef.current?.querySelectorAll<HTMLButtonElement>('[role="tablist"][aria-label="创作工作台"] [role="tab"][aria-selected="true"]');
+    Array.from(tabs ?? []).find((tab) => tab.getClientRects().length > 0)?.focus();
+  }, [workbench]);
   const setWorkbenchPreference = actions.setWorkbenchPreference;
   const applyWorkbenchPreference = useCallback((preference: WorkbenchPreference): void => {
     setWorkbenchPreference(preference);
@@ -798,13 +832,21 @@ function CreativeWorkbench({
   const jsonl = selectedLower?.endsWith(".jsonl") === true;
   const structured = jsonl || selectedLower?.endsWith(".json") === true;
   const previewable = markdown || jsonl;
-  const episodeDirectory = episodeDirectoryForPath(selected);
-  const productionAvailable = selected !== undefined && isCreatorDocumentPath(selected) && episodeDirectory !== undefined;
+  const dramaEpisodes = useMemo(() => [...new Set((workspace?.files ?? [])
+    .filter((file) => isCreatorDocumentPath(file.path))
+    .flatMap((file) => { const directory = episodeDirectoryForPath(file.path); return directory === undefined ? [] : [directory]; }))].sort(), [workspace?.files]);
+  const selectedEpisode = episodeDirectoryForPath(selected);
+  const episodeDirectory = workbench === "drama"
+    ? dramaEpisode !== undefined && dramaEpisodes.includes(dramaEpisode) ? dramaEpisode : selectedEpisode ?? dramaEpisodes[0]
+    : selectedEpisode;
+  const productionAvailable = episodeDirectory !== undefined && (workbench === "drama" || (selected !== undefined && isCreatorDocumentPath(selected)));
   const editorModes = productionAvailable ? EDITOR_MODES : EDITOR_MODES.filter((mode) => mode !== "production");
   const episodeDocumentPaths = useMemo(
     () => episodeDirectory === undefined ? [] : creatorDocumentPaths(workspace?.files.filter((file) => file.kind === "text") ?? [], episodeDirectory),
     [episodeDirectory, workspace?.files]
   );
+  const [episodeLoadAttempt, setEpisodeLoadAttempt] = useState(0);
+  const [episodeLoadFailure, setEpisodeLoadFailure] = useState<{ readonly episode: string; readonly message: string }>();
   const episodeDocuments = useMemo(() => Object.fromEntries(episodeDocumentPaths.flatMap((path) => {
     const current = buffers[path];
     return current === undefined || current.missing === true ? [] : [[path, current.content] as const];
@@ -893,8 +935,8 @@ function CreativeWorkbench({
     const next = initialWorkbenchMode(workbench, workspace.files, workspace.games, workspace.videos);
     if (next !== workbench) setWorkbench(next);
   }, [setWorkbench, workbench, workspace]);
-  const gameBuilding = normalizedActivities.some(({ path }) => path.startsWith("game-adaptations/"));
-  const videoBuilding = normalizedActivities.some(({ path }) => path.startsWith("video-recaps/"));
+  const gameBuilding = activeGame !== undefined && normalizedActivities.some(({ path }) => path.startsWith(`${activeGame.root}/build/`));
+  const videoBuilding = activeVideo !== undefined && normalizedActivities.some(({ path }) => path.startsWith(`${activeVideo.root}/`));
 
   useEffect(() => { buffersRef.current = buffers; }, [buffers]);
 
@@ -942,10 +984,21 @@ function CreativeWorkbench({
     rememberEditorPosition();
     const nextWorkbench = workbenchModeForPath(path) ?? "story";
     setWorkbench(nextWorkbench);
-    if (nextWorkbench === "game" && !path.includes("/build/app/")) setGameTab("design");
+    if (nextWorkbench === "game") {
+      const project = workspace?.games.find((item) => item.source === "workspace" && path.startsWith(`${item.root}/`));
+      if (project !== undefined) setGameProjectId(project.id);
+      if (!path.includes("/build/app/")) setGameTab("design");
+    }
+    if (nextWorkbench === "video") {
+      modeSelection.current = path;
+      setEditorMode("preview");
+      const project = workspace?.videos.find((item) => path.startsWith(`${item.root}/`));
+      if (project !== undefined) setVideoProjectId(project.id);
+      if (!/\.(?:mp4|mov|webm|mkv)$/iu.test(path)) setVideoTab("docs");
+    }
     setSelected(path);
     expandPath(path);
-  }, [expandPath, rememberEditorPosition]);
+  }, [expandPath, rememberEditorPosition, setEditorMode, setGameProjectId, setVideoProjectId, setVideoTab, workspace?.games, workspace?.videos]);
 
   useEffect(() => {
     if (workspace === undefined) return;
@@ -958,6 +1011,8 @@ function CreativeWorkbench({
           .find((path) => workspace.files.some((file) => file.path === path));
         if (documentPath !== undefined) {
           setWorkbench("drama");
+          actions.setDramaEpisode(intent.episode);
+          actions.setDramaPane("canvas");
           setSelected(documentPath);
           expandPath(documentPath);
           globalThis.setTimeout(() => { setEditorMode("production"); }, 0);
@@ -1034,7 +1089,7 @@ function CreativeWorkbench({
     if (preserveFocusedDraft) return;
     // The editor textarea is not mounted in the Game Studio, so the draft guard above can never
     // fire there. Never preempt a running game: agent writes may expand the tree, not navigate.
-    if ((workbench === "game" && gameTab === "preview") || (workbench === "video" && videoTab === "preview")) return;
+    if ((workbench === "game" && (gameTab !== "design" || (current?.source === "human" && current.content !== current.saved))) || (workbench === "video" && (videoTab !== "docs" || (current?.source === "human" && current.content !== current.saved)))) return;
     revealPath(path);
   }, [expandPath, gameTab, revealPath, selected, videoTab, workbench]);
 
@@ -1136,6 +1191,7 @@ function CreativeWorkbench({
     const missing = episodeDocumentPaths.filter((path) => buffersRef.current[path] === undefined && !activityPaths.has(path));
     if (missing.length === 0) return;
     const controller = new AbortController();
+    setEpisodeLoadFailure(undefined);
     void Promise.all(missing.map((path) => fetch(endpoint("file", sessionId, path), { signal: controller.signal }).then((response) => json<FilePayload>(response))))
       .then((files) => {
         setBuffers((current) => {
@@ -1150,6 +1206,7 @@ function CreativeWorkbench({
       })
       .catch((reason: unknown) => {
         if (!controller.signal.aborted) {
+          setEpisodeLoadFailure({ episode: episodeDirectory ?? "", message: reason instanceof Error ? reason.message : String(reason) });
           setBuffers((current) => {
             const next = { ...current };
             for (const path of missing) {
@@ -1161,7 +1218,7 @@ function CreativeWorkbench({
         }
       });
     return () => { controller.abort(); };
-  }, [activityPaths, episodeDocumentPaths, productionAvailable, sessionId]);
+  }, [activityPaths, episodeDirectory, episodeDocumentPaths, episodeLoadAttempt, productionAvailable, sessionId]);
 
   useEffect(() => {
     if (normalizedActivities.length === 0) return;
@@ -1259,12 +1316,13 @@ function CreativeWorkbench({
         event.preventDefault();
         event.stopPropagation();
         revealPath(path);
+        if (workbenchModeForPath(path) === "drama") { actions.setDramaPane("documents"); actions.setDramaFilesOpen(true); actions.setDramaEpisode(episodeDirectoryForPath(path)); }
         break;
       }
     };
     sessionSurface.addEventListener("click", followOfficialFileLink, true);
     return () => { sessionSurface.removeEventListener("click", followOfficialFileLink, true); };
-  }, [normalizedActivities.length, open, revealPath, workspace]);
+  }, [actions, normalizedActivities.length, open, revealPath, workspace]);
 
   useEffect(() => {
     if (workbench !== "game" && workbench !== "video") return;
@@ -1366,13 +1424,17 @@ function CreativeWorkbench({
   useEffect(() => {
     if (!open) return;
     const saveShortcut = (event: KeyboardEvent): void => {
+      if (event.defaultPrevented) return;
       if (!(event.metaKey || event.ctrlKey) || event.key.toLocaleLowerCase() !== "s") return;
+      if ((workbench === "video" && videoTab !== "docs") || (workbench === "game" && (gameTab !== "design" || activeGame?.source !== "workspace"))) return;
+      if (workbench === "video" && (!(event.target instanceof Element) || event.target.closest(".oh-video-documents") === null)) return;
+      if (workbench === "game" && (!(event.target instanceof Element) || event.target.closest(".oh-game-documents") === null)) return;
       event.preventDefault();
       if (selected !== undefined) void savePath(selected);
     };
     globalThis.addEventListener("keydown", saveShortcut);
     return () => { globalThis.removeEventListener("keydown", saveShortcut); };
-  }, [open, savePath, selected]);
+  }, [activeGame?.source, gameTab, open, savePath, selected, videoTab, workbench]);
 
   const groups = useMemo(() => {
     const value = new Map<string, WorkspaceFile[]>();
@@ -1395,6 +1457,8 @@ function CreativeWorkbench({
   }, [activityPath, workbench, workspace]);
 
   const selectWorkbench = (next: WorkbenchMode): void => {
+    const focused = surfaceRef.current?.ownerDocument.activeElement;
+    followWorkbenchTabFocus.current = focused?.closest('[role="tablist"][aria-label="创作工作台"]') !== null && focused?.closest('[role="tablist"][aria-label="创作工作台"]') !== undefined;
     setWorkbench(next);
     if (next === "game" || next === "video") {
       if (next === "game") setGameTab("preview");
@@ -1408,9 +1472,12 @@ function CreativeWorkbench({
   };
   const selectEditorMode = (next: WorkbenchMemory["editorMode"]): void => {
     if (next === "preview") rememberEditorPosition();
+    if (workbench === "drama") actions.setDramaPane(next === "production" ? "canvas" : "documents");
     setEditorMode(next);
   };
   const navigateProductionTarget = (target: DramaDocumentTarget): void => {
+    actions.setDramaPane("documents");
+    actions.setDramaFilesOpen(true);
     const content = buffersRef.current[target.path]?.content ?? "";
     const before = content.slice(0, target.offset);
     const approximateScrollTop = Math.max(0, before.split(/\r?\n/u).length * 28 - 96);
@@ -1419,12 +1486,109 @@ function CreativeWorkbench({
     revealPath(target.path);
     setEditorMode("source");
   };
+  const openDramaDocument = (path: string): void => {
+    if (workbenchModeForPath(path) === "drama") {
+      actions.setDramaPane("documents");
+      actions.setDramaEpisode(episodeDirectoryForPath(path) ?? episodeDirectory);
+    }
+    revealPath(path);
+  };
+  const focusContextInChat = (prompt?: string): void => {
+    globalThis.setTimeout(() => {
+      const applied = focusProductionChat(prompt);
+      if (prompt !== undefined) { setManualChatContext(applied ? undefined : prompt); setContextCopyStatus(undefined); }
+    }, 0);
+  };
+  const continueDramaInChat = (targetId?: string): void => {
+    actions.setDramaChatOpen(true);
+    const title = targetId === undefined || episodeProduction === undefined ? undefined
+      : productionCanvasNodes(episodeProduction, episodeDocuments).find((node) => node.id === targetId)?.title;
+    const prompt = title === undefined
+      ? episodeDirectory === undefined ? "我想先讨论这部短剧的第一集，从故事和角色开始。" : undefined
+      : `我想继续调整 ${episodeDirectory?.split("/").at(-1) ?? "本集"} 的「${title}」。请先和我讨论思路，不生成任何素材。`;
+    focusContextInChat(prompt);
+  };
+  const continueGameInChat = (prompt: string): void => {
+    actions.setGameChatOpen(true);
+    setGamePane("chat");
+    focusContextInChat(prompt);
+  };
+  const continueVideoInChat = (prompt: string): void => {
+    actions.setVideoChatOpen(true);
+    setVideoPane("chat");
+    focusContextInChat(prompt);
+  };
+  const setVideoChatVisible = (visible: boolean): void => {
+    actions.setVideoChatOpen(visible);
+    const width = surfaceRef.current?.closest<HTMLElement>("[data-conversation-scroll]")?.clientWidth;
+    if (!visible) setVideoPane("studio");
+    else if (width !== undefined && width < 720) setVideoPane("chat");
+  };
+  const setGameChatVisible = (visible: boolean): void => {
+    actions.setGameChatOpen(visible);
+    const width = surfaceRef.current?.closest<HTMLElement>("[data-conversation-scroll]")?.clientWidth;
+    if (!visible) setGamePane("studio");
+    else if (width !== undefined && width < 720) setGamePane("chat");
+  };
+  const refreshGame = (): void => { setGameLoadAttempt((current) => current + 1); reload(); };
+  const gameEditor: GameDocumentEditor = {
+    selected, buffers, mode: editorMode, textareaRef, errors: gameReadErrors,
+    onSelect: revealPath, onMode: setEditorMode, onSave: savePath, onConflict: resolveGameConflict,
+    onEdit: (path, content) => { setBuffers((current) => {
+      const existing = current[path];
+      return existing === undefined ? current : { ...current, [path]: { ...existing, content, source: "human" } };
+    }); },
+    onDiscard: (path) => { setBuffers((current) => { const next = { ...current }; delete next[path]; return next; }); setSelected(undefined); },
+    onRememberPosition: rememberEditorPosition, onRetry: refreshGame
+  };
+  const dispatchDramaPrompt = async (prompt: string): Promise<void> => {
+    actions.setDramaChatOpen(true);
+    await sendProductionPrompt(prompt);
+  };
+  const episodeDocumentsPending = episodeDocumentPaths.some((path) => buffers[path] === undefined && !activityPaths.has(path));
+  const dramaProductionView = episodeProduction === undefined ? undefined : episodeDocumentsPending
+    ? episodeLoadFailure !== undefined && episodeLoadFailure.episode === episodeDirectory
+      ? <div className="oh-story-empty" role="alert">暂时无法读取本集文稿：{episodeLoadFailure.message}<button type="button" onClick={() => { setEpisodeLoadAttempt((current) => current + 1); }}>重新读取</button></div>
+      : <div className="oh-story-empty" role="status">正在整理本集画布…</div>
+    : <DramaProductionView
+    sessionId={sessionId}
+    production={episodeProduction}
+    documents={episodeDocuments}
+    sessionRunning={sessionRunning}
+    queue={productionQueue}
+    section={productionSection}
+    selectedId={productionSelectedId}
+    jobs={productionJobs}
+    versions={productionVersions}
+    libraryVersions={productionLibrary}
+    selections={productionSelections}
+    manualReferences={productionReferences}
+    sequence={productionSequence}
+    canvas={productionCanvas}
+    viewport={productionViewport}
+    onSectionChange={setProductionSection}
+    onSelect={setProductionSelectedId}
+    onNavigate={navigateProductionTarget}
+    onJobsChange={setProductionJobs}
+    onSelectionsChange={setProductionSelections}
+    onManualReferencesChange={setProductionReferences}
+    onOpenMedia={openDramaDocument}
+    onSequenceChange={setProductionSequence}
+    onCanvasChange={setProductionCanvas}
+    onViewportChange={setProductionViewport}
+    onContinueInChat={continueDramaInChat}
+    onDispatchPrompt={dispatchDramaPrompt}
+    onCancelTurn={cancelProduction}
+    onRemoveQueued={removeQueuedProduction}
+    onRefresh={reload}
+  />;
   const selectedLabel = selected ?? `在当前 DSH workspace 中选择${workbenchLabel(workbench)}文件`;
   const selectedBasename = selected?.split("/").at(-1) ?? selectedLabel;
   const selectedGroup = selected === undefined ? undefined : groupForPath(selected);
   const toggleGroup = (key: string, open: boolean): void => {
     setExpanded((current) => ({ ...current, [key]: open }));
   };
+  function resolveGameConflict(keepLocal: boolean): void { resolveConflict(keepLocal); }
   const resolveConflict = (keepLocal: boolean): void => {
     if (selected === undefined || conflict?.theirs === undefined || conflict.theirsVersion === undefined) return;
     const theirs = conflict.theirs;
@@ -1447,15 +1611,22 @@ function CreativeWorkbench({
     // still offers the way in, because that error is only readable inside the workbench.
     if (!creativeProject && error === undefined) return welcome ? <WelcomeGuide onPlayExample={playExample} /> : null;
     return <div ref={surfaceRef} className="oh-story-split-surface" data-open="false">
-      <style>{styles}</style>
+      <style>{[styles, gameCanvasStyles, gamePlaytestNotesStyles, videoStudioStyles].join("\n")}</style>
       <button className="oh-story-launcher" type="button" title={error ?? "打开创作工作台"} aria-label="打开创作工作台" onClick={() => { applyWorkbenchPreference("open"); }}>
         <span aria-hidden>✦</span><b>创作工作台</b>
       </button>
     </div>;
   }
 
-  return <div ref={surfaceRef} className="oh-story-split-surface" data-open="true" data-workbench={workbench}>
-    <style>{styles}</style>
+  return <div ref={surfaceRef} className="oh-story-split-surface" data-open="true" data-workbench={workbench} data-drama-pane={dramaPane} data-drama-files={dramaFilesOpen ? "open" : "closed"} data-drama-chat={dramaChatOpen ? "open" : "closed"}>
+    <style>{[styles, gameCanvasStyles, gamePlaytestNotesStyles, videoStudioStyles].join("\n")}</style>
+    {manualChatContext !== undefined && <aside className="oh-story-context-fallback" aria-live="polite" aria-label="带到 Chat 的讨论内容">
+      <header><strong>讨论内容已保留</strong><button type="button" aria-label="关闭讨论内容" onClick={() => { setManualChatContext(undefined); }}>×</button></header>
+      <p>讨论内容未自动填入 Chat，已有输入保持原样。你可以在这里查看或复制选中内容。</p>
+      <button type="button" onClick={() => { void navigator.clipboard.writeText(manualChatContext).then(() => { setContextCopyStatus("已复制，可贴入 Chat 继续讨论。"); }).catch(() => { setContextCopyStatus("复制暂不可用，可展开选中内容手动复制。"); }); }}>复制讨论内容</button>
+      {contextCopyStatus !== undefined && <p role="status">{contextCopyStatus}</p>}
+      <details><summary>查看选中内容</summary><pre>{manualChatContext}</pre></details>
+    </aside>}
     {(workbench === "game" || workbench === "video") && <div className="oh-game-mobile-switcher" role="tablist" aria-label={workbench === "game" ? "窄屏游戏工作台" : "窄屏视频工作台"}>
       {(["studio", "chat"] as const).map((pane) => <button
         type="button"
@@ -1465,8 +1636,8 @@ function CreativeWorkbench({
         aria-controls={pane === "chat" ? compactChatId : workbench === "game" ? compactStudioId : compactVideoStudioId}
         aria-selected={(workbench === "game" ? gamePane : videoPane) === pane}
         tabIndex={(workbench === "game" ? gamePane : videoPane) === pane ? 0 : -1}
-        onKeyDown={(event) => { handleTabKey(event, ["studio", "chat"] as const, workbench === "game" ? gamePane : videoPane, workbench === "game" ? setGamePane : setVideoPane); }}
-        onClick={() => { if (workbench === "game") setGamePane(pane); else setVideoPane(pane); }}
+        onKeyDown={(event) => { handleTabKey(event, ["studio", "chat"] as const, workbench === "game" ? gamePane : videoPane, (pane) => { if (workbench === "game") { setGamePane(pane); if (pane === "chat") actions.setGameChatOpen(true); } else { setVideoPane(pane); if (pane === "chat") actions.setVideoChatOpen(true); } }); }}
+        onClick={() => { if (workbench === "game") { setGamePane(pane); if (pane === "chat") actions.setGameChatOpen(true); } else { setVideoPane(pane); if (pane === "chat") actions.setVideoChatOpen(true); } }}
       >{pane === "studio" ? "制作" : "对话"}</button>)}
     </div>}
     {workbench === "game" && workspace === undefined && <main id={compactStudioId} className="oh-game-studio" role="tabpanel" aria-labelledby={`${compactTabsId}-studio-tab`}><div className="oh-game-design-empty">{error ?? "正在连接游戏工作台…"}</div></main>}
@@ -1474,7 +1645,6 @@ function CreativeWorkbench({
           sessionId={sessionId}
           workspace={workspace}
           building={gameBuilding}
-          selected={selected}
           gameTab={gameTab}
           gameProjectId={gameProjectId}
           hidden={workbench !== "game"}
@@ -1485,12 +1655,26 @@ function CreativeWorkbench({
           labelledBy={`${compactTabsId}-studio-tab`}
           onWorkbench={selectWorkbench}
           onCollapse={() => { applyWorkbenchPreference("closed"); }}
-          onSelect={revealPath}
+          editor={gameEditor}
+          canvasByProject={gameCanvasByProject}
+          onCanvasChange={(projectId, value) => { actions.setGameCanvas((current) => ({ ...current, [projectId]: value })); }}
+          chatOpen={gameChatOpen}
+          compactPane={gamePane}
+          onChatOpen={setGameChatVisible}
+          onRefresh={refreshGame}
+          onContinueInChat={continueGameInChat}
         />}
     {workbench === "video" && workspace === undefined && <main id={compactVideoStudioId} className="oh-video-studio" role="tabpanel" aria-labelledby={`${compactTabsId}-studio-tab`}><div className="oh-video-preview-empty">{error ?? "正在连接视频工作台…"}</div></main>}
     {workspace !== undefined && videoStudioMounted && <VideoStudio
           sessionId={sessionId}
           projects={workspace.videos}
+          files={workspace.files}
+          editor={gameEditor}
+          chatOpen={videoChatOpen}
+          onChatOpen={setVideoChatVisible}
+          onContinueInChat={continueVideoInChat}
+          canvasByProject={videoCanvasByProject}
+          onCanvasChange={(id, value) => { actions.setVideoCanvas((current) => ({ ...current, [id]: value })); }}
           running={videoBuilding}
           projectId={videoProjectId}
           tab={videoTab}
@@ -1504,15 +1688,21 @@ function CreativeWorkbench({
           onCollapse={() => { applyWorkbenchPreference("closed"); }}
         />}
     {workbench !== "game" && workbench !== "video" && <>
-    <aside className="oh-story-tree">
-      <div className="oh-story-brand">
+    {workbench === "drama" && <header className="oh-drama-workspace-toolbar">
+      <div className="oh-drama-workspace-brand"><strong>✦ Oh Story</strong><div className="oh-story-mode-tabs" role="tablist" aria-label="创作工作台">{WORKBENCH_MODES.map((mode) => <button type="button" role="tab" key={mode} aria-selected={workbench === mode} tabIndex={workbench === mode ? 0 : -1} onKeyDown={(event) => { handleTabKey(event, WORKBENCH_MODES, workbench, selectWorkbench); }} onClick={() => { selectWorkbench(mode); }}>{workbenchLabel(mode)}</button>)}</div></div>
+      <label className="oh-drama-episode-picker"><span>剧集</span><select aria-label="选择短剧剧集" value={episodeDirectory ?? ""} onChange={(event) => { actions.setDramaEpisode(event.target.value); actions.setDramaPane("canvas"); setProductionSection("canvas"); }}>{dramaEpisodes.length === 0 ? <option value="">还没有剧集</option> : dramaEpisodes.map((directory) => <option value={directory} key={directory}>{directory.split("/").at(-1)}</option>)}</select></label>
+      <div className="oh-drama-workspace-views" role="tablist" aria-label="短剧工作区"><button type="button" role="tab" aria-selected={dramaPane === "canvas"} onClick={() => { rememberEditorPosition(); actions.setDramaPane("canvas"); setProductionSection("canvas"); }}>画布</button><button type="button" role="tab" aria-selected={dramaPane === "documents"} onClick={() => { actions.setDramaPane("documents"); actions.setDramaFilesOpen(true); }}>文稿</button></div>
+      <div className="oh-drama-workspace-actions"><button type="button" aria-label={dramaFilesOpen ? "收起项目文稿" : "展开项目文稿"} aria-expanded={dramaFilesOpen} onClick={() => { actions.setDramaFilesOpen(!dramaFilesOpen); }}>文稿目录</button><button type="button" aria-label={dramaChatOpen ? "收起原生 Chat" : "展开原生 Chat"} aria-expanded={dramaChatOpen} onClick={() => { actions.setDramaChatOpen(!dramaChatOpen); }}>Chat</button><button type="button" aria-label="刷新项目文件" onClick={reload}>↻</button><button type="button" aria-label="收起创作工作台" onClick={() => { applyWorkbenchPreference("closed"); }}>×</button></div>
+    </header>}
+    <aside className="oh-story-tree" aria-hidden={workbench === "drama" && !dramaFilesOpen || undefined}>
+      <div className="oh-story-brand" hidden={workbench === "drama"}>
         <span className="oh-story-brand-cluster"><strong>✦ <span>Oh Story</span></strong>{workspaceKind !== undefined && <span className="oh-story-kind">{workspaceKind === "story" ? "小说" : "短剧"}</span>}</span>
         <span className="oh-story-brand-actions">
           <button type="button" onClick={reload} title="刷新" aria-label="刷新项目文件">↻</button>
           <button type="button" onClick={() => { applyWorkbenchPreference("closed"); }} title="收起创作工作台" aria-label="收起创作工作台">×</button>
         </span>
       </div>
-      {workspace !== undefined && <div className="oh-story-mode-tabs" role="tablist" aria-label="创作工作台">
+      {workspace !== undefined && workbench !== "drama" && <div className="oh-story-mode-tabs" role="tablist" aria-label="创作工作台">
         {WORKBENCH_MODES.map((mode) => <button
           type="button"
           role="tab"
@@ -1537,14 +1727,14 @@ function CreativeWorkbench({
               selected={selected}
               activityPath={activityPath}
               onToggle={toggleGroup}
-              onSelect={revealPath}
+              onSelect={openDramaDocument}
             />
           </details>;
         })}
       </nav>
     </aside>
-    <main className="oh-story-editor">
-      <header>
+    <main className="oh-story-editor" data-drama-canvas={dramaCanvasActive || undefined}>
+      <header hidden={dramaCanvasActive}>
         <span className="oh-story-editor-path" title={selected}><span>{selectedLabel}</span><strong>{selectedBasename}</strong></span>
         <div className="oh-story-editor-actions">
           {(previewable || productionAvailable) && !selectedMedia && <div className="oh-story-editor-tabs" role="tablist" aria-label={productionAvailable ? "短剧文档查看方式" : markdown ? "Markdown 查看方式" : "JSONL 查看方式"}>
@@ -1572,7 +1762,9 @@ function CreativeWorkbench({
         </div>}
       </div>}
       {fileError !== undefined && <div className="oh-story-error">{fileError}</div>}
-      {selected === undefined
+      {dramaCanvasActive
+        ? dramaProductionView ?? <div className="oh-drama-empty-workspace"><strong>从第一集开始，让故事慢慢生长</strong><p>说说你想讲的故事，或把已有剧本交给 AI。人物、场景和镜头会在这里展开。</p><button type="button" onClick={() => { continueDramaInChat(); }}>和 AI 讨论第一集</button></div>
+        : selected === undefined
         ? <div className="oh-story-empty">{workbench === "story"
             ? <>当前 workspace 还没有小说文件。可在右侧 Chat 中运行 <code>/story-setup</code>。</>
             : <>当前 workspace 还没有短剧项目。可在右侧 Chat 中运行 <code>/short-drama</code>。</>}</div>
@@ -1594,36 +1786,7 @@ function CreativeWorkbench({
             setSelected(workspace === undefined ? undefined : preferredWorkbenchFile(workspace.files, workbench));
           }}>放弃本地草稿</button></div>
         : editorMode === "production" && productionAvailable && episodeProduction !== undefined
-          ? <DramaProductionView
-              sessionId={sessionId}
-              production={episodeProduction}
-              sessionRunning={sessionRunning}
-              queue={productionQueue}
-              section={productionSection}
-              selectedId={productionSelectedId}
-              jobs={productionJobs}
-              versions={productionVersions}
-              libraryVersions={productionLibrary}
-              selections={productionSelections}
-              manualReferences={productionReferences}
-              sequence={productionSequence}
-              canvas={productionCanvas}
-              viewport={productionViewport}
-              onSectionChange={setProductionSection}
-              onSelect={setProductionSelectedId}
-              onNavigate={navigateProductionTarget}
-              onJobsChange={setProductionJobs}
-              onSelectionsChange={setProductionSelections}
-              onManualReferencesChange={setProductionReferences}
-              onOpenMedia={(path) => { revealPath(path); }}
-              onSequenceChange={setProductionSequence}
-              onCanvasChange={setProductionCanvas}
-              onViewportChange={setProductionViewport}
-              onDispatchPrompt={sendProductionPrompt}
-              onCancelTurn={cancelProduction}
-              onRemoveQueued={removeQueuedProduction}
-              onRefresh={reload}
-            />
+          ? dramaProductionView
         : previewable && editorMode === "preview"
           ? markdown
             ? <MarkdownPreview content={buffer.content} label={selected} />
@@ -1659,6 +1822,7 @@ function CreativeWorkbench({
 
 interface ProductionConversationFace {
   readonly sendProductionPrompt: (prompt: string) => Promise<void>;
+  readonly focusProductionChat: (context?: string) => boolean;
   readonly cancelProduction: () => Promise<void>;
   readonly removeQueuedProduction: (itemId: string) => Promise<void>;
 }
@@ -1699,7 +1863,7 @@ function WorkbenchMemoryMirror({ sessionId, useStore }: Pick<WorkbenchSlotProps,
 }
 
 /** Mount beside the official conversation without replacing Chat or Composer. */
-function SessionWorkbenchBridge({ sessionId, useSession, useSessions, useProjection, useChat, useStore, actions, sendProductionPrompt, cancelProduction, removeQueuedProduction }: WorkbenchSlotProps) {
+function SessionWorkbenchBridge({ sessionId, useSession, useSessions, useProjection, useChat, useStore, actions, sendProductionPrompt, focusProductionChat, cancelProduction, removeQueuedProduction }: WorkbenchSlotProps) {
   const marker = useRef<HTMLSpanElement>(null);
   const [target, setTarget] = useState<HTMLElement>();
   const runningCalls = useChat((snapshot) => snapshot.legacy.runningCalls);
@@ -1710,7 +1874,11 @@ function SessionWorkbenchBridge({ sessionId, useSession, useSessions, useProject
   const liveTurn = useChat((snapshot) => openTurn(snapshot));
   const workbench = useStore((memory) => memory.workbench);
   const gamePane = useStore((memory) => memory.gamePane);
+  const gameChatOpen = useStore((memory) => memory.gameChatOpen);
+  const videoChatOpen = useStore((memory) => memory.videoChatOpen);
   const videoPane = useStore((memory) => memory.videoPane);
+  const dramaChatOpen = useStore((memory) => memory.dramaChatOpen);
+  const dramaFilesOpen = useStore((memory) => memory.dramaFilesOpen);
   const sessionRunning = useSession((snapshot) => snapshot.running);
   const inboxRows = useProjection("inbox", (inbox) => inbox?.["next-turn"]);
   const pendingSubmissions = useSession((snapshot) => snapshot.pendingSubmissions);
@@ -1807,6 +1975,10 @@ function SessionWorkbenchBridge({ sessionId, useSession, useSessions, useProject
       // writing the variable DSH also owns can never turn into a resize duel.
       scroller.style.setProperty("--oh-story-composer-height", `${String(composerSeat()?.getBoundingClientRect().height ?? 0)}px`);
       scroller.dataset.ohStoryWorkbench = workbench;
+      scroller.dataset.ohGameChat = gameChatOpen ? "open" : "closed";
+      scroller.dataset.ohVideoChat = videoChatOpen ? "open" : "closed";
+      scroller.dataset.ohDramaChat = dramaChatOpen ? "open" : "closed";
+      scroller.dataset.ohDramaFiles = dramaFilesOpen ? "open" : "closed";
       const studioPane = workbench === "video" ? videoPane : gamePane;
       scroller.dataset.ohStudioPane = studioPane;
       const compactAt = workbench === "game" || workbench === "video" ? 720 : 620;
@@ -1857,8 +2029,12 @@ function SessionWorkbenchBridge({ sessionId, useSession, useSessions, useProject
       delete scroller.dataset.ohStoryLayout;
       delete scroller.dataset.ohStoryWorkbench;
       delete scroller.dataset.ohStudioPane;
+      delete scroller.dataset.ohGameChat;
+      delete scroller.dataset.ohVideoChat;
+      delete scroller.dataset.ohDramaChat;
+      delete scroller.dataset.ohDramaFiles;
     };
-  }, [gamePane, open, target, videoPane, workbench]);
+  }, [dramaChatOpen, dramaFilesOpen, gameChatOpen, gamePane, open, target, videoChatOpen, videoPane, workbench]);
   return <>
     <span ref={marker} className="oh-story-bridge-marker" aria-hidden />
     {target === undefined ? null : createPortal(<CreativeWorkbench
@@ -1880,6 +2056,7 @@ function SessionWorkbenchBridge({ sessionId, useSession, useSessions, useProject
       creativeProject={creativeProject}
       welcome={welcome}
       sendProductionPrompt={sendProductionPrompt}
+      focusProductionChat={focusProductionChat}
       cancelProduction={cancelProduction}
       removeQueuedProduction={removeQueuedProduction}
       useStore={useStore}
@@ -1896,7 +2073,7 @@ type WorkbenchSeatProps = PropsRuntime<"shell.overlay"> & PropsRenderSlots<"oh-s
  */
 function WelcomeGuide({ onPlayExample }: { readonly onPlayExample?: (() => void) | undefined }) {
   return <section className="oh-story-welcome" aria-label="Oh Story 使用引导">
-    <style>{styles}</style>
+    <style>{[styles, gameCanvasStyles, gamePlaytestNotesStyles, videoStudioStyles].join("\n")}</style>
     <h2>Oh Story 已加载</h2>
     <p>直接在下方输入框说你想写什么，比如「写一篇 8000 字的重生复仇短篇」，或输入 <code>/story</code>、<code>/short-drama</code>、<code>/novel-to-game quick</code>、<code>/video-recap</code>。写出第一个创作文件后，小说、短剧、游戏、视频工作台会自动出现。</p>
     <ol>
@@ -1956,7 +2133,7 @@ function RoleToolView({ block, inspect }: ToolCallViewProps) {
   const output = resultOf(block);
   const state = !("kind" in block) ? "running" : block.isError ? "error" : "done";
   return <details className="oh-story-role" data-state={state}>
-    <style>{styles}</style>
+    <style>{[styles, gameCanvasStyles, gamePlaytestNotesStyles, videoStudioStyles].join("\n")}</style>
     <summary><span>✦ Role</span><strong>{role}</strong><em>{state === "running" ? "运行中" : state === "error" ? "失败" : "完成"}</em></summary>
     {output !== undefined && <pre>{output}</pre>}
     {inspect !== undefined && <button type="button" onClick={inspect}>在轨迹中检查</button>}
@@ -1969,7 +2146,7 @@ function ProductionToolView({ block, inspect }: ToolCallViewProps) {
   const episode = typeof args.episode === "string" ? args.episode : "短剧";
   const state = !("kind" in block) ? "running" : block.isError ? "error" : "done";
   return <details className="oh-story-role" data-state={state}>
-    <style>{styles}</style>
+    <style>{[styles, gameCanvasStyles, gamePlaytestNotesStyles, videoStudioStyles].join("\n")}</style>
     <summary><span>▦ 生产</span><strong>{episode} · {action}</strong><em>{state === "running" ? "执行中" : state === "error" ? "失败" : "已应用"}</em></summary>
     {resultOf(block) !== undefined && <pre>{resultOf(block)}</pre>}
     {inspect !== undefined && <button type="button" onClick={inspect}>在轨迹中检查</button>}
@@ -1994,12 +2171,16 @@ export function apply(context: ClientContext): void {
         if (binding === undefined || conversation === undefined) {
           return {
             sendProductionPrompt: () => Promise.reject(new Error("DSH 会话当前不可用。")),
+            focusProductionChat: () => false,
             cancelProduction: () => Promise.reject(new Error("DSH 会话当前不可用。")),
             removeQueuedProduction: () => Promise.reject(new Error("DSH 会话当前不可用。"))
           };
         }
         return {
           sendProductionPrompt: (prompt: string) => conversation.send(prompt),
+          focusProductionChat: (prompt?: string) => {
+            return focusChatContext(conversation.input, binding, prompt);
+          },
           cancelProduction: () => conversation.cancel(),
           removeQueuedProduction: (itemId: string) => conversation.updateQueue(itemId as Parameters<IConversation["updateQueue"]>[0], { kind: "remove" })
         };
