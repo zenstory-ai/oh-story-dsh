@@ -35,4 +35,4 @@ NovelToGame 0.7.0 把这个示例改成互动影游，加入 58 段配音过场�
 
 - `pnpm assets:sync:game` 后 NovelToGame 目录约 244 KB，parity 报告 `no bundled examples`。
 - 单元测试改为不再构造 `source` 字段的游戏项目，覆盖只有构建的项目在画布上显示为一张试玩卡。
-- 打包冒烟结果见本次发布 PR。
+- 候选源码 `672629a` 的打包 tarball 为 2.8 MB（0.1.22 约 21.6 MB）；干净克隆 `pnpm verify:release` 退出 0，打包 Chrome 在 `0.2.1-rc.5`、`0.2.0-rc.2` 与 `0.2.2-rc.1` 均 `"ok": true`，`gameSaveRestore: true`。

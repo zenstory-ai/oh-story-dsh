@@ -25,4 +25,5 @@ Status: implemented
 ## Verification
 
 - 临时副本把依赖切到 `0.2.2-rc.1`、Cordis `4.1.0`、Schemastery `3.19.0` 与配套 Cordis 插件 `1.1.0`：typecheck、250 个单元测试、7 个真实 Cordis 契约测试、boundary 与构建全部通过。
-- 打包 Chrome 与真实 provider 结果见本次 PR。
+- 候选源码 `672629a` 在干净克隆中 `pnpm verify:release` 退出 0，打包 Chrome 在 `0.2.1-rc.5`、`0.2.0-rc.2` 与 `0.2.2-rc.1` 均 `"ok": true`。
+- 真实 provider 未重跑：Oh Story、Drama Skills、它们的技能桥与默认宿主自 0.1.22 实测以来没有变化，付费实测也不覆盖游戏流程。
