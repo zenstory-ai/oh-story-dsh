@@ -134,6 +134,12 @@ describe("oh_story_role Cordis Context contract", () => {
         provider: "spawn", label: "oh-story:story-architect", delivery: "caller",
         request: { parent: topology.agent, prompt: [{ type: "text", text: "检查故事架构" }], maxDepth: 1 }
       }));
+      // The flattened contract (post-0.2.x hosts) reads the same fields at the
+      // top level; both shapes are carried so either host resolves.
+      const spec = start.mock.calls[0][0] as unknown as Record<string, unknown>;
+      expect(spec.parent).toBe(topology.agent);
+      expect(spec.prompt).toEqual([{ type: "text", text: "检查故事架构" }]);
+      expect(spec.maxDepth).toBe(1);
       expect(child!.section).toHaveBeenCalledWith(expect.objectContaining({
         name: "deployment:persona-prefix", text: expect.stringContaining("OH_STORY_DSH_ROLE:story-architect")
       }));
