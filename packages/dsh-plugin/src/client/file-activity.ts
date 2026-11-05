@@ -333,17 +333,16 @@ export function workbenchModeForPath(path: string | undefined): WorkbenchMode | 
 
 /**
  * The workbench to show when a Session first opens a workspace: the current one when it has
- * work, otherwise the first of 小说, 短剧, 游戏, 视频 that does. The bundled game example is
- * not the creator's work, so it never selects the game workbench.
+ * work, otherwise the first of 小说, 短剧, 游戏, 视频 that does.
  */
 export function initialWorkbenchMode(
   current: WorkbenchMode,
   files: readonly WorkspaceFilePath[],
-  games: readonly { readonly source: "workspace" | "example" }[],
+  games: readonly unknown[],
   videos: readonly unknown[]
 ): WorkbenchMode {
   const hasWork = (mode: WorkbenchMode): boolean => mode === "game"
-    ? games.some((game) => game.source === "workspace")
+    ? games.length > 0
     : mode === "video" ? videos.length > 0 : files.some((file) => workbenchModeForPath(file.path) === mode);
   if (hasWork(current)) return current;
   return (["story", "drama", "game", "video"] as const).find(hasWork) ?? current;

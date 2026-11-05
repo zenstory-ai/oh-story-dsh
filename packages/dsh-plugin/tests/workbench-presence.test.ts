@@ -25,13 +25,9 @@ describe("creative project presence", () => {
     expect(hasCreativeProject(undefined)).toBe(false);
   });
 
-  it("does not count the bundled game example as workspace creative work", () => {
-    expect(hasCreativeProject(workspace({ games: [{ source: "example" }] }))).toBe(false);
-  });
-
   it("recognizes creative files, workspace games and video projects", () => {
     expect(hasCreativeProject(workspace({ files: [{ path: "正文/第001章.md" }] }))).toBe(true);
-    expect(hasCreativeProject(workspace({ games: [{ source: "example" }, { source: "workspace" }] }))).toBe(true);
+    expect(hasCreativeProject(workspace({ games: [{ id: "workspace:letter" }] }))).toBe(true);
     expect(hasCreativeProject(workspace({ videos: [{ id: "recap" }] }))).toBe(true);
   });
 });

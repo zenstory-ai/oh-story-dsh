@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { readFile as readNodeFile, realpath as nodeRealpath, stat as nodeStat } from "node:fs/promises";
+import { realpath as nodeRealpath, stat as nodeStat } from "node:fs/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { extname, isAbsolute, relative, resolve } from "node:path";
+import { extname, isAbsolute, relative } from "node:path";
 import type { Context } from "@deepseek-ai/cordis";
 import type { Agent } from "@deepseek-ai/dsh-agent";
 import { FsError, type FileSystem, type FsInfo, type FsTarget, type FsVersion } from "@deepseek-ai/dsh-fs";
@@ -13,7 +13,7 @@ import type {} from "@deepseek-ai/dsh-typert-registry";
 import { type GameVerificationBinding, WorkspaceVerificationTracker } from "./game-verification.js";
 import { dramaAdapterStatuses, ensureDramaAdapterConfig, type DramaAdapterStatus } from "./drama-adapters.js";
 import { commandOutput, DRAMA_PYTHON, hostPython, VIDEO_PYTHON, type PythonProbe } from "./host-python.js";
-import { defaultDramaSkillRoot, defaultNovelToGameSkillRoot } from "./skill-provider.js";
+import { defaultDramaSkillRoot } from "./skill-provider.js";
 import { skipVideoDirectory, summarizeVideoProject, VIDEO_DIRECTORY, videoProjectRoot, visibleVideoPath, type VideoProjectSummary } from "./video-project.js";
 import { isTrustedPreviewNavigation, isTrustedWorkspaceRequest } from "./workspace-request-trust.js";
 
@@ -37,7 +37,6 @@ const MEDIA_TYPES: ReadonlyMap<string, string> = new Map([
 const MEDIA_MAX_BYTES = 256 * 1_024 * 1_024;
 const FILE_LIMIT = 1_000;
 const PREVIEW_FILE_LIMIT = 32 * 1024 * 1024;
-const BUNDLED_GAME_EXAMPLE = "jin-ping-mei";
 const workspaceVerificationTracker = new WorkspaceVerificationTracker();
 let videoPreflightCache: { readonly expires: number; readonly value: VideoPreflightSummary } | undefined;
 let dramaPreflightCache: { readonly expires: number; readonly value: DramaPreflightSummary } | undefined;
@@ -76,7 +75,6 @@ interface GameProjectSummary {
   readonly id: string;
   readonly root: string;
   readonly title: string;
-  readonly source: "workspace" | "example";
   readonly previewReady: boolean;
   readonly previewUrl?: string | undefined;
   readonly previewVersion: string;
@@ -550,7 +548,6 @@ async function workspaceGameProjects(
       id: `workspace:${id}`,
       root,
       title: gameProjectTitle(brief, id),
-      source: "workspace" as const,
       previewReady: preview.ready,
       previewUrl: preview.ready
         ? `/oh-story/game-preview/workspace/${token(sessionId)}/${token(root)}/index.html`
@@ -585,32 +582,6 @@ async function workspaceVideoProjects(realm: WorkspaceRealm, files: readonly Wor
     ]);
     return summarizeVideoProject(root, files, { project, runManifest, assembly, narration, validatedClips, visualAudioBoard, storyPlan });
   }));
-}
-
-function bundledExampleRoot(): string {
-  return resolve(defaultNovelToGameSkillRoot(), `../examples/${BUNDLED_GAME_EXAMPLE}`);
-}
-
-async function bundledGameExample(): Promise<GameProjectSummary> {
-  const root = bundledExampleRoot();
-  const [example, verification, manifest] = await Promise.all([
-    readNodeFile(resolve(root, "example.json"), "utf8"),
-    readNodeFile(resolve(root, "qa/verification.json"), "utf8"),
-    readNodeFile(resolve(defaultNovelToGameSkillRoot(), "../manifest.json"), "utf8")
-  ]);
-  const exampleJson = JSON.parse(example) as { readonly title?: unknown };
-  const manifestJson = JSON.parse(manifest) as { readonly upstream?: { readonly commit?: unknown } };
-  const previewVersion = typeof manifestJson.upstream?.commit === "string" ? manifestJson.upstream.commit.slice(0, 16) : "bundled";
-  return {
-    id: `example:${BUNDLED_GAME_EXAMPLE}`,
-    root: `examples/${BUNDLED_GAME_EXAMPLE}`,
-    title: typeof exampleJson.title === "string" ? exampleJson.title : "金瓶梅 · 风月总账",
-    source: "example",
-    previewReady: true,
-    previewUrl: `/oh-story/game-preview/example/${BUNDLED_GAME_EXAMPLE}/index.html`,
-    previewVersion,
-    verification: normalizedVerification(JSON.parse(verification) as unknown, "PINNED", previewVersion)
-  };
 }
 
 function previewContentType(path: string): string {
@@ -690,19 +661,6 @@ async function previewBytes(context: Context, pathname: string): Promise<{ reado
     throw new WorkspaceHttpError(400, "游戏预览地址无效。");
   }
   const kind = segments.shift();
-  if (kind === "example") {
-    const id = segments.shift();
-    const path = segments.join("/") || "index.html";
-    if (id !== BUNDLED_GAME_EXAMPLE || !safeRelativePath(path)) throw new WorkspaceHttpError(404, "游戏示例不存在。");
-    const appRoot = resolve(bundledExampleRoot(), "build/app");
-    const target = resolve(appRoot, path);
-    const escaped = relative(appRoot, target);
-    if (escaped.startsWith("..") || isAbsolute(escaped)) throw new WorkspaceHttpError(403, "预览资源离开了游戏目录。");
-    const info = await nodeStat(target).catch(() => undefined);
-    if (!info?.isFile()) throw new WorkspaceHttpError(404, "预览资源不存在。");
-    if (info.size > PREVIEW_FILE_LIMIT) throw new WorkspaceHttpError(413, "预览资源过大。");
-    return { path, bytes: await readNodeFile(target) };
-  }
   if (kind === "workspace") {
     const session = segments.shift();
     const project = segments.shift();
@@ -760,10 +718,7 @@ async function handle(context: Context, request: IncomingMessage, response: Serv
       const metadataErrors = [tracking.error, shortDrama.error].filter((value): value is string => value !== undefined);
       const sessionId = url.searchParams.get("sessionId");
       if (sessionId === null) throw new WorkspaceHttpError(400, "缺少 DSH sessionId。");
-      const games = [
-        ...await workspaceGameProjects(realm, files, sessionId, options.maxBytes),
-        await bundledGameExample()
-      ];
+      const games = await workspaceGameProjects(realm, files, sessionId, options.maxBytes);
       const videos = await workspaceVideoProjects(realm, files, options.maxBytes);
       send(response, 200, { cwd: realm.cwd, files, games, videos, tracking: tracking.value, shortDrama: shortDrama.value, metadataErrors, mode: "dsh-session" });
       return;

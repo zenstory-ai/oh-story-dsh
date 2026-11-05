@@ -5,7 +5,6 @@ export interface GameProject {
   readonly id: string;
   readonly root: string;
   readonly title: string;
-  readonly source: "workspace" | "example";
   readonly previewReady: boolean;
   readonly previewUrl?: string | undefined;
   readonly previewVersion: string;

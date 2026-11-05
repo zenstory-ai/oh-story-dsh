@@ -1,7 +1,7 @@
-export type GameVerificationBinding = "CURRENT" | "PINNED" | "STALE" | "UNBOUND";
+export type GameVerificationBinding = "CURRENT" | "STALE" | "UNBOUND";
 
 export interface GameVerificationFreshness {
-  readonly binding: Exclude<GameVerificationBinding, "PINNED">;
+  readonly binding: GameVerificationBinding;
   readonly verifiedPreviewVersion?: string | undefined;
 }
 

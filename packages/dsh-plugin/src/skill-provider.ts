@@ -92,7 +92,6 @@ const DSH_GAME_BRIDGE = [
   "Use only DSH-visible tools and approvals. qa/verification.json remains the sole machine QA truth and must cover launch, render, input, coreLoop, outcome, and restart with real execution evidence.",
   // NovelToGame 0.6.0 pipeline-contract.md: with no target player available, the whitebox playtest uses a fresh agent that has not read the design or source.
   "When the whitebox playtest calls for a fresh agent that has not read the design documents or source, run it as a DSH subagent visible in this preset, giving it only the playable entry and normal player input; in director mode, ask the user in this Session first whether a real target player can try it.",
-  "The bundled Jin Ping Mei project is a read-only example, not a template to copy mechanically and not proof that another adaptation passed QA.",
   "</novel-to-game-dsh-integration>"
 ].join("\n");
 const DSH_VIDEO_BRIDGE = [

@@ -566,8 +566,7 @@ function GameStudio({ workspace, building, gameTab, gameProjectId, hidden, onGam
   readonly onChatOpen: (open: boolean) => void;
   readonly onContinueInChat: (prompt: string) => void;
 }) {
-  const project = gameProjectId === "" ? undefined : workspace.games.find((item) => item.id === gameProjectId) ?? workspace.games.find((item) => item.source === "workspace");
-  const example = workspace.games.find((item) => item.source === "example");
+  const project = gameProjectId === "" ? undefined : workspace.games.find((item) => item.id === gameProjectId) ?? workspace.games[0];
   const studioRef = useRef<HTMLElement>(null);
   const tabsId = useId();
   useLayoutEffect(() => {
@@ -582,7 +581,7 @@ function GameStudio({ workspace, building, gameTab, gameProjectId, hidden, onGam
   }, []);
   useEffect(() => { if (project !== undefined && project.id !== gameProjectId) onGameProject(project.id); }, [gameProjectId, onGameProject, project]);
   useEffect(() => {
-    if (hidden || project === undefined || gameTab !== "design" || project.source !== "workspace" || editor.selected?.startsWith(`${project.root}/`) === true) return;
+    if (hidden || project === undefined || gameTab !== "design" || editor.selected?.startsWith(`${project.root}/`) === true) return;
     const first = gameCreativeDocuments(project, workspace.files)[0]?.path;
     if (first !== undefined) editor.onSelect(first);
   }, [editor.selected, gameTab, hidden, project?.id, workspace.files]);
@@ -598,14 +597,14 @@ function GameStudio({ workspace, building, gameTab, gameProjectId, hidden, onGam
   const canvasDocumentsReady = project === undefined || gameCreativeDocuments(project, workspace.files).every(({ path }) => editor.buffers[path] !== undefined || editor.errors[path] !== undefined);
   const tabLabels = { preview: "试玩", canvas: "创作画布", design: "文稿" } as const;
   const tabs = ["preview", "canvas", "design"] as const;
-  return <main ref={studioRef} id={paneId} className="oh-game-studio" data-source={project?.source ?? "empty"} role="tabpanel" aria-labelledby={labelledBy} hidden={hidden}>
+  return <main ref={studioRef} id={paneId} className="oh-game-studio" role="tabpanel" aria-labelledby={labelledBy} hidden={hidden}>
     <header className="oh-game-toolbar">
       <div className="oh-workbench-cluster"><WorkbenchModeTabs className="oh-game-mode-tabs" current="game" onSelect={onWorkbench} /><button className="oh-workbench-collapse" type="button" title="收起创作工作台" aria-label="收起创作工作台" onClick={onCollapse}>×</button></div>
-      <label className="oh-game-project" title="切换项目将重新载入试玩"><span>游戏项目</span><select aria-label="游戏项目；切换将重新载入试玩" value={project?.id ?? ""} onChange={(event) => { onGameProject(event.target.value); }}><option value="">新建游戏想法</option>{workspace.games.some((item) => item.source === "workspace") && <optgroup label="我的项目">{workspace.games.filter((item) => item.source === "workspace").map((item) => <option value={item.id} key={item.id}>{`我的项目 · ${item.title}`}</option>)}</optgroup>}{example !== undefined && <optgroup label="内置示例"><option value={example.id}>{`内置示例 · ${example.title}`}</option></optgroup>}</select></label>
+      <label className="oh-game-project" title="切换项目将重新载入试玩"><span>游戏项目</span><select aria-label="游戏项目；切换将重新载入试玩" value={project?.id ?? ""} onChange={(event) => { onGameProject(event.target.value); }}><option value="">新建游戏想法</option>{workspace.games.length > 0 && <optgroup label="我的项目">{workspace.games.map((item) => <option value={item.id} key={item.id}>{`我的项目 · ${item.title}`}</option>)}</optgroup>}</select></label>
       <div className="oh-game-tabs" role="tablist" aria-label="游戏工作台">{tabs.map((tab) => <button key={tab} type="button" role="tab" tabIndex={gameTab === tab ? 0 : -1} aria-selected={gameTab === tab} id={`${tabsId}-${tab}-tab`} aria-controls={`${tabsId}-${tab}-panel`} onKeyDown={(event) => { handleTabKey(event, tabs, gameTab, selectTab); }} onClick={() => { selectTab(tab); }}>{tabLabels[tab]}</button>)}</div>
       <div className="oh-game-toolbar-actions"><button type="button" className="oh-game-chat-toggle" aria-label={chatOpen ? "收起原生 Chat" : "展开原生 Chat"} aria-expanded={chatOpen} onClick={() => { onChatOpen(!chatOpen); }}>Chat</button></div>
     </header>
-    {project === undefined ? <div className="oh-game-create-empty"><span aria-hidden>◫</span><small>一个故事，可以有很多种玩法</small><h2>把你的故事，变成能玩的世界。</h2><p>带来一部小说、一个人物，或者一个刚冒出来的念头。<br />先聊聊你希望玩家经历什么。</p><div><button type="button" onClick={() => { onContinueInChat("我想做一段可以选择结局的故事，先聊聊玩家会经历什么。"); }}>一段可以选择的故事</button><button type="button" onClick={() => { onContinueInChat("我想围绕小说里的人物做一款轻策略游戏，先和我讨论核心玩法。"); }}>围绕人物的轻策略</button><button type="button" onClick={() => { onContinueInChat("我想把小说里的地点做成可以探索的世界，先讨论可玩的体验。"); }}>可以探索的世界</button></div><button type="button" className="oh-game-primary" onClick={() => { onContinueInChat("我有一个游戏想法，想先聊聊故事和玩家的体验。"); }}>和 AI 讨论游戏想法</button>{example !== undefined && <button type="button" onClick={() => { onGameProject(example.id); onGameTab("preview"); }}>试玩内置示例</button>}</div>
+    {project === undefined ? <div className="oh-game-create-empty"><span aria-hidden>◫</span><small>一个故事，可以有很多种玩法</small><h2>把你的故事，变成能玩的世界。</h2><p>带来一部小说、一个人物，或者一个刚冒出来的念头。<br />先聊聊你希望玩家经历什么。</p><div><button type="button" onClick={() => { onContinueInChat("我想做一段可以选择结局的故事，先聊聊玩家会经历什么。"); }}>一段可以选择的故事</button><button type="button" onClick={() => { onContinueInChat("我想围绕小说里的人物做一款轻策略游戏，先和我讨论核心玩法。"); }}>围绕人物的轻策略</button><button type="button" onClick={() => { onContinueInChat("我想把小说里的地点做成可以探索的世界，先讨论可玩的体验。"); }}>可以探索的世界</button></div><button type="button" className="oh-game-primary" onClick={() => { onContinueInChat("我有一个游戏想法，想先聊聊故事和玩家的体验。"); }}>和 AI 讨论游戏想法</button></div>
       : <div className="oh-game-panels">
         <div className="oh-game-panel oh-game-play-panel" role="tabpanel" id={`${tabsId}-preview-panel`} aria-labelledby={`${tabsId}-preview-tab`} hidden={gameTab !== "preview"}>
           <GamePreview key={project.id} project={project} building={building} onDiscuss={() => { onContinueInChat(`先把「${project.title}」做成一小段可以玩的体验，请先和我核对故事、玩法和范围。`); }} />
@@ -713,13 +712,13 @@ function CreativeWorkbench({
   const [contextCopyStatus, setContextCopyStatus] = useState<string>();
   const [gameLoadAttempt, setGameLoadAttempt] = useState(0);
   const [gameReadErrors, setGameReadErrors] = useState<Readonly<Record<string, string>>>({});
-  const activeGame = gameProjectId === "" ? undefined : workspace?.games.find((project) => project.id === gameProjectId) ?? workspace?.games.find((project) => project.source === "workspace");
+  const activeGame = gameProjectId === "" ? undefined : workspace?.games.find((project) => project.id === gameProjectId) ?? workspace?.games[0];
   const gameDocuments = useMemo(() => activeGame === undefined ? [] : gameCreativeDocuments(activeGame, workspace?.files ?? []), [activeGame, workspace?.files]);
   const activeVideo = workspace?.videos.find((project) => project.id === videoProjectId) ?? workspace?.videos[0];
   const videoDocuments = useMemo(() => activeVideo === undefined ? [] : videoCreativeDocuments(activeVideo), [activeVideo]);
   const creativeDocuments = workbench === "video" ? videoDocuments : gameDocuments;
   useEffect(() => {
-    if (workbench !== "video" && (workbench !== "game" || activeGame?.source !== "workspace")) return;
+    if (workbench !== "video" && (workbench !== "game" || activeGame === undefined)) return;
     const missing = creativeDocuments.filter(({ path }) => {
       const current = buffersRef.current[path];
       const file = workspace?.files.find((item) => item.path === path);
@@ -767,21 +766,14 @@ function CreativeWorkbench({
   const setWorkbenchPreference = actions.setWorkbenchPreference;
   const applyWorkbenchPreference = useCallback((preference: WorkbenchPreference): void => {
     setWorkbenchPreference(preference);
-    // Without creative work the only way in is the bundled example, a one-off visit: remembering
-    // it would decide the layout of the creator's first real project in this workspace. A choice
+    // Opening the workbench before any creative work exists is a one-off visit: remembering it
+    // would decide the layout of the creator's first real project in this workspace. A choice
     // the workspace already remembers stays the creator's to change.
     const storage = workbenchPreferenceStorage();
     if (creativeProject || readWorkbenchPreference(storage, workspace?.cwd) !== undefined) {
       writeWorkbenchPreference(storage, workspace?.cwd, preference);
     }
   }, [creativeProject, setWorkbenchPreference, workspace?.cwd]);
-  const exampleGameId = workspace?.games.find((game) => game.source === "example")?.id;
-  const playExample = exampleGameId === undefined ? undefined : (): void => {
-    setGameProjectId(exampleGameId);
-    setGameTab("preview");
-    setWorkbench("game");
-    applyWorkbenchPreference("open");
-  };
   const compactTabsId = useId();
   const compactStudioId = `${compactTabsId}-studio-panel`;
   const compactVideoStudioId = `${compactTabsId}-video-studio-panel`;
@@ -961,7 +953,7 @@ function CreativeWorkbench({
     const nextWorkbench = workbenchModeForPath(path) ?? "story";
     setWorkbench(nextWorkbench);
     if (nextWorkbench === "game") {
-      const project = workspace?.games.find((item) => item.source === "workspace" && path.startsWith(`${item.root}/`));
+      const project = workspace?.games.find((item) => path.startsWith(`${item.root}/`));
       if (project !== undefined) setGameProjectId(project.id);
       if (!path.includes("/build/app/")) setGameTab("design");
     }
@@ -1046,7 +1038,7 @@ function CreativeWorkbench({
   }, [actions, expandPath, productionIntentCalls, productionIntents, setEditorMode, setProductionSection, setSelected, setWorkbench, workspace]);
 
   // Latch first entry into the game workbench: before that the Studio must not mount, or every
-  // session downloads and runs the bundled example in a display:none iframe. Once mounted it
+  // session downloads and runs a game in a display:none iframe. Once mounted it
   // stays mounted so the running game survives later navigation.
   const openedGame = useRef(false);
   if (workbench === "game") openedGame.current = true;
@@ -1402,7 +1394,7 @@ function CreativeWorkbench({
     const saveShortcut = (event: KeyboardEvent): void => {
       if (event.defaultPrevented) return;
       if (!(event.metaKey || event.ctrlKey) || event.key.toLocaleLowerCase() !== "s") return;
-      if ((workbench === "video" && videoTab !== "docs") || (workbench === "game" && (gameTab !== "design" || activeGame?.source !== "workspace"))) return;
+      if ((workbench === "video" && videoTab !== "docs") || (workbench === "game" && (gameTab !== "design" || activeGame?.id === undefined))) return;
       if (workbench === "video" && (!(event.target instanceof Element) || event.target.closest(".oh-video-documents") === null)) return;
       if (workbench === "game" && (!(event.target instanceof Element) || event.target.closest(".oh-game-documents") === null)) return;
       event.preventDefault();
@@ -1410,7 +1402,7 @@ function CreativeWorkbench({
     };
     globalThis.addEventListener("keydown", saveShortcut);
     return () => { globalThis.removeEventListener("keydown", saveShortcut); };
-  }, [activeGame?.source, gameTab, open, savePath, selected, videoTab, workbench]);
+  }, [activeGame?.id, gameTab, open, savePath, selected, videoTab, workbench]);
 
   const groups = useMemo(() => {
     const value = new Map<string, WorkspaceFile[]>();
@@ -1592,7 +1584,7 @@ function CreativeWorkbench({
     // Without creative work there is nothing to reveal, so the plugin leaves the
     // official conversation exactly as DSH renders it. A failed workspace request
     // still offers the way in, because that error is only readable inside the workbench.
-    if (!creativeProject && error === undefined) return welcome ? <WelcomeGuide onPlayExample={playExample} /> : null;
+    if (!creativeProject && error === undefined) return welcome ? <WelcomeGuide /> : null;
     return <div ref={surfaceRef} className="oh-story-split-surface" data-open="false">
       <style>{[styles, gameCanvasStyles, videoStudioStyles].join("\n")}</style>
       <button className="oh-story-launcher" type="button" title={error ?? "打开创作工作台"} aria-label="打开创作工作台" onClick={() => { applyWorkbenchPreference("open"); }}>
@@ -2035,11 +2027,8 @@ function SessionWorkbenchBridge({ sessionId, useSession, useSessions, useProject
 
 type WorkbenchSeatProps = PropsRuntime<"shell.overlay"> & PropsRenderSlots<"oh-story.workspace">;
 
-/**
- * How to reach the workbench from a DSH that has no creative work open yet. Only a Session can
- * open the workbench, so the bundled example's entry appears when one is supplied.
- */
-function WelcomeGuide({ onPlayExample }: { readonly onPlayExample?: (() => void) | undefined }) {
+/** How to reach the workbench from a DSH that has no creative work open yet. */
+function WelcomeGuide() {
   return <section className="oh-story-welcome" aria-label="Oh Story 使用引导">
     <style>{[styles, gameCanvasStyles, videoStudioStyles].join("\n")}</style>
     <h2>Oh Story 已加载</h2>
@@ -2049,10 +2038,6 @@ function WelcomeGuide({ onPlayExample }: { readonly onPlayExample?: (() => void)
       <li>想放进自己的作品文件夹：点击左侧「工作区 / Workspaces」旁的「添加工作区 / Add workspace」，在系统弹出的文件夹窗口里选择，再在下方「选择工作区 / Choose workspace」中选中它。</li>
       <li>输入框右下角显示模型名就说明已配置好；没有模型时，在「设置 → 模型」填入 API Key。只查看已有作品无需 API Key。</li>
     </ol>
-    {onPlayExample !== undefined && <div className="oh-story-welcome-example">
-      <button type="button" onClick={onPlayExample}>先玩内置示例《金瓶梅 · 风月总账》</button>
-      <span>随插件附带的完整 ADV 游戏，不用 API Key。内容 18+，进入前会确认年龄。</span>
-    </div>}
   </section>;
 }
 

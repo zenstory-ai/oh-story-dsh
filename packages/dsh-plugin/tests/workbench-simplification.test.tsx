@@ -104,7 +104,7 @@ describe("video workbench default surface", () => {
 });
 
 describe("existing playtest notes on disk", () => {
-  const project = { id: "letter", root: "game-adaptations/letter", title: "来信", source: "workspace" } as Parameters<typeof GameDocuments>[0]["project"];
+  const project = { id: "letter", root: "game-adaptations/letter", title: "来信" } as Parameters<typeof GameDocuments>[0]["project"];
   const text = (path: string) => ({ path, bytes: 10, version: "1", kind: "text" as const });
   const render = () => renderToStaticMarkup(<GameDocuments
     project={project}

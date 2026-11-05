@@ -1,29 +1,24 @@
 # Validation
 
-Candidate: `@oh-story/dsh` 0.1.22 on DeepSeek Harness `0.2.1-rc.5`, with the earlier `0.2.0-rc.2` and the `0.2.2-alpha.3` trial line covered. Local aggregate acceptance passed on 2026-11-03.
+Candidate: `@oh-story/dsh` 0.1.23 on DeepSeek Harness `0.2.1-rc.5`, with the earlier `0.2.0-rc.2` and the `0.2.2-rc.1` trial line covered. Local aggregate acceptance passed on 2026-11-05.
 
-## Unreleased creative workbench regression — 2026-11-04
+## 0.1.23 release evidence
 
-This change redesigns the short-drama, game and video surfaces and regresses all four workbenches, including the existing novel workflow. It does not publish a package or change the pinned upstream assets.
+0.1.23 syncs NovelToGame 0.7.0 without bundling upstream examples, moves the trial line to DSH `0.2.2-rc.1`, and carries the workbench redesign merged in #104. The default host, Oh Story 0.10.0, Drama Skills 0.10.2 and video-recap 0.6.2 are unchanged from 0.1.22.
 
-| Check | Result |
-| --- | --- |
-| `pnpm verify` | Passed: lint, types, four asset parity checks, DSH boundary, release/upstream-update scripts, 34 test files / 245 tests, and build |
-| `pnpm test:contract` | Passed: 7 targeted tests using real Cordis Context/Fiber |
-| `pnpm test:dsh` | Passed on official DSH 0.2.1-rc.5 with packaged plugin and isolated Chrome |
-| `pnpm test:dsh:rc` | Passed on official DSH 0.2.0-rc.2 with packaged plugin and isolated Chrome |
+### Local evidence
 
-Both native runs returned `ok: true`, `provider: local-fixture` and `videoStudio: preview-canvas-documents`. The browser bundle is 380,312 bytes, below the unchanged 400,000-byte budget. No dependencies or pinned knowledge files changed. The contract command is a targeted rerun, not seven additional distinct tests beyond the verify total.
+- NovelToGame 0.7.0 (`b06f4b3b4f33`), 7 Skills, synced from a clean clone of the release tag; parity requires no `examples/` path in the manifest. The bundled NovelToGame directory is about 244 KB, and the packed tarball is 2.8 MB.
+- The example preview route, project `source` field, `PINNED` verification binding, welcome-card entry and project-list group are removed; unit tests no longer construct example projects.
+- The packaged smoke now asserts that the tarball has no `lib/novel-to-game/examples/`, that the first-launch guide and an empty Game Studio offer no example, that the retired example route serves nothing, and that the workspace reports only workspace games. Project switching, quick save/load through the sandboxed preview's `localStorage`, iframe preservation, fullscreen, the 500px layout and novel/game switching run against a second test-only workspace game (`smoke-game-alt`).
+- A scratch copy with dependencies on `0.2.2-rc.1`, Cordis `4.1.0`, Schemastery `3.19.0` and Cordis plugins `1.1.0` passed typecheck, 250 unit tests, 7 real-Cordis contract tests, the DSH boundary and the build.
+- On 2026-11-05, `pnpm verify:release` passed in a clean clone of the candidate (`672629a`) with the upstream release checkouts: lint, typecheck, four parity checks, the DSH boundary, release and upstream-update tests, 250 unit/contract tests, and the build. Packaged Chrome on DSH `0.2.1-rc.5`, `0.2.0-rc.2` and `0.2.2-rc.1` returned `"ok": true` with `gameSaveRestore: true`.
 
-- Novel: file navigation, Markdown, streamed Agent writes, saves, draft recovery, CAS conflicts, native Chat and responsive layout.
-- Short drama: episode-scoped content canvas, real media and version selection, document navigation, production preflight/confirmation, task queue/cancellation, mixed composition and episode isolation.
-- Game: actual playable iframe, canvas/document switching, editing and CAS, an existing `PLAYTEST_NOTES.md` opening unchanged as an ordinary project file, draft protection and explicit new-build loading.
-- Video: output/source interval mapping and actual seek, media/document/canvas switching, JSON narration metadata preservation, CAS, native Chat context, authoritative file updates during a running task and explicit new-version loading.
-- Cross-workbench regression: unsaved game documents visit novel/drama/video and return; unsaved video documents visit novel/drama/game and return. The target workbench remains selected after effects settle and drafts survive. Hidden studios retain their media runtime without selecting documents in another workbench.
-- Chat compatibility: current DSH uses the public keep-draft transaction and honors applied/preserved/blocked results; preserved or blocked contexts remain visibly copyable. Older DSH without that transaction only focuses the native Composer and retains a copyable context card. Neither path replaces existing text, references or attachments.
-- Desktop and 500px interaction checks passed, including mouse navigation and keyboard switching between Studio and Chat.
+### Release gates
 
-Interface evidence: [short drama](images/drama-canvas-workbench.png), [game preview](images/game-creative-workbench.png), [game canvas](images/game-creative-canvas.png), [video preview](images/video-narrative-workbench.png), [video canvas](images/video-narrative-canvas.png). Failure and final-run logs remain in the ignored local `.omx/ui-review/` directory. Paid DeepSeek/provider and real media-generation runs were not executed in this regression; deterministic fixture success is not evidence of their output quality. The alpha host line was not rerun for this PR.
+- **Local aggregate acceptance:** passed 2026-11-05.
+- **Paid provider:** not rerun. The Oh Story and Drama Skills, their bridges and the default host are unchanged since the 0.1.22 run on `0.2.1-rc.5` below; the paid run does not exercise the game pipeline.
+- **New-user audit:** not rerun.
 
 ## 0.1.22 release evidence
 

@@ -45,7 +45,7 @@ describe("game preview URLs", () => {
   });
 
   it("is not isolated on a host without a loopback alias", () => {
-    const urls = previewUrls("/oh-story/game-preview/example/jin-ping-mei/index.html", "bundled", 0, "https://dsh.example.test");
+    const urls = previewUrls("/oh-story/game-preview/workspace/s/p/index.html", "v1", 0, "https://dsh.example.test");
     expect(urls.isolated).toBe(false);
     expect(urls.href).toBe(urls.probeHref);
   });

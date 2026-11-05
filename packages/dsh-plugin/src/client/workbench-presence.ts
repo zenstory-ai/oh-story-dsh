@@ -9,7 +9,7 @@ export type WorkbenchPreference = "open" | "closed";
 
 export interface WorkbenchWorkspace {
   readonly files: readonly unknown[];
-  readonly games: readonly { readonly source: "workspace" | "example" }[];
+  readonly games: readonly unknown[];
   readonly videos: readonly unknown[];
 }
 
@@ -18,12 +18,11 @@ export interface WorkbenchPreferenceStorage {
   setItem: (key: string, value: string) => void;
 }
 
-/** The bundled game example ships with the plugin, so it never marks a workspace as creative. */
 export function hasCreativeProject(workspace: WorkbenchWorkspace | undefined): boolean {
   if (workspace === undefined) return false;
   return workspace.files.length > 0
     || workspace.videos.length > 0
-    || workspace.games.some((game) => game.source === "workspace");
+    || workspace.games.length > 0;
 }
 
 /** An explicit creator choice always wins over what the workspace happens to contain. */

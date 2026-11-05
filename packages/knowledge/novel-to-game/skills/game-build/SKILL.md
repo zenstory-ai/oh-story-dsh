@@ -19,6 +19,7 @@ description: "Build a risk-matched whitebox or the approved production game for 
 `targetRuntime`、`testedRuntime` 与未覆盖项。
 
 正式生产继承 `ART_DIRECTION.md` 的可观察视觉约束与批准目标图，在实际运行中验证焦点资产。
+正式生产需要新绘制位图且无合适现成资产时，使用当前环境的图像生成能力；在 Codex 中优先使用内置 ImageGen。已有图标体系与适合代码表达的简单图形继续复用。成品保存到项目并接入真实界面，不以文字徽章、emoji 或生成请求充当已完成美术；白盒占位按阶段标明。
 
 BUILD_BRIEF 只压缩产品边界、必须保真的体验事实、运行方式与完成证据，实现细节交给实现模型。
 
@@ -26,8 +27,8 @@ BUILD_BRIEF 只压缩产品边界、必须保真的体验事实、运行方式�
 独有动作、代价和世界回应时才采用；实时手感、空间、视线、物理或模板覆盖不了的核心动词走 custom。
 白盒也必须选择能验证最大风险的形态，不能把所有项目降成文游。
 
-当前会话能编码时直接实现；外部模型不可用时只交付构建说明，不声称游戏已生成。不要发送与原型
-无关的完整受版权保护原文。
+当前会话具备实现能力时直接构建，否则使用其他可用实现方式。确无可用实现方式时，报告阻塞并
+交付构建说明，不声称候选已生成。不要发送与原型无关的完整受版权保护原文。
 
 ## 按能力读取可选合同
 
@@ -36,15 +37,16 @@ BUILD_BRIEF 只压缩产品边界、必须保真的体验事实、运行方式�
 - 采用生成式自由输入、知识权限、事件回放、存档迁移或 `signature_command` 时，读取
   [playable-model-contract.md](references/playable-model-contract.md) 的相关部分。
 - 语音策略不是 `none` 时读取 [tts-production-contract.md](references/tts-production-contract.md)。
-- 实际采用动态媒体时读取 [generative-media-pipeline.md](references/generative-media-pipeline.md)。
+- 实际采用动态媒体（影像短片、生成的音乐或音效）时读取 [generative-media-pipeline.md](references/generative-media-pipeline.md)；
+  要在选择之后播剧情过场（互动影游）时再读 [cutscene-production.md](references/cutscene-production.md)。
 - 2.5D 角色或物件需要多方向、多动作且身份一致的序列帧时，读取
   [baked-sprite-workflow.md](references/baked-sprite-workflow.md)。
 
 ## 共同构建循环
 
-1. 先实现一个最小但完整的核心循环：启动、真实输入、状态变化、结果和重开。范围不足时修范围，
-   不先堆审计材料。
-2. 实现 GAME_DESIGN 的状态、动作与结果；使用生成模型时，模型只解释输入和结果，规则器拥有提交权。
+1. 按阶段实现候选：`whitebox` 只实现验证最大风险所需的真实输入、状态变化与反馈；`production`
+   先实现启动、核心动作、设计结果与重开的完整闭环。
+2. 实现该候选涉及的 GAME_DESIGN 状态、动作与结果；使用生成模型时，模型只解释输入和结果，规则器拥有提交权。
    存在 `signature_command` 时再执行可选合同的专属边界。
 3. 保留能复现问题的初态与输入路径，涉及随机性时固定 seed；修订后重放失败路径与相邻反例。
    同一手感或表现问题连续两次修复无效时停止换方案，先查成熟作品处理同类问题的公开资料（开发者
