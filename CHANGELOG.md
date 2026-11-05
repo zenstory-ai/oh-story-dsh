@@ -11,7 +11,12 @@
 
 ## [Unreleased]
 
+## [0.1.23] - 2026-11-05
+
 ### Changed
+
+- 同步 [NovelToGame 0.7.0](https://github.com/zenstory-ai/novel-to-game/releases/tag/v0.7.0)（`b06f4b3b4f33fba9446454203251cade6a154f27`，7 Skills）：互动影游成为支持的形态——每个影响后续的选择之后接一段演出后果的短过场，故事接在过场最后一帧上继续；新增过场的设计、预算、美术与制作做法，QA 检查每个选项都播放自己的过场、没有视频时游戏照常可玩；读文字时的配乐改用延音乐器。
+- DSH 0.2.2 试用线换成 [0.2.2-rc.1](https://www.npmjs.com/package/@deepseek-ai/dsh/v/0.2.2-rc.1)（npm `next`），发布前的打包浏览器验证改名 `pnpm test:dsh:next`。默认宿主仍是 npm `latest` 的 `0.2.1-rc.5`，兼容范围不变；试用 0.2.2 需要 Node.js 24.9+。
 
 - 视频区改为「预览 / 创作画布 / 文稿」：边看画面边核对解说，有可靠剪辑对应关系时可回看原片。默认页面以播放器为主，不再重复项目标题和信息栏，段落定位与讨论都在解说稿内。解说可逐段改稿与保存，已有配音和视频保持原样；切换视图保留播放位置，新版由创作者明确载入。原生 Chat 按需展开，制作记录、环境与质检原文收进「制作详情」。
 - 将选中内容带到 Chat 时保留原有草稿、引用和附件；旧版 DSH 没有安全的草稿初始化接口时，展开同一段 Chat 并保留可查看、复制的讨论内容，不替换现有输入。
@@ -20,6 +25,10 @@
 - 短剧默认进入集级无限画布：故事场次、人物与场景参考、镜头和已有图片/视频在同一空间查看；卡片可移动、缩放、打开原文并切换真实成果版本。剧集选择独立于当前打开的文稿，布局与视野按集保留。从卡片准备生成时仍留在画布，卡片显示真实任务状态，原生 Chat 展开供核对确认。
 - 短剧沿用 DSH 的主题和原生 Chat，文稿目录与 Chat 可分别收起，为画面留出空间；在画布继续创作会展开同一会话，已有输入草稿和附件不会被覆盖。
 - 素材、生成记录和成片保留在画布旁的入口，制作环境与文档诊断收到「制作详情」；已写好提示词与真正生成的媒体分开显示，生产仍先预检、再在 Chat 确认。
+
+### Removed
+
+- 插件不再附带《金瓶梅 · 风月总账》示例游戏。NovelToGame 0.7.0 把它做成了约 100 MB 的互动影游，随包分发会让每次安装都多下载这么多。欢迎卡上的「先玩内置示例」和「游戏项目」里的「内置示例」一并去掉；你自己的游戏项目照常显示和试玩。安装包随之小了约 18 MB。
 
 ## [0.1.22] - 2026-11-03
 
@@ -432,7 +441,8 @@
 - 提供 13 个 Oh Story 小说 Skills、7 个专业 Roles 与 10 个 Drama Skills。
 - 提供文件树、Markdown/JSONL 编辑预览与官方 DSH Chat 同屏的三栏工作台。
 
-[Unreleased]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.22...HEAD
+[Unreleased]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.23...HEAD
+[0.1.23]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.22...v0.1.23
 [0.1.22]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.21...v0.1.22
 [0.1.21]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.20...v0.1.21
 [0.1.20]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.19...v0.1.20

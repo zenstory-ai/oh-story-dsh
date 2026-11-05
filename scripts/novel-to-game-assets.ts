@@ -19,7 +19,6 @@ export interface NovelToGameAssetManifest {
   };
   readonly generatedAt: string;
   readonly skills: readonly string[];
-  readonly examples: readonly string[];
   readonly files: readonly { readonly path: string; readonly sha256: string; readonly bytes: number }[];
 }
 
@@ -60,28 +59,6 @@ export async function currentNovelToGameFiles(): Promise<NovelToGameAssetManifes
     .map(async (path) => ({ path: portableRelative(novelToGameRoot, path), ...await fileDigest(path) })));
 }
 
-/**
- * Authoring provenance the Game Studio never reads. The product serves examples/<name>/build/app/**
- * and reads example.json plus qa/verification.json; everything below is upstream working material
- * that would otherwise ship to every plugin user (source/ alone is the 2MB public-domain novel).
- */
-const exampleAuthoringOnly = [
-  "source/",
-  "analysis/",
-  "concepts/",
-  "design/",
-  "screenshots/",
-  "qa/evidence/",
-  // Upstream's own deploy excludes it (.vercelignore); verification.json names it only as provenance.
-  "build/app/test/",
-  "_progress.md",
-  "PRODUCT_BRIEF.md"
-] as const;
-
-function isPortableExampleAsset(bundledPath: string): boolean {
-  return !exampleAuthoringOnly.some((entry) => bundledPath === entry.replace(/\/$/u, "") || bundledPath.startsWith(entry));
-}
-
 function isPortableSourceAsset(path: string): boolean {
   const normalized = path.split(sep).join("/");
   // A local checkout can hold ignored agent state (.omc/) next to tracked files; never ship it.
@@ -105,21 +82,12 @@ export async function synchronizeNovelToGameAssets(): Promise<NovelToGameAssetMa
     dereference: false,
     filter: isPortableSourceAsset
   });
-  await mkdir(join(novelToGameRoot, "examples"), { recursive: true });
-  const sourceExample = join(source, "examples/jin-ping-mei");
-  await cp(sourceExample, join(novelToGameRoot, "examples/jin-ping-mei"), {
-    recursive: true,
-    dereference: false,
-    filter: (path) => isPortableSourceAsset(path) && isPortableExampleAsset(portableRelative(sourceExample, path))
-  });
+  // Upstream's example games are not bundled: they are built products (0.7.0's interactive film alone
+  // is ~100 MB) and the Skills never read them. Plugin users make their own projects.
   for (const file of ["LICENSE", "README.md", "README_ZH.md", "VERSION"]) {
     await cp(join(source, file), join(novelToGameRoot, file));
   }
   const skills = (await readdir(join(novelToGameRoot, "skills"), { withFileTypes: true }))
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => entry.name)
-    .sort();
-  const examples = (await readdir(join(novelToGameRoot, "examples"), { withFileTypes: true }))
     .filter((entry) => entry.isDirectory())
     .map((entry) => entry.name)
     .sort();
@@ -132,7 +100,6 @@ export async function synchronizeNovelToGameAssets(): Promise<NovelToGameAssetMa
     },
     generatedAt: new Date().toISOString(),
     skills,
-    examples,
     files: await currentNovelToGameFiles()
   };
   await writeFile(join(novelToGameRoot, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);

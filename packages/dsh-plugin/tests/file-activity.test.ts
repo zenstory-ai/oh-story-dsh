@@ -292,14 +292,13 @@ describe("official DSH file activity", () => {
   });
 
   it("opens a new Session on the workbench that holds the workspace's work", () => {
-    const sample = [{ source: "example" as const }];
-    expect(initialWorkbenchMode("story", [{ path: "剧集/EP001/剧本.md" }], sample, [])).toBe("drama");
-    expect(initialWorkbenchMode("story", [], [...sample, { source: "workspace" }], [])).toBe("game");
-    expect(initialWorkbenchMode("story", [], sample, [{}])).toBe("video");
-    expect(initialWorkbenchMode("story", [{ path: "正文.md" }, { path: "剧集/EP001/剧本.md" }], sample, [])).toBe("story");
-    expect(initialWorkbenchMode("drama", [{ path: "正文/第001章.md" }, { path: "剧集/EP001/剧本.md" }], sample, [])).toBe("drama");
-    // The bundled example alone is not the creator's work.
-    expect(initialWorkbenchMode("story", [], sample, [])).toBe("story");
+    expect(initialWorkbenchMode("story", [{ path: "剧集/EP001/剧本.md" }], [], [])).toBe("drama");
+    expect(initialWorkbenchMode("story", [], [{ id: "workspace:letter" }], [])).toBe("game");
+    expect(initialWorkbenchMode("story", [], [], [{}])).toBe("video");
+    expect(initialWorkbenchMode("story", [{ path: "正文.md" }, { path: "剧集/EP001/剧本.md" }], [], [])).toBe("story");
+    expect(initialWorkbenchMode("drama", [{ path: "正文/第001章.md" }, { path: "剧集/EP001/剧本.md" }], [], [])).toBe("drama");
+    // A workspace with no work keeps the current workbench.
+    expect(initialWorkbenchMode("story", [], [], [])).toBe("story");
   });
 
   it("recognizes NovelToGame artifacts and prefers the product brief", () => {

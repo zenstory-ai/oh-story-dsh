@@ -6,7 +6,6 @@ const project: GameProject = {
   id: "jade-letter",
   root: "projects/jade-letter",
   title: "青石巷来信",
-  source: "workspace",
   previewReady: false,
   previewVersion: "0"
 };
@@ -72,11 +71,11 @@ describe("game creative canvas model", () => {
     expect(edges.every((edge) => nodes.some((node) => node.id === edge.from) && nodes.some((node) => node.id === edge.to))).toBe(true);
   });
 
-  it("shows the bundled example as one real playable card without fake documents", () => {
-    const example: GameProject = { ...project, id: "example", source: "example", previewReady: true, previewVersion: "bundled" };
-    const nodes = gameCanvasNodes(example, [file("projects/jade-letter/build/app/index.html")], {});
+  it("shows a project that has only a build as one real playable card without fake documents", () => {
+    const built: GameProject = { ...project, id: "built", previewReady: true, previewVersion: "1" };
+    const nodes = gameCanvasNodes(built, [file("projects/jade-letter/build/app/index.html")], {});
 
-    expect(nodes).toEqual([expect.objectContaining({ id: "game:example:preview", kind: "preview", title: "青石巷来信" })]);
+    expect(nodes).toEqual([expect.objectContaining({ id: "game:built:preview", kind: "preview", title: "青石巷来信" })]);
     expect(gameCanvasEdges(nodes)).toEqual([]);
   });
 

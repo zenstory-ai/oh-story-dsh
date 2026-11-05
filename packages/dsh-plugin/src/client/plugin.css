@@ -16,10 +16,6 @@
 .oh-story-welcome h2 { margin: 0 0 8px; font-size: 20px; }
 .oh-story-welcome p { margin: 8px 0 0; }
 .oh-story-welcome ol { margin: 12px 0; padding-left: 24px; }
-.oh-story-welcome-example { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding-top: 12px; border-top: 1px solid var(--dsw-alias-border-l2); }
-.oh-story-welcome-example button { min-height: 32px; border: 1px solid var(--dsw-alias-border-l2); border-radius: 8px; padding: 4px 12px; color: inherit; background: var(--dsw-alias-bg-layer-1); cursor: pointer; font: inherit; font-weight: 600; }
-.oh-story-welcome-example button:hover { background: var(--dsw-alias-button-ghost-active-fill); }
-.oh-story-welcome-example span { color: var(--dsw-alias-label-secondary); font-size: 12px; }
 .oh-story-split-surface { display: contents; font-family: var(--dsw-font-family); }
 
 /* Collapsed, the plugin owns nothing but this control: DSH renders the

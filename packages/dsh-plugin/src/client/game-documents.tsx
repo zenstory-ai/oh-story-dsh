@@ -33,7 +33,6 @@ export function GameDocuments({ project, files, editor, onChat }: {
   readonly editor: GameDocumentEditor;
   readonly onChat: (prompt: string) => void;
 }) {
-  if (project.source === "example") return <div className="oh-game-design-empty"><strong>内置完整示例</strong><p>可以直接试玩这个示例。它的原著、创作设定与设计文稿未随插件分发；你的项目会在这里显示自己的文稿。</p><button type="button" onClick={() => { onChat("我想参考这个示例，讨论自己的游戏故事和玩法。请先和我讨论想法。"); }}>讨论我的游戏想法</button></div>;
   const available = files.filter((file) => file.kind === "text" && file.path.startsWith(`${project.root}/`));
   const creative = Object.entries(DOCUMENT_NAMES).flatMap(([relative, title]) => {
     const file = available.find((item) => item.path === `${project.root}/${relative}`);

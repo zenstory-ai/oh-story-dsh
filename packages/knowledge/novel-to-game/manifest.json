@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "upstream": {
     "repository": "https://github.com/zenstory-ai/novel-to-game.git",
-    "commit": "c3075f35cc14d4bc94e2829df2bfcc0d9971229e",
-    "releaseVersion": "0.6.1"
+    "commit": "b06f4b3b4f33fba9446454203251cade6a154f27",
+    "releaseVersion": "0.7.0"
   },
-  "generatedAt": "2026-10-27T08:36:13.586Z",
+  "generatedAt": "2026-11-05T09:24:59.569Z",
   "skills": [
     "game-art-direction",
     "game-build",
@@ -15,9 +15,6 @@
     "novel-game-analyze",
     "novel-to-game"
   ],
-  "examples": [
-    "jin-ping-mei"
-  ],
   "files": [
     {
       "path": "LICENSE",
@@ -26,553 +23,18 @@
     },
     {
       "path": "README.md",
-      "sha256": "e3db2db40799e4460f6ebee77794cb0ae43ee28a3a01069e9f54155133af49b1",
-      "bytes": 37861
+      "sha256": "8a3c7fadf5ae13baced6322aca95b0477c32719c882e92ddace2d38d3306a1a7",
+      "bytes": 35699
     },
     {
       "path": "README_ZH.md",
-      "sha256": "088e801663994bcd3b60b58b33b8e99345ccc3470afbb1d0aeb561cea3ca768d",
-      "bytes": 34100
+      "sha256": "258a542f3fff0ff870258ec339cbb30f4eb7e0c98ff8c42944635561d1466c3f",
+      "bytes": 31699
     },
     {
       "path": "VERSION",
-      "sha256": "87b241b275c591694846560e9879f50c9da3150f854efdabd782c539772f3033",
+      "sha256": "967d9afb101346667166f2e76e81910bc190488d7d41d50ca0072e9d92f00e32",
       "bytes": 6
-    },
-    {
-      "path": "examples/jin-ping-mei/build/BUILD_BRIEF.md",
-      "sha256": "b6dbed37f9faac97dcfb0f125471a5eee703789b26371af64dcac7dbb58da3ab",
-      "bytes": 2208
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/.gitignore",
-      "sha256": "56537ebe03160a28fdb6e59ae18f408d6f8aba609df73c45917c9358fd3bad52",
-      "bytes": 8
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/.vercelignore",
-      "sha256": "9d9c205f180165a62954ec9d12705e18fa8a20fe0f99709cd4bfe141243ea677",
-      "bytes": 17
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/RUN.md",
-      "sha256": "991d4208a67d05594c37286575f90109abfa29870ab47f1fac27963560c876ce",
-      "bytes": 2102
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/assets/bg/chamber.webp",
-      "sha256": "35a721772a2511c68b6b22faf35c3fae9bafc87f257751a1b0c05b20373d376e",
-      "bytes": 159850
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/assets/bg/compound_new_guofeng.webp",
-      "sha256": "e7d2cc8c4478184480a141e5e4ebfd16a134e219f6aa82a9166b6262fcaeec55",
-      "bytes": 443276
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/assets/bg/court_night.webp",
-      "sha256": "cf17e668ab1f7855ed73fd3242a383fdad58eb7d4ae442b651de783b24cfe6bf",
-      "bytes": 323002
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/assets/bg/court_rain.webp",
-      "sha256": "e38047f3e81e4c535e182da1e5cb5ada9869b50002cacc11e50c36ea2d84cd1b",
-      "bytes": 354574
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/assets/bg/garden.webp",
-      "sha256": "0f69555edead74fffb962bd815ebaa3aa0a8919f5f396676a80e1c09f5c75695",
-      "bytes": 359918
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/assets/bg/hall.webp",
-      "sha256": "43943ad228cbb76f7530a2fd8a58f6f174dc7e1d8ed69b00b2ecbd52075fea6e",
-      "bytes": 214124
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/assets/bg/kitchen.webp",
-      "sha256": "fc88a67c331ad810e9076a5d39a28ecd3fbf5fa7de905d557167aed014899805",
-      "bytes": 180332
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/assets/bg/street.webp",
-      "sha256": "fb8040561e5f5a55360045cbe08f8fdc8aada9b6609352c4bc18e5deffc9a01b",
-      "bytes": 324252
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/assets/bg/street_dawn.webp",
-      "sha256": "fe3d05596a76bc6e619dfb3dd957509dbf2fd3aaa9a95109a69f44e880c21677",
-      "bytes": 352794
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/assets/bg/temple.webp",
-      "sha256": "642c9288a85abaaed97276ba9563e7fff9376d8e96039ccf12ef028b5a2e3848",
-      "bytes": 393698
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/assets/cg/finale/fate_coda.webp",
-      "sha256": "6691f9bee9125e4686a17347ebe45ba2f06ca6abf4cf7bcb204f453969a39176",
-      "bytes": 236592
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/assets/cg/finale/meng.webp",
-      "sha256": "eaad25d4e17d6eee1ef109e880e06aa233558a7ae1df85435fc910e0cd1c8c3e",
-      "bytes": 207418
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/assets/cg/finale/pan.webp",
-      "sha256": "d3b552c7adc734638ca31c5a810a4032cee291994032db686ca19d9660184d2c",
-      "bytes": 296768
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/assets/cg/finale/pinger.webp",
-      "sha256": "d1bcd06f1861393f08a65f040f7d742c69c9d39d6abaee979ea39e45cb793229",
-      "bytes": 238584
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/assets/cg/finale/xuee.webp",
-      "sha256": "9ade0dd2fb4bb1896728d9e3d329aea2840b07e020bca417d9a540e1b5a27d87",
-      "bytes": 324856
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/assets/cg/finale/yue.webp",
-      "sha256": "e815bbc4a60e46e9d75abddbb29ff7fe42cf8ca92e95e6978cf4c6383e5129f8",
-      "bytes": 234878
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/assets/cg/group/inner_court_afterglow_five.webp",
-      "sha256": "75fef2b554d0c59cd01eb8e7bfbd82c004d7b8f80a94c1f39ffc3f32285fae2a",
-      "bytes": 320166
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/assets/cg/group/inner_court_alliance.webp",
-      "sha256": "1ffd9ee9f1a9493ff5e2c3d5843fd488e2f24ea7e0c0fe1f0695593c3eb482da",
-      "bytes": 334616
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/assets/cg/group/public_day10.webp",
-      "sha256": "b110170996d407651e91fe76a31a93bf555fb9bd659e8b62c40165cdbf653ead",
-      "bytes": 347128
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/assets/cg/group/public_day5.webp",
-      "sha256": "93b166c839e9c25398b0790f3d5821d8b85878395d5f1881aeff269a0bac523e",
-      "bytes": 313400
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/assets/cg/group/title_new_guofeng.webp",
-      "sha256": "375f73c10aea38a0235e84467bfabf8f13fe5a55322875e4af3711fa0a1b3bfc",
-      "bytes": 297206
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/assets/cg/joint/pan_pinger.webp",
-      "sha256": "fdcb7558005dd0a09ab49f4f9b9bb6ad004cd99e1ab92853a11e7cb6fd24091c",
-      "bytes": 306540
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/assets/cg/joint/pan_xuee.webp",
-      "sha256": "5c1a3efc73efad7ac2ef595ff31199ac5bb86be228260e6a428b96e2af1e41c1",
-      "bytes": 325244
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/assets/cg/joint/yue_meng.webp",
-      "sha256": "eb3b770e603943667bb3217f3bc6d9e16937229d7f96b2753dd221e2ef3dd98a",
-      "bytes": 287792
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/assets/cg/joint/yue_pan.webp",
-      "sha256": "0ffc288d09d6585fb275850f92274e8e5762a4f72bc3b8a9cb7318eece4ff0d3",
-      "bytes": 325506
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/assets/cg/joint/yue_pinger.webp",
-      "sha256": "bb688f4e44b24506c59f2d6e19403c406f1477ce3ee7968c6e809d1390fdc1ff",
-      "bytes": 300402
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/assets/cg/meng/explicit.webp",
-      "sha256": "d7999687e3260c4d94b11c4e08a3dde2885fdd2c3532fe096b336a2bfc15b02f",
-      "bytes": 278702
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/assets/cg/meng/prelude.webp",
-      "sha256": "e1306c98de93e5bc1131f883c0c0e072ff4b5240ae44e1eaf6d1b7e62fadc0fe",
-      "bytes": 200262
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/assets/cg/milestone/meng.webp",
-      "sha256": "9a0daa9945124d06bb7fc7838b2394f18ae8f3774b16ad56869b204a9b93b1ea",
-      "bytes": 261132
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/assets/cg/milestone/pan.webp",
-      "sha256": "1f4ceb8295fb7072f5228df896a3e27d8580ed3435c66deba6a738797a23b37b",
-      "bytes": 260562
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/assets/cg/milestone/pinger.webp",
-      "sha256": "79d47a06b03a7b8d74c32276c50c831e6d8c4833cb8c24956393d3ac936df56b",
-      "bytes": 181074
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/assets/cg/milestone/xuee.webp",
-      "sha256": "d89e629dd2188ec552cd144bbd8f6955c4b412ad942f73996e0c7a83c1cbc164",
-      "bytes": 252890
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/assets/cg/milestone/yue.webp",
-      "sha256": "878d607031c733b01e8f732fd0b776409c232eec2c3b067a9a0d3ba4e117ee18",
-      "bytes": 218976
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/assets/cg/pan/explicit.webp",
-      "sha256": "22a1e61e299df9113bd5064ab50d28969c7ee588e0f93d4d478657d2c2ce5a54",
-      "bytes": 246930
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/assets/cg/pan/prelude.webp",
-      "sha256": "f688cb0702542db332ee96e9acd38ea2e5e8f93a64d3179c3a13dabb25da6297",
-      "bytes": 203316
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/assets/cg/pinger/explicit.webp",
-      "sha256": "f4f1eebe08e9c62c1fa15139346a709b3c52b39547f127a24c6a28a09d9a4ed8",
-      "bytes": 226298
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/assets/cg/pinger/prelude.webp",
-      "sha256": "e5cb7f43b31f3b26c76b49fe08f11c41ab10ffcd117751cab57e9248db24461d",
-      "bytes": 206568
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/assets/cg/xuee/explicit.webp",
-      "sha256": "2a6ffcf92abbeb2c3153d7dacb8877fff9edbee912c249f5a95549c1635839a1",
-      "bytes": 315244
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/assets/cg/xuee/prelude.webp",
-      "sha256": "ce4f6c2c5d131ca0d6924af5557259221cd8a24ccf1d0f9bcc4bcde3235cbc60",
-      "bytes": 297146
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/assets/cg/yue/explicit.webp",
-      "sha256": "3b8b34b954a4c47b0990584ef94110e23b26880ed62e3503110195a10868e718",
-      "bytes": 252370
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/assets/cg/yue/moon.webp",
-      "sha256": "0db74a97526e0917d3f1e62ab298864373451a76bab1aded2f21467fd9a32d81",
-      "bytes": 222758
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/assets/cg/yue/prelude.webp",
-      "sha256": "9ec61854e37169ba2b4e7176b47819c206032d89b665c22fe1a0a6d2467932c8",
-      "bytes": 189118
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/assets/heroine/meng/night.webp",
-      "sha256": "69809edd2de568e73956fd4f2d45c47a5d99e5ad2bb1d6c5e019eedeefc126d7",
-      "bytes": 233346
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/assets/heroine/pan/night.webp",
-      "sha256": "d9e966068e2f727c37b0e23df3e59a5f173d78c1146ba69e7acd7de2c946df99",
-      "bytes": 261188
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/assets/heroine/pinger/night.webp",
-      "sha256": "982804fc9d873848965eb4e70e7ef6090740d135c622a281936cb84280d93b81",
-      "bytes": 199986
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/assets/heroine/xuee/night.webp",
-      "sha256": "7394d8b7ff4e48498266ea2c16d9c6851949bdc3e444fb39fc761c34003ce3f8",
-      "bytes": 296336
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/assets/heroine/yue/night.webp",
-      "sha256": "5f9dd4ad1e7bf7c91643d0f519bdbf90b158d06c7ea6b3db6bb1d10032d44803",
-      "bytes": 213484
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/assets/scene/gate_collector.webp",
-      "sha256": "e2724ced045e73a4b5621468333593a146c95e5b0e93d776abf458923e2f0fc2",
-      "bytes": 215828
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/assets/sprite/meng/angry.webp",
-      "sha256": "39fb0651db7cbe7d8544014d9e11e850f57a57db74ece75c47de534c7520ff2a",
-      "bytes": 154386
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/assets/sprite/meng/blush.webp",
-      "sha256": "93a7b854b98d1ff8d09efe66d1f46cf6bc4f572df11d86f310076bc766a94839",
-      "bytes": 156732
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/assets/sprite/meng/neutral.webp",
-      "sha256": "26fda51b90aa702b9ab5ba3d69d1013f7a5c9854a663713a27b43dcb72977683",
-      "bytes": 215404
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/assets/sprite/meng/sad.webp",
-      "sha256": "7849a1bef7b4fa3ad31358a635cfd35d8d06d2f789eb46516995485fd90baef6",
-      "bytes": 166160
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/assets/sprite/meng/smile.webp",
-      "sha256": "97ab4b28ef62e0502d24de5d2535640a02f54bf496481dfc408c52a12e4cd196",
-      "bytes": 163834
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/assets/sprite/meng/surprised.webp",
-      "sha256": "52431574e9dbb31c66d85003f6a01d347cf6b74b5df31366a35c2a3d43ef266f",
-      "bytes": 222760
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/assets/sprite/pan/angry.webp",
-      "sha256": "f1258f582dcf4ed26cfaad2d7dbce61fce13667435d2add533844e8de69fd111",
-      "bytes": 192586
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/assets/sprite/pan/blush.webp",
-      "sha256": "4395d0bdb55a8a4a923cd31deb087904f7af7d89a04b29beb0785d08c1c64f85",
-      "bytes": 196028
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/assets/sprite/pan/neutral.webp",
-      "sha256": "99a62c38520cbdc0d5a14ae2d770df3b78a99010e75f2aacd860e7f303117bab",
-      "bytes": 248174
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/assets/sprite/pan/sad.webp",
-      "sha256": "f4e876a515b18b79a310ca389b6e574be23f79a9399c7725e904bffc8c44b550",
-      "bytes": 203850
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/assets/sprite/pan/smile.webp",
-      "sha256": "5e9beb59b8bafd99419a583b0550118fb62c27d693df251b20c8ecae78540b86",
-      "bytes": 200958
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/assets/sprite/pan/surprised.webp",
-      "sha256": "4b68e48750da9b0f8ab28000ce238822ea9ea9979aae449bcbcc2b90ebe1c943",
-      "bytes": 256756
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/assets/sprite/pinger/angry.webp",
-      "sha256": "92cf6fd81855514848021d870892107036f31e0aa9ead48c5114225aa52e3163",
-      "bytes": 176962
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/assets/sprite/pinger/blush.webp",
-      "sha256": "fd167afd2c9cd222b48dff843e3c8ffbaba74a004405bad9b5dee9b517ec5fcb",
-      "bytes": 175918
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/assets/sprite/pinger/neutral.webp",
-      "sha256": "75b8da1811726f228367b68fa0d4f60df471af38f9ce11fad2f4552530f929dc",
-      "bytes": 223598
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/assets/sprite/pinger/sad.webp",
-      "sha256": "2fdea46a3548d0e0f6f4361d933aaa515a4bcb1ede96912b5c47d9950a8df24e",
-      "bytes": 168476
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/assets/sprite/pinger/smile.webp",
-      "sha256": "9867fb8999e7832ba12bdf6ee1767bf7848bd06a955b55099b21ce3e5b79881a",
-      "bytes": 177980
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/assets/sprite/pinger/surprised.webp",
-      "sha256": "cd92b8d754eb260747b252864c1bac988f95cc9d47a7a2dee30b69b322eb656d",
-      "bytes": 230860
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/assets/sprite/xuee/angry.webp",
-      "sha256": "9880fd5a45842e7562330ce13380f6b3a33a534dd3fa7b37127186065d460142",
-      "bytes": 157304
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/assets/sprite/xuee/blush.webp",
-      "sha256": "82fa9b3ab93e1d51cd9ac1e65b49d91520087ad239c6437602d7cbef52b92280",
-      "bytes": 156526
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/assets/sprite/xuee/neutral.webp",
-      "sha256": "b1a6cade2bb4f2e7b58efd88d091c99a5552520687492e5d63416a67c89a2b1f",
-      "bytes": 175434
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/assets/sprite/xuee/sad.webp",
-      "sha256": "d4a70e4e77c9991238ab81abfeaba4d57d52178f4019eb1bd3689764eeed5c23",
-      "bytes": 154540
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/assets/sprite/xuee/smile.webp",
-      "sha256": "d13acb857e42658aa8336df90f796c0c459250b5e6f6f60507cf99999bb08e17",
-      "bytes": 170578
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/assets/sprite/xuee/surprised.webp",
-      "sha256": "0ddbbd62703055957691cc9801185123c94ce48c2be1cb55333d729f4f71f653",
-      "bytes": 180702
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/assets/sprite/yue/angry.webp",
-      "sha256": "ce006abc870cc60ba92b173c71c5b849439bfd10b6d8c0c0770f07918c6d9b27",
-      "bytes": 177228
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/assets/sprite/yue/blush.webp",
-      "sha256": "113709ab39a6017e3471cb8e0d01b0bb3f002aa0fab492bbabaca8c282ad905a",
-      "bytes": 177378
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/assets/sprite/yue/neutral.webp",
-      "sha256": "2629426fd42281c52caf02b43690a2e13faa19e7b48a37663c7dde7cf84cf7a5",
-      "bytes": 220652
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/assets/sprite/yue/sad.webp",
-      "sha256": "ab5c17b672157930635227f35541d3296d73403bd48932c655abe5d49c1d6687",
-      "bytes": 175314
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/assets/sprite/yue/smile.webp",
-      "sha256": "4f72060c924e334e30dde44307b3c7de34bd1ac8bb66955205a5cdf2a1c5c174",
-      "bytes": 173120
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/assets/sprite/yue/surprised.webp",
-      "sha256": "a0a15b97b30820ef5a9aae6c23ac0d947048db0e44b892217efd68300f008862",
-      "bytes": 228056
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/css/style.css",
-      "sha256": "865cf898814a3149fc1f755a52c08acf21349a4e01dd34b76ede5e86a403acf4",
-      "bytes": 28611
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/index.html",
-      "sha256": "6f66f2d7e36d6e4ef1862efd2464da3f6a8b841aac5824d727bed2fb9df4ca07",
-      "bytes": 3439
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/js/adv.js",
-      "sha256": "3c67762b5d665add85bcf2b8f8a5a8b4d01a0fc18b7c46021ed6e005a6acf90c",
-      "bytes": 10443
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/js/audio.js",
-      "sha256": "bc55efbca94be03723911ea61e34459f2f0344b55f4c995b84d18340af8967e8",
-      "bytes": 8745
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/js/main.js",
-      "sha256": "1a971f5e244f7f03aef96c119707ad0f5bc9354a806924656332f5089d547071",
-      "bytes": 20664
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/js/menus.js",
-      "sha256": "9f07d2bc25cedec554c7bf3fb31ecab0810c115964429e65d501d01c4ef4a80e",
-      "bytes": 15976
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/js/petals.js",
-      "sha256": "7f511dfd363cf8cbb9eba71467361d661cb263b3e3c42b3ca68c2f27ed3f0792",
-      "bytes": 2349
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/js/stage.js",
-      "sha256": "5b75cb0584b8f852f2cbfaebe613727e6d16d6d1349bfd1dcb51ee56059647ec",
-      "bytes": 6580
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/js/store.js",
-      "sha256": "668e00e27ae0a1e3126e2a2c48d6c1e803c020b3071da6f3852a7cdc9e96212e",
-      "bytes": 2602
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/js/story/common.js",
-      "sha256": "bc2948c3348b9a299fc041840f18790d7c0addf6f669a1667770b2750326927a",
-      "bytes": 9105
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/js/story/common2.js",
-      "sha256": "37dc47d66f6deb8b297815f9f3c12881749c70c78a0d0cfbb013dd69bc7fa3c1",
-      "bytes": 9897
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/js/story/common3.js",
-      "sha256": "9ceab05b4ab927b8a91eca93f39582cdd1b3b75ab3e4b4a9084d592d8ce4ce5f",
-      "bytes": 9028
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/js/story/dates.js",
-      "sha256": "a4d86145ca913e31f0f87a5bd272a57634641f7ec822d7a20f79e928fecf14f3",
-      "bytes": 8230
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/js/story/index.js",
-      "sha256": "0d1e1659d5e8505f0a6e34b86932ba4dba2640b7ee1af88734b8fc97b802e78e",
-      "bytes": 8641
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/js/story/meng.js",
-      "sha256": "3f957d0c33fbb8b638902985d07f1f172f0c5eb34bc41c2bd99ffea83ca9e6e3",
-      "bytes": 8134
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/js/story/pan.js",
-      "sha256": "ff324f992613a7e602818cd9250a6b0f0bae05893d8725a76c891783f223f1ee",
-      "bytes": 9193
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/js/story/pinger.js",
-      "sha256": "b148bfcffbb5c5822be5daea4903e520041d76c99836c271c0f97bbe3a0a9254",
-      "bytes": 8785
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/js/story/xuee.js",
-      "sha256": "679517e9bf12a5fe92d239a28564be8f93cf0f2d8d20bf9b12bb081018937cd3",
-      "bytes": 8283
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/js/story/yue.js",
-      "sha256": "bf85fb55ed7525f2e77e3add40b88ad963423ccaaecd5b6fac9c1033647cca87",
-      "bytes": 9312
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/package.json",
-      "sha256": "ee976a411123cc462bf7bf891ff9365550d2acfbcb82a2d2225b06ce53c1a12a",
-      "bytes": 400
-    },
-    {
-      "path": "examples/jin-ping-mei/build/app/vercel.json",
-      "sha256": "d95ad8642f998ce32f0e2edc60e768e821201a5eca3ca3fbeb2331c70e86e4d9",
-      "bytes": 448
-    },
-    {
-      "path": "examples/jin-ping-mei/build/art/generated-art.json",
-      "sha256": "ca767e079cf22c89c46d4db7ef5c8a98aa1ac279b602054df8c3cd805d61f327",
-      "bytes": 13025
-    },
-    {
-      "path": "examples/jin-ping-mei/example.json",
-      "sha256": "619c52e46823705d882d75c81d6851082f074c08ca742c3896b9ece9ead194dc",
-      "bytes": 384
-    },
-    {
-      "path": "examples/jin-ping-mei/qa/README.md",
-      "sha256": "0091b4301d58ca7633f8db0a51dbb1ad7551303d0494044fabd1caeb4d7c2b3c",
-      "bytes": 923
-    },
-    {
-      "path": "examples/jin-ping-mei/qa/verification.json",
-      "sha256": "ad646eaf618cd3e2896b56eb0429ec7526769c2f940c846e20259c2200dee826",
-      "bytes": 1277
     },
     {
       "path": "skills/game-art-direction/SKILL.md",
@@ -586,13 +48,13 @@
     },
     {
       "path": "skills/game-art-direction/references/art-direction-method.md",
-      "sha256": "367b8d421b99c64151582f3803b9b07689ded244b32125cb50c86cf49cb19f41",
-      "bytes": 3162
+      "sha256": "7a4ebc45f3752331c94963025ece3373e63a16c62a5c50271634e8de23507e51",
+      "bytes": 7045
     },
     {
       "path": "skills/game-build/SKILL.md",
-      "sha256": "4a1b79ed036d2f149fb0a19f68609bf7fd0a5335a171321b7bd67175cd6671d2",
-      "bytes": 5563
+      "sha256": "c388f9f31e0af28b996630376c7678afa2b40ebb276e573b6087dbf61aaef463",
+      "bytes": 6212
     },
     {
       "path": "skills/game-build/agents/openai.yaml",
@@ -611,13 +73,18 @@
     },
     {
       "path": "skills/game-build/references/build-brief-contract.md",
-      "sha256": "ccc9f1a953c041f6e3075fd131088ba3d5ae13170e0a438edd83f622bc052efe",
-      "bytes": 3564
+      "sha256": "da8ce699de79e2f1d2ab4b9036e831417f083c34b321ec6c91df561cd872cfac",
+      "bytes": 4375
+    },
+    {
+      "path": "skills/game-build/references/cutscene-production.md",
+      "sha256": "6b6bffdaed448e5fb680d93ae6898dc14e751b70751374a95c5dbd972f8fdc27",
+      "bytes": 3004
     },
     {
       "path": "skills/game-build/references/generative-media-pipeline.md",
-      "sha256": "f3051882b7c874d0e74ec4aa585a091323eb5d610ab4cbbf286b924858b5152a",
-      "bytes": 1231
+      "sha256": "17d5900e840ad8c9d9a179bb04bf628ebd1572edcc006822033cf32b83ca2abd",
+      "bytes": 2717
     },
     {
       "path": "skills/game-build/references/playable-model-contract.md",
@@ -626,8 +93,8 @@
     },
     {
       "path": "skills/game-build/references/tts-production-contract.md",
-      "sha256": "8962b0d6a08c61ebf0936b4a97e4e91a55c6333f5b122e510d3769925f0aa1f0",
-      "bytes": 1249
+      "sha256": "a5c42b6f66c068665cc4766e6c8c9fe8b923bcdd12609fed8060e7edcdb9e5ad",
+      "bytes": 1421
     },
     {
       "path": "skills/game-concept/SKILL.md",
@@ -641,8 +108,8 @@
     },
     {
       "path": "skills/game-concept/references/concept-method.md",
-      "sha256": "c34c47b3920740957dbf4b8e64c7258e1b584604eff671ca2718baf340bc9538",
-      "bytes": 3284
+      "sha256": "69cf2528f036c9d8632b6906ce3729103334adcbf61b5e72d827c6c76dd73c0e",
+      "bytes": 3725
     },
     {
       "path": "skills/game-qa/SKILL.md",
@@ -661,13 +128,13 @@
     },
     {
       "path": "skills/game-qa/references/test-design-method.md",
-      "sha256": "2b9c4a7331c8302f1d0894178eb9cf1bd39633a69512bfd2481006db786693b4",
-      "bytes": 3635
+      "sha256": "34dea0a7191a053f8217edf9d79503f9d4bc67e971138ec9cbb50d4226ef7f4c",
+      "bytes": 5973
     },
     {
       "path": "skills/game-world-design/SKILL.md",
-      "sha256": "c72856e53a0ec22e0c33c2f9fb593e426cdf014d319aecd949c0be25518c693c",
-      "bytes": 3913
+      "sha256": "38c7461473db98aef88f3e3509754292aef79a91544f8bfab7cd5ee21b534465",
+      "bytes": 4089
     },
     {
       "path": "skills/game-world-design/agents/openai.yaml",
@@ -675,9 +142,14 @@
       "bytes": 336
     },
     {
+      "path": "skills/game-world-design/references/interactive-film-method.md",
+      "sha256": "d047bf8f007da240ae14becab6b6ad51b56aef7e7a9fe6f4c4299309e7705af2",
+      "bytes": 7120
+    },
+    {
       "path": "skills/game-world-design/references/narrative-design-method.md",
-      "sha256": "7e11b018e3b9d59bbd7102b4329aecc7c1e1c7c13616475129a8028f0313071d",
-      "bytes": 2446
+      "sha256": "7de472b6dc46c4480223a8a27917225a5cc4442a89c8204bd54f14d3ac61c0af",
+      "bytes": 2996
     },
     {
       "path": "skills/game-world-design/references/numeric-design-method.md",
@@ -686,13 +158,13 @@
     },
     {
       "path": "skills/game-world-design/references/world-design-method.md",
-      "sha256": "ecbb27b68ff8cf11996c7d4220579437e69fa31c7fa8eb939dee263fd1ce07ff",
-      "bytes": 4356
+      "sha256": "c5d60b800a1b33b676d1a718737d16f70d3ee52d387c23d9e5e792e1d90c5fda",
+      "bytes": 4670
     },
     {
       "path": "skills/novel-game-analyze/SKILL.md",
-      "sha256": "4595ec966ee2cbcf46ca75daa534a790beb29c669d348b09e16254e30893894a",
-      "bytes": 4879
+      "sha256": "7fe9258dcc1584dd577b298eb884424f49c01285f27026f5656aafdb35328cfe",
+      "bytes": 4741
     },
     {
       "path": "skills/novel-game-analyze/agents/openai.yaml",
@@ -706,8 +178,8 @@
     },
     {
       "path": "skills/novel-to-game/SKILL.md",
-      "sha256": "62b35309ba32c01f006deb4a7156e304839f57d77cc5264d3a7b9a697588dd61",
-      "bytes": 4470
+      "sha256": "d36eb052dbb215b46e800b09b5e4ebbb42a93e223ac5f70a33a01fd7f6248aa1",
+      "bytes": 4613
     },
     {
       "path": "skills/novel-to-game/agents/openai.yaml",
@@ -721,8 +193,8 @@
     },
     {
       "path": "skills/novel-to-game/references/pipeline-contract.md",
-      "sha256": "60c90580a613e9a8dbd0a87f2c87476061e43551842f25168e0ce09ee1113f2a",
-      "bytes": 3278
+      "sha256": "16bf69ae547cbc6dbd04f434ce4fc5c2956a266e5cc05ac35dac47775f306d93",
+      "bytes": 3396
     }
   ]
 }

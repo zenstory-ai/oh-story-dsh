@@ -9,7 +9,6 @@ describe("GameCanvas", () => {
       id: "jade-letter",
       root: "games/jade-letter",
       title: "青石巷来信",
-      source: "workspace",
       previewReady: true,
       previewVersion: "3"
     };

@@ -41,10 +41,10 @@ The table describes the current source. Published packages pin their upstream co
 | --- | --- | --- |
 | Novel | [Oh Story 0.10.0](https://github.com/zenstory-ai/oh-story-claudecode/releases/tag/v0.10.0) · 14 Skills · 7 Roles | `/story`, `/story-long-write`, `/story-review`, `/story-publish` |
 | Short drama | [Drama Skills 0.10.2](https://github.com/zenstory-ai/drama-skills/releases/tag/v0.10.2) · 12 Skills | `/short-drama`, `/short-drama-write`, `/short-drama-storyboard`, `/short-drama-edit` |
-| Game | [NovelToGame 0.6.1](https://github.com/zenstory-ai/novel-to-game) · 7 Skills · playable 《金瓶梅》 ADV sample (18+) | `/novel-to-game quick`, `/game-build`, `/game-qa` |
+| Game | [NovelToGame 0.7.0](https://github.com/zenstory-ai/novel-to-game/releases/tag/v0.7.0) · 7 Skills | `/novel-to-game quick`, `/game-build`, `/game-qa` |
 | Video | [video-recap-skills 0.6.2](https://github.com/zenstory-ai/video-recap-skills/releases/tag/v0.6.2) · 7 Skills (3 user entry points) | `/video-recap`, `/video-script`, `/video-reference` |
 
-> Latest release **v0.1.22** (2026-11-03). The default install pins DeepSeek Harness `0.2.1-rc.5` (the npm `latest` and `next`); the earlier `0.2.0-rc.2` and `0.2.2-alpha.3` (the npm `alpha`) are also supported. See [CHANGELOG.md](CHANGELOG.md) and [Releases](https://github.com/zenstory-ai/oh-story-dsh/releases); upgrade steps are in the FAQ entry [“What do I do after upgrading?”](#what-do-i-do-after-upgrading).
+> Latest release **v0.1.23** (2026-11-05). The default install pins DeepSeek Harness `0.2.1-rc.5` (the npm `latest`); the earlier `0.2.0-rc.2` and `0.2.2-rc.1` (the npm `next`) are also supported. See [CHANGELOG.md](CHANGELOG.md) and [Releases](https://github.com/zenstory-ai/oh-story-dsh/releases); upgrade steps are in the FAQ entry [“What do I do after upgrading?”](#what-do-i-do-after-upgrading).
 
 ## The four workbenches
 
@@ -66,7 +66,7 @@ Each episode maintains up to five core creative Markdown files as needed: `剧�
 
 ![Game workbench](docs/images/game-creative-workbench.png)
 
-The game workspace offers Playtest, Creative canvas and Documents. The canvas organizes actual story, gameplay and art documents alongside the playable build. Edit and save documents with draft and conflict protection, and continue in native Chat. View changes preserve the running game, Chat can collapse, and new builds load only when selected. Output from `/novel-to-game quick` goes to `game-adaptations/<project>/`; once `build/app/index.html` is ready the project appears in the list and can be refreshed, made full-screen or switched. Games run on a separate origin inside an iframe sandbox. The bundled Jin Ping Mei ADV sample plays without an API key: before you have any work, click 「先玩内置示例」 (play the bundled sample) on the welcome card; afterwards pick it under 「内置示例」 in the 「游戏项目」 (game project) list. Adapted from the classical novel, it contains adult content (18+) and asks you to confirm your age before it starts.
+The game workspace offers Playtest, Creative canvas and Documents. The canvas organizes actual story, gameplay and art documents alongside the playable build. Edit and save documents with draft and conflict protection, and continue in native Chat. View changes preserve the running game, Chat can collapse, and new builds load only when selected. Output from `/novel-to-game quick` goes to `game-adaptations/<project>/`; once `build/app/index.html` is ready the project appears in the list and can be refreshed, made full-screen or switched. Games run on a separate origin inside an iframe sandbox.
 
 ### Video recap
 
@@ -89,11 +89,11 @@ Boundaries and protocols for each workbench are in the [architecture notes](docs
 Requires Node.js 24+. The install command provides pnpm temporarily, so a machine with only Node.js can run it:
 
 ```bash
-npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.1-rc.5 dsh plugin --profile web add @oh-story/dsh@0.1.22 &&
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.1-rc.5 dsh plugin --profile web add @oh-story/dsh@0.1.23 &&
 npx -y @deepseek-ai/dsh@0.2.1-rc.5 web
 ```
 
-Keep the terminal running; the browser opens automatically by default. If it does not, copy the full `http://127.0.0.1:3080/?token=...` link printed in the terminal — first-time authentication needs the token in the link. Closing the terminal stops the service. Use the same dsh version for install and start. The commands on this page pin `0.2.1-rc.5`, the npm `latest` and `next`. The plugin accepts `>=0.2.0-rc.2 <0.2.1-0`, `>=0.2.1-alpha.1 <0.2.2-0` and `>=0.2.2-alpha.2 <0.2.3-0`. If you stay on `0.2.0-rc.2`, or want to try `0.2.2-alpha.3` (which needs Node.js 24.9+), use that same version in both the install and start commands; do not mix host versions. DSH checks compatibility while adding and loading the plugin and reports mismatches (`dsh plugin allow-version` overrides it at your own risk).
+Keep the terminal running; the browser opens automatically by default. If it does not, copy the full `http://127.0.0.1:3080/?token=...` link printed in the terminal — first-time authentication needs the token in the link. Closing the terminal stops the service. Use the same dsh version for install and start. The commands on this page pin `0.2.1-rc.5`, the npm `latest`. The plugin accepts `>=0.2.0-rc.2 <0.2.1-0`, `>=0.2.1-alpha.1 <0.2.2-0` and `>=0.2.2-alpha.2 <0.2.3-0`. If you stay on `0.2.0-rc.2`, or want to try `0.2.2-rc.1` (which needs Node.js 24.9+), use that same version in both the install and start commands; do not mix host versions. DSH checks compatibility while adding and loading the plugin and reports mismatches (`dsh plugin allow-version` overrides it at your own risk).
 
 Before creating with AI, add a Provider and API key under DSH's Settings → Models, or set the `DEEPSEEK_API_KEY` environment variable before starting. To only browse existing work, choose "Configure later" in the first-run guide.
 
@@ -103,7 +103,7 @@ Before creating with AI, add a Provider and API key under DSH's Settings → Mod
 The prebuilt package in the GitHub Release passes the same test suite:
 
 ```bash
-npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.1-rc.5 dsh plugin --profile web add https://github.com/zenstory-ai/oh-story-dsh/releases/download/v0.1.22/oh-story-dsh-0.1.22.tgz &&
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.1-rc.5 dsh plugin --profile web add https://github.com/zenstory-ai/oh-story-dsh/releases/download/v0.1.23/oh-story-dsh-0.1.23.tgz &&
 npx -y @deepseek-ai/dsh@0.2.1-rc.5 web
 ```
 
@@ -147,7 +147,7 @@ Voice references require an explicit capability declaration: generated generic p
 Whichever profile the plugin is installed into, every Session of that profile loads the creation Skills. To keep the stock `web` profile clean, install into a separate profile:
 
 ```bash
-npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.1-rc.5 dsh plugin --profile story add @oh-story/dsh@0.1.22
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.1-rc.5 dsh plugin --profile story add @oh-story/dsh@0.1.23
 ```
 
 A new profile has no UI by default. Edit `~/.dsh/profiles/story/package.json` and set `dsh.profile.bundles` to:
@@ -259,9 +259,9 @@ IMG-JIANGCHEN-SHEET 在当前集内重复，后出现的条目会遮蔽前一条
 
 (“Source EP001-SC009 does not exist in the screenplay.” / “Points at the non-existent SHOT-EP001-030.” / “Duplicated within this episode; the later entry shadows the earlier one.”)
 
-### The bundled game's QA record
+### A game's QA record
 
-See the complete [`qa/verification.json`](packages/knowledge/novel-to-game/examples/jin-ping-mei/qa/verification.json) for Jin Ping Mei. The simplified example below retains the six statuses and an experience limitation; its limitation wording is not a verbatim quote of the current record:
+See the complete [`qa/verification.json`](https://github.com/zenstory-ai/novel-to-game/blob/v0.7.0/examples/jin-ping-mei/qa/verification.json) for upstream's Jin Ping Mei example (the example is not bundled with the plugin). The simplified example below retains the six statuses and an experience limitation; its limitation wording is not a verbatim quote of the current record:
 
 ```json
 "checks": { "launch": "PASS", "render": "PASS", "input": "PASS", "coreLoop": "PASS", "outcome": "PASS", "restart": "PASS" },
@@ -308,7 +308,7 @@ Update the plugin using Installation and restart DSH. If the current version sti
 
 ### The workbench is blank after installing — no panel and no "创作工作台" button?
 
-Check the plugin and DSH versions, then follow [Installation](#installation) using one supported host line: `0.2.1-rc.5` by default, or the earlier `0.2.0-rc.2`, or the trial `0.2.2-alpha.3`. Use that version for both installation and startup, and check that the plugin is loaded in the same profile. If the workbench is still blank, report the versions and terminal error. The historical Queue failure is recorded in [#50](https://github.com/zenstory-ai/oh-story-dsh/issues/50).
+Check the plugin and DSH versions, then follow [Installation](#installation) using one supported host line: `0.2.1-rc.5` by default, or the earlier `0.2.0-rc.2`, or the trial `0.2.2-rc.1`. Use that version for both installation and startup, and check that the plugin is loaded in the same profile. If the workbench is still blank, report the versions and terminal error. The historical Queue failure is recorded in [#50](https://github.com/zenstory-ai/oh-story-dsh/issues/50).
 
 ### I also installed Oh Story for Codex or OpenCode — which copy does DSH use?
 
@@ -334,6 +334,8 @@ Yes. The type, asset, unit-test and build gate runs on both macOS and Windows in
 
 Rerun the install command with the target version after `@oh-story/dsh@`, then restart DSH. Use the same host version for installation and startup; see [Installation](#installation) for the supported range. Skills and Roles ship with the plugin and need no redeployment into projects.
 
+Version 0.1.23 includes NovelToGame 0.7.0, which can turn a novel into an interactive film: each choice that matters later is followed by a short cutscene that acts out what it changed. The plugin no longer bundles the Jin Ping Mei example game (0.7.0's example is an interactive film of about 100 MB), so the 「内置示例」 entries on the welcome card and in the game project list are gone; your own game projects are unaffected. The DSH 0.2.2 trial line moves to `0.2.2-rc.1`; the default host stays `0.2.1-rc.5`. It needs no migration, only a reinstall and restart.
+
 Version 0.1.22 includes Oh Story 0.10.0 and Drama Skills 0.10.2; it needs no migration, only a reinstall and restart. The default host stays DSH `0.2.1-rc.5` and the trial line moves to `0.2.2-alpha.3`. Fiction volume and chapter outlines, the genre profile, and short-story settings and section outlines are now written in plain language, and older outlines still read and write; opening a book adds `设定/全书梗概.md`; each chapter check reports in plain words whether the chapter is ready; author memory uses only entries you confirmed, so habits you never confirmed stop applying until you state them again. The 小说 view's Markdown preview no longer shows `<!-- -->` comments as text. Short drama adds `/short-drama-breakdown`, which measures a benchmark drama you supply with ffmpeg (episode length, shot length, dialogue share, how episodes hand over) and compares it with your own script, storyboard or cut; the comic-drama pacing defaults are recalibrated, and one reference image may occupy only one slot (merge the two slots when the check reports 同一张图只能占一个槽位).
 
 Version 0.1.21 includes Oh Story 0.9.2 and Drama Skills 0.10.0, and the default host is now DSH `0.2.1-rc.5`; it needs no migration, only a reinstall and restart. Fiction gains `/story-publish`, which turns your existing settings and outline into 番茄小说 listing material (title, blurb, tags) saved as `发布资料-番茄小说.md` in the book folder; it writes only what you confirm and never signs in to the author backend or publishes for you. `/story-cover` can deliver just the cover prompt. Short drama storyboards fight scenes round by round and lets edits land reactions over the line; when a project has no reference images yet, the storyboard writes `PLAN-...` image plans and video prompts are still delivered, though real images are still needed before production. English dialogue is timed by words.
@@ -352,7 +354,6 @@ Check the actions relevant to your project:
 - **Chapter outlines:** complete the chapter's outline before prose. An outline with fewer than 30 characters after removing `#` and whitespace is blocked.
 - **Short-drama projects:** v0.5 structured projects cannot be migrated in place to creator-first projects. Start a new root and keep only the creative documents needed now. Preserve each shot's real source scene and visual basis, declare the purpose of `REF-*`, and account for unused `MOTION-*` before the first `## CUT-` in `剪辑单.md`. On-screen text needs Remotion; when upgrading from before Drama Skills 0.8, rerun `npm install` in `~/.cache/short-drama-edit/remotion`. To disable automatic same-scene cut matching, put `- 接镜匹配：无` in the delivery specification.
 - **Character voice references:** bind audio to the character and validate `reference_roles`, identity and negative controls. Audio stays outside the image picker.
-- **Bundled game:** the current Jin Ping Mei ADV does not share saves with the former ledger game; start the example again after upgrading.
 - **Video projects:** an older incomplete work directory may need rebuilding from the first stage; an old PASS is not a new result. Dub clones the original speaker's voice and requires confirmed audio rights and speaker consent before adding `--confirm-voice-rights`, including to older resume commands. Without libass, deliver an external SRT.
 
 See [CHANGELOG.md](CHANGELOG.md) and [Validation](docs/VALIDATION.md) for release history and recorded evidence.

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { gameRoot, previewContentSecurityPolicy } from "../src/workspace-route.js";
 
-const assets = "http://127.0.0.1:4000/oh-story/game-preview/example/jin-ping-mei/";
+const assets = "http://127.0.0.1:4000/oh-story/game-preview/";
 
 describe("game preview security boundary", () => {
   it("confines every preview response, not only HTML documents", () => {

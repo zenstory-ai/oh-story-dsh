@@ -39,10 +39,10 @@
 | --- | --- | --- |
 | 小说 | [Oh Story 0.10.0](https://github.com/zenstory-ai/oh-story-claudecode/releases/tag/v0.10.0) · 14 Skills · 7 Roles | `/story`、`/story-long-write`、`/story-review`、`/story-publish` |
 | 短剧 | [Drama Skills 0.10.2](https://github.com/zenstory-ai/drama-skills/releases/tag/v0.10.2) · 12 Skills | `/short-drama`、`/short-drama-write`、`/short-drama-storyboard`、`/short-drama-edit` |
-| 游戏 | [NovelToGame 0.6.1](https://github.com/zenstory-ai/novel-to-game) · 7 Skills · 《金瓶梅》ADV 可玩示例（18+） | `/novel-to-game quick`、`/game-build`、`/game-qa` |
+| 游戏 | [NovelToGame 0.7.0](https://github.com/zenstory-ai/novel-to-game/releases/tag/v0.7.0) · 7 Skills | `/novel-to-game quick`、`/game-build`、`/game-qa` |
 | 视频 | [video-recap-skills 0.6.2](https://github.com/zenstory-ai/video-recap-skills/releases/tag/v0.6.2) · 7 Skills（3 个用户入口） | `/video-recap`、`/video-script`、`/video-reference` |
 
-> 最新版本 **v0.1.22**（2026-11-03）。默认安装固定使用 DeepSeek Harness `0.2.1-rc.5`（npm `latest` 与 `next`）；更早的 `0.2.0-rc.2` 与 npm `alpha` 的 `0.2.2-alpha.3` 也受支持。变更见 [CHANGELOG.md](CHANGELOG.md) 与 [Releases](https://github.com/zenstory-ai/oh-story-dsh/releases)；升级步骤见常见问题[「升级到新版本后要做什么」](#升级到新版本后要做什么)。
+> 最新版本 **v0.1.23**（2026-11-05）。默认安装固定使用 DeepSeek Harness `0.2.1-rc.5`（npm `latest`）；更早的 `0.2.0-rc.2` 与 npm `next` 的 `0.2.2-rc.1` 也受支持。变更见 [CHANGELOG.md](CHANGELOG.md) 与 [Releases](https://github.com/zenstory-ai/oh-story-dsh/releases)；升级步骤见常见问题[「升级到新版本后要做什么」](#升级到新版本后要做什么)。
 
 ## 四个工作台
 
@@ -66,7 +66,7 @@
 
 ![游戏创作画布](docs/images/game-creative-canvas.png)
 
-游戏区提供「试玩 / 创作画布 / 文稿」：默认大面积试玩，创作画布组织已有原著、玩法、美术文稿和可玩版本；文稿能直接编辑保存，未保存内容与并发修改继续受保护。原生 Chat 可收起，切换视图保留试玩进度，新版准备好后由你选择载入。`/novel-to-game quick` 的产物写进 `game-adaptations/<project>/`，`build/app/index.html` 就绪后自动进入项目列表，可刷新、全屏、切换项目。游戏在独立 origin 与 iframe sandbox 里运行。随包的《金瓶梅 · 风月总账》ADV 示例不用 API Key 也能玩：还没有作品时点欢迎卡上的「先玩内置示例」，之后在「游戏项目」下拉的「内置示例」里选择。示例改编自古典小说，含成人内容（18+），进入前会确认年龄。
+游戏区提供「试玩 / 创作画布 / 文稿」：默认大面积试玩，创作画布组织已有原著、玩法、美术文稿和可玩版本；文稿能直接编辑保存，未保存内容与并发修改继续受保护。原生 Chat 可收起，切换视图保留试玩进度，新版准备好后由你选择载入。`/novel-to-game quick` 的产物写进 `game-adaptations/<project>/`，`build/app/index.html` 就绪后自动进入项目列表，可刷新、全屏、切换项目。游戏在独立 origin 与 iframe sandbox 里运行。
 
 ### 视频解说
 
@@ -89,11 +89,11 @@
 需要 Node.js 24+。安装命令会临时提供 pnpm，只装了 Node.js 的机器也能执行：
 
 ```bash
-npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.1-rc.5 dsh plugin --profile web add @oh-story/dsh@0.1.22 &&
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.1-rc.5 dsh plugin --profile web add @oh-story/dsh@0.1.23 &&
 npx -y @deepseek-ai/dsh@0.2.1-rc.5 web
 ```
 
-保持终端运行，浏览器默认自动打开；没有自动打开就复制终端打印的完整 `http://127.0.0.1:3080/?token=...` 链接访问，首次认证需要链接里的 token。关闭终端会停止服务。安装与启动请使用同一个 dsh 版本。本页默认命令固定使用 npm `latest` 与 `next` 的 `0.2.1-rc.5`；本插件接受 `>=0.2.0-rc.2 <0.2.1-0`、`>=0.2.1-alpha.1 <0.2.2-0` 与 `>=0.2.2-alpha.2 <0.2.3-0`。仍在用 `0.2.0-rc.2`，或想试 `0.2.2-alpha.3`（需要 Node.js 24.9+）时，安装与启动两条命令都要换成同一个版本；不要把两个宿主版本混用。DSH 会在安装与加载时检查版本，不匹配时给出明确提示（`dsh plugin allow-version` 可自担风险放行）。
+保持终端运行，浏览器默认自动打开；没有自动打开就复制终端打印的完整 `http://127.0.0.1:3080/?token=...` 链接访问，首次认证需要链接里的 token。关闭终端会停止服务。安装与启动请使用同一个 dsh 版本。本页默认命令固定使用 npm `latest` 的 `0.2.1-rc.5`；本插件接受 `>=0.2.0-rc.2 <0.2.1-0`、`>=0.2.1-alpha.1 <0.2.2-0` 与 `>=0.2.2-alpha.2 <0.2.3-0`。仍在用 `0.2.0-rc.2`，或想试 `0.2.2-rc.1`（需要 Node.js 24.9+）时，安装与启动两条命令都要换成同一个版本；不要把两个宿主版本混用。DSH 会在安装与加载时检查版本，不匹配时给出明确提示（`dsh plugin allow-version` 可自担风险放行）。
 
 开始 AI 创作前，在 DSH 的「设置 → 模型」中添加 Provider 并填入 API Key，或在启动前设置环境变量 `DEEPSEEK_API_KEY`。只查看已有作品可在首次引导中选择「稍后配置 / Configure later」。
 
@@ -103,7 +103,7 @@ npx -y @deepseek-ai/dsh@0.2.1-rc.5 web
 GitHub Release 中的预构建包经过同一套测试：
 
 ```bash
-npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.1-rc.5 dsh plugin --profile web add https://github.com/zenstory-ai/oh-story-dsh/releases/download/v0.1.22/oh-story-dsh-0.1.22.tgz &&
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.1-rc.5 dsh plugin --profile web add https://github.com/zenstory-ai/oh-story-dsh/releases/download/v0.1.23/oh-story-dsh-0.1.23.tgz &&
 npx -y @deepseek-ai/dsh@0.2.1-rc.5 web
 ```
 
@@ -147,7 +147,7 @@ npx -y @deepseek-ai/dsh@0.2.1-rc.5 web
 插件装进哪个 profile，那个 profile 的每个 Session 就都会加载创作 Skills。想让原版 `web` 保持干净，就把插件装进独立 profile：
 
 ```bash
-npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.1-rc.5 dsh plugin --profile story add @oh-story/dsh@0.1.22
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.1-rc.5 dsh plugin --profile story add @oh-story/dsh@0.1.23
 ```
 
 新 profile 默认没有界面。编辑 `~/.dsh/profiles/story/package.json`，把 `dsh.profile.bundles` 改成：
@@ -253,9 +253,9 @@ MOTION-EP001-003 指向不存在的 SHOT-EP001-030。                 视频提�
 IMG-JIANGCHEN-SHEET 在当前集内重复，后出现的条目会遮蔽前一条。   图片提示词.md:3
 ```
 
-### 随包游戏的 QA 记录
+### 游戏的 QA 记录
 
-《金瓶梅 · 风月总账》的完整结果见 [`qa/verification.json`](packages/knowledge/novel-to-game/examples/jin-ping-mei/qa/verification.json)。下面保留六项状态与体验限制的简化示意，限制文字并非当前记录的逐字引用：
+上游示例《金瓶梅 · 风月总账》的完整结果见 [`qa/verification.json`](https://github.com/zenstory-ai/novel-to-game/blob/v0.7.0/examples/jin-ping-mei/qa/verification.json)（示例不随插件分发）。下面保留六项状态与体验限制的简化示意，限制文字并非当前记录的逐字引用：
 
 ```json
 "checks": { "launch": "PASS", "render": "PASS", "input": "PASS", "coreLoop": "PASS", "outcome": "PASS", "restart": "PASS" },
@@ -300,7 +300,7 @@ IMG-JIANGCHEN-SHEET 在当前集内重复，后出现的条目会遮蔽前一条
 
 ### 装好后工作台一片空白，面板和「创作工作台」按钮都不出现？
 
-先核对插件与 DSH 版本，再按[安装](#安装)使用同一条受支持的宿主线：默认 `0.2.1-rc.5`，或更早的 `0.2.0-rc.2`、试用的 `0.2.2-alpha.3`。安装和启动两条命令都要一致。检查同一 profile 中是否已加载插件；仍然空白时，附版本号和终端错误开 Issue。历史 Queue 接口故障见 [#50](https://github.com/zenstory-ai/oh-story-dsh/issues/50)。
+先核对插件与 DSH 版本，再按[安装](#安装)使用同一条受支持的宿主线：默认 `0.2.1-rc.5`，或更早的 `0.2.0-rc.2`、试用的 `0.2.2-rc.1`。安装和启动两条命令都要一致。检查同一 profile 中是否已加载插件；仍然空白时，附版本号和终端错误开 Issue。历史 Queue 接口故障见 [#50](https://github.com/zenstory-ai/oh-story-dsh/issues/50)。
 
 ### 我另外给 Codex 或 OpenCode 装过 Oh Story，DSH 里用的是哪一份？
 
@@ -326,6 +326,8 @@ DSH 的 `plugin add` 内部需要 pnpm，单独运行 `npx @deepseek-ai/dsh ... 
 
 重新执行安装命令，把 `@oh-story/dsh@` 后的版本号换成目标版本，再重启 DSH。安装与启动使用同一个宿主版本；当前支持范围见[安装](#安装)。Skills 与 Roles 随插件打包，无需在项目里重新部署。
 
+0.1.23 带来 NovelToGame 0.7.0：可以把小说做成互动影游，关键选择之后接一段演出这个选择后果的过场。插件不再附带《金瓶梅》示例游戏（0.7.0 的示例已是约 100 MB 的互动影游），欢迎卡和「游戏项目」里的「内置示例」随之去掉；你自己的游戏项目不受影响。DSH 0.2.2 的试用线换成 `0.2.2-rc.1`，默认宿主仍是 `0.2.1-rc.5`。不用迁移，重装后重启即可。
+
 0.1.22 带来 Oh Story 0.10.0 与 Drama Skills 0.10.2，不用迁移，重装后重启即可；默认宿主仍是 DSH `0.2.1-rc.5`，试用线换成 `0.2.2-alpha.3`。小说的卷纲、细纲、题材定位、短篇设定和小节大纲改用大白话，老书的卷纲细纲照样能读能写；开书多一份 `设定/全书梗概.md`；每章检查用白话说能不能交；作者记忆只用你确认过的条目，之前没确认过的习惯不再生效，想保留的再说一次。小说视图的 Markdown 预览不再把 `<!-- -->` 注释原样显示出来。短剧新增 `/short-drama-breakdown`：用 ffmpeg 量你提供的标杆剧（集长、镜长、对白占比、集尾怎么接），再和自己的剧本、分镜、成片对照；漫剧默认节奏按实测校准，同一张参考图只占一个槽位（检查报「同一张图只能占一个槽位」时把两个槽位合并）。
 
 0.1.21 带来 Oh Story 0.9.2 与 Drama Skills 0.10.0，默认宿主改为 DSH `0.2.1-rc.5`，不用迁移，重装后重启即可。小说新增 `/story-publish`：从已有设定和大纲整理番茄小说的书名、简介、标签等建书资料，存成书目录下的 `发布资料-番茄小说.md`，只写你确认过的内容，不会替你登录后台或发布；`/story-cover` 可以只出封面提示词。短剧分镜新增打戏按回合拆镜，剪辑可以把反应压在台词上；项目里还没有参考图时，分镜写 `PLAN-...` 挂图计划、视频提示词照常交付，投产前仍要放入真实图片；英文台词按词估时。
@@ -344,7 +346,6 @@ DSH 的 `plugin add` 内部需要 pnpm，单独运行 `npx @deepseek-ai/dsh ... 
 - **小说细纲**：开始正文前补全本章细纲；只有标题、不计 `#` 与空白不足 30 字的细纲会被拦下。
 - **短剧项目**：v0.5 结构化项目不能原地迁为 creator-first 项目。新建项目根，只保留当前需要的创作文档。每镜保留真实场景来源和视觉依据，`REF-*` 声明用途；`剪辑单.md` 在第一个 `## CUT-` 之前列明未采用的 `MOTION-*`。画面文字需要 Remotion；从 Drama Skills 0.8 之前升级时，在 `~/.cache/short-drama-edit/remotion` 重新 `npm install`。想关闭默认同场景接镜匹配，在交付规格写 `- 接镜匹配：无`。
 - **角色参考音频**：绑定具体角色，并声明和校验 `reference_roles`、人物身份与禁控条件；音频不进入图片选择器。
-- **随包游戏**：当前《金瓶梅》ADV 与旧账务版存档不互通，升级后重新开始示例。
 - **视频项目**：旧版中途工作目录可能需要从首阶段重建，不能把旧 PASS 当成新结果。dub 会复刻原说话人的声音，必须先确认音频使用权与说话人授权，再加 `--confirm-voice-rights`，旧续跑命令也遵守同一要求。缺少 libass 时交付外部 SRT。
 
 逐版变化与既有验证证据见 [CHANGELOG.md](CHANGELOG.md) 和[验证说明](docs/VALIDATION.md)。
