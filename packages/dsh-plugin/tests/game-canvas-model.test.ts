@@ -39,6 +39,15 @@ describe("game creative canvas model", () => {
     expect(JSON.stringify(nodes[0])).not.toMatch(/internal|debug|https|\*\*|`/u);
   });
 
+  it("does not join markup fragments or expose multiline comments in excerpts", () => {
+    const path = "projects/jade-letter/concepts/CONCEPT.md";
+    const nodes = gameCanvasNodes(project, [file(path)], {
+      [path]: "# 故事\n<!-- hidden\ninternal -->玩家<b>选择</b>路线。\n<scr<script>ipt>片段"
+    });
+    expect(nodes[0]?.excerpt).toBe("玩家 选择 路线。 ipt片段");
+    expect(nodes[0]?.excerpt).not.toMatch(/[<>]|hidden|internal/u);
+  });
+
   it("removes conventional template filename prefixes from visible titles", () => {
     const briefPath = "projects/jade-letter/PRODUCT_BRIEF.md";
     const designPath = "projects/jade-letter/design/GAME_DESIGN.md";

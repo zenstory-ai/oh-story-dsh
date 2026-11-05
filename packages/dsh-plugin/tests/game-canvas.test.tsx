@@ -30,7 +30,7 @@ describe("GameCanvas", () => {
     expect(markup).toContain("打开文稿");
     expect(markup).toContain(`data-document-path="${path}"`);
     expect(markup).not.toContain("PLAYTEST_NOTES");
-    const visibleText = markup.replace(/<[^>]+>/gu, "");
+    const visibleText = markup.replace(/<[^>]+>/gu, " ").replace(/[<>]/gu, "");
     expect(visibleText).not.toContain("games/jade-letter");
     expect(visibleText).not.toContain("QA");
   });

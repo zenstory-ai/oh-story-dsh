@@ -180,7 +180,7 @@ function markdownExcerpt(content: string | undefined): string | undefined {
   if (content === undefined) return undefined;
   let inFence = false;
   const lines: string[] = [];
-  for (const raw of content.replace(/<!--[\s\S]*?-->/gu, "").split(/\r?\n/u)) {
+  for (const raw of content.replace(/<!--[\s\S]*?(?:-->|$)/gu, " ").split(/\r?\n/u)) {
     const line = raw.trim();
     if (/^```/u.test(line)) { inFence = !inFence; continue; }
     if (inFence || line.length === 0 || /^#{1,6}\s/u.test(line) || /^\|/u.test(line) || /^\|?\s*:?-{3,}/u.test(line)) continue;
@@ -194,11 +194,12 @@ function markdownExcerpt(content: string | undefined): string | undefined {
 
 function cleanMarkdownText(value: string): string {
   return value
-    .replace(/<!--.*?-->/gu, "")
+    .replace(/<!--[\s\S]*?(?:-->|$)/gu, " ")
     .replace(/!\[([^\]]*)\]\([^)]*\)/gu, "$1")
     .replace(/\[([^\]]+)\]\([^)]*\)/gu, "$1")
     .replace(/[*_~`]+/gu, "")
-    .replace(/<[^>]+>/gu, "")
+    .replace(/<[^>]+>/gu, " ")
+    .replace(/[<>]/gu, "")
     .replace(/\s+/gu, " ")
     .trim();
 }
