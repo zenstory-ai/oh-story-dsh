@@ -17,7 +17,7 @@ Both native runs returned `ok: true`, `provider: local-fixture` and `videoStudio
 
 - Novel: file navigation, Markdown, streamed Agent writes, saves, draft recovery, CAS conflicts, native Chat and responsive layout.
 - Short drama: episode-scoped content canvas, real media and version selection, document navigation, production preflight/confirmation, task queue/cancellation, mixed composition and episode isolation.
-- Game: actual playable iframe, canvas/document switching, editing and CAS, persistent version-linked playtest notes and their styled drawer, draft protection and explicit new-build loading.
+- Game: actual playable iframe, canvas/document switching, editing and CAS, an existing `PLAYTEST_NOTES.md` opening unchanged as an ordinary project file, draft protection and explicit new-build loading.
 - Video: output/source interval mapping and actual seek, media/document/canvas switching, JSON narration metadata preservation, CAS, native Chat context, authoritative file updates during a running task and explicit new-version loading.
 - Cross-workbench regression: unsaved game documents visit novel/drama/video and return; unsaved video documents visit novel/drama/game and return. The target workbench remains selected after effects settle and drafts survive. Hidden studios retain their media runtime without selecting documents in another workbench.
 - Chat compatibility: current DSH uses the public keep-draft transaction and honors applied/preserved/blocked results; preserved or blocked contexts remain visibly copyable. Older DSH without that transaction only focuses the native Composer and retains a copyable context card. Neither path replaces existing text, references or attachments.

@@ -17,6 +17,8 @@ const demoFramesDirectory = process.env.OH_STORY_DEMO_FRAMES_DIR;
 const gameEvidenceDirectory = process.env.OH_STORY_GAME_E2E_DIR;
 const dramaEvidenceDirectory = process.env.OH_STORY_DRAMA_E2E_DIR;
 const videoEvidenceDirectory = join(repositoryRoot, ".omx", "ui-review", "video-product-evidence");
+const gameProductEvidenceDirectory = join(repositoryRoot, ".omx", "ui-review", "game-product-evidence");
+const dramaProductEvidenceDirectory = join(repositoryRoot, ".omx", "ui-review", "drama-product-evidence");
 const useRealDeepSeek = process.env.OH_STORY_DEMO_USE_REAL_DEEPSEEK === "1";
 const browserChannel = process.env.DSH_SMOKE_BROWSER_CHANNEL ?? (process.platform === "win32" ? "msedge" : "chrome");
 const storyProjectName = "让你管账号，你高燃混剪炸全网";
@@ -65,6 +67,7 @@ const longReplyContent = [
   "",
   longReplyTail
 ].join("\n");
+const existingPlaytestNotes = "# 试玩笔记\n\n第一次结算后，按钮反馈太弱。\n";
 const roleReference = "story-setup/references/agent-references/writing-craft.md";
 const roleReferenceExcerpt = "贯穿道具：随情节改变意义";
 const roleSmokePrompt = "ROLE_RUNTIME_SMOKE：必须调用 oh_story_role 的 narrative-writer，并返回子角色结果。";
@@ -629,6 +632,7 @@ async function main(): Promise<void> {
       writeFile(join(generatedGameRoot, "design", "ART_DIRECTION.md"), "# 美术方向\n\n纸本账簿、春日街市与克制的水墨色彩。\n"),
       writeFile(join(generatedGameRoot, "build", "BUILD_BRIEF.md"), "# 试玩构建说明\n\n本轮验证一次交易、即时反馈与返回街市的完整循环。\n"),
       writeFile(join(generatedGameRoot, "_progress.md"), "# Progress\n\n- playable: complete\n"),
+      writeFile(join(generatedGameRoot, "PLAYTEST_NOTES.md"), existingPlaytestNotes),
       // Expose an actionable button only after its input listener is attached;
       // a streamed HTML response can make it visible before the script arrives.
       writeFile(join(generatedGameRoot, "build", "app", "index.html"), "<!doctype html><html lang=zh-CN><meta charset=utf-8><title>DSH Game Smoke</title><button id=play disabled>试玩成功</button><script>document.body.dataset.fixtureInstance=String(Math.random());document.body.dataset.clicks='0';const play=document.querySelector('#play');play.addEventListener('click',event=>{document.body.dataset.clicks=String(Number(document.body.dataset.clicks)+1);event.currentTarget.textContent='输入已验证'});play.disabled=false</script></html>"),
@@ -914,7 +918,7 @@ async function main(): Promise<void> {
     const firstRunDramaViews = firstRunPage.getByRole("tablist", { name: "短剧工作区" });
     const firstRunProductionTabs = firstRunPage.getByRole("tablist", { name: "短剧生产视图" });
     await firstRunProductionTabs.waitFor({ state: "visible", timeout: 10_000 });
-    if (await firstRunDramaViews.getByRole("tab", { name: "画布", exact: true }).getAttribute("aria-selected") !== "true"
+    if (await firstRunDramaViews.getByRole("tab", { name: "制作", exact: true }).getAttribute("aria-selected") !== "true"
       || await firstRunProductionTabs.getByRole("tab", { name: "画布", exact: true }).getAttribute("aria-selected") !== "true"
       || await firstRunPage.getByRole("button", { name: "展开项目文稿", exact: true }).getAttribute("aria-expanded") !== "false"
       || await firstRunPage.getByRole("button", { name: "展开原生 Chat", exact: true }).getAttribute("aria-expanded") !== "false"
@@ -922,6 +926,9 @@ async function main(): Promise<void> {
       || await firstRunPage.locator('[data-slot="conversation.session"] > :not(.oh-story-split-surface)').count() !== 1) {
       throw new Error("A drama Session without Agent UI intent did not default to canvas with files and native Chat collapsed.");
     }
+    await mkdir(dramaProductEvidenceDirectory, { recursive: true });
+    await firstRunPage.waitForTimeout(500);
+    await firstRunPage.screenshot({ path: join(dramaProductEvidenceDirectory, "drama-canvas.png"), animations: "disabled" });
     const initialCanvasKinds = await firstRunPage.locator(".oh-story-canvas-viewport").evaluate((viewport) => {
       const bounds = viewport.getBoundingClientRect();
       return [...viewport.querySelectorAll<HTMLElement>("article[data-node-type]")].filter((card) => {
@@ -1756,35 +1763,24 @@ async function main(): Promise<void> {
       const gameComposer = page.locator('[data-composer-seat] textarea, [data-composer-seat] [contenteditable="true"]').first();
       const protectedGameDraft = "先保留这段游戏讨论草稿";
       await gameComposer.fill(protectedGameDraft);
-      await gameStudio.getByRole("button", { name: "试玩笔记", exact: true }).click();
-      const playtestNotes = page.getByRole("dialog").filter({ has: page.getByRole("heading", { name: "试玩笔记", exact: true }) });
-      await playtestNotes.waitFor({ state: "visible", timeout: 10_000 });
-      await playtestNotes.locator(".oh-game-notes__drawer").evaluate(async (element) => { await Promise.all(element.getAnimations().map((animation) => animation.finished)); });
-      const notesDrawer = await playtestNotes.locator(".oh-game-notes__drawer").boundingBox();
-      if (notesDrawer === null || notesDrawer.width > 441 || Math.abs(notesDrawer.x + notesDrawer.width - 1440) > 1) throw new Error(`Playtest notes did not render as the styled right drawer: ${JSON.stringify(notesDrawer)}`);
-      const playtestNoteText = "第一次结算后，按钮反馈太弱，玩家不确定账簿是否已经更新。";
-      const playtestNoteEditor = playtestNotes.getByRole("textbox", { name: "填写试玩笔记", exact: true });
-      await playtestNoteEditor.fill(playtestNoteText);
-      await playtestNotes.getByRole("button", { name: "保存笔记", exact: true }).click();
-      await playtestNotes.locator(".oh-game-notes__note").getByText(playtestNoteText, { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
-      const playtestNotesPath = join(generatedGameRoot, "PLAYTEST_NOTES.md");
-      const playtestNotesFile = await readFile(playtestNotesPath, "utf8");
-      if (!playtestNotesFile.includes(playtestNoteText) || !playtestNotesFile.includes(generatedGame.previewVersion)) {
-        throw new Error("Saved playtest notes did not preserve the note and the actually displayed preview version.");
+      if (await gameStudio.getByText(/试玩笔记|正在创作|看看创作画布|Oh Story/u).count() !== 0) {
+        throw new Error("Game preview kept a removed notes entry or repeated heading.");
       }
-      const reloadedPlaytestNotesResponse = await dshFetch(`${origin}/oh-story/game-notes?sessionId=${encodeURIComponent(gameSession.sessionId)}&project=${encodeURIComponent(generatedGame.root)}`);
-      const reloadedPlaytestNotes = await reloadedPlaytestNotesResponse.json() as { readonly notes?: readonly { readonly text?: string; readonly previewVersion?: string }[] };
-      if (!reloadedPlaytestNotesResponse.ok || reloadedPlaytestNotes.notes?.some((note) => note.text === playtestNoteText && note.previewVersion === generatedGame.previewVersion) !== true) {
-        throw new Error(`Reloading playtest notes lost their version association: ${JSON.stringify(reloadedPlaytestNotes)}`);
-      }
-
-      await playtestNoteEditor.fill("把这条反馈带去讨论，但不要覆盖已有草稿。 ");
-      await playtestNotes.getByRole("button", { name: "带到 Chat", exact: true }).click();
+      await mkdir(gameProductEvidenceDirectory, { recursive: true });
+      await page.screenshot({ path: join(gameProductEvidenceDirectory, "game-preview.png"), animations: "disabled" });
+      await gameTabs.getByRole("tab", { name: "文稿", exact: true }).click();
+      // Notes written by an earlier version stay on disk and open as an ordinary project file.
+      const existingNotesPath = `game-adaptations/${generatedGameId}/PLAYTEST_NOTES.md`;
+      await gameStudio.locator("nav summary").filter({ hasText: "更多项目文件" }).click();
+      await gameStudio.getByRole("button", { name: existingNotesPath, exact: true }).click();
+      await gameStudio.getByText("第一次结算后，按钮反馈太弱。", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+      const removedNotesRoute = await dshFetch(`${origin}/oh-story/game-notes?sessionId=${encodeURIComponent(gameSession.sessionId)}&project=${encodeURIComponent(generatedGame.root)}`);
+      if (removedNotesRoute.status !== 404) throw new Error(`The removed playtest notes route still responds: ${String(removedNotesRoute.status)}.`);
+      if (await readFile(join(generatedGameRoot, "PLAYTEST_NOTES.md"), "utf8") !== existingPlaytestNotes) throw new Error("Existing playtest notes on disk changed.");
+      await gameStudio.getByRole("button", { name: "讨论这份文稿", exact: true }).click();
       if (await gameComposer.evaluate((element) => element instanceof HTMLTextAreaElement || element instanceof HTMLInputElement ? element.value : element.textContent ?? "") !== protectedGameDraft) {
-        throw new Error("Taking a playtest note to Chat overwrote the creator's existing Composer draft.");
+        throw new Error("Taking a game document to Chat overwrote the creator's existing Composer draft.");
       }
-      if (await playtestNotes.isVisible()) await playtestNotes.getByRole("button", { name: "关闭试玩笔记", exact: true }).click();
-      await playtestNotes.waitFor({ state: "hidden", timeout: 10_000 });
       const retainedGameContext = page.getByRole("complementary", { name: "带到 Chat 的讨论内容", exact: true });
       await retainedGameContext.waitFor({ state: "visible", timeout: 10_000 });
       if (!await retainedGameContext.getByRole("button", { name: "复制讨论内容", exact: true }).isVisible()) throw new Error("The selected context was lost while preserving an existing Chat draft.");
@@ -1804,6 +1800,7 @@ async function main(): Promise<void> {
       if (!/创作方向：DSH Game Studio Smoke/u.test(await gameBriefNode.getAttribute("aria-label") ?? "")) {
         throw new Error("Game canvas exposed the template filename instead of its creator-facing title.");
       }
+      await page.screenshot({ path: join(gameProductEvidenceDirectory, "game-canvas.png"), animations: "disabled" });
       const briefLeft = await gameBriefNode.evaluate((element) => (element as HTMLElement).style.left);
       await gameBriefNode.press("Shift+ArrowRight");
       const movedBriefLeft = await gameBriefNode.evaluate((element) => (element as HTMLElement).style.left);
@@ -1983,12 +1980,27 @@ async function main(): Promise<void> {
         || compactGameBoxes.some((box) => box !== null && (box.x < -1 || box.x + box.width > 501))) {
         throw new Error(`500px Game Studio clipped controls or broke its tab contract: ${JSON.stringify({ compactAria, compactGameOverflow, compactGameBoxes })}`);
       }
+      if (await gameStudio.locator(".oh-game-chat-toggle").isVisible()) throw new Error("500px Game Studio repeated the 制作/对话 switch with a Chat button.");
+      const [, compactGameToolbar, compactGameProject, compactGameViews] = compactGameBoxes;
+      if (!compactGameToolbar || !compactGameProject || !compactGameViews || compactGameToolbar.height > 100 || Math.abs(compactGameProject.y + compactGameProject.height / 2 - compactGameViews.y - compactGameViews.height / 2) > 4) {
+        throw new Error(`500px Game Studio stacked its project and view controls: ${JSON.stringify(compactGameBoxes)}`);
+      }
+      const compactGameModeTabs = gameStudio.getByRole("tablist", { name: "创作工作台" });
+      const compactSwitcher = await compactGameTabs.boundingBox();
+      const compactModes = await compactGameModeTabs.boundingBox();
+      if (compactSwitcher === null || compactModes === null || compactModes.x + compactModes.width > compactSwitcher.x) throw new Error("500px workbench tabs ran under the 制作/对话 switch.");
       await compactChatTab.click();
       const composer = page.locator('[data-composer-seat] textarea, [data-composer-seat] [contenteditable="true"]').first();
       await composer.waitFor({ state: "visible", timeout: 10_000 });
       await composer.fill("窄屏对话草稿");
       if (!await composer.evaluate((element) => element instanceof HTMLTextAreaElement || element instanceof HTMLInputElement ? element.value === "窄屏对话草稿" : element.textContent === "窄屏对话草稿")) {
         throw new Error("500px Game Studio Chat pane did not accept Composer input.");
+      }
+      await compactStudioTab.click();
+      await gameStudio.waitFor({ state: "visible", timeout: 10_000 });
+      await compactChatTab.click();
+      if (!await composer.evaluate((element) => element instanceof HTMLTextAreaElement || element instanceof HTMLInputElement ? element.value === "窄屏对话草稿" : element.textContent === "窄屏对话草稿")) {
+        throw new Error("500px 制作/对话 switching lost the Composer draft.");
       }
       await composer.fill("");
       await compactStudioTab.click();
@@ -1999,6 +2011,7 @@ async function main(): Promise<void> {
       }
       await gameOpening.waitFor({ state: "visible", timeout: 10_000 });
       await captureGameEvidence(page, "game-studio-compact");
+      await page.screenshot({ path: join(gameProductEvidenceDirectory, "game-compact.png"), animations: "disabled" });
       await page.setViewportSize({ width: 1_440, height: 900 });
       await page.waitForFunction(() => document.querySelector("[data-conversation-scroll]")?.getAttribute("data-oh-story-layout") === "wide");
       await gameStudio.getByRole("tab", { name: "小说", exact: true }).click();
@@ -2073,6 +2086,19 @@ async function main(): Promise<void> {
       await captureDemoFrame(page, "video", 1);
       await mkdir(videoEvidenceDirectory, { recursive: true });
       await page.screenshot({ path: join(videoEvidenceDirectory, "video-preview.png"), animations: "disabled" });
+      if (await videoStudio.getByText(/视频解说|段落概览|在画布里看故事|讨论这一段|边看画面|文稿用于定位|完整文稿|已载入/u).count() !== 0 || await videoStudio.locator(".oh-video-player-caption").count() !== 0) {
+        throw new Error("Video preview kept a removed heading, information bar or explanatory line.");
+      }
+      for (const label of ["解说稿", "讨论当前画面", "全屏预览", "制作详情"]) {
+        if (!await videoStudio.getByRole("button", { name: label, exact: true }).isVisible()) throw new Error(`Video preview lost its ${label} action.`);
+      }
+      if (!await videoStudio.getByRole("link", { name: "导出视频", exact: true }).isVisible()) throw new Error("Video preview lost its export action.");
+      const scriptToggle = videoStudio.getByRole("button", { name: "解说稿", exact: true });
+      const scriptPanel = videoStudio.getByRole("complementary", { name: "分段解说稿", exact: true });
+      await scriptToggle.click();
+      await scriptPanel.waitFor({ state: "hidden", timeout: 10_000 });
+      await scriptToggle.click();
+      await scriptPanel.waitFor({ state: "visible", timeout: 10_000 });
       const versionTabs = videoStudio.getByRole("tablist", { name: "预览版本", exact: true });
       for (const label of ["原片", "剪后画面", "成片"]) {
         if (await versionTabs.getByRole("tab", { name: label, exact: true }).count() !== 1) throw new Error(`Video Studio missed ${label}.`);
@@ -2091,6 +2117,10 @@ async function main(): Promise<void> {
       });
       if (await versionTabs.getByRole("tab", { name: "原片", exact: true }).getAttribute("aria-selected") !== "true") {
         throw new Error("Source-time navigation did not load the source preview.");
+      }
+      await videoStudio.locator(".oh-video-player-caption").getByText("核对 00:02–00:04", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+      if (await videoStudio.getByRole("button", { name: "讨论这一段", exact: true }).count() !== 0 || await videoStudio.getByText("正在核对这段解说").count() !== 0) {
+        throw new Error("Locating a segment brought back the removed current-segment bar.");
       }
       await videoSegment.locator("button.oh-video-segment-jump").click();
       await page.waitForFunction(() => {
@@ -2171,6 +2201,8 @@ async function main(): Promise<void> {
         throw new Error(`Preview/Canvas/Documents switching remounted or reset the video element: ${JSON.stringify(documentPlayerState)}`);
       }
       await videoDocuments.getByRole("button", { name: /^解说稿(?:\s*尚未保存)?$/u }).click();
+      await videoStudio.getByRole("button", { name: "编辑解说", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+      await page.screenshot({ path: join(videoEvidenceDirectory, "video-documents.png"), animations: "disabled" });
       await videoStudio.getByRole("button", { name: "编辑解说", exact: true }).click();
       const narrationEditor = videoStudio.getByRole("textbox", { name: "第 1 段解说", exact: true });
       await narrationEditor.waitFor({ state: "visible", timeout: 10_000 });
@@ -2322,17 +2354,37 @@ async function main(): Promise<void> {
         || compactVideoBoxes.some((box) => box !== null && (box.x < -1 || box.x + box.width > 501))) {
         throw new Error(`500px Video Studio clipped controls or broke its tab contract: ${JSON.stringify({ compactVideoAria, compactVideoOverflow, compactVideoBoxes })}`);
       }
+      if (await videoChatToggle.isVisible()) throw new Error("500px Video Studio repeated the 制作/对话 switch with a Chat button.");
+      const [, compactVideoToolbar, compactVideoProject, compactVideoViews] = compactVideoBoxes;
+      if (!compactVideoToolbar || !compactVideoProject || !compactVideoViews || compactVideoToolbar.height > 110 || Math.abs(compactVideoProject.y + compactVideoProject.height / 2 - compactVideoViews.y - compactVideoViews.height / 2) > 4) {
+        throw new Error(`500px Video Studio stacked its project and view controls: ${JSON.stringify(compactVideoBoxes)}`);
+      }
+      await page.screenshot({ path: join(videoEvidenceDirectory, "video-compact.png"), animations: "disabled" });
       await compactVideoStudioTab.focus();
       await compactVideoStudioTab.press("ArrowRight");
       await videoComposer.waitFor({ state: "visible", timeout: 10_000 });
       await videoComposer.fill("窄屏视频对话草稿");
+      await compactVideoChatTab.press("ArrowLeft");
+      await videoStudio.waitFor({ state: "visible", timeout: 10_000 });
+      await compactVideoStudioTab.press("ArrowRight");
+      if (await videoComposer.evaluate((element) => element instanceof HTMLTextAreaElement || element instanceof HTMLInputElement ? element.value : element.textContent) !== "窄屏视频对话草稿") {
+        throw new Error("500px 制作/对话 switching lost the video Composer draft.");
+      }
       await videoComposer.fill("");
       await compactVideoChatTab.press("ArrowLeft");
       await videoStudio.waitFor({ state: "visible", timeout: 10_000 });
       if (await recapPlayer.getAttribute("data-video-native-smoke") !== "compact-preserved") throw new Error("Compact Video Studio/Chat switching remounted the video player.");
       await page.setViewportSize({ width: 1_440, height: 900 });
       await page.waitForFunction(() => document.querySelector("[data-conversation-scroll]")?.getAttribute("data-oh-story-layout") === "wide");
-      if (await videoChatToggle.getAttribute("aria-pressed") === "true") await videoChatToggle.click();
+      await videoTabs.getByRole("tab", { name: "预览", exact: true }).click();
+      if (await videoChatToggle.getAttribute("aria-pressed") !== "true") await videoChatToggle.click();
+      await videoComposer.waitFor({ state: "visible", timeout: 10_000 });
+      const chatOpenScriptToggle = videoStudio.getByRole("button", { name: "解说稿", exact: true });
+      if (!await chatOpenScriptToggle.isVisible() || await videoStudio.getByRole("complementary", { name: "分段解说稿", exact: true }).isVisible()) {
+        throw new Error("Opening native Chat did not collapse the script panel while keeping its toggle.");
+      }
+      await page.screenshot({ path: join(videoEvidenceDirectory, "video-chat-open.png"), animations: "disabled" });
+      await videoChatToggle.click();
 
       await videoStudio.getByRole("button", { name: "制作详情", exact: true }).click();
       const videoDetails = page.getByRole("dialog", { name: "视频制作详情" });
@@ -2374,9 +2426,9 @@ async function main(): Promise<void> {
       if (!useRealDeepSeek && await page.locator(".oh-story-shot-card").filter({ hasText: productionIntentArgs.targetId }).first().getAttribute("data-selected") === null) {
         throw new Error("Agent production intent did not focus the requested semantic shot target.");
       }
-      await dramaWorkspaceTabs.getByRole("tab", { name: "画布", exact: true }).click();
+      await dramaWorkspaceTabs.getByRole("tab", { name: "制作", exact: true }).click();
       const closedCanvasBox = await page.locator(".oh-story-production").boundingBox();
-      if (await dramaWorkspaceTabs.getByRole("tab", { name: "画布", exact: true }).getAttribute("aria-selected") !== "true"
+      if (await dramaWorkspaceTabs.getByRole("tab", { name: "制作", exact: true }).getAttribute("aria-selected") !== "true"
         || await episodeSelector.inputValue() !== "剧集/EP001"
         || await dramaTreeShell.getAttribute("aria-hidden") !== "true"
         || await page.getByRole("button", { name: "展开项目文稿", exact: true }).getAttribute("aria-expanded") !== "false"
@@ -3048,7 +3100,15 @@ async function main(): Promise<void> {
       if (compactShotHeadingWidth < 32 || compactProductionOverflow > 1 || compactProduction.scrollWidth > compactProduction.clientWidth + 1) {
         throw new Error(`500px production view overflowed or made its shot list unreadable: ${JSON.stringify({ compactShotHeadingWidth, compactProductionOverflow, compactProduction })}`);
       }
-      await dramaWorkspaceTabs.getByRole("tab", { name: "文稿", exact: true }).click();
+      const dramaProductionTab = dramaWorkspaceTabs.getByRole("tab", { name: "制作", exact: true });
+      const dramaDocumentsTab = dramaWorkspaceTabs.getByRole("tab", { name: "文稿", exact: true });
+      const dramaTabHasFocus = async (tab: typeof dramaProductionTab): Promise<boolean> => await tab.getAttribute("aria-selected") === "true" && await tab.getAttribute("tabindex") === "0" && await tab.evaluate((element) => document.activeElement === element);
+      await dramaProductionTab.focus();
+      await dramaProductionTab.press("ArrowRight");
+      if (!await dramaTabHasFocus(dramaDocumentsTab)) throw new Error("ArrowRight did not move the drama workspace tabs to 文稿.");
+      await dramaDocumentsTab.press("ArrowLeft");
+      if (!await dramaTabHasFocus(dramaProductionTab)) throw new Error("ArrowLeft did not move the drama workspace tabs to 制作.");
+      await dramaProductionTab.press("ArrowRight");
       await page.getByRole("button", { name: "收起项目文稿", exact: true }).click();
       await page.getByRole("tab", { name: "源码" }).click();
       const compactSource = page.getByRole("textbox", { name: compactPath });

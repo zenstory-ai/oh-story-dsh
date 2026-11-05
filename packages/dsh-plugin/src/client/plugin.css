@@ -963,8 +963,7 @@
 [data-conversation-scroll][data-oh-story-workbench="game"][data-oh-story-layout="compact"] .oh-game-project select { max-width: none; width: 100%; min-height: 44px; }
 [data-conversation-scroll][data-oh-story-workbench="game"][data-oh-story-layout="compact"] .oh-game-tabs { grid-column: 2; grid-row: 1; width: fit-content; justify-self: end; }
 [data-conversation-scroll][data-oh-story-workbench="game"][data-oh-story-layout="compact"] .oh-game-mode-tabs button,
-[data-conversation-scroll][data-oh-story-workbench="game"][data-oh-story-layout="compact"] .oh-game-tabs button,
-[data-conversation-scroll][data-oh-story-workbench="game"][data-oh-story-layout="compact"] .oh-game-mobile-switcher button { min-height: 44px; }
+[data-conversation-scroll][data-oh-story-workbench="game"][data-oh-story-layout="compact"] .oh-game-tabs button { min-height: 44px; }
 [data-conversation-scroll][data-oh-story-workbench="game"][data-oh-story-layout="compact"] .oh-game-preview-shell { grid-template-rows: 46px minmax(0, 1fr); }
 [data-conversation-scroll][data-oh-story-workbench="game"][data-oh-story-layout="compact"] .oh-game-preview-status button { min-height: 36px; }
 [data-conversation-scroll][data-oh-story-workbench="game"][data-oh-story-layout="compact"] .oh-game-reload b { display: none; }
@@ -1118,7 +1117,6 @@
 .oh-video-tabs button[aria-selected="true"],
 .oh-video-version-tabs button[aria-selected="true"] { color: var(--dsw-alias-label-primary); background: var(--dsw-alias-bg-base); box-shadow: 0 1px 2px rgb(0 0 0 / 9%); font-weight: 600; }
 .oh-video-project { display: flex; min-width: 0; grid-column: 1; grid-row: 2; align-items: center; gap: 9px; color: var(--os-muted); font-size: 11px; }
-.oh-video-project > span { flex: none; }
 .oh-video-project select {
   width: min(100%, 440px);
   min-width: 0;
@@ -1173,9 +1171,6 @@
 .oh-video-preview-empty strong { color: rgb(255 255 255 / 92%); }
 .oh-video-preview-empty p { max-width: 560px; margin: 0; }
 .oh-video-preview-empty code { color: rgb(255 255 255 / 88%); }
-.oh-video-prompt-example { max-width: 560px; margin-top: 10px; padding: 12px 14px; border: 1px solid rgb(255 255 255 / 11%); border-radius: 9px; background: rgb(255 255 255 / 4%); text-align: left; }
-.oh-video-prompt-example span { display: block; margin-bottom: 4px; color: var(--video-accent); font-size: 10px; font-weight: 600; }
-.oh-video-prompt-example q { quotes: none; }
 .oh-video-preview-empty .oh-video-environment { width: min(100%, 420px); box-sizing: border-box; margin: 10px 0 0; border-color: rgb(255 255 255 / 11%); background: rgb(255 255 255 / 4%); text-align: left; }
 .oh-video-preview-empty .oh-video-environment strong { color: rgb(255 255 255 / 92%); }
 .oh-video-preview-empty .oh-video-environment span,
@@ -1229,7 +1224,6 @@
 [data-conversation-scroll][data-oh-story-workbench="video"][data-oh-story-layout="compact"] .oh-video-toolbar > .oh-workbench-cluster { grid-column: 1 / -1; grid-row: 1; width: fit-content; }
 [data-conversation-scroll][data-oh-story-workbench="video"][data-oh-story-layout="compact"] .oh-video-tabs { grid-column: 2; grid-row: 2; justify-self: end; }
 [data-conversation-scroll][data-oh-story-workbench="video"][data-oh-story-layout="compact"] .oh-video-project { grid-column: 1; grid-row: 2; }
-[data-conversation-scroll][data-oh-story-workbench="video"][data-oh-story-layout="compact"] .oh-video-project > span { display: none; }
 [data-conversation-scroll][data-oh-story-workbench="video"][data-oh-story-layout="compact"] .oh-video-stage { grid-column: 1 / -1; grid-row: 3; justify-self: start; }
 [data-conversation-scroll][data-oh-story-workbench="video"][data-oh-story-layout="compact"] .oh-video-stagebar { grid-template-columns: minmax(0, 1fr) auto; grid-template-rows: 42px 38px; gap: 2px 6px; padding: 3px 7px; }
 [data-conversation-scroll][data-oh-story-workbench="video"][data-oh-story-layout="compact"] .oh-video-preview-shell { grid-template-rows: 86px minmax(0, 1fr); }
@@ -1261,7 +1255,6 @@
 [data-workbench="drama"] > .oh-story-editor[data-drama-canvas] > header { display: none; }
 .oh-drama-workspace-toolbar { position: sticky; z-index: 12; top: 0; display: flex; min-width: 0; min-height: 44px; grid-column: 1 / 3; grid-row: 1; align-items: center; flex-wrap: wrap; gap: 8px 12px; box-sizing: border-box; padding: 7px 12px; border-bottom: 1px solid var(--os-border); color: var(--dsw-alias-label-primary); background: var(--dsw-alias-bg-base); font: 12px/1.5 var(--dsw-font-family); }
 .oh-drama-workspace-brand { display: flex; min-width: 0; align-items: center; gap: 12px; }
-.oh-drama-workspace-brand > strong { flex: none; font-size: 12px; font-weight: 600; white-space: nowrap; }
 .oh-drama-workspace-brand .oh-story-mode-tabs { margin: 0; padding: 2px; }
 .oh-drama-workspace-brand .oh-story-mode-tabs button { min-height: 24px; padding: 1px 7px; }
 .oh-drama-episode-picker { display: flex; min-width: 0; align-items: center; gap: 6px; color: var(--os-muted); font-size: 11px; }
@@ -1329,7 +1322,6 @@
 [data-conversation-scroll][data-oh-story-workbench="drama"][data-oh-story-layout="compact"][data-oh-drama-chat="open"]:has(> [data-slot="conversation.session"] > .oh-story-split-surface[data-open="true"]) { grid-template-columns: 0 0 minmax(0, 1fr); }
 [data-oh-story-workbench="drama"][data-oh-story-layout="compact"] .oh-drama-workspace-toolbar { grid-column: 1 / -1; gap: 5px 7px; padding: 6px 8px; }
 [data-oh-story-workbench="drama"][data-oh-story-layout="compact"] .oh-drama-workspace-brand { gap: 7px; }
-[data-oh-story-workbench="drama"][data-oh-story-layout="compact"] .oh-drama-workspace-brand > strong { font-size: 10px; }
 [data-oh-story-workbench="drama"][data-oh-story-layout="compact"] .oh-drama-workspace-brand .oh-story-mode-tabs button { padding-inline: 5px; font-size: 10px; }
 [data-oh-story-workbench="drama"][data-oh-story-layout="compact"] .oh-drama-episode-picker > span { display: none; }
 [data-oh-story-workbench="drama"][data-oh-story-layout="compact"] .oh-drama-episode-picker select { max-width: 78px; min-width: 65px; font-size: 10px; }
@@ -1373,36 +1365,27 @@
 [data-conversation-scroll][data-oh-story-workbench="game"][data-oh-game-chat="closed"] > [data-slot="conversation.session"] > :not(.oh-story-split-surface),
 [data-conversation-scroll][data-oh-story-workbench="game"][data-oh-game-chat="closed"] > [data-composer-seat] { display: none; }
 .oh-game-studio .oh-game-toolbar { display: flex; min-height: 56px; flex-wrap: wrap; gap: 8px 12px; padding: 9px 14px; }
-.oh-game-plugin-brand { font-size: 12px; font-weight: 600; white-space: nowrap; }
 .oh-game-studio .oh-workbench-cluster { display: flex; min-width: 0; align-items: center; gap: 10px; }
 .oh-game-studio .oh-game-mode-tabs { gap: 1px; margin: 0; padding: 2px; border: 1px solid var(--os-border); border-radius: 6px; }
-.oh-game-studio .oh-game-mode-tabs button { min-width: 0; min-height: 26px; padding: 3px 7px; font-size: 10px; }
+.oh-game-studio .oh-game-mode-tabs button { min-width: 0; min-height: 26px; padding: 3px 7px; font-size: 11px; }
 .oh-game-studio .oh-game-project { min-width: 0; max-width: 330px; flex: 1 1 165px; }
 .oh-game-studio .oh-game-project > span { display: none; }
 .oh-game-studio .oh-game-project select { width: 100%; min-height: 32px; border-radius: 6px; font-size: 11px; }
-.oh-game-toolbar-actions { display: flex; flex: none; align-items: center; gap: 5px; margin-left: auto; }
+.oh-game-toolbar-actions { display: flex; flex: none; align-items: center; gap: 5px; }
 .oh-game-toolbar-actions > button,
 .oh-game-document-body > header button,
 .oh-game-create-empty button,
-.oh-game-project-heading > button,
-.oh-game-feedback-strip button,
 .oh-game-design-empty > button { min-height: 30px; border: 1px solid var(--os-border); border-radius: 6px; padding: 4px 10px; color: var(--dsw-alias-label-secondary); background: var(--dsw-alias-bg-base); cursor: pointer; font: 11px/1.5 var(--dsw-font-family); }
 .oh-game-toolbar-actions > button:hover,
 .oh-game-document-body > header button:hover,
-.oh-game-create-empty button:hover,
-.oh-game-project-heading > button:hover,
-.oh-game-feedback-strip button:hover { color: var(--dsw-alias-label-primary); background: var(--dsw-alias-bg-layer-1); }
+.oh-game-create-empty button:hover { color: var(--dsw-alias-label-primary); background: var(--dsw-alias-bg-layer-1); }
 .oh-game-toolbar-actions > button[aria-expanded="true"] { color: var(--dsw-alias-state-business-primary); border-color: color-mix(in srgb, var(--dsw-alias-state-business-primary) 35%, var(--os-border)); background: color-mix(in srgb, var(--dsw-alias-state-business-primary) 4%, var(--dsw-alias-bg-base)); }
-.oh-game-studio .oh-game-tabs { min-width: 0; flex: none; gap: 2px; border-radius: 6px; }
+.oh-game-studio .oh-game-tabs { min-width: 0; flex: none; gap: 2px; margin-left: auto; border-radius: 6px; }
 .oh-game-studio .oh-game-tabs button { min-width: 0; min-height: 29px; padding: 4px 11px; font-size: 11px; white-space: nowrap; }
 .oh-game-studio button:focus-visible,
 .oh-game-documents select:focus-visible,
 .oh-game-documents textarea:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: 2px; }
 .oh-game-play-panel { gap: 15px; box-sizing: border-box; padding: 22px 24px 14px; background: var(--dsw-alias-bg-layer-1); }
-.oh-game-project-heading { display: flex; flex: none; min-width: 0; align-items: center; justify-content: space-between; gap: 12px; }
-.oh-game-project-heading small { color: var(--dsw-alias-label-secondary); font-size: 10px; }
-.oh-game-project-heading h2 { margin: 5px 0 0; color: var(--dsw-alias-label-primary); font-size: 18px; font-weight: 550; line-height: 1.5; overflow-wrap: anywhere; }
-.oh-game-project-heading > button { flex: none; border: 0; padding-inline: 0; background: transparent; font-size: 10px; }
 .oh-game-play-panel > .oh-game-preview-shell { min-height: 180px; border: 1px solid var(--os-border); border-radius: 8px; grid-template-rows: 40px minmax(0, 1fr); box-shadow: 0 2px 12px rgb(0 0 0 / 3%); }
 .oh-game-play-panel > .oh-game-preview-shell[data-update="pending"] { grid-template-rows: auto 40px minmax(0, 1fr); }
 .oh-game-preview-shell:fullscreen { border: 0; border-radius: 0; width: 100%; height: 100%; }
@@ -1418,15 +1401,9 @@
 .oh-game-new-version strong { font-size: 11px; font-weight: 500; }
 .oh-game-new-version span { color: var(--dsw-alias-label-secondary); font-size: 10px; }
 .oh-game-new-version > button { flex: none; min-height: 29px; border: 1px solid var(--os-border); border-radius: 5px; padding: 3px 9px; color: var(--dsw-alias-state-business-primary); background: var(--dsw-alias-bg-base); font: 11px var(--dsw-font-family); cursor: pointer; }
-.oh-game-feedback-strip { display: flex; flex: none; align-items: center; justify-content: space-between; gap: 12px; padding: 3px 0; }
-.oh-game-feedback-strip > div { display: flex; min-width: 0; flex-direction: column; gap: 5px; }
-.oh-game-feedback-strip strong { font-weight: 500; color: var(--dsw-alias-label-secondary); font-size: 11px; }
-.oh-game-feedback-strip span { font-size: 10px; color: var(--dsw-alias-label-secondary); }
-.oh-game-feedback-strip button { flex: none; }
 .oh-game-play-panel .oh-game-preview-empty { color: var(--dsw-alias-label-secondary); border-radius: 8px; background: var(--dsw-alias-bg-base); }
 .oh-game-documents { display: flex; flex: 1; min-height: 0; overflow: hidden; background: var(--dsw-alias-bg-base); }
 .oh-game-documents > nav { width: 178px; min-width: 0; flex: none; overflow: auto; box-sizing: border-box; padding: 21px 10px; border-right: 1px solid var(--os-border); background: var(--dsw-alias-bg-layer-1); }
-.oh-game-documents > nav > span { display: block; margin: 0 9px 14px; color: var(--dsw-alias-label-secondary); font-size: 10px; }
 .oh-game-documents nav button { display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 6px; min-height: 34px; border: 0; border-radius: 5px; padding: 8px 9px; color: var(--dsw-alias-label-secondary); background: transparent; text-align: left; font: 11px/1.7 var(--dsw-font-family); cursor: pointer; overflow-wrap: anywhere; }
 .oh-game-documents nav button[aria-current="page"] { color: var(--dsw-alias-state-business-primary); background: color-mix(in srgb, var(--dsw-alias-state-business-primary) 7%, transparent); }
 .oh-game-documents nav button > i { width: 5px; height: 5px; flex: none; border-radius: 50%; background: var(--dsw-alias-state-business-primary); }
@@ -1434,8 +1411,7 @@
 .oh-game-documents nav summary { padding: 8px; cursor: pointer; }
 .oh-game-document-body { display: flex; min-height: 0; min-width: 0; flex: 1; flex-direction: column; overflow: auto; }
 .oh-game-document-body > header { display: flex; flex: none; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding: 23px 26px 20px; border-bottom: 1px solid var(--os-border); }
-.oh-game-document-body > header small { color: var(--dsw-alias-label-secondary); font-size: 10px; }
-.oh-game-document-body > header h2 { margin: 6px 0 0; color: var(--dsw-alias-label-primary); font-size: 19px; font-weight: 550; line-height: 1.5; }
+.oh-game-document-body > header h2 { margin: 0; color: var(--dsw-alias-label-primary); font-size: 19px; font-weight: 550; line-height: 1.5; }
 .oh-game-document-body > header > div:last-child { display: flex; align-items: center; gap: 6px; }
 .oh-game-draft-label { display: block; margin-top: 8px; color: var(--dsw-alias-label-secondary); font-size: 10px; }
 .oh-game-document-body > textarea { display: block; box-sizing: border-box; width: 100%; min-height: 240px; flex: 1; resize: none; border: 0; padding: 24px 28px 40px; color: var(--dsw-alias-label-primary); background: var(--dsw-alias-bg-base); font: 13px/1.9 var(--dsw-font-family); outline-offset: -3px; }
@@ -1451,12 +1427,7 @@
 .oh-game-create-empty p { margin: 0; font-size: 12px; line-height: 2; }
 .oh-game-create-empty > div { display: flex; justify-content: center; flex-wrap: wrap; gap: 9px; }
 .oh-game-create-empty .oh-game-primary { padding: 8px 15px; border-color: var(--dsw-alias-state-business-primary); color: var(--dsw-alias-static-white, white); background: var(--dsw-alias-state-business-primary); }
-.oh-game-studio[data-oh-game-narrow] .oh-game-plugin-brand { display: none; }
-.oh-game-studio[data-oh-game-narrow] .oh-game-project-heading > button,
-.oh-game-studio[data-oh-game-narrow] .oh-game-feedback-strip span { display: none; }
 .oh-game-studio[data-oh-game-narrow] .oh-game-play-panel { gap: 12px; padding: 15px 10px 10px; }
-.oh-game-studio[data-oh-game-narrow] .oh-game-feedback-strip { align-items: flex-start; flex-direction: column; gap: 9px; }
-.oh-game-studio[data-oh-game-narrow] .oh-game-project-heading h2 { font-size: 15px; }
 .oh-game-studio[data-oh-game-narrow] .oh-game-documents { flex-direction: column; }
 .oh-game-studio[data-oh-game-narrow] .oh-game-documents > nav { display: none; }
 .oh-game-studio[data-oh-game-narrow] .oh-game-doc-picker { display: flex; flex: none; align-items: center; gap: 8px; padding: 10px; color: var(--dsw-alias-label-secondary); font-size: 10px; }
@@ -1465,8 +1436,12 @@
 .oh-game-studio[data-oh-game-narrow] .oh-game-document-body > header h2 { font-size: 16px; }
 .oh-game-studio[data-oh-game-narrow] .oh-game-document-body > textarea,
 .oh-game-studio[data-oh-game-narrow] .oh-game-document-body > .oh-story-markdown { padding: 18px 13px; }
-[data-conversation-scroll][data-oh-story-workbench="game"][data-oh-story-layout="compact"] .oh-game-toolbar,
+/* 制作/对话 owns this state below 720px and floats beside the workbench tabs. */
+[data-conversation-scroll][data-oh-story-workbench="game"][data-oh-story-layout="compact"] .oh-game-toolbar-actions { display: none; }
+[data-conversation-scroll][data-oh-story-workbench="game"][data-oh-story-layout="compact"] .oh-game-toolbar { min-height: 0; padding: 9px 10px; gap: 7px 9px; }
+[data-conversation-scroll][data-oh-story-workbench="game"][data-oh-story-layout="compact"] .oh-game-toolbar > .oh-workbench-cluster { width: calc(100% - 128px); }
 [data-conversation-scroll][data-oh-story-workbench="game"][data-oh-story-layout="compact"] .oh-game-studio[data-oh-game-narrow] .oh-game-toolbar { min-height: 0; padding: 51px 10px 9px; gap: 7px 9px; }
+[data-conversation-scroll][data-oh-story-workbench="game"][data-oh-story-layout="compact"] .oh-game-studio[data-oh-game-narrow] .oh-game-toolbar > .oh-workbench-cluster { width: 100%; }
 [data-conversation-scroll][data-oh-story-workbench="game"][data-oh-story-layout="compact"] .oh-game-mode-tabs button,
 [data-conversation-scroll][data-oh-story-workbench="game"][data-oh-story-layout="compact"] .oh-game-tabs button { min-height: 31px; }
 [data-conversation-scroll][data-oh-story-workbench="game"][data-oh-story-layout="compact"] .oh-game-project { min-width: 0; max-width: none; }

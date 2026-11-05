@@ -54,8 +54,6 @@ export interface CreativeCanvasProps<Node extends CreativeCanvasNode = CreativeC
   readonly renderNodeActions: (node: Node) => ReactNode;
   readonly renderContextActions: (node: Node) => ReactNode;
   readonly ariaLabel: string;
-  readonly title?: string | undefined;
-  readonly description?: string | undefined;
   readonly helpText: string;
   readonly empty: CreativeCanvasEmptyState;
 }
@@ -276,9 +274,7 @@ export function CreativeCanvas<Node extends CreativeCanvasNode>(props: CreativeC
 
   return <section className="oh-game-canvas-shell" aria-label={props.ariaLabel}>
     <div className="oh-game-canvas-toolbar">
-      {props.title !== undefined || props.description !== undefined
-        ? <div className="oh-game-canvas-intro">{props.title !== undefined && <strong>{props.title}</strong>}{props.description !== undefined && <span>{props.description}</span>}</div>
-        : <div className="oh-game-canvas-help" id={helpId}>{props.helpText}</div>}
+      <div className="oh-game-canvas-help" id={helpId}>{props.helpText}</div>
       <div className="oh-game-canvas-controls">
         <button type="button" aria-label="缩小画布" onClick={() => { zoomAtCenter(1 / BUTTON_ZOOM_STEP); }}>−</button>
         <span aria-live="polite">{Math.round(viewport.zoom * 100)}%</span>
@@ -296,7 +292,7 @@ export function CreativeCanvas<Node extends CreativeCanvasNode>(props: CreativeC
       role="application"
       aria-roledescription="无限画布"
       aria-label={`${props.ariaLabel}视野`}
-      aria-describedby={props.title === undefined && props.description === undefined ? helpId : undefined}
+      aria-describedby={helpId}
       tabIndex={0}
       data-panning={panning || undefined}
       style={{ backgroundPosition: `${String(viewport.x)}px ${String(viewport.y)}px`, backgroundSize: `${String(gridSize)}px ${String(gridSize)}px` }}

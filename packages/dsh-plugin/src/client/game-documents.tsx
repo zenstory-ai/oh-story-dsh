@@ -8,8 +8,7 @@ const DOCUMENT_NAMES: Readonly<Record<string, string>> = {
   "concepts/CONCEPT.md": "玩家为什么想继续",
   "design/GAME_DESIGN.md": "选择与玩法",
   "design/ART_DIRECTION.md": "画面与氛围",
-  "build/BUILD_BRIEF.md": "这一版想做什么",
-  "PLAYTEST_NOTES.md": "试玩笔记"
+  "build/BUILD_BRIEF.md": "这一版想做什么"
 };
 
 export interface GameDocumentEditor {
@@ -49,10 +48,10 @@ export function GameDocuments({ project, files, editor, onChat }: {
   const source = editor.mode === "source";
   const navButton = (file: GameWorkspaceFile, label: string) => <button type="button" key={file.path} aria-label={file.path} title={file.path} aria-current={file.path === selected ? "page" : undefined} onClick={() => { editor.onSelect(file.path); }}><span>{label}</span>{editor.buffers[file.path] !== undefined && editor.buffers[file.path]?.content !== editor.buffers[file.path]?.saved && <i title="尚未保存" />}</button>;
   return <div className="oh-game-documents">
-    <nav aria-label="游戏创作文稿"><span>创作文稿</span>{creative.map((file) => navButton(file, file.title))}{other.length > 0 && <details open={other.some((file) => file.path === selected)}><summary>更多项目文件</summary>{other.map((file) => navButton(file, file.path.slice(project.root.length + 1)))}</details>}</nav>
+    <nav aria-label="游戏创作文稿">{creative.map((file) => navButton(file, file.title))}{other.length > 0 && <details open={other.some((file) => file.path === selected)}><summary>更多项目文件</summary>{other.map((file) => navButton(file, file.path.slice(project.root.length + 1)))}</details>}</nav>
     <label className="oh-game-doc-picker">创作文稿<select aria-label="选择游戏创作文稿" value={selected ?? ""} onChange={(event) => { editor.onSelect(event.target.value); }}>{available.map((file) => <option key={file.path} value={file.path}>{creative.find((item) => item.path === file.path)?.title ?? file.path.slice(project.root.length + 1)}</option>)}</select></label>
     <section className="oh-game-document-body">
-      <header><div><small>创作文稿</small><h2>{title}</h2>{dirty && <span className="oh-game-draft-label">本地草稿 · 尚未保存</span>}</div><div>{buffer !== undefined && buffer.missing !== true && <><button type="button" onClick={() => { editor.onMode(source ? "preview" : "source"); }}>{source ? "阅读文稿" : "编辑文稿"}</button>{dirty && <button type="button" disabled={buffer.saving === true} onClick={() => { if (selected !== undefined) void editor.onSave(selected); }}>{buffer.saving === true ? "正在保存…" : "保存文稿"}</button>}</>}<button type="button" aria-label="讨论这份文稿" onClick={() => { onChat(`我想讨论「${title}」这份创作设定。${selected === undefined ? "" : `文稿：${selected}`} 请先和我讨论思路。`); }}>Chat</button></div></header>
+      <header><div><h2>{title}</h2>{dirty && <span className="oh-game-draft-label">本地草稿 · 尚未保存</span>}</div><div>{buffer !== undefined && buffer.missing !== true && <><button type="button" onClick={() => { editor.onMode(source ? "preview" : "source"); }}>{source ? "阅读文稿" : "编辑文稿"}</button>{dirty && <button type="button" disabled={buffer.saving === true} onClick={() => { if (selected !== undefined) void editor.onSave(selected); }}>{buffer.saving === true ? "正在保存…" : "保存文稿"}</button>}</>}<button type="button" aria-label="讨论这份文稿" onClick={() => { onChat(`我想讨论「${title}」这份创作设定。${selected === undefined ? "" : `文稿：${selected}`} 请先和我讨论思路。`); }}>Chat</button></div></header>
       {selected === undefined ? <div className="oh-game-design-empty"><strong>把想法留在文稿里</strong><p>先和 AI 讨论故事、玩法和美术方向，已有的创作内容会出现在这里。</p><button type="button" onClick={() => { onChat("我想先梳理这个游戏的故事、核心玩法和美术方向，请和我讨论思路。"); }}>和 AI 讨论创作设定</button></div>
         : buffer === undefined ? <div className="oh-game-design-empty" role={editor.errors[selected] === undefined ? "status" : "alert"}>{editor.errors[selected] ?? "正在读取创作文稿…"}{editor.errors[selected] !== undefined && <button type="button" onClick={editor.onRetry}>重新读取</button>}</div>
           : <>

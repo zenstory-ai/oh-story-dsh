@@ -56,7 +56,7 @@ npx -y @deepseek-ai/dsh@0.2.1-rc.5 web
 
 ![游戏工作台](https://raw.githubusercontent.com/zenstory-ai/oh-story-dsh/main/docs/images/game-creative-workbench.png)
 
-游戏区提供「试玩 / 创作画布 / 文稿」，画布组织真实故事、玩法、美术与构建。文稿可编辑保存并处理冲突，试玩笔记关联实际版本写入 `PLAYTEST_NOTES.md`，可带到原生 Chat 继续讨论。游戏产物写入 `game-adaptations/<project>`；`build/app/index.html` 就绪后即可在左侧隔离预览中实时试玩，切换项目文件或窄屏对话不会卸载当前运行时，新构建也只在用户主动选择后载入。`/game-qa` 与 `qa/verification.json` 保留为 Agent/自动化质量契约，不在制作面板展示独立 QA UI。
+游戏区提供「试玩 / 创作画布 / 文稿」，画布组织真实故事、玩法、美术与构建。文稿可编辑保存并处理冲突，可带到原生 Chat 继续讨论。游戏产物写入 `game-adaptations/<project>`；`build/app/index.html` 就绪后即可在左侧隔离预览中实时试玩，切换项目文件或窄屏对话不会卸载当前运行时，新构建也只在用户主动选择后载入。`/game-qa` 与 `qa/verification.json` 保留为 Agent/自动化质量契约，不在制作面板展示独立 QA UI。
 
 ## 视频工作台
 

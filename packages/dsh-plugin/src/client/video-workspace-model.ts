@@ -64,14 +64,14 @@ export function videoCanvasModel(project: VideoProject, narrative: VideoNarrativ
     initial: { x: 50, y: 60 + index * 230 }, width: 292, height: 190
   });
   const source = project.previews.find((asset) => asset.role === "source");
-  if (source !== undefined) nodes.push({ id: "source", kind: "source", title: project.title, eyebrow: "原片", path: source.path, excerpt: "回到原片，核对画面与声音。", initial: { x: 50, y: 60 + documents.length * 230 }, width: 292, height: 300 });
+  if (source !== undefined) nodes.push({ id: "source", kind: "source", title: project.title, eyebrow: "原片", path: source.path, initial: { x: 50, y: 60 + documents.length * 230 }, width: 292, height: 282 });
   for (const [index, segment] of (narrative?.segments ?? []).entries()) nodes.push({
     id: `segment:${segment.id}`, kind: segment.kind === "original" ? "world" : "concept", title: segment.kind === "original" ? "留给原声" : `解说第 ${String((segment.index ?? index) + 1)} 段`,
     eyebrow: `${narrative?.authoredClock === "unknown" ? "文稿时间" : "输出"} ${videoRange(segment.output)}`, excerpt: segment.text ?? "在这里听见原片的声音。", path: project.narrationPath, segment,
     initial: { x: 442 + index % 3 * 350, y: 60 + Math.floor(index / 3) * 240 }, width: 296, height: 200
   });
   const preview = project.previews.find((asset) => asset.role === "final") ?? project.previews.find((asset) => asset.role === "edited");
-  if (preview !== undefined) nodes.push({ id: "preview", kind: "preview", title: project.title, eyebrow: preview.role === "final" ? "可播放成片" : "剪后画面", path: preview.path, excerpt: "回到预览，听一遍完整的节奏。", initial: { x: 792, y: 80 + Math.ceil((narrative?.segments.length ?? 0) / 3) * 240 }, width: 316, height: 300 });
+  if (preview !== undefined) nodes.push({ id: "preview", kind: "preview", title: project.title, eyebrow: preview.role === "final" ? "可播放成片" : "剪后画面", path: preview.path, initial: { x: 792, y: 80 + Math.ceil((narrative?.segments.length ?? 0) / 3) * 240 }, width: 316, height: 282 });
   // Only evidence-backed source relationships. Chronological order is shown by times, not a forced pipeline.
   const edges: CreativeCanvasEdge[] = source === undefined || narrative?.authoredClock === "unknown" ? [] : nodes.flatMap((node) => {
     const span = node.segment === undefined ? undefined : videoSourceRange(project, node.segment, files);

@@ -14,7 +14,7 @@ describe("video runtime check", () => {
   it("keeps production details reachable before a project exists without showing setup as the creative home", () => {
     const html = renderToStaticMarkup(<VideoStudio
       sessionId="s" projects={[]} running={false} projectId={undefined} tab="preview" hidden={false}
-      workbenches={["story", "video"]} paneId="pane" labelledBy="tab"
+      paneId="pane" labelledBy="tab"
       files={[]} chatOpen={false} onChatOpen={() => undefined} onContinueInChat={() => undefined} canvasByProject={{}} onCanvasChange={() => undefined}
       editor={{ selected: undefined, buffers: {}, mode: "preview", textareaRef: { current: null }, errors: {}, onSelect: () => undefined, onEdit: () => undefined, onSave: async () => undefined, onMode: () => undefined, onConflict: () => undefined, onDiscard: () => undefined, onRememberPosition: () => undefined, onRetry: () => undefined }}
       onProject={() => undefined} onTab={() => undefined} onWorkbench={() => undefined} onCollapse={() => undefined}

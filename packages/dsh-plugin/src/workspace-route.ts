@@ -10,11 +10,6 @@ import type {} from "@deepseek-ai/dsh-host-webserver";
 import type { SandboxPolicyService } from "@deepseek-ai/dsh-sandbox-policy";
 import { SessionId } from "@deepseek-ai/dsh-session";
 import type {} from "@deepseek-ai/dsh-typert-registry";
-import {
-  gamePlaytestNotesPath,
-  gamePlaytestNotesWriteIntent,
-  parseGamePlaytestNotes
-} from "./game-playtest-notes.js";
 import { type GameVerificationBinding, WorkspaceVerificationTracker } from "./game-verification.js";
 import { dramaAdapterStatuses, ensureDramaAdapterConfig, type DramaAdapterStatus } from "./drama-adapters.js";
 import { commandOutput, DRAMA_PYTHON, hostPython, VIDEO_PYTHON, type PythonProbe } from "./host-python.js";
@@ -779,53 +774,6 @@ async function handle(context: Context, request: IncomingMessage, response: Serv
     }
     if (url.pathname === "/oh-story/drama-preflight" && request.method === "GET") {
       send(response, 200, await dramaPreflight());
-      return;
-    }
-    if (url.pathname === "/oh-story/game-notes" && request.method === "GET") {
-      const realm = await workspaceRealm(context, url);
-      const project = url.searchParams.get("project");
-      if (project === null || !gameRoot(project)) throw new WorkspaceHttpError(400, "游戏项目路径无效。");
-      const path = gamePlaytestNotesPath(project);
-      const target = await creativeTarget(realm, path);
-      if (await realm.fs.stat(target) === undefined) {
-        send(response, 200, { path, content: "", exists: false, expectedVersion: null, notes: [] });
-        return;
-      }
-      const file = await readVersionedFile(realm.fs, target, options.maxBytes);
-      send(response, 200, {
-        path,
-        content: file.content,
-        exists: true,
-        expectedVersion: file.version,
-        notes: parseGamePlaytestNotes(file.content)
-      });
-      return;
-    }
-    if (url.pathname === "/oh-story/game-notes" && request.method === "PUT") {
-      const realm = await workspaceRealm(context, url);
-      const project = url.searchParams.get("project");
-      if (project === null || !gameRoot(project)) throw new WorkspaceHttpError(400, "游戏项目路径无效。");
-      const input = await jsonBody(request, options.maxBytes * 2 + 1_024);
-      if (typeof input.content !== "string") throw new WorkspaceHttpError(400, "content 必须是字符串。");
-      if (input.expectedVersion !== null && (typeof input.expectedVersion !== "string" || input.expectedVersion === "")) {
-        throw new WorkspaceHttpError(400, "expectedVersion 必须是版本字符串或 null。");
-      }
-      if (Buffer.byteLength(input.content) > options.maxBytes) throw new WorkspaceHttpError(413, "试玩笔记超过工作台大小限制。");
-      const path = gamePlaytestNotesPath(project);
-      const outcome = await realm.fs.writeText(
-        await creativeTarget(realm, path),
-        input.content,
-        gamePlaytestNotesWriteIntent(input.expectedVersion),
-        undefined,
-        realm.sandboxPolicy.resolve({ session: realm.agent.session })
-      );
-      send(response, 200, {
-        path,
-        content: outcome.after,
-        exists: true,
-        expectedVersion: outcome.version,
-        notes: parseGamePlaytestNotes(outcome.after)
-      });
       return;
     }
     if (url.pathname === "/oh-story/file" && request.method === "GET") {

@@ -16,8 +16,6 @@ describe("CreativeCanvas", () => {
       onOpen={() => undefined}
       onContinueInChat={() => undefined}
       ariaLabel="视频创作无限画布"
-      title="创作画布"
-      description="把画面、原声和解说放在一起想。"
       helpText="拖动空白处平移"
       empty={{ title: "还没有内容", description: "先聊聊。", actionLabel: "开始讨论", onAction: () => undefined }}
       renderNodeMedia={(node) => node.id === "segment" ? <img src="/media/segment.jpg" alt="" /> : undefined}
@@ -26,7 +24,7 @@ describe("CreativeCanvas", () => {
     />);
 
     expect(markup).toContain('aria-label="视频创作无限画布"');
-    expect(markup).toContain("把画面、原声和解说放在一起想。");
+    expect(markup).toContain("拖动空白处平移");
     expect(markup).toContain("观众想知道什么");
     expect(markup).toContain("输出 00:00–00:06");
     expect(markup).toContain("留下疑问");
