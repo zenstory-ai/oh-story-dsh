@@ -11,6 +11,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- `oh_story_role` 在已拍平 `startActivation` 入参契约的新版宿主上不再报 `Cannot read properties of undefined (reading 'id')`：激活参数现在同时携带顶层 `parent`/`prompt`/`maxDepth` 与旧的 `request` 嵌套形，新旧宿主都能取到自己要的字段。旧版宿主行为不变。
+
 ### Changed
 
 - 视频区改为「预览 / 创作画布 / 文稿」：边看画面边核对解说，有可靠剪辑对应关系时可回看原片。默认页面以播放器为主，不再重复项目标题和信息栏，段落定位与讨论都在解说稿内。解说可逐段改稿与保存，已有配音和视频保持原样；切换视图保留播放位置，新版由创作者明确载入。原生 Chat 按需展开，制作记录、环境与质检原文收进「制作详情」。

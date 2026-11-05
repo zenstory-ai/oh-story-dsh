@@ -36,6 +36,12 @@ interface ManagedRoleSpec {
   readonly provider: string;
   readonly label: string;
   readonly childId: SessionId;
+  // Hosts before the activation-spec flatten read these under `request`; the
+  // flattened contract (dsh-subagent post-flatten releases) reads them at the
+  // top level. Both shapes are carried so either host resolves.
+  readonly parent?: Agent;
+  readonly prompt?: ContentBlock[];
+  readonly maxDepth?: number;
   readonly request: Pick<RoleStartRequest, "parent" | "prompt" | "maxDepth">;
   readonly signal: AbortSignal;
   readonly delivery: "caller";
@@ -85,6 +91,9 @@ async function startRole(runtime: OhStoryRoleSubagents, role: OhStoryRoleName, r
       provider: "spawn",
       label: request.label,
       childId,
+      parent: request.parent,
+      prompt: request.prompt,
+      maxDepth: request.maxDepth,
       request: { parent: request.parent, prompt: request.prompt, maxDepth: request.maxDepth },
       signal: request.signal,
       delivery: "caller"
