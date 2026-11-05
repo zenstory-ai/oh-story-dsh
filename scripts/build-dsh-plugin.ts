@@ -86,7 +86,7 @@ await build({
   sourcemap: true,
   treeShaking: true,
   define: { "process.env.NODE_ENV": '"production"' },
-  minifySyntax: true,
+  minify: true,
   external: ["@deepseek-ai/*", "react", "react/jsx-runtime", "react-dom", "react-dom/client"],
   plugins: [inlineCss],
   banner: { js: "window.__ModuleLoader__.load({id:\"@oh-story/dsh\",factory:(require)=>{var module={exports:{}};var exports=module.exports;" },

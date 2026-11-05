@@ -20,6 +20,13 @@ function referenceParagraph(kind: ProductionJob["kind"]): string {
   return kind === "image" ? `${referenceRules}${shotStartFrameNote}` : referenceRules;
 }
 
+function creatorFacingTargetName(production: DramaEpisodeProduction, targetId: string): string {
+  return production.shots.find((item) => item.id === targetId)?.title
+    ?? production.assets.find((item) => item.id === targetId)?.title
+    ?? production.visualAssets.find((item) => item.id === targetId)?.title
+    ?? targetId;
+}
+
 export function nativeProductionPrompt(
   production: DramaEpisodeProduction,
   job: ProductionJob,
@@ -29,6 +36,8 @@ export function nativeProductionPrompt(
     ? "无"
     : references.map((item) => `${item.targetId}: ${item.path ?? item.url}`).join("\n");
   return `/short-drama-produce
+
+请为「${creatorFacingTargetName(production, job.targetId)}」准备一份${job.kind === "image" ? "画面" : "视频"}生成预览，先让我核对内容和成本，再决定是否开始生成。
 
 只准备当前单项生产任务，不运行 Provider。
 - 任务 ID：${job.id}
@@ -55,6 +64,8 @@ export function nativeBatchPrompt(
   candidates: readonly { readonly id: string; readonly prompt: string }[]
 ): string {
   return `/short-drama-produce
+
+请为这 ${String(candidates.length)} 个镜头准备一份${job.kind === "image" ? "关键帧" : "视频"}生成预览，先让我核对内容和成本，再决定是否开始生成。
 
 只准备当前批量生产任务，不运行 Provider。
 - 批次任务 ID：${job.id}

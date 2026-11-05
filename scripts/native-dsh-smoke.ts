@@ -15,6 +15,10 @@ const REMOTE_STREAM_MUX_PATH = "/api/remote.mux";
 const CHAT_FLOW_ROW_SELECTOR = ":is([data-chat-flow-key], [data-chat-running]):not([data-step-process-content] *)";
 const demoFramesDirectory = process.env.OH_STORY_DEMO_FRAMES_DIR;
 const gameEvidenceDirectory = process.env.OH_STORY_GAME_E2E_DIR;
+const dramaEvidenceDirectory = process.env.OH_STORY_DRAMA_E2E_DIR;
+const videoEvidenceDirectory = join(repositoryRoot, ".omx", "ui-review", "video-product-evidence");
+const gameProductEvidenceDirectory = join(repositoryRoot, ".omx", "ui-review", "game-product-evidence");
+const dramaProductEvidenceDirectory = join(repositoryRoot, ".omx", "ui-review", "drama-product-evidence");
 const useRealDeepSeek = process.env.OH_STORY_DEMO_USE_REAL_DEEPSEEK === "1";
 const browserChannel = process.env.DSH_SMOKE_BROWSER_CHANNEL ?? (process.platform === "win32" ? "msedge" : "chrome");
 const storyProjectName = "让你管账号，你高燃混剪炸全网";
@@ -49,6 +53,9 @@ const gameUpdatePrompt = "GAME_BUILD_UPDATE_SMOKE：请使用 write 工具写入
 const gameUpdatePath = `game-adaptations/${generatedGameId}/build/app/version.txt`;
 const gameUpdateContent = "game-build-update-smoke\n";
 const gameUpdateReply = "游戏构建版本标记已更新。";
+const videoUpdatePrompt = "VIDEO_BUILD_UPDATE_SMOKE：请保持当前视频并等待本地构建完成。";
+const videoUpdatePath = "video-recaps/smoke-recap/work/assembly_manifest.json";
+const videoUpdateReply = Array.from({ length: 80 }, (_, index) => `本地视频构建检查 ${String(index + 1)} / 80。`).join("\n");
 const todoLayoutPrompt = "TODO_LAYOUT_SMOKE：写入十一条已完成任务。";
 const todoLayoutItems = Array.from({ length: 11 }, (_, index) => ({ content: `布局任务 ${String(index + 1)}`, status: "completed" }));
 const longReplyPrompt = "LONG_REPLY_SMOKE：请返回一篇很长的答复。";
@@ -60,6 +67,7 @@ const longReplyContent = [
   "",
   longReplyTail
 ].join("\n");
+const existingPlaytestNotes = "# 试玩笔记\n\n第一次结算后，按钮反馈太弱。\n";
 const roleReference = "story-setup/references/agent-references/writing-craft.md";
 const roleReferenceExcerpt = "贯穿道具：随情节改变意义";
 const roleSmokePrompt = "ROLE_RUNTIME_SMOKE：必须调用 oh_story_role 的 narrative-writer，并返回子角色结果。";
@@ -90,6 +98,13 @@ async function captureGameEvidence(page: Page, name: string): Promise<void> {
     await page.waitForTimeout(250);
   }
   await page.screenshot({ path: join(gameEvidenceDirectory, `${name}.png`), animations: "disabled" });
+}
+
+async function captureDramaEvidence(page: Page, name: string): Promise<void> {
+  if (dramaEvidenceDirectory === undefined) return;
+  await mkdir(dramaEvidenceDirectory, { recursive: true });
+  await page.waitForTimeout(180);
+  await page.screenshot({ path: join(dramaEvidenceDirectory, `${name}.png`), animations: "disabled" });
 }
 
 async function prepareDemoSurface(page: Page): Promise<void> {
@@ -196,6 +211,7 @@ async function startMockDeepSeek(): Promise<MockDeepSeek> {
       const lastUserIndex = messages.findLastIndex((message) => message.role === "user" && !isToolResult(message));
       const currentTurn = JSON.stringify(messages.slice(Math.max(lastUserIndex, 0)));
       const gameUpdateTurn = currentTurn.includes(gameUpdatePrompt);
+      const videoUpdateTurn = currentTurn.includes(videoUpdatePrompt);
       const plainWriteTurn = currentTurn.includes(plainWritePrompt);
       const mutationTurn = currentTurn.includes(agentMutationPrompt) || gameUpdateTurn || plainWriteTurn;
       const todoLayoutTurn = currentTurn.includes(todoLayoutPrompt);
@@ -249,6 +265,8 @@ async function startMockDeepSeek(): Promise<MockDeepSeek> {
           ? roleParentReply
           : productionIntentTurn
             ? productionIntentReply
+          : videoUpdateTurn
+            ? videoUpdateReply
           : mutationTurn
             ? gameUpdateTurn ? gameUpdateReply : plainWriteTurn ? plainWriteReply : agentMutationReply
             : currentTurn.includes(plainPrompt)
@@ -271,8 +289,8 @@ async function startMockDeepSeek(): Promise<MockDeepSeek> {
       response.socket?.setNoDelay(true);
       for (const event of events) {
         response.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
-        if (productionTurn || todoLayoutTurn || (mutationTurn && !hasToolResult)) {
-          await new Promise((accept) => setTimeout(accept, productionTurn ? 750 : todoLayoutTurn ? 500 : 180));
+        if (productionTurn || videoUpdateTurn || todoLayoutTurn || (mutationTurn && !hasToolResult)) {
+          await new Promise((accept) => setTimeout(accept, productionTurn ? 750 : videoUpdateTurn ? 300 : todoLayoutTurn ? 500 : 180));
         }
       }
       response.end();
@@ -601,11 +619,20 @@ async function main(): Promise<void> {
     const generatedGameRoot = join(storyRoot, "game-adaptations", generatedGameId);
     await Promise.all([
       mkdir(join(generatedGameRoot, "build", "app"), { recursive: true }),
+      mkdir(join(generatedGameRoot, "analysis"), { recursive: true }),
+      mkdir(join(generatedGameRoot, "concepts"), { recursive: true }),
+      mkdir(join(generatedGameRoot, "design"), { recursive: true }),
       mkdir(join(generatedGameRoot, "qa"), { recursive: true })
     ]);
     await Promise.all([
-      writeFile(join(generatedGameRoot, "PRODUCT_BRIEF.md"), "# PRODUCT_BRIEF · DSH Game Studio Smoke\n\ntargetFinish: playable-prototype\n"),
+      writeFile(join(generatedGameRoot, "PRODUCT_BRIEF.md"), "# PRODUCT_BRIEF · DSH Game Studio Smoke\n\ntargetFinish: playable-prototype\n\n## 核心体验\n\n让玩家通过一笔真实交易理解选择的代价。\n"),
+      writeFile(join(generatedGameRoot, "analysis", "SOURCE_BIBLE.md"), "# 原著依据\n\n- 主角必须在春日清晨进入清河县。\n- 账簿是所有分支共同出现的关键物件。\n"),
+      writeFile(join(generatedGameRoot, "concepts", "CONCEPT.md"), "# 游戏概念\n\n玩家在一次交易中选择信誉、金钱或人情，并立即看到后果。\n"),
+      writeFile(join(generatedGameRoot, "design", "GAME_DESIGN.md"), "# 玩法设计\n\n## 核心循环\n\n观察线索 → 做出选择 → 记录得失 → 回到街市。\n"),
+      writeFile(join(generatedGameRoot, "design", "ART_DIRECTION.md"), "# 美术方向\n\n纸本账簿、春日街市与克制的水墨色彩。\n"),
+      writeFile(join(generatedGameRoot, "build", "BUILD_BRIEF.md"), "# 试玩构建说明\n\n本轮验证一次交易、即时反馈与返回街市的完整循环。\n"),
       writeFile(join(generatedGameRoot, "_progress.md"), "# Progress\n\n- playable: complete\n"),
+      writeFile(join(generatedGameRoot, "PLAYTEST_NOTES.md"), existingPlaytestNotes),
       // Expose an actionable button only after its input listener is attached;
       // a streamed HTML response can make it visible before the script arrives.
       writeFile(join(generatedGameRoot, "build", "app", "index.html"), "<!doctype html><html lang=zh-CN><meta charset=utf-8><title>DSH Game Smoke</title><button id=play disabled>试玩成功</button><script>document.body.dataset.fixtureInstance=String(Math.random());document.body.dataset.clicks='0';const play=document.querySelector('#play');play.addEventListener('click',event=>{document.body.dataset.clicks=String(Number(document.body.dataset.clicks)+1);event.currentTarget.textContent='输入已验证'});play.disabled=false</script></html>"),
@@ -618,24 +645,58 @@ async function main(): Promise<void> {
       }, null, 2)}\n`)
     ]);
     const videoProjectRoot = join(storyRoot, "video-recaps", "smoke-recap");
+    const alternateVideoProjectRoot = join(storyRoot, "video-recaps", "smoke-recap-alt");
     await Promise.all([
       mkdir(join(videoProjectRoot, "sources"), { recursive: true }),
       mkdir(join(videoProjectRoot, "work"), { recursive: true }),
-      mkdir(join(videoProjectRoot, "outputs"), { recursive: true })
+      mkdir(join(videoProjectRoot, "outputs"), { recursive: true }),
+      mkdir(join(alternateVideoProjectRoot, "sources"), { recursive: true }),
+      mkdir(join(alternateVideoProjectRoot, "work"), { recursive: true })
     ]);
     await Promise.all([
       cp(videoMediaFixture, join(videoProjectRoot, "sources", "source.mp4")),
       cp(videoMediaFixture, join(videoProjectRoot, "work", "edited_source.mp4")),
       cp(videoMediaFixture, join(videoProjectRoot, "outputs", "recap_smoke.mp4")),
+      cp(videoMediaFixture, join(videoProjectRoot, "outputs", "recap_smoke_v2.mp4")),
       writeFile(join(videoProjectRoot, "project.json"), `${JSON.stringify({ title: "DSH Video Recap Smoke" }, null, 2)}\n`),
       writeFile(join(videoProjectRoot, "work", "recap_run_manifest.json"), `${JSON.stringify({
         source_video: "video-recaps/smoke-recap/sources/source.mp4",
         settings: { edit_mode: "cut" }
       }, null, 2)}\n`),
       writeFile(join(videoProjectRoot, "work", "clip_plan.json"), `${JSON.stringify({ clips: [{ source_start: 0, source_end: 5 }] }, null, 2)}\n`),
-      writeFile(join(videoProjectRoot, "work", "narration.json"), `${JSON.stringify([{ start: 0, end: 2, text: "视频工作台烟测" }], null, 2)}\n`),
+      writeFile(join(videoProjectRoot, "work", "clip_plan_validated.json"), `${JSON.stringify({ clips: [{
+        clip_id: "clip-001", source_start: 2, source_end: 4, output_start: 0, output_end: 2, duration: 2, frame_count: 50
+      }] }, null, 2)}\n`),
+      writeFile(join(videoProjectRoot, "work", "narration.json"), `${JSON.stringify([{
+        start: 0, end: 2, narration: "视频工作台烟测", pause_after_ms: 250, overlaps_speech: false, emotion: "平静"
+      }], null, 2)}\n`),
+      writeFile(join(videoProjectRoot, "work", "recap_story_plan.json"), `${JSON.stringify({
+        schema_version: 1,
+        director_intent: {
+          viewer_promise: "两秒看懂一次选择为什么改变结局",
+          pov: "跟随做出选择的人",
+          dramatic_question: "他会为这个决定付出什么？",
+          emotional_start: "犹豫",
+          emotional_end: "确认",
+          ending_aftertaste: "选择留下回响"
+        },
+        hypotheses: [{ id: "h1", spine: "从犹豫到承担选择的后果", hook: "一个决定改写了结局", payoff: "回看决定时理解代价" }],
+        chosen_hypothesis: "h1"
+      }, null, 2)}\n`),
+      writeFile(join(videoProjectRoot, "work", "subtitles.srt"), "1\n00:00:00,000 --> 00:00:02,000\n视频工作台烟测\n"),
       writeFile(join(videoProjectRoot, "work", "production_reference.json"), `${JSON.stringify({ profile: { provenance: "measured" }, methods: [] }, null, 2)}\n`),
-      writeFile(join(videoProjectRoot, "work", "assembly_manifest.json"), `${JSON.stringify({ final_output: "video-recaps/smoke-recap/outputs/recap_smoke.mp4" }, null, 2)}\n`)
+      writeFile(join(videoProjectRoot, "work", "assembly_manifest.json"), `${JSON.stringify({ final_output: "video-recaps/smoke-recap/outputs/recap_smoke.mp4" }, null, 2)}\n`),
+      cp(videoMediaFixture, join(alternateVideoProjectRoot, "sources", "source.mp4")),
+      writeFile(join(alternateVideoProjectRoot, "project.json"), `${JSON.stringify({ title: "DSH Video Alternate Smoke" }, null, 2)}\n`),
+      writeFile(join(alternateVideoProjectRoot, "work", "recap_run_manifest.json"), `${JSON.stringify({
+        source_video: "video-recaps/smoke-recap-alt/sources/source.mp4", settings: { edit_mode: "full" }
+      }, null, 2)}\n`),
+      writeFile(join(alternateVideoProjectRoot, "work", "narration.json"), `${JSON.stringify([{
+        start: 0, end: 1, narration: "另一个项目的解说。", pause_after_ms: 120, emotion: "克制"
+      }], null, 2)}\n`),
+      writeFile(join(alternateVideoProjectRoot, "work", "recap_story_plan.json"), `${JSON.stringify({
+        director_intent: { viewer_promise: "看懂另一种选择", dramatic_question: "如果不回头呢？", ending_aftertaste: "答案留给观众" }
+      }, null, 2)}\n`)
     ]);
 
     const secondEpisode = join(dramaRoot, "剧集", "EP002");
@@ -760,11 +821,17 @@ async function main(): Promise<void> {
     if (await firstRunGame.locator(".oh-game-preview-shell").getAttribute("data-state") !== "ready") {
       throw new Error("The bundled example preview did not report the loaded build as ready.");
     }
-    // Video lists its runtime requirements before any video project exists.
+    // An empty Video Studio keeps technical runtime details out of the main flow,
+    // while the explicit details dialog still exposes them when requested.
     await firstRunGame.getByRole("tablist", { name: "创作工作台" }).getByRole("tab", { name: "视频", exact: true }).click();
     const firstRunVideo = firstRunPage.locator(".oh-video-studio");
-    await firstRunVideo.getByText("还没有视频项目", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
-    await firstRunVideo.getByLabel("视频运行环境").getByText(/^Python /u).waitFor({ state: "visible", timeout: 10_000 });
+    await firstRunVideo.getByText("把这段故事，讲给更多人听", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+    await firstRunVideo.getByRole("button", { name: "制作详情", exact: true }).click();
+    const firstRunVideoDetails = firstRunPage.getByRole("dialog", { name: "视频制作详情" });
+    await firstRunVideoDetails.waitFor({ state: "visible", timeout: 10_000 });
+    await firstRunVideoDetails.locator("summary").filter({ hasText: "运行环境" }).click();
+    await firstRunVideoDetails.getByLabel("视频运行环境").getByText(/^Python /u).waitFor({ state: "visible", timeout: 10_000 });
+    await firstRunVideoDetails.getByRole("button", { name: "关闭", exact: true }).click();
     // The visit is the Session's alone: nothing is remembered for the workspace, and collapsing
     // returns the blank Session to its guide (DSH 0.2.0 reuses this Session for New session).
     const rememberedLayout = await firstRunPage.evaluate(() => Object.keys(localStorage).filter((key) => key.startsWith("oh-story.workbench.")));
@@ -846,6 +913,31 @@ async function main(): Promise<void> {
       await prepareSession(origin, selectedSession.sessionId, "你好", "通用 · 首次启动");
       await welcome.waitFor({ state: "detached", timeout: 10_000 });
     }
+    await selectSession(firstRunPage, dramaWorkspace.workspace.title, dramaSessionTitle);
+    await firstRunPage.getByRole("tablist", { name: "创作工作台" }).getByRole("tab", { name: "短剧", exact: true }).click();
+    const firstRunDramaViews = firstRunPage.getByRole("tablist", { name: "短剧工作区" });
+    const firstRunProductionTabs = firstRunPage.getByRole("tablist", { name: "短剧生产视图" });
+    await firstRunProductionTabs.waitFor({ state: "visible", timeout: 10_000 });
+    if (await firstRunDramaViews.getByRole("tab", { name: "制作", exact: true }).getAttribute("aria-selected") !== "true"
+      || await firstRunProductionTabs.getByRole("tab", { name: "画布", exact: true }).getAttribute("aria-selected") !== "true"
+      || await firstRunPage.getByRole("button", { name: "展开项目文稿", exact: true }).getAttribute("aria-expanded") !== "false"
+      || await firstRunPage.getByRole("button", { name: "展开原生 Chat", exact: true }).getAttribute("aria-expanded") !== "false"
+      || await firstRunPage.locator(".oh-story-canvas article").count() < 12
+      || await firstRunPage.locator('[data-slot="conversation.session"] > :not(.oh-story-split-surface)').count() !== 1) {
+      throw new Error("A drama Session without Agent UI intent did not default to canvas with files and native Chat collapsed.");
+    }
+    await mkdir(dramaProductEvidenceDirectory, { recursive: true });
+    await firstRunPage.waitForTimeout(500);
+    await firstRunPage.screenshot({ path: join(dramaProductEvidenceDirectory, "drama-canvas.png"), animations: "disabled" });
+    const initialCanvasKinds = await firstRunPage.locator(".oh-story-canvas-viewport").evaluate((viewport) => {
+      const bounds = viewport.getBoundingClientRect();
+      return [...viewport.querySelectorAll<HTMLElement>("article[data-node-type]")].filter((card) => {
+        const box = card.getBoundingClientRect();
+        return box.left >= bounds.left && box.right <= bounds.right && box.top >= bounds.top && box.bottom <= bounds.bottom;
+      }).map((card) => card.dataset.nodeType);
+    });
+    if (!initialCanvasKinds.includes("story") || !initialCanvasKinds.includes("shot")) throw new Error(`The initial canvas framed partial document loading instead of the story and a shot: ${JSON.stringify(initialCanvasKinds)}`);
+    await selectSession(firstRunPage, storyWorkspace.workspace.title, storySessionTitle);
     if (firstRunErrors.length > 0) throw new Error(`First-launch browser errors: ${JSON.stringify(firstRunErrors)}`);
     await firstRunBrowser.close();
     firstRunBrowser = undefined;
@@ -915,8 +1007,19 @@ async function main(): Promise<void> {
       readonly mode?: string;
       readonly cwd?: string;
       readonly files?: readonly { readonly path: string }[];
-      readonly games?: readonly { readonly id: string; readonly title: string; readonly source: string; readonly previewUrl?: string; readonly verification?: { readonly status?: string; readonly binding?: string } }[];
-      readonly videos?: readonly { readonly id: string; readonly title: string; readonly state: string; readonly previews: readonly { readonly role: string; readonly path: string }[] }[];
+      readonly games?: readonly { readonly id: string; readonly root: string; readonly title: string; readonly source: string; readonly previewUrl?: string; readonly previewVersion: string; readonly verification?: { readonly status?: string; readonly binding?: string } }[];
+      readonly videos?: readonly {
+        readonly id: string;
+        readonly title: string;
+        readonly state: string;
+        readonly previews: readonly { readonly role: string; readonly path: string }[];
+        readonly narrationPath?: string;
+        readonly narrationVersion?: string;
+        readonly narrative?: {
+          readonly authoredClock: string;
+          readonly segments: readonly { readonly text?: string; readonly output: { readonly start: number; readonly end: number }; readonly sourceRanges: readonly { readonly start: number; readonly end: number }[] }[];
+        };
+      }[];
       readonly shortDrama?: unknown;
     };
     const bundledGame = storyWorkspacePayload.games?.find((game) => game.id === "example:jin-ping-mei");
@@ -927,10 +1030,16 @@ async function main(): Promise<void> {
       || bundledGame?.title !== "金瓶梅 · 风月总账" || bundledGame.source !== "example" || bundledGame.verification?.status !== "PASS"
       || bundledGame.verification.binding !== "PINNED"
       || bundledGame.previewUrl === undefined || generatedGame?.source !== "workspace" || generatedGame.previewUrl === undefined
+      || generatedGame.root !== `game-adaptations/${generatedGameId}` || generatedGame.previewVersion === ""
       || generatedGame.verification?.status !== "PASS" || generatedGame.verification.binding !== "UNBOUND"
       || !storyWorkspacePayload.files?.some((file) => file.path.endsWith("/production_reference.json"))
       || generatedVideo?.title !== "DSH Video Recap Smoke" || generatedVideo.state !== "ready"
-      || JSON.stringify(generatedVideo.previews.map((preview) => preview.role)) !== JSON.stringify(["source", "edited", "final"])) {
+      || JSON.stringify(generatedVideo.previews.map((preview) => preview.role)) !== JSON.stringify(["source", "edited", "final"])
+      || generatedVideo.narrationPath !== "video-recaps/smoke-recap/work/narration.json"
+      || generatedVideo.narrationVersion === undefined || generatedVideo.narrative?.authoredClock !== "output"
+      || generatedVideo.narrative.segments[0]?.text !== "视频工作台烟测"
+      || JSON.stringify(generatedVideo.narrative.segments[0]?.output) !== JSON.stringify({ start: 0, end: 2 })
+      || JSON.stringify(generatedVideo.narrative.segments[0]?.sourceRanges) !== JSON.stringify([{ start: 2, end: 4 }])) {
       throw new Error(`Story Session workspace route failed: ${JSON.stringify(storyWorkspacePayload)}`);
     }
     const recapSourceUrl = `${origin}/oh-story/media?sessionId=${encodeURIComponent(storySession.sessionId)}&path=${encodeURIComponent("video-recaps/smoke-recap/sources/source.mp4")}`;
@@ -1212,6 +1321,17 @@ async function main(): Promise<void> {
         || plainChatWidth < workbenchChatWidth + 200) {
         throw new Error(`The first creative file did not hand the layout to the workbench: ${JSON.stringify({ plainChatWidth, workbenchChatWidth })}`);
       }
+      const plainWorkbenchTabs = page.getByRole("tablist", { name: "创作工作台" });
+      await plainWorkbenchTabs.getByRole("tab", { name: "游戏", exact: true }).click();
+      const emptyGameStudio = page.locator(".oh-game-studio");
+      await emptyGameStudio.waitFor({ state: "visible", timeout: 10_000 });
+      if (await emptyGameStudio.getByRole("combobox", { name: "游戏项目" }).inputValue() !== ""
+        || await emptyGameStudio.getByRole("option", { name: "新建游戏想法", exact: true }).count() !== 1
+        || await emptyGameStudio.getByRole("button", { name: "试玩内置示例", exact: true }).count() !== 1
+        || await emptyGameStudio.getByRole("button", { name: "和 AI 讨论游戏想法", exact: true }).count() !== 1) {
+        throw new Error("A creative workspace without a game silently opened the bundled example instead of the new-game state.");
+      }
+      await plainWorkbenchTabs.getByRole("tab", { name: "小说", exact: true }).click();
 
       const collapseWorkbench = page.getByRole("button", { name: "收起创作工作台" }).first();
       await collapseWorkbench.click();
@@ -1410,7 +1530,8 @@ async function main(): Promise<void> {
         await page.getByRole("button", { name: "刷新项目文件", exact: true }).click();
         await dramaTab.waitFor({ state: "visible", timeout: 10_000 });
         await dramaTab.click();
-        await page.getByText("当前 workspace 还没有短剧项目。", { exact: false }).waitFor({ state: "visible", timeout: 10_000 });
+        await page.getByText("从第一集开始，让故事慢慢生长", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+        await page.getByRole("button", { name: "和 AI 讨论第一集", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
         await storyTab.click();
         await page.locator(".oh-story-kind").filter({ hasText: "小说" }).waitFor({ state: "visible", timeout: 10_000 });
       }
@@ -1547,9 +1668,10 @@ async function main(): Promise<void> {
       await gameWorkbenchTabs.getByRole("tab", { name: "游戏", exact: true }).click();
       const gameStudio = page.locator(".oh-game-studio");
       await gameStudio.waitFor({ state: "visible", timeout: 20_000 });
-      const gameTabs = page.getByRole("tablist", { name: "游戏工作台", exact: true });
+      const gameTabs = gameStudio.getByRole("tablist", { name: "游戏工作台", exact: true });
       await gameTabs.getByRole("tab", { name: "试玩", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
-      if (await gameTabs.getByRole("tab", { name: "QA", exact: true }).count() !== 0 || await page.locator(".oh-game-qa").count() !== 0) {
+      if (JSON.stringify(await gameTabs.getByRole("tab").allTextContents()) !== JSON.stringify(["试玩", "创作画布", "文稿"])
+        || await gameTabs.getByRole("tab", { name: "QA", exact: true }).count() !== 0 || await page.locator(".oh-game-qa").count() !== 0) {
         throw new Error("Game Studio still exposed the removed QA surface.");
       }
       const projectSelect = page.getByRole("combobox", { name: "游戏项目" });
@@ -1580,6 +1702,18 @@ async function main(): Promise<void> {
         element.closest('[data-slot="conversation.session"]')?.setAttribute("data-e2e-anchor", "game-before-input");
         element.closest(".oh-story-split-surface")?.setAttribute("data-e2e-surface", "game-before-input");
       });
+      const nativeGameChat = page.locator('[data-slot="conversation.session"] > :not(.oh-story-split-surface)').first();
+      await nativeGameChat.waitFor({ state: "attached", timeout: 10_000 });
+      await nativeGameChat.evaluate((element) => { element.setAttribute("data-game-native-smoke", "persistent"); });
+      const closeGameChat = gameStudio.getByRole("button", { name: "收起原生 Chat", exact: true });
+      await closeGameChat.click();
+      await gameStudio.getByRole("button", { name: "展开原生 Chat", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+      if (await nativeGameChat.getAttribute("data-game-native-smoke") !== "persistent"
+        || await generatedIframe.getAttribute("data-e2e-instance") !== "generated-preserved") {
+        throw new Error("Collapsing native Game Chat remounted Chat or the active game iframe.");
+      }
+      await gameStudio.getByRole("button", { name: "展开原生 Chat", exact: true }).click();
+      await closeGameChat.waitFor({ state: "visible", timeout: 10_000 });
       const generatedInputState = async () => {
         const frame = page.frames().find((candidate) => candidate.url().includes("/oh-story/game-preview/workspace/"));
         const button = await generatedFrame.locator("#play").boundingBox();
@@ -1625,11 +1759,115 @@ async function main(): Promise<void> {
       };
       await generatedPlay.click();
       await requireGeneratedInput("after initial click");
-      await gameTabs.getByRole("tab", { name: "项目文件", exact: true }).click();
-      await page.locator(".oh-game-design").waitFor({ state: "visible", timeout: 10_000 });
+
+      const gameComposer = page.locator('[data-composer-seat] textarea, [data-composer-seat] [contenteditable="true"]').first();
+      const protectedGameDraft = "先保留这段游戏讨论草稿";
+      await gameComposer.fill(protectedGameDraft);
+      if (await gameStudio.getByText(/试玩笔记|正在创作|看看创作画布|Oh Story/u).count() !== 0) {
+        throw new Error("Game preview kept a removed notes entry or repeated heading.");
+      }
+      await mkdir(gameProductEvidenceDirectory, { recursive: true });
+      await page.screenshot({ path: join(gameProductEvidenceDirectory, "game-preview.png"), animations: "disabled" });
+      await gameTabs.getByRole("tab", { name: "文稿", exact: true }).click();
+      // Notes written by an earlier version stay on disk and open as an ordinary project file.
+      const existingNotesPath = `game-adaptations/${generatedGameId}/PLAYTEST_NOTES.md`;
+      await gameStudio.locator("nav summary").filter({ hasText: "更多项目文件" }).click();
+      await gameStudio.getByRole("button", { name: existingNotesPath, exact: true }).click();
+      await gameStudio.getByText("第一次结算后，按钮反馈太弱。", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+      const removedNotesRoute = await dshFetch(`${origin}/oh-story/game-notes?sessionId=${encodeURIComponent(gameSession.sessionId)}&project=${encodeURIComponent(generatedGame.root)}`);
+      if (removedNotesRoute.status !== 404) throw new Error(`The removed playtest notes route still responds: ${String(removedNotesRoute.status)}.`);
+      if (await readFile(join(generatedGameRoot, "PLAYTEST_NOTES.md"), "utf8") !== existingPlaytestNotes) throw new Error("Existing playtest notes on disk changed.");
+      await gameStudio.getByRole("button", { name: "讨论这份文稿", exact: true }).click();
+      if (await gameComposer.evaluate((element) => element instanceof HTMLTextAreaElement || element instanceof HTMLInputElement ? element.value : element.textContent ?? "") !== protectedGameDraft) {
+        throw new Error("Taking a game document to Chat overwrote the creator's existing Composer draft.");
+      }
+      const retainedGameContext = page.getByRole("complementary", { name: "带到 Chat 的讨论内容", exact: true });
+      await retainedGameContext.waitFor({ state: "visible", timeout: 10_000 });
+      if (!await retainedGameContext.getByRole("button", { name: "复制讨论内容", exact: true }).isVisible()) throw new Error("The selected context was lost while preserving an existing Chat draft.");
+      await retainedGameContext.getByRole("button", { name: "关闭讨论内容", exact: true }).click();
+      await gameComposer.fill("");
+
+      await gameTabs.getByRole("tab", { name: "创作画布", exact: true }).click();
+      const gameCanvas = gameStudio.getByRole("application", { name: "游戏创作无限画布视野" });
+      await gameCanvas.waitFor({ state: "visible", timeout: 10_000 });
+      const gameCanvasNodes = gameCanvas.locator("article.oh-game-canvas-node");
+      const gameBriefPath = `game-adaptations/${generatedGameId}/PRODUCT_BRIEF.md`;
+      const gameBriefNode = gameCanvas.locator(`article.oh-game-canvas-node:has(button[data-document-path=${JSON.stringify(gameBriefPath)}])`);
+      await gameBriefNode.waitFor({ state: "visible", timeout: 10_000 });
+      if (await gameCanvasNodes.count() !== 7 || await gameCanvas.locator("article").filter({ hasText: /QA|verification\.json/u }).count() !== 0) {
+        throw new Error("Game canvas did not project only the six real creator documents and current playable build.");
+      }
+      if (!/创作方向：DSH Game Studio Smoke/u.test(await gameBriefNode.getAttribute("aria-label") ?? "")) {
+        throw new Error("Game canvas exposed the template filename instead of its creator-facing title.");
+      }
+      await page.screenshot({ path: join(gameProductEvidenceDirectory, "game-canvas.png"), animations: "disabled" });
+      const briefLeft = await gameBriefNode.evaluate((element) => (element as HTMLElement).style.left);
+      await gameBriefNode.press("Shift+ArrowRight");
+      const movedBriefLeft = await gameBriefNode.evaluate((element) => (element as HTMLElement).style.left);
+      if (briefLeft === movedBriefLeft) throw new Error("Keyboard canvas editing did not move the selected game document.");
+
+      const assertActiveWorkbench = async (expected: string): Promise<void> => {
+        await page.waitForFunction((mode) => document.querySelector("[data-conversation-scroll]")?.getAttribute("data-oh-story-workbench") === mode, expected);
+        await page.evaluate(() => new Promise<void>((accept) => { requestAnimationFrame(() => { requestAnimationFrame(() => { accept(); }); }); }));
+        const actual = await page.locator("[data-conversation-scroll]").getAttribute("data-oh-story-workbench");
+        if (actual !== expected) throw new Error(`A hidden document workspace stole navigation: expected ${expected}, got ${String(actual)}`);
+      };
+      await gameTabs.getByRole("tab", { name: "文稿", exact: true }).click();
+      const gameDocuments = gameStudio.getByRole("navigation", { name: "游戏创作文稿" });
+      await gameDocuments.waitFor({ state: "visible", timeout: 10_000 });
+      const gameDesignPath = `game-adaptations/${generatedGameId}/design/GAME_DESIGN.md`;
+      const gameDesignButton = gameDocuments.getByRole("button", { name: gameDesignPath, exact: true });
+      if (await gameDesignButton.getAttribute("title") !== gameDesignPath) throw new Error("Game document navigation hid its authoritative project path.");
+      await gameDesignButton.click();
+      await gameStudio.getByRole("heading", { name: "选择与玩法", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+      await gameStudio.getByRole("button", { name: "编辑文稿", exact: true }).click();
+      const gameDesignEditor = gameStudio.getByRole("textbox", { name: gameDesignPath, exact: true });
+      const originalGameDesign = await gameDesignEditor.inputValue();
+      const savedGameDesign = `${originalGameDesign}\n<!-- game document native smoke -->\n`;
+      await gameDesignEditor.fill(savedGameDesign);
+      for (const [mode, label] of [["story", "小说"], ["drama", "短剧"], ["video", "视频"]] as const) {
+        await gameStudio.getByRole("tab", { name: label, exact: true }).click();
+        await assertActiveWorkbench(mode);
+        await page.getByRole("tablist", { name: "创作工作台", exact: true }).getByRole("tab", { name: "游戏", exact: true }).click();
+        await assertActiveWorkbench("game");
+        await gameTabs.getByRole("tab", { name: "文稿", exact: true }).click();
+        await gameDesignButton.click();
+        if (!await gameDesignEditor.isVisible()) await gameStudio.getByRole("button", { name: "编辑文稿", exact: true }).click();
+        if (await gameDesignEditor.inputValue() !== savedGameDesign) throw new Error(`Game document draft was lost after visiting ${label}.`);
+      }
+      const saveGameDocument = gameStudio.getByRole("button", { name: "保存文稿", exact: true });
+      await saveGameDocument.click();
+      await gameStudio.getByText("本地草稿 · 尚未保存", { exact: true }).waitFor({ state: "detached", timeout: 10_000 });
+      if (await readFile(join(storyRoot, gameDesignPath), "utf8") !== savedGameDesign) throw new Error("Game document save did not reach the project file.");
+
+      const gameDesignUrl = `${origin}/oh-story/file?sessionId=${encodeURIComponent(gameSession.sessionId)}&path=${encodeURIComponent(gameDesignPath)}`;
+      const conflictGameDesignResponse = await dshFetch(gameDesignUrl);
+      const conflictGameDesign = await conflictGameDesignResponse.json() as { readonly content?: string; readonly version?: string };
+      if (!conflictGameDesignResponse.ok || conflictGameDesign.version === undefined) throw new Error("Could not prepare game document conflict fixture.");
+      await gameDesignEditor.fill(`${savedGameDesign}\n本地冲突草稿\n`);
+      const externalGameDesign = `${savedGameDesign}\n磁盘并发修改\n`;
+      const externalGameDesignResponse = await dshFetch(gameDesignUrl, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ content: externalGameDesign, baseVersion: conflictGameDesign.version })
+      });
+      const externalGameDesignPayload = await externalGameDesignResponse.json() as { readonly version?: string };
+      if (!externalGameDesignResponse.ok || externalGameDesignPayload.version === undefined) throw new Error("Could not stage a concurrent game document update.");
+      await gameStudio.getByRole("button", { name: "保存文稿", exact: true }).click();
+      const gameConflict = gameStudio.getByRole("alert").filter({ hasText: gameDesignPath });
+      await gameConflict.waitFor({ state: "visible", timeout: 10_000 });
+      await gameConflict.getByRole("button", { name: "使用磁盘版本", exact: true }).click();
+      if (await gameDesignEditor.inputValue() !== externalGameDesign) throw new Error("Game document conflict resolution did not use the authoritative disk version.");
+      const restoredGameDesignResponse = await dshFetch(gameDesignUrl, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ content: originalGameDesign, baseVersion: externalGameDesignPayload.version })
+      });
+      if (!restoredGameDesignResponse.ok) throw new Error("Could not restore the game document conflict fixture.");
+
       await gameTabs.getByRole("tab", { name: "试玩", exact: true }).click();
       if (await generatedIframe.getAttribute("data-e2e-instance") !== "generated-preserved") {
-        throw new Error("Preview/Design switching remounted the generated game iframe.");
+        throw new Error("Preview/Canvas/Document switching remounted the generated game iframe.");
       }
       await requireGeneratedInput("after Preview/Design restoration");
       const generatedBrowserFrame = page.frames().find((frame) => frame.url().includes("/oh-story/game-preview/workspace/"));
@@ -1645,11 +1883,30 @@ async function main(): Promise<void> {
       if (!await projectSelect.inputValue().then((value) => value === "example:jin-ping-mei")) {
         throw new Error("Game Studio did not select the bundled Jin Ping Mei example.");
       }
+      await gameTabs.getByRole("tab", { name: "创作画布", exact: true }).click();
+      await gameCanvas.locator("article.oh-game-canvas-node").waitFor({ state: "visible", timeout: 10_000 });
+      if (await gameCanvas.locator("article.oh-game-canvas-node").count() !== 1
+        || await gameCanvas.getByText("DSH Game Studio Smoke", { exact: false }).count() !== 0) {
+        throw new Error("Switching game projects leaked generated-project documents or canvas state into the bundled example.");
+      }
+      await gameTabs.getByRole("tab", { name: "文稿", exact: true }).click();
+      await gameStudio.getByText("它的原著、创作设定与设计文稿未随插件分发", { exact: false }).waitFor({ state: "visible", timeout: 10_000 });
+      await projectSelect.selectOption(`workspace:${generatedGameId}`);
+      await gameTabs.getByRole("tab", { name: "创作画布", exact: true }).click();
+      await gameBriefNode.waitFor({ state: "visible", timeout: 10_000 });
+      if (await gameBriefNode.evaluate((element) => (element as HTMLElement).style.left) !== movedBriefLeft) {
+        throw new Error("Returning to a workspace game lost its project-isolated canvas layout.");
+      }
+      await projectSelect.selectOption("example:jin-ping-mei");
+      await gameTabs.getByRole("tab", { name: "试玩", exact: true }).click();
       const gameFrame = page.frameLocator('iframe[title="《金瓶梅 · 风月总账》可试玩预览"]');
       const ageGate = gameFrame.getByRole("button", { name: "我已成年，进入", exact: true });
       await ageGate.waitFor({ state: "visible", timeout: 30_000 });
       const gameScroller = page.locator("[data-conversation-scroll]");
       const gameChat = page.locator('[data-slot="conversation.session"] > :not(.oh-story-split-surface)');
+      const expandExampleChat = gameStudio.getByRole("button", { name: "展开原生 Chat", exact: true });
+      if (await expandExampleChat.isVisible()) await expandExampleChat.click();
+      await gameStudio.getByRole("button", { name: "收起原生 Chat", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
       const [studioBox, gameChatBox] = await Promise.all([gameStudio.boundingBox(), gameChat.boundingBox()]);
       if (studioBox === null || gameChatBox === null
         || await gameScroller.getAttribute("data-oh-story-workbench") !== "game"
@@ -1683,7 +1940,7 @@ async function main(): Promise<void> {
       await gameIframe.evaluate((element) => { element.setAttribute("data-e2e-instance", "jin-ping-mei-preserved"); });
       await captureGameEvidence(page, "game-studio-playable");
       await captureDemoFrame(page, "game", 3);
-      await gameTabs.getByRole("tab", { name: "说明", exact: true }).click();
+      await gameTabs.getByRole("tab", { name: "文稿", exact: true }).click();
       await page.locator(".oh-game-design-empty").filter({ hasText: "内置完整示例" }).waitFor({ state: "visible", timeout: 10_000 });
       await captureGameEvidence(page, "game-studio-design");
       await captureDemoFrame(page, "game", 4);
@@ -1723,6 +1980,15 @@ async function main(): Promise<void> {
         || compactGameBoxes.some((box) => box !== null && (box.x < -1 || box.x + box.width > 501))) {
         throw new Error(`500px Game Studio clipped controls or broke its tab contract: ${JSON.stringify({ compactAria, compactGameOverflow, compactGameBoxes })}`);
       }
+      if (await gameStudio.locator(".oh-game-chat-toggle").isVisible()) throw new Error("500px Game Studio repeated the 制作/对话 switch with a Chat button.");
+      const [, compactGameToolbar, compactGameProject, compactGameViews] = compactGameBoxes;
+      if (!compactGameToolbar || !compactGameProject || !compactGameViews || compactGameToolbar.height > 100 || Math.abs(compactGameProject.y + compactGameProject.height / 2 - compactGameViews.y - compactGameViews.height / 2) > 4) {
+        throw new Error(`500px Game Studio stacked its project and view controls: ${JSON.stringify(compactGameBoxes)}`);
+      }
+      const compactGameModeTabs = gameStudio.getByRole("tablist", { name: "创作工作台" });
+      const compactSwitcher = await compactGameTabs.boundingBox();
+      const compactModes = await compactGameModeTabs.boundingBox();
+      if (compactSwitcher === null || compactModes === null || compactModes.x + compactModes.width > compactSwitcher.x) throw new Error("500px workbench tabs ran under the 制作/对话 switch.");
       await compactChatTab.click();
       const composer = page.locator('[data-composer-seat] textarea, [data-composer-seat] [contenteditable="true"]').first();
       await composer.waitFor({ state: "visible", timeout: 10_000 });
@@ -1730,22 +1996,31 @@ async function main(): Promise<void> {
       if (!await composer.evaluate((element) => element instanceof HTMLTextAreaElement || element instanceof HTMLInputElement ? element.value === "窄屏对话草稿" : element.textContent === "窄屏对话草稿")) {
         throw new Error("500px Game Studio Chat pane did not accept Composer input.");
       }
+      await compactStudioTab.click();
+      await gameStudio.waitFor({ state: "visible", timeout: 10_000 });
+      await compactChatTab.click();
+      if (!await composer.evaluate((element) => element instanceof HTMLTextAreaElement || element instanceof HTMLInputElement ? element.value === "窄屏对话草稿" : element.textContent === "窄屏对话草稿")) {
+        throw new Error("500px 制作/对话 switching lost the Composer draft.");
+      }
       await composer.fill("");
       await compactStudioTab.click();
       await gameStudio.waitFor({ state: "visible", timeout: 10_000 });
-      if (await gameIframe.getAttribute("data-e2e-instance") !== "jin-ping-mei-preserved") {
-        throw new Error("Compact Studio/Chat switching remounted the game iframe.");
+      if (await gameIframe.getAttribute("data-e2e-instance") !== "jin-ping-mei-preserved"
+        || await nativeGameChat.getAttribute("data-game-native-smoke") !== "persistent") {
+        throw new Error("Compact Studio/Chat switching remounted the game iframe or native Chat.");
       }
       await gameOpening.waitFor({ state: "visible", timeout: 10_000 });
       await captureGameEvidence(page, "game-studio-compact");
+      await page.screenshot({ path: join(gameProductEvidenceDirectory, "game-compact.png"), animations: "disabled" });
       await page.setViewportSize({ width: 1_440, height: 900 });
       await page.waitForFunction(() => document.querySelector("[data-conversation-scroll]")?.getAttribute("data-oh-story-layout") === "wide");
       await gameStudio.getByRole("tab", { name: "小说", exact: true }).click();
       await storyTree.waitFor({ state: "visible", timeout: 10_000 });
       await page.getByRole("tablist", { name: "创作工作台" }).getByRole("tab", { name: "游戏", exact: true }).click();
       await gameStudio.waitFor({ state: "visible", timeout: 10_000 });
-      if (await gameIframe.getAttribute("data-e2e-instance") !== "jin-ping-mei-preserved") {
-        throw new Error("Novel/Game switching remounted the active game iframe.");
+      if (await gameIframe.getAttribute("data-e2e-instance") !== "jin-ping-mei-preserved"
+        || await nativeGameChat.getAttribute("data-game-native-smoke") !== "persistent") {
+        throw new Error("Novel/Game switching remounted the active game iframe or native Chat.");
       }
       await gameOpening.waitFor({ state: "visible", timeout: 10_000 });
       if (!useRealDeepSeek) {
@@ -1794,56 +2069,426 @@ async function main(): Promise<void> {
       const videoStudio = page.locator(".oh-video-studio");
       await videoStudio.waitFor({ state: "visible", timeout: 10_000 });
       const videoProject = videoStudio.getByRole("combobox", { name: "视频项目", exact: true });
-      if (await videoProject.inputValue() !== "smoke-recap" || !await videoStudio.getByText("成片已就绪", { exact: true }).isVisible()) {
+      if (await videoProject.inputValue() !== "smoke-recap" || await videoProject.locator("option").count() !== 2) {
         throw new Error("Video Studio did not discover the manifest-driven smoke project.");
       }
       const videoTabs = videoStudio.getByRole("tablist", { name: "视频工作台", exact: true });
-      await videoTabs.getByRole("tab", { name: "预览", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
-      const recapPlayer = videoStudio.locator("video");
+      for (const label of ["预览", "创作画布", "文稿"]) {
+        if (await videoTabs.getByRole("tab", { name: label, exact: true }).count() !== 1) throw new Error(`Video Studio missed ${label}.`);
+      }
+      const videoChatToggle = videoStudio.getByRole("button", { name: "Chat", exact: true });
+      if (await videoChatToggle.getAttribute("aria-pressed") !== "false") throw new Error("Video Studio did not start with Chat collapsed.");
+      const recapPlayer = videoStudio.locator(".oh-video-player-stage > video");
       await recapPlayer.waitFor({ state: "visible", timeout: 10_000 });
       await page.waitForFunction(() => (document.querySelector(".oh-video-studio video") as HTMLVideoElement | null)?.readyState !== 0);
-      const videoChat = page.locator('[data-slot="conversation.session"] > :not(.oh-story-split-surface)');
-      const [videoStudioBox, videoChatBox] = await Promise.all([videoStudio.boundingBox(), videoChat.boundingBox()]);
-      if (videoStudioBox === null || videoChatBox === null
-        || await page.locator("[data-conversation-scroll]").getAttribute("data-oh-story-workbench") !== "video"
-        || videoStudioBox.x + videoStudioBox.width > videoChatBox.x + 1
-        || videoStudioBox.width <= videoChatBox.width) {
-        throw new Error(`Video Studio did not render as preview-left/chat-right: ${JSON.stringify({ videoStudioBox, videoChatBox })}`);
-      }
+      if (await page.locator("[data-conversation-scroll]").getAttribute("data-oh-story-workbench") !== "video") throw new Error("Video Studio did not claim the native conversation layout.");
       await prepareDemoSurface(page);
       await captureDemoFrame(page, "video", 1);
+      await mkdir(videoEvidenceDirectory, { recursive: true });
+      await page.screenshot({ path: join(videoEvidenceDirectory, "video-preview.png"), animations: "disabled" });
+      if (await videoStudio.getByText(/视频解说|段落概览|在画布里看故事|讨论这一段|边看画面|文稿用于定位|完整文稿|已载入/u).count() !== 0 || await videoStudio.locator(".oh-video-player-caption").count() !== 0) {
+        throw new Error("Video preview kept a removed heading, information bar or explanatory line.");
+      }
+      for (const label of ["解说稿", "讨论当前画面", "全屏预览", "制作详情"]) {
+        if (!await videoStudio.getByRole("button", { name: label, exact: true }).isVisible()) throw new Error(`Video preview lost its ${label} action.`);
+      }
+      if (!await videoStudio.getByRole("link", { name: "导出视频", exact: true }).isVisible()) throw new Error("Video preview lost its export action.");
+      const scriptToggle = videoStudio.getByRole("button", { name: "解说稿", exact: true });
+      const scriptPanel = videoStudio.getByRole("complementary", { name: "分段解说稿", exact: true });
+      await scriptToggle.click();
+      await scriptPanel.waitFor({ state: "hidden", timeout: 10_000 });
+      await scriptToggle.click();
+      await scriptPanel.waitFor({ state: "visible", timeout: 10_000 });
       const versionTabs = videoStudio.getByRole("tablist", { name: "预览版本", exact: true });
-      for (const label of ["原片", "剪后片", "最终成片"]) {
+      for (const label of ["原片", "剪后画面", "成片"]) {
         if (await versionTabs.getByRole("tab", { name: label, exact: true }).count() !== 1) throw new Error(`Video Studio missed ${label}.`);
       }
-      await versionTabs.getByRole("tab", { name: "剪后片", exact: true }).click();
+
+      const videoSegment = videoStudio.locator("article.oh-video-script-segment[data-segment-id]").first();
+      await videoSegment.waitFor({ state: "visible", timeout: 10_000 });
+      if (!await videoSegment.getByText("视频工作台烟测", { exact: true }).isVisible()
+        || !await videoSegment.getByText("输出 00:00–00:02", { exact: true }).isVisible()) {
+        throw new Error("Video Studio did not project the authoritative narration onto the output clock.");
+      }
+      await videoSegment.getByRole("button", { name: "原片 00:02–00:04", exact: true }).click();
+      await page.waitForFunction(() => {
+        const element = document.querySelector(".oh-video-studio video") as HTMLVideoElement | null;
+        return element !== null && element.readyState >= 2 && !element.seeking && element.paused && Math.abs(element.currentTime - 2) < 0.2;
+      });
+      if (await versionTabs.getByRole("tab", { name: "原片", exact: true }).getAttribute("aria-selected") !== "true") {
+        throw new Error("Source-time navigation did not load the source preview.");
+      }
+      await videoStudio.locator(".oh-video-player-caption").getByText("核对 00:02–00:04", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+      if (await videoStudio.getByRole("button", { name: "讨论这一段", exact: true }).count() !== 0 || await videoStudio.getByText("正在核对这段解说").count() !== 0) {
+        throw new Error("Locating a segment brought back the removed current-segment bar.");
+      }
+      await videoSegment.locator("button.oh-video-segment-jump").click();
+      await page.waitForFunction(() => {
+        const element = document.querySelector(".oh-video-studio video") as HTMLVideoElement | null;
+        return element !== null && element.readyState >= 2 && !element.seeking && element.paused && element.currentTime < 0.2;
+      });
+      if (await versionTabs.getByRole("tab", { name: "成片", exact: true }).getAttribute("aria-selected") !== "true") {
+        throw new Error("Output-time navigation did not return to the final preview.");
+      }
+
+      await recapPlayer.evaluate((element) => {
+        element.setAttribute("data-video-native-smoke", "tabs-preserved");
+        const video = element as HTMLVideoElement; video.currentTime = 0.75; video.pause();
+      });
+      await page.waitForFunction(() => {
+        const element = document.querySelector(".oh-video-player-stage > video") as HTMLVideoElement | null;
+        return element !== null && element.readyState >= 2 && !element.seeking && Math.abs(element.currentTime - 0.75) < 0.2;
+      });
+      await videoTabs.getByRole("tab", { name: "创作画布", exact: true }).click();
+      const videoCanvas = videoStudio.getByRole("application", { name: "视频创作无限画布视野" });
+      await videoCanvas.waitFor({ state: "visible", timeout: 10_000 });
+      const canvasPlayerState = {
+        marker: await recapPlayer.getAttribute("data-video-native-smoke"),
+        time: await recapPlayer.evaluate((element) => (element as HTMLVideoElement).currentTime),
+        source: await recapPlayer.getAttribute("src")
+      };
+      if (canvasPlayerState.marker !== "tabs-preserved" || Math.abs(canvasPlayerState.time - 0.75) > 0.2) {
+        throw new Error(`Preview/Canvas switching remounted or reset the video element: ${JSON.stringify(canvasPlayerState)}`);
+      }
+      const videoCanvasNodes = videoCanvas.locator("article.oh-game-canvas-node");
+      if (await videoCanvasNodes.count() !== 4) throw new Error(`Video canvas did not project its four evidence-backed nodes: ${String(await videoCanvasNodes.count())}.`);
+      const narrationNode = videoCanvasNodes.filter({ hasText: "解说第 1 段" });
+      await narrationNode.waitFor({ state: "visible", timeout: 10_000 });
+      const narrationNodeBox = await narrationNode.boundingBox();
+      if (narrationNodeBox === null) throw new Error("Video narration node could not be dragged.");
+      const narrationLeftBefore = await narrationNode.evaluate((element) => (element as HTMLElement).style.left);
+      await page.mouse.move(narrationNodeBox.x + 24, narrationNodeBox.y + 24);
+      await page.mouse.down();
+      await page.mouse.move(narrationNodeBox.x + 104, narrationNodeBox.y + 64, { steps: 4 });
+      await page.mouse.up();
+      const narrationLeftAfter = await narrationNode.evaluate((element) => (element as HTMLElement).style.left);
+      if (narrationLeftAfter === narrationLeftBefore) throw new Error("Pointer dragging did not move the video canvas node.");
       await captureDemoFrame(page, "video", 2);
-      await videoTabs.getByRole("tab", { name: "产物", exact: true }).click();
-      await videoStudio.getByRole("button", { name: /运行清单 recap_run_manifest\.json/u }).click();
-      await videoStudio.getByText('"edit_mode": "cut"', { exact: false }).waitFor({ state: "visible", timeout: 10_000 });
+      await page.screenshot({ path: join(videoEvidenceDirectory, "video-canvas.png"), animations: "disabled" });
+
+      await videoProject.selectOption("smoke-recap-alt");
+      await page.waitForFunction(() => (document.querySelector('.oh-video-studio select[aria-label="视频项目"]') as HTMLSelectElement | null)?.value === "smoke-recap-alt");
+      const alternateNarrationNode = videoCanvas.locator("article.oh-game-canvas-node").filter({ hasText: "解说第 1 段" });
+      await alternateNarrationNode.waitFor({ state: "visible", timeout: 10_000 });
+      if (await alternateNarrationNode.evaluate((element) => (element as HTMLElement).style.left) === narrationLeftAfter) {
+        throw new Error("Video canvas positions leaked into another project.");
+      }
+      await videoProject.selectOption("smoke-recap");
+      await narrationNode.waitFor({ state: "visible", timeout: 10_000 });
+      if (await narrationNode.evaluate((element) => (element as HTMLElement).style.left) !== narrationLeftAfter) {
+        throw new Error("Video canvas did not restore the project's own node positions.");
+      }
+      // Changing projects deliberately remounts VideoWorkspace. Establish a new
+      // baseline before checking that tabs within this project preserve its player.
+      await recapPlayer.evaluate((element) => {
+        element.setAttribute("data-video-native-smoke", "tabs-preserved");
+        const video = element as HTMLVideoElement; video.currentTime = 0.75; video.pause();
+      });
+      await page.waitForFunction(() => {
+        const element = document.querySelector(".oh-video-player-stage > video") as HTMLVideoElement | null;
+        return element !== null && element.readyState >= 2 && !element.seeking && Math.abs(element.currentTime - 0.75) < 0.2;
+      });
+
+      await videoTabs.getByRole("tab", { name: "文稿", exact: true }).click();
+      const videoDocuments = videoStudio.getByRole("navigation", { name: "视频创作文稿" });
+      await videoDocuments.waitFor({ state: "visible", timeout: 10_000 });
+      const documentPlayerState = {
+        marker: await recapPlayer.getAttribute("data-video-native-smoke"),
+        time: await recapPlayer.evaluate((element) => (element as HTMLVideoElement).currentTime),
+        source: await recapPlayer.getAttribute("src")
+      };
+      if (documentPlayerState.marker !== "tabs-preserved" || Math.abs(documentPlayerState.time - 0.75) > 0.2) {
+        throw new Error(`Preview/Canvas/Documents switching remounted or reset the video element: ${JSON.stringify(documentPlayerState)}`);
+      }
+      await videoDocuments.getByRole("button", { name: /^解说稿(?:\s*尚未保存)?$/u }).click();
+      await videoStudio.getByRole("button", { name: "编辑解说", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+      await page.screenshot({ path: join(videoEvidenceDirectory, "video-documents.png"), animations: "disabled" });
+      await videoStudio.getByRole("button", { name: "编辑解说", exact: true }).click();
+      const narrationEditor = videoStudio.getByRole("textbox", { name: "第 1 段解说", exact: true });
+      await narrationEditor.waitFor({ state: "visible", timeout: 10_000 });
+      const narrationPath = "video-recaps/smoke-recap/work/narration.json";
+      const narrationFile = join(storyRoot, narrationPath);
+      const originalNarrationContent = await readFile(narrationFile, "utf8");
+      const originalNarration = JSON.parse(originalNarrationContent) as readonly Record<string, unknown>[];
+      await narrationEditor.fill("视频工作台烟测改稿");
+      for (const [mode, label] of [["story", "小说"], ["drama", "短剧"], ["game", "游戏"]] as const) {
+        await videoStudio.getByRole("tab", { name: label, exact: true }).click();
+        await assertActiveWorkbench(mode);
+        await page.getByRole("tablist", { name: "创作工作台", exact: true }).getByRole("tab", { name: "视频", exact: true }).click();
+        await assertActiveWorkbench("video");
+        await videoTabs.getByRole("tab", { name: "文稿", exact: true }).click();
+        await videoDocuments.getByRole("button", { name: /^解说稿(?:\s*尚未保存)?$/u }).click();
+        if (!await narrationEditor.isVisible()) await videoStudio.getByRole("button", { name: "编辑解说", exact: true }).click();
+        if (await narrationEditor.inputValue() !== "视频工作台烟测改稿") throw new Error(`Video document draft was lost after visiting ${label}.`);
+      }
+      await videoStudio.getByRole("button", { name: "保存文稿", exact: true }).click();
+      await videoStudio.getByText("改稿草稿 · 尚未保存", { exact: true }).waitFor({ state: "detached", timeout: 10_000 });
+      const savedNarration = JSON.parse(await readFile(narrationFile, "utf8")) as readonly Record<string, unknown>[];
+      if (savedNarration[0]?.narration !== "视频工作台烟测改稿"
+        || JSON.stringify({ ...savedNarration[0], narration: originalNarration[0]?.narration }) !== JSON.stringify(originalNarration[0])) {
+        throw new Error(`Narration editing changed timing or metadata: ${JSON.stringify(savedNarration)}`);
+      }
+
+      const activeVideoSessionId = videoSession?.sessionId ?? gameSession.sessionId;
+      const narrationUrl = `${origin}/oh-story/file?sessionId=${encodeURIComponent(activeVideoSessionId)}&path=${encodeURIComponent(narrationPath)}`;
+      const narrationConflictBaseResponse = await dshFetch(narrationUrl);
+      const narrationConflictBase = await narrationConflictBaseResponse.json() as { readonly content?: string; readonly version?: string };
+      if (!narrationConflictBaseResponse.ok || narrationConflictBase.content === undefined || narrationConflictBase.version === undefined) throw new Error("Could not prepare video narration conflict fixture.");
+      await narrationEditor.fill("本地视频冲突草稿");
+      const externalNarration = JSON.parse(narrationConflictBase.content) as Record<string, unknown>[];
+      externalNarration[0] = { ...externalNarration[0], narration: "磁盘并发视频改稿" };
+      const externalNarrationContent = `${JSON.stringify(externalNarration, null, 2)}\n`;
+      const externalNarrationResponse = await dshFetch(narrationUrl, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ content: externalNarrationContent, baseVersion: narrationConflictBase.version })
+      });
+      const externalNarrationPayload = await externalNarrationResponse.json() as { readonly version?: string };
+      if (!externalNarrationResponse.ok || externalNarrationPayload.version === undefined) throw new Error("Could not stage a concurrent video narration update.");
+      await videoStudio.getByRole("button", { name: "保存文稿", exact: true }).click();
+      const narrationConflict = videoStudio.getByRole("alert").filter({ hasText: narrationPath });
+      await narrationConflict.waitFor({ state: "visible", timeout: 10_000 });
+      await narrationConflict.getByRole("button", { name: "使用磁盘版本", exact: true }).click();
+      if (await narrationEditor.inputValue() !== "磁盘并发视频改稿") throw new Error("Narration conflict resolution did not load the authoritative disk version.");
+      const externalNarrationRow = JSON.parse(await readFile(narrationFile, "utf8")) as readonly Record<string, unknown>[];
+      if (JSON.stringify({ ...externalNarrationRow[0], narration: originalNarration[0]?.narration }) !== JSON.stringify(originalNarration[0])) {
+        throw new Error("Concurrent narration update did not preserve unknown metadata.");
+      }
+      const restoreNarration = await dshFetch(narrationUrl, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ content: originalNarrationContent, baseVersion: externalNarrationPayload.version })
+      });
+      if (!restoreNarration.ok) throw new Error("Could not restore the video narration conflict fixture.");
       await captureDemoFrame(page, "video", 3);
-      await videoStudio.getByLabel("视频运行环境").getByText(/^Python /u).waitFor({ state: "visible", timeout: 10_000 });
+
+      await videoTabs.getByRole("tab", { name: "预览", exact: true }).click();
+      if (await recapPlayer.getAttribute("data-video-native-smoke") !== "tabs-preserved") throw new Error("Returning to Preview replaced the loaded video.");
+      await videoChatToggle.click();
+      const nativeVideoChat = page.locator('[data-slot="conversation.session"] > :not(.oh-story-split-surface)').first();
+      await nativeVideoChat.waitFor({ state: "visible", timeout: 10_000 });
+      const videoComposer = page.locator('[data-composer-seat] textarea, [data-composer-seat] [contenteditable="true"]').first();
+      await videoComposer.fill("先保留这段视频讨论草稿");
+      await videoChatToggle.click();
+      await videoSegment.getByRole("button", { name: "讨论第 1 段", exact: true }).click();
+      await nativeVideoChat.waitFor({ state: "visible", timeout: 10_000 });
+      const retainedVideoDraft = await videoComposer.evaluate((element) => element instanceof HTMLTextAreaElement || element instanceof HTMLInputElement ? element.value : element.textContent);
+      if (retainedVideoDraft !== "先保留这段视频讨论草稿") throw new Error("Continuing a video segment in Chat overwrote the user's existing draft.");
+      const retainedVideoContext = page.getByRole("complementary", { name: "带到 Chat 的讨论内容", exact: true });
+      await retainedVideoContext.waitFor({ state: "visible", timeout: 10_000 });
+      await retainedVideoContext.getByRole("button", { name: "关闭讨论内容", exact: true }).click();
+      await videoComposer.fill("");
+      await videoChatToggle.click();
+
+      await recapPlayer.evaluate((element) => {
+        element.setAttribute("data-video-native-smoke", "pending-preserved");
+        const video = element as HTMLVideoElement; video.currentTime = 0.65; video.pause();
+      });
+      await page.waitForFunction(() => {
+        const element = document.querySelector(".oh-video-player-stage > video") as HTMLVideoElement | null;
+        return element !== null && element.readyState >= 2 && !element.seeking && Math.abs(element.currentTime - 0.65) < 0.2;
+      });
+      if (!useRealDeepSeek) {
+        const assemblyUrl = `${origin}/oh-story/file?sessionId=${encodeURIComponent(activeVideoSessionId)}&path=${encodeURIComponent(videoUpdatePath)}`;
+        const assemblyBaseResponse = await dshFetch(assemblyUrl);
+        const assemblyBase = await assemblyBaseResponse.json() as { readonly content?: string; readonly version?: string };
+        if (!assemblyBaseResponse.ok || assemblyBase.content === undefined || assemblyBase.version === undefined) throw new Error("Could not prepare the pending video version fixture.");
+        const stagedAssemblyResponse = await dshFetch(assemblyUrl, {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ content: assemblyBase.content.replace("recap_smoke.mp4", "recap_smoke_v2.mp4"), baseVersion: assemblyBase.version })
+        });
+        if (!stagedAssemblyResponse.ok) throw new Error(`Could not stage the pending video version: ${String(stagedAssemblyResponse.status)}.`);
+        const beforeVideoUpdate = (await sessionEvents(origin, activeVideoSessionId)).at(-1)?.seq ?? -1;
+        await rpc(origin, "session/prompt", {
+          request: {
+            requestId: crypto.randomUUID(), sessionId: activeVideoSessionId, mode: "queue",
+            content: [{ type: "text", text: videoUpdatePrompt }]
+          }
+        });
+        await waitForCompletedTurn(origin, activeVideoSessionId, beforeVideoUpdate);
+        const tabAfterVideoUpdate = await videoTabs.getByRole("tab", { selected: true }).allTextContents();
+        const playerAfterVideoUpdate = {
+          marker: await recapPlayer.getAttribute("data-video-native-smoke"),
+          time: await recapPlayer.evaluate((element) => (element as HTMLVideoElement).currentTime),
+          source: await recapPlayer.getAttribute("src")
+        };
+        const updatedAssemblyResponse = await dshFetch(assemblyUrl);
+        const updatedAssembly = await updatedAssemblyResponse.json() as { readonly content?: string };
+        const updatedWorkspaceResponse = await dshFetch(`${origin}/oh-story/workspace?sessionId=${encodeURIComponent(activeVideoSessionId)}`);
+        const updatedWorkspace = await updatedWorkspaceResponse.json() as { readonly videos?: readonly { readonly id: string; readonly previews: readonly { readonly role: string; readonly path: string }[] }[] };
+        const updatedFinal = updatedWorkspace.videos?.find((item) => item.id === "smoke-recap")?.previews.find((item) => item.role === "final");
+        if (!updatedAssemblyResponse.ok || !updatedAssembly.content?.includes("recap_smoke_v2.mp4")
+          || !updatedWorkspaceResponse.ok || updatedFinal?.path !== "video-recaps/smoke-recap/outputs/recap_smoke_v2.mp4") {
+          throw new Error(`Video update did not reach the authoritative project: ${JSON.stringify({ tabAfterVideoUpdate, playerAfterVideoUpdate, updatedAssembly, updatedFinal })}`);
+        }
+        if (JSON.stringify(tabAfterVideoUpdate) !== JSON.stringify(["预览"])) {
+          throw new Error(`A video build preempted the active workspace tab: ${JSON.stringify({ tabAfterVideoUpdate, playerAfterVideoUpdate })}`);
+        }
+        await videoStudio.getByText("新版本已准备好", { exact: true }).waitFor({ state: "visible", timeout: 20_000 });
+        const oldVideoSource = await recapPlayer.getAttribute("src") ?? "";
+        if (!oldVideoSource.includes("recap_smoke.mp4") || oldVideoSource.includes("recap_smoke_v2.mp4")
+          || await recapPlayer.getAttribute("data-video-native-smoke") !== "pending-preserved"
+          || Math.abs(await recapPlayer.evaluate((element) => (element as HTMLVideoElement).currentTime) - 0.65) > 0.2) {
+          throw new Error("A pending video build replaced or reset the loaded player before explicit consent.");
+        }
+        await videoStudio.getByRole("button", { name: "载入新版本", exact: true }).click();
+        await page.waitForFunction(() => ((document.querySelector(".oh-video-studio video") as HTMLVideoElement | null)?.src ?? "").includes("recap_smoke_v2.mp4"));
+        if (await recapPlayer.getAttribute("data-video-native-smoke") !== null) throw new Error("Explicit video version loading did not replace the old player DOM.");
+      }
+
+      await recapPlayer.evaluate((element) => { element.setAttribute("data-video-native-smoke", "compact-preserved"); });
+      await page.setViewportSize({ width: 500, height: 900 });
+      await page.waitForFunction(() => document.querySelector("[data-conversation-scroll]")?.getAttribute("data-oh-story-layout") === "compact");
+      const compactVideoTabs = page.getByRole("tablist", { name: "窄屏视频工作台" });
+      await compactVideoTabs.waitFor({ state: "visible", timeout: 10_000 });
+      const compactVideoStudioTab = compactVideoTabs.getByRole("tab", { name: "制作", exact: true });
+      const compactVideoChatTab = compactVideoTabs.getByRole("tab", { name: "对话", exact: true });
+      const compactVideoAria = await Promise.all([compactVideoStudioTab, compactVideoChatTab].map(async (tab) => {
+        const controlled = await tab.getAttribute("aria-controls");
+        return controlled !== null && await page.locator(`[id=${JSON.stringify(controlled)}]`).getAttribute("role") === "tabpanel";
+      }));
+      const compactVideoOverflow = await page.evaluate(() => Math.max(document.body.scrollWidth, document.documentElement.scrollWidth) - document.documentElement.clientWidth);
+      const compactVideoBoxes = await Promise.all([videoStudio.boundingBox(), videoStudio.locator(".oh-video-toolbar").boundingBox(), videoProject.boundingBox(), videoTabs.boundingBox(), compactVideoTabs.boundingBox()]);
+      if (compactVideoAria.some((value) => !value) || compactVideoOverflow > 1 || compactVideoBoxes.some((box) => box === null)
+        || compactVideoBoxes.some((box) => box !== null && (box.x < -1 || box.x + box.width > 501))) {
+        throw new Error(`500px Video Studio clipped controls or broke its tab contract: ${JSON.stringify({ compactVideoAria, compactVideoOverflow, compactVideoBoxes })}`);
+      }
+      if (await videoChatToggle.isVisible()) throw new Error("500px Video Studio repeated the 制作/对话 switch with a Chat button.");
+      const [, compactVideoToolbar, compactVideoProject, compactVideoViews] = compactVideoBoxes;
+      if (!compactVideoToolbar || !compactVideoProject || !compactVideoViews || compactVideoToolbar.height > 110 || Math.abs(compactVideoProject.y + compactVideoProject.height / 2 - compactVideoViews.y - compactVideoViews.height / 2) > 4) {
+        throw new Error(`500px Video Studio stacked its project and view controls: ${JSON.stringify(compactVideoBoxes)}`);
+      }
+      await page.screenshot({ path: join(videoEvidenceDirectory, "video-compact.png"), animations: "disabled" });
+      await compactVideoStudioTab.focus();
+      await compactVideoStudioTab.press("ArrowRight");
+      await videoComposer.waitFor({ state: "visible", timeout: 10_000 });
+      await videoComposer.fill("窄屏视频对话草稿");
+      await compactVideoChatTab.press("ArrowLeft");
+      await videoStudio.waitFor({ state: "visible", timeout: 10_000 });
+      await compactVideoStudioTab.press("ArrowRight");
+      if (await videoComposer.evaluate((element) => element instanceof HTMLTextAreaElement || element instanceof HTMLInputElement ? element.value : element.textContent) !== "窄屏视频对话草稿") {
+        throw new Error("500px 制作/对话 switching lost the video Composer draft.");
+      }
+      await videoComposer.fill("");
+      await compactVideoChatTab.press("ArrowLeft");
+      await videoStudio.waitFor({ state: "visible", timeout: 10_000 });
+      if (await recapPlayer.getAttribute("data-video-native-smoke") !== "compact-preserved") throw new Error("Compact Video Studio/Chat switching remounted the video player.");
+      await page.setViewportSize({ width: 1_440, height: 900 });
+      await page.waitForFunction(() => document.querySelector("[data-conversation-scroll]")?.getAttribute("data-oh-story-layout") === "wide");
+      await videoTabs.getByRole("tab", { name: "预览", exact: true }).click();
+      if (await videoChatToggle.getAttribute("aria-pressed") !== "true") await videoChatToggle.click();
+      await videoComposer.waitFor({ state: "visible", timeout: 10_000 });
+      const chatOpenScriptToggle = videoStudio.getByRole("button", { name: "解说稿", exact: true });
+      if (!await chatOpenScriptToggle.isVisible() || await videoStudio.getByRole("complementary", { name: "分段解说稿", exact: true }).isVisible()) {
+        throw new Error("Opening native Chat did not collapse the script panel while keeping its toggle.");
+      }
+      await page.screenshot({ path: join(videoEvidenceDirectory, "video-chat-open.png"), animations: "disabled" });
+      await videoChatToggle.click();
+
+      await videoStudio.getByRole("button", { name: "制作详情", exact: true }).click();
+      const videoDetails = page.getByRole("dialog", { name: "视频制作详情" });
+      await videoDetails.waitFor({ state: "visible", timeout: 10_000 });
+      await videoDetails.locator("summary").filter({ hasText: "运行环境" }).click();
+      await videoDetails.getByLabel("视频运行环境").getByText(/^Python /u).waitFor({ state: "visible", timeout: 10_000 });
+      await videoDetails.getByRole("combobox", { name: "制作记录", exact: true }).selectOption("video-recaps/smoke-recap/work/recap_run_manifest.json");
+      await videoDetails.getByText('"edit_mode": "cut"', { exact: false }).waitFor({ state: "visible", timeout: 10_000 });
       await captureDemoFrame(page, "video", 4);
+      await videoDetails.getByRole("button", { name: "关闭", exact: true }).click();
       await videoStudio.getByRole("tab", { name: "小说", exact: true }).click();
       await storyTree.waitFor({ state: "visible", timeout: 10_000 });
 
       await selectSession(page, dramaWorkspace.workspace.title, dramaSessionTitle);
       // Reading drama files with a real model does not select a UI workbench.
       await page.getByRole("tablist", { name: "创作工作台" }).getByRole("tab", { name: "短剧", exact: true }).click();
-      const dramaTree = page.getByRole("navigation", { name: "短剧项目文件" });
-      await dramaTree.waitFor({ state: "visible", timeout: 10_000 });
-      const dramaKind = page.locator(".oh-story-kind");
-      await dramaKind.waitFor({ state: "visible", timeout: 10_000 });
       const dramaWorkbenchTabs = page.getByRole("tablist", { name: "创作工作台" });
       await dramaWorkbenchTabs.waitFor({ state: "visible", timeout: 10_000 });
-      if (await dramaKind.textContent() !== "短剧"
-        || await dramaWorkbenchTabs.getByRole("tab", { name: "短剧", exact: true }).count() !== 1
+      if (await dramaWorkbenchTabs.getByRole("tab", { name: "短剧", exact: true }).getAttribute("aria-selected") !== "true"
         || await dramaWorkbenchTabs.getByRole("tab", { name: "小说", exact: true }).count() !== 1
         || await dramaWorkbenchTabs.getByRole("tab", { name: "游戏", exact: true }).count() !== 1
         || await dramaWorkbenchTabs.getByRole("tab", { name: "视频", exact: true }).count() !== 1) {
         throw new Error("Drama workspace did not expose all four persistent creation workbenches.");
       }
+      const dramaWorkspaceTabs = page.getByRole("tablist", { name: "短剧工作区" });
+      const productionTabs = page.getByRole("tablist", { name: "短剧生产视图" });
+      const episodeSelector = page.getByRole("combobox", { name: "选择短剧剧集" });
+      const dramaSurface = page.locator('.oh-story-split-surface[data-workbench="drama"]');
+      const dramaTreeShell = dramaSurface.locator(".oh-story-tree");
+      const dramaScroller = page.locator('[data-conversation-scroll][data-oh-story-workbench="drama"]');
+      const nativeDramaChat = page.locator('[data-slot="conversation.session"] > :not(.oh-story-split-surface)').first();
+      await productionTabs.waitFor({ state: "visible", timeout: 10_000 });
+      await dramaScroller.waitFor({ state: "attached", timeout: 10_000 });
+      await nativeDramaChat.waitFor({ state: "attached", timeout: 10_000 });
+      await nativeDramaChat.evaluate((element) => { element.dataset.nativeSmokeMount = "persistent"; });
+      if (!useRealDeepSeek && await page.getByRole("button", { name: "镜头清单", exact: true }).getAttribute("aria-pressed") !== "true") {
+        throw new Error("The explicit Agent focus_target intent did not open its requested shot-list auxiliary view.");
+      }
+      if (!useRealDeepSeek && await page.locator(".oh-story-shot-card").filter({ hasText: productionIntentArgs.targetId }).first().getAttribute("data-selected") === null) {
+        throw new Error("Agent production intent did not focus the requested semantic shot target.");
+      }
+      await dramaWorkspaceTabs.getByRole("tab", { name: "制作", exact: true }).click();
+      const closedCanvasBox = await page.locator(".oh-story-production").boundingBox();
+      if (await dramaWorkspaceTabs.getByRole("tab", { name: "制作", exact: true }).getAttribute("aria-selected") !== "true"
+        || await episodeSelector.inputValue() !== "剧集/EP001"
+        || await dramaTreeShell.getAttribute("aria-hidden") !== "true"
+        || await page.getByRole("button", { name: "展开项目文稿", exact: true }).getAttribute("aria-expanded") !== "false"
+        || await page.getByRole("button", { name: "展开原生 Chat", exact: true }).getAttribute("aria-expanded") !== "false"
+        || await productionTabs.getByRole("tab").allTextContents().then((labels) => JSON.stringify(labels) !== JSON.stringify(["画布", "素材", "生成记录", "成片"]))
+        || await productionTabs.getByRole("tab", { name: "画布", exact: true }).getAttribute("aria-selected") !== "true"
+        || await page.locator(".oh-story-canvas article").count() < 12
+        || await page.locator(".oh-story-canvas img.oh-story-media-preview").count() < 1
+        || await page.locator(".oh-story-canvas video.oh-story-media-preview").count() < 1
+        || closedCanvasBox === null) {
+        throw new Error("Drama did not open on the real episode canvas with files and native Chat collapsed.");
+      }
+      await captureDramaEvidence(page, "01-default-canvas");
+      await episodeSelector.selectOption("剧集/EP002");
+      await page.locator('.oh-story-canvas article[title="来源条目：SHOT-EP002-001"]').waitFor({ state: "visible", timeout: 10_000 });
+      if (await page.locator(".oh-story-canvas .oh-story-media-preview").count() !== 0) {
+        throw new Error("The episode selector leaked EP001 media into the EP002 canvas.");
+      }
+      await episodeSelector.selectOption("剧集/EP001");
+      await page.locator('.oh-story-canvas article[title="来源条目：SHOT-EP001-001"]').waitFor({ state: "visible", timeout: 10_000 });
+
+      await page.getByRole("button", { name: "展开原生 Chat", exact: true }).click();
+      const openedCanvasBox = await page.locator(".oh-story-production").boundingBox();
+      if (openedCanvasBox === null || closedCanvasBox.width <= openedCanvasBox.width
+        || await nativeDramaChat.getAttribute("data-native-smoke-mount") !== "persistent") {
+        throw new Error(`Collapsing native Chat did not preserve its DOM while giving canvas more room: ${JSON.stringify({ closedCanvasBox, openedCanvasBox })}`);
+      }
+      const dramaComposer = page.locator('[data-composer-seat] textarea, [data-composer-seat] [contenteditable="true"]').first();
+      await dramaComposer.waitFor({ state: "visible", timeout: 10_000 });
+      const protectedChatDraft = "保留这段创作草稿，不要让画布操作覆盖";
+      await dramaComposer.fill(protectedChatDraft);
+      await page.getByRole("button", { name: "收起原生 Chat", exact: true }).click();
+      // The explicit Agent focus may have panned to shot 008; frame the canvas
+      // before selecting its first story card rather than trying to scroll it.
+      await page.getByRole("button", { name: "适应", exact: true }).click();
+      await page.locator(".oh-story-canvas article").first().click();
+      await page.getByRole("button", { name: "在 Chat 中继续", exact: true }).click();
+      await page.getByRole("button", { name: "收起原生 Chat", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+      const preservedChatDraft = await dramaComposer.evaluate((element) => element instanceof HTMLTextAreaElement || element instanceof HTMLInputElement ? element.value : element.textContent ?? "");
+      if (await nativeDramaChat.getAttribute("data-native-smoke-mount") !== "persistent"
+        || preservedChatDraft !== protectedChatDraft) {
+        throw new Error("Continuing from canvas remounted native Chat or overwrote its existing draft.");
+      }
+      await captureDramaEvidence(page, "02-chat-expanded");
+      await dramaComposer.fill("");
+
+      await page.getByRole("button", { name: "展开项目文稿", exact: true }).click();
+      const dramaTree = page.getByRole("navigation", { name: "短剧项目文件" });
+      await dramaTree.waitFor({ state: "visible", timeout: 10_000 });
       await selectFile(page, "剧集/EP001/剧本.md");
+      if (await dramaWorkspaceTabs.getByRole("tab", { name: "文稿", exact: true }).getAttribute("aria-selected") !== "true") {
+        throw new Error("Opening a drama file did not switch from canvas to the document workspace.");
+      }
+      await episodeSelector.selectOption("剧集/EP002");
+      await page.locator('.oh-story-canvas article[title="来源条目：SHOT-EP002-001"]').waitFor({ state: "visible", timeout: 10_000 });
+      if (await page.locator(".oh-story-editor-path").getAttribute("title") !== "剧集/EP001/剧本.md") {
+        throw new Error("Selecting an episode replaced the independently selected document.");
+      }
+      await episodeSelector.selectOption("剧集/EP001");
+      await dramaWorkspaceTabs.getByRole("tab", { name: "文稿", exact: true }).click();
       await page.getByRole("tab", { name: "预览", exact: true }).click();
       await page.getByRole("article", { name: "剧集/EP001/剧本.md 渲染预览" }).waitFor({ state: "visible", timeout: 10_000 });
       await page.getByText(dramaPrompt, { exact: true }).waitFor({ state: "visible", timeout: 20_000 });
@@ -1981,20 +2626,16 @@ async function main(): Promise<void> {
       await captureDemoFrame(page, "drama", 3);
       const productionTab = page.getByRole("tab", { name: "生产", exact: true });
       await productionTab.click();
-      const productionTabs = page.getByRole("tablist", { name: "短剧生产视图" });
       await productionTabs.waitFor({ state: "visible", timeout: 10_000 });
+      await page.getByRole("button", { name: "镜头清单", exact: true }).click();
       if (await page.locator(".oh-story-shot-card").count() !== 22
         || await page.locator(".oh-story-shot-card img.oh-story-media-preview").count() < 1
         || await page.locator(".oh-story-shot-card video.oh-story-media-preview").count() < 1
-        || await productionTabs.getByRole("tab").allTextContents().then((labels) => JSON.stringify(labels) !== JSON.stringify(["镜头", "素材", "任务", "成片", "画布"]))) {
+        || await productionTabs.getByRole("tab").allTextContents().then((labels) => JSON.stringify(labels) !== JSON.stringify(["画布", "素材", "生成记录", "成片"]))) {
         throw new Error("Production shot board did not project the creator-first documents and DSH workspace media.");
       }
-      if (!useRealDeepSeek && await page.locator(".oh-story-shot-card").filter({ hasText: productionIntentArgs.targetId }).first().getAttribute("data-selected") === null) {
-        throw new Error("Agent production intent did not focus the requested semantic shot target.");
-      }
-      // The Agent intent above focuses SHOT-EP001-008, so the board is scrolled well past the first shot and
-      // the first card's loading="lazy" keyframe is deliberately still unloaded. Bring it into view and
-      // await decode before measuring, so this asserts fixture realism rather than scroll position.
+      // Bring the lazy first keyframe into view and await decode before measuring, so this asserts
+      // fixture realism independently of whichever canvas or shot selection preceded this board visit.
       const keyframePreview = page.locator(".oh-story-shot-card img.oh-story-media-preview").first();
       await keyframePreview.scrollIntoViewIfNeeded();
       await keyframePreview.evaluate(async (element) => {
@@ -2029,7 +2670,7 @@ async function main(): Promise<void> {
         throw new Error("Project media library did not expose the three realistic workspace results.");
       }
       const reusableReference = page.locator(".oh-story-media-library-grid > article").filter({ hasText: productionMediaPath })
-        .getByRole("button", { name: /SHOT-EP001-001 参考/u });
+        .getByRole("button", { name: /^(?:设为|取消) 攥紧的茶杯 的参考$/u });
       await reusableReference.click();
       await page.waitForTimeout(100);
       if (await reusableReference.getAttribute("aria-pressed") !== "true") throw new Error("Project media could not be attached as an explicit shot reference.");
@@ -2045,8 +2686,8 @@ async function main(): Promise<void> {
       await mkdir(dirname(join(dramaRoot, explicitStillPath)), { recursive: true });
       await cp(keyframeV2MediaFixture, join(dramaRoot, explicitStillPath));
       await page.getByRole("button", { name: "刷新", exact: true }).click();
-      const stillSelector = page.getByRole("combobox", { name: "选择 SHOT-EP001-001 成片素材", exact: true });
-      const stillOption = stillSelector.getByRole("option", { name: /IMG-ZHOUBOSEN-SHEET · 静帧/u });
+      const stillSelector = page.getByRole("combobox", { name: "选择 攥紧的茶杯 成片素材", exact: true });
+      const stillOption = stillSelector.getByRole("option", { name: /周薄森角色板 · 静帧/u });
       await stillOption.waitFor({ state: "attached", timeout: 10_000 });
       const stillVersionId = await stillOption.getAttribute("value");
       if (stillVersionId === null) throw new Error("Sequence did not expose the same-episode delivery IMG source.");
@@ -2055,11 +2696,11 @@ async function main(): Promise<void> {
       if (new URL((await selectedStill.getAttribute("src")) ?? "", origin).searchParams.get("path") !== explicitStillPath) {
         throw new Error("Explicit IMG composition source did not replace its automatic shot keyframe.");
       }
-      await page.getByRole("button", { name: "下移 SHOT-EP001-001", exact: true }).click();
-      if (await page.locator(".oh-story-sequence > ol > li strong").first().textContent() !== "SHOT-EP001-002") {
+      await page.getByRole("button", { name: "下移 攥紧的茶杯", exact: true }).click();
+      if (await page.locator(".oh-story-sequence > ol > li strong").first().getAttribute("title") !== "SHOT-EP001-002") {
         throw new Error("Production sequence did not apply an explicit shot reorder.");
       }
-      await page.getByRole("button", { name: "上移 SHOT-EP001-001", exact: true }).click();
+      await page.getByRole("button", { name: "上移 攥紧的茶杯", exact: true }).click();
       await productionTabs.getByRole("tab", { name: "画布", exact: true }).click();
       if (await page.locator(".oh-story-canvas article").count() < 12 || await page.locator(".oh-story-canvas path").count() < 8) {
         throw new Error("Production canvas omitted creator-document relationships.");
@@ -2106,16 +2747,51 @@ async function main(): Promise<void> {
         return rect.left >= box.x - 1 && rect.right <= box.x + box.width + 1;
       }), canvasBox);
       if (!framedNodes) throw new Error("Canvas fit did not frame every node after panning and zooming.");
-      await productionTabs.getByRole("tab", { name: "镜头", exact: true }).click();
-      await page.locator(".oh-story-shot-card").first().getByRole("button", { name: "IMG-ZHOUBOSEN-SHEET", exact: true }).click();
+      await page.getByRole("button", { name: "镜头清单", exact: true }).click();
+      await page.locator(".oh-story-shot-card").first().getByRole("button", { name: "周薄森角色板", exact: true }).click();
       await page.getByRole("textbox", { name: "剧集/EP001/图片提示词.md" }).waitFor({ state: "visible", timeout: 10_000 });
       await selectFile(page, "剧集/EP001/分镜.md");
       await productionTab.click();
       await page.locator(".oh-story-shot-card").first().waitFor({ state: "visible", timeout: 10_000 });
       if (!useRealDeepSeek) {
         const beforeShotOne = (await sessionEvents(origin, dramaSession.sessionId)).at(-1)?.seq ?? -1;
-        await page.locator(".oh-story-shot-card").first().getByRole("button", { name: "准备关键帧", exact: true }).click();
-        await productionTabs.getByRole("tab", { name: "任务", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+        await page.getByRole("button", { name: "收起原生 Chat", exact: true }).click();
+        await productionTabs.getByRole("tab", { name: "画布", exact: true }).click();
+        await page.getByRole("button", { name: "适应", exact: true }).click();
+        const firstShotCanvasNode = page.locator('.oh-story-canvas article[title="来源条目：SHOT-EP001-001"]');
+        await firstShotCanvasNode.getByRole("button", { name: "准备关键帧", exact: true }).click();
+        await firstShotCanvasNode.locator(".oh-story-canvas-node-meta").getByText("等待确认", { exact: true })
+          .waitFor({ state: "visible", timeout: 10_000 });
+        await page.getByRole("button", { name: "收起原生 Chat", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+        let preparedCanvasFocus: { readonly selected: boolean; readonly node: Awaited<ReturnType<Locator["boundingBox"]>>; readonly viewport: Awaited<ReturnType<Locator["boundingBox"]>> } = {
+          selected: false,
+          node: null,
+          viewport: null
+        };
+        for (const deadline = Date.now() + 5_000; Date.now() < deadline;) {
+          const [selected, node, viewport] = await Promise.all([
+            firstShotCanvasNode.getAttribute("aria-pressed").then((value) => value === "true"),
+            firstShotCanvasNode.boundingBox(),
+            canvasViewport.boundingBox()
+          ]);
+          preparedCanvasFocus = { selected, node, viewport };
+          if (selected && node !== null && viewport !== null
+            && node.x >= viewport.x - 1 && node.y >= viewport.y - 1
+            && node.x + node.width <= viewport.x + viewport.width + 1
+            && node.y + node.height <= viewport.y + viewport.height + 1) break;
+          await page.waitForTimeout(100);
+        }
+        const preparedNode = preparedCanvasFocus.node;
+        const preparedViewport = preparedCanvasFocus.viewport;
+        if (await productionTabs.getByRole("tab", { name: "画布", exact: true }).getAttribute("aria-selected") !== "true"
+          || await nativeDramaChat.getAttribute("data-native-smoke-mount") !== "persistent"
+          || !preparedCanvasFocus.selected || preparedNode === null || preparedViewport === null
+          || preparedNode.x < preparedViewport.x - 1 || preparedNode.y < preparedViewport.y - 1
+          || preparedNode.x + preparedNode.width > preparedViewport.x + preparedViewport.width + 1
+          || preparedNode.y + preparedNode.height > preparedViewport.y + preparedViewport.height + 1) {
+          throw new Error(`Preparing production did not keep its selected shot visible on canvas while reopening the same native Chat DOM: ${JSON.stringify(preparedCanvasFocus)}`);
+        }
+        await productionTabs.getByRole("tab", { name: "生成记录", exact: true }).click();
         await page.locator(".oh-story-task-board article").first().waitFor({ state: "visible", timeout: 10_000 });
         await page.locator('[data-slot="conversation.session"]').getByText("/short-drama-produce", { exact: false }).last()
           .waitFor({ state: "visible", timeout: 20_000 });
@@ -2127,15 +2803,15 @@ async function main(): Promise<void> {
         const shotCards = page.locator(".oh-story-shot-card");
 
         const beforeShotTwo = (await sessionEvents(origin, dramaSession.sessionId)).at(-1)?.seq ?? -1;
-        await productionTabs.getByRole("tab", { name: "镜头", exact: true }).click();
+        await page.getByRole("button", { name: "镜头清单", exact: true }).click();
         await shotCards.nth(1).getByRole("button", { name: "准备关键帧", exact: true }).click();
         const runningQueueRemovalTask = taskFor("SHOT-EP001-002");
-        await runningQueueRemovalTask.getByRole("button", { name: "停止当前 DSH Turn", exact: true })
+        await runningQueueRemovalTask.getByRole("button", { name: "停止当前生成", exact: true })
           .waitFor({ state: "visible", timeout: 10_000 });
-        await productionTabs.getByRole("tab", { name: "镜头", exact: true }).click();
+        await page.getByRole("button", { name: "镜头清单", exact: true }).click();
         await shotCards.nth(2).getByRole("button", { name: "准备关键帧", exact: true }).click();
         const removedQueuedTask = taskFor("SHOT-EP001-003");
-        const removeQueuedButton = removedQueuedTask.getByRole("button", { name: "从 DSH Queue 移除", exact: true });
+        const removeQueuedButton = removedQueuedTask.getByRole("button", { name: "从生成队列移除", exact: true });
         await removeQueuedButton.waitFor({ state: "visible", timeout: 10_000 });
         await removeQueuedButton.click();
         await removedQueuedTask.getByText("已取消", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
@@ -2145,20 +2821,20 @@ async function main(): Promise<void> {
         await waitForCompletedTurn(origin, dramaSession.sessionId, beforeShotTwo);
 
         const productionRequestsBeforeCancel = mockDeepSeek?.requests.filter((request) => request === "production").length ?? 0;
-        await productionTabs.getByRole("tab", { name: "镜头", exact: true }).click();
+        await page.getByRole("button", { name: "镜头清单", exact: true }).click();
         await shotCards.nth(3).getByRole("button", { name: "准备关键帧", exact: true }).click();
         const canceledRunningTask = taskFor("SHOT-EP001-004");
-        await canceledRunningTask.getByRole("button", { name: "停止当前 DSH Turn", exact: true })
+        await canceledRunningTask.getByRole("button", { name: "停止当前生成", exact: true })
           .waitFor({ state: "visible", timeout: 10_000 });
-        await productionTabs.getByRole("tab", { name: "镜头", exact: true }).click();
+        await page.getByRole("button", { name: "镜头清单", exact: true }).click();
         await shotCards.nth(4).getByRole("button", { name: "准备关键帧", exact: true }).click();
         const preservedQueuedTask = taskFor("SHOT-EP001-005");
-        await preservedQueuedTask.getByRole("button", { name: "从 DSH Queue 移除", exact: true })
+        await preservedQueuedTask.getByRole("button", { name: "从生成队列移除", exact: true })
           .waitFor({ state: "visible", timeout: 10_000 });
-        await canceledRunningTask.getByRole("button", { name: "停止当前 DSH Turn", exact: true }).click();
+        await canceledRunningTask.getByRole("button", { name: "停止当前生成", exact: true }).click();
         await canceledRunningTask.getByText("已取消", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
-        await preservedQueuedTask.getByText("DSH Queue", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
-        const preservedQueueRemove = preservedQueuedTask.getByRole("button", { name: "从 DSH Queue 移除", exact: true });
+        await preservedQueuedTask.getByText("生成队列", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+        const preservedQueueRemove = preservedQueuedTask.getByRole("button", { name: "从生成队列移除", exact: true });
         await preservedQueueRemove.waitFor({ state: "visible", timeout: 10_000 });
         const productionRequestsAfterCancel = mockDeepSeek?.requests.filter((request) => request === "production").length ?? 0;
         if (productionRequestsAfterCancel !== productionRequestsBeforeCancel + 1) {
@@ -2167,10 +2843,10 @@ async function main(): Promise<void> {
         await preservedQueueRemove.click();
         await preservedQueuedTask.getByText("已取消", { exact: true }).waitFor({ state: "visible", timeout: 10_000 });
 
-        await productionTabs.getByRole("tab", { name: "镜头", exact: true }).click();
+        await page.getByRole("button", { name: "镜头清单", exact: true }).click();
         await page.getByRole("button", { name: "准备批量视频", exact: true }).click();
         const batchTask = taskFor("BATCH-VIDEOS");
-        await batchTask.getByRole("button", { name: "停止当前 DSH Turn", exact: true })
+        await batchTask.getByRole("button", { name: "停止当前生成", exact: true })
           .waitFor({ state: "visible", timeout: 10_000 });
         const batchJobId = await batchTask.getAttribute("data-job-id");
         if (batchJobId === null) throw new Error("Batch production task did not expose its stable projection id.");
@@ -2229,22 +2905,24 @@ async function main(): Promise<void> {
         if (new URL((await sequenceRows.first().locator("img").getAttribute("src")) ?? "", origin).searchParams.get("path") !== explicitStillPath) {
           throw new Error("A new video silently replaced the creator's explicit static IMG source.");
         }
+        await page.getByRole("button", { name: "收起原生 Chat", exact: true }).click();
         await page.setViewportSize({ width: 500, height: 900 });
         await page.waitForTimeout(150);
         const sequenceOverflow = await page.locator(".oh-story-sequence").evaluate((element) => element.scrollWidth - element.clientWidth);
         if (sequenceOverflow > 1) throw new Error(`500px sequence source controls overflowed by ${String(sequenceOverflow)}px.`);
-        const compactSourcePicker = page.getByRole("combobox", { name: "选择 SHOT-EP001-001 成片素材" });
+        const compactSourcePicker = page.getByRole("combobox", { name: "选择 攥紧的茶杯 成片素材" });
         await compactSourcePicker.scrollIntoViewIfNeeded();
         const compactSourcePickerBox = await compactSourcePicker.boundingBox();
         if (!await compactSourcePicker.isVisible() || compactSourcePickerBox === null || compactSourcePickerBox.width < 100 || compactSourcePickerBox.height < 20) {
           throw new Error(`500px sequence source selector is not usable: ${JSON.stringify(compactSourcePickerBox)}`);
         }
         await page.setViewportSize({ width: 1_440, height: 900 });
+        await page.getByRole("button", { name: "展开原生 Chat", exact: true }).click();
         await composeButton.click();
         await page.locator('[data-slot="conversation.session"]').getByText("IMG-ZHOUBOSEN-SHEET · 静帧", { exact: false }).last()
           .waitFor({ state: "visible", timeout: 10_000 });
         const compositionTask = page.locator(".oh-story-task-board article").filter({ hasText: "成片" }).first();
-        await compositionTask.getByRole("button", { name: "停止当前 DSH Turn", exact: true })
+        await compositionTask.getByRole("button", { name: "停止当前生成", exact: true })
           .waitFor({ state: "visible", timeout: 10_000 });
         const compositionJobId = await compositionTask.getAttribute("data-job-id");
         if (compositionJobId === null) throw new Error("Composition task did not expose its stable projection id.");
@@ -2252,7 +2930,7 @@ async function main(): Promise<void> {
         // would be completed by this one's cut.
         await productionTabs.getByRole("tab", { name: "成片", exact: true }).click();
         if (await composeButton.isEnabled()) throw new Error("合成成片 stayed available while the first assembly was still in flight.");
-        await productionTabs.getByRole("tab", { name: "任务", exact: true }).click();
+        await productionTabs.getByRole("tab", { name: "生成记录", exact: true }).click();
         // short-drama-edit renders to this fixed path; the job correlates on the deliverable.
         const compositionOutput = "剧集/EP001/制作成果/成片/成片.mp4";
         await mkdir(dirname(join(dramaRoot, compositionOutput)), { recursive: true });
@@ -2267,12 +2945,12 @@ async function main(): Promise<void> {
       await selectFile(page, "剧集/EP002/分镜.md");
       await page.getByRole("article", { name: "剧集/EP002/分镜.md 渲染预览" }).waitFor({ state: "visible", timeout: 10_000 });
       await productionTab.click();
-      await productionTabs.getByRole("tab", { name: "镜头", exact: true }).click();
+      await page.getByRole("button", { name: "镜头清单", exact: true }).click();
       await page.locator(".oh-story-shot-card").first().waitFor({ state: "visible", timeout: 10_000 });
       if (await page.locator(".oh-story-shot-card").count() !== 22
-        || await page.locator(".oh-story-shot-card").first().getByRole("button", { name: "SHOT-EP002-001", exact: true }).count() !== 1
+        || await page.locator(".oh-story-shot-card").first().getByText("SHOT-EP002-001", { exact: true }).count() !== 1
         || await page.locator(".oh-story-shot-card .oh-story-media-preview").count() !== 0
-        || await page.locator(".oh-story-production-summary").textContent() !== "22 镜 · 11 素材 · 0 任务") {
+        || await page.locator(".oh-story-production-summary").textContent() !== "22 个镜头 · 11 项素材") {
         throw new Error("EP002 production projection leaked EP001 media or task state.");
       }
       await page.locator(".oh-story-shot-card").first().locator("h3").click();
@@ -2280,7 +2958,7 @@ async function main(): Promise<void> {
       const crossEpisodeMedia = page.locator(".oh-story-media-library-grid > article").filter({ hasText: "剧集/EP001/" });
       if (await crossEpisodeMedia.count() < 3) throw new Error("EP002 could not discover reusable EP001 project media.");
       const ep2Reference = crossEpisodeMedia.filter({ hasText: productionMediaPath })
-        .getByRole("button", { name: /SHOT-EP002-001 参考/u });
+        .getByRole("button", { name: /^(?:设为|取消) 攥紧的茶杯 的参考$/u });
       await ep2Reference.click();
       await page.waitForTimeout(100);
       if (await ep2Reference.getAttribute("aria-pressed") !== "true") throw new Error("EP002 could not attach an EP001 image as an explicit cross-episode reference.");
@@ -2290,14 +2968,14 @@ async function main(): Promise<void> {
       await openFolder(page, "EP001");
       await selectFile(page, "剧集/EP001/分镜.md");
       await productionTab.click();
-      await productionTabs.getByRole("tab", { name: "任务", exact: true }).click();
+      await productionTabs.getByRole("tab", { name: "生成记录", exact: true }).click();
       if (!useRealDeepSeek && await page.locator(".oh-story-task-board article").count() < 6) {
         throw new Error("EP001 task projection was not restored after switching episodes.");
       }
       await productionTabs.getByRole("tab", { name: "画布", exact: true }).click();
       const restoredFirstEpisodeCanvasLeft = Number.parseFloat(await page.locator(".oh-story-canvas article").first().evaluate((element) => getComputedStyle(element).left));
       if (restoredFirstEpisodeCanvasLeft !== leftAfterKeyboardMove) throw new Error("EP001 canvas coordinates were not restored after switching episodes.");
-      await productionTabs.getByRole("tab", { name: "镜头", exact: true }).click();
+      await page.getByRole("button", { name: "镜头清单", exact: true }).click();
       if (await page.locator(".oh-story-shot-card").first().locator(".oh-story-version-strip").getByRole("button").first().getAttribute("data-selected") === null) {
         throw new Error("EP001 media-version selection was not restored after switching episodes.");
       }
@@ -2386,41 +3064,52 @@ async function main(): Promise<void> {
       await page.setViewportSize({ width: 500, height: 900 });
       await page.waitForTimeout(100);
       const compactScroller = await scrollerLocator.evaluate((element) => ({ clientWidth: element.clientWidth, scrollWidth: element.scrollWidth }));
-      const compactBoxes = await Promise.all([
-        page.locator(".oh-story-tree").boundingBox(),
-        page.locator(".oh-story-editor").boundingBox(),
-        chatLocator.boundingBox(),
-        composerLocator.boundingBox(),
+      const compactChatBoxes = await Promise.all([
+        chatLocator.boundingBox(), composerLocator.boundingBox(),
         composerLocator.getByRole("button", { name: /^(?:Select model|选择模型)/u }).boundingBox(),
         composerLocator.getByRole("button", { name: /^(?:Send message|发送消息)$/u }).boundingBox()
       ]);
-      if (compactBoxes.some((box) => box === null)) throw new Error("Compact three-column layout lost a required column.");
-      const [compactTree, compactEditor, compactChat, compactComposer, compactModel, compactSend] = compactBoxes as Exclude<(typeof compactBoxes)[number], null>[];
-      const compactOrdered = compactTree.x + compactTree.width <= compactEditor.x + 1
-        && compactEditor.x + compactEditor.width <= compactChat.x + 1;
-      const compactVisible = [compactTree, compactEditor, compactChat, compactComposer, compactModel, compactSend]
+      if (compactChatBoxes.some((box) => box === null)) throw new Error("Compact Chat mode lost native DSH controls.");
+      const compactVisible = (compactChatBoxes as Exclude<(typeof compactChatBoxes)[number], null>[])
         .every((box) => box.x >= -1 && box.x + box.width <= 501);
+      const compactEditorWhileChatOpen = await page.locator(".oh-story-editor").boundingBox();
+      const compactTreeWhileChatOpen = await page.locator(".oh-story-tree").boundingBox();
+      const pageOverflow = await page.evaluate(() => Math.max(document.body.scrollWidth, document.documentElement.scrollWidth) - document.documentElement.clientWidth);
+      if (!compactVisible || compactEditorWhileChatOpen !== null || compactTreeWhileChatOpen !== null
+        || await scrollerLocator.getAttribute("data-oh-story-layout") !== "compact" || pageOverflow > 1) {
+        throw new Error(`500px Chat mode did not give the native conversation the compact surface: ${JSON.stringify({ compactScroller, compactChatBoxes, compactEditorWhileChatOpen, compactTreeWhileChatOpen, pageOverflow })}`);
+      }
+      await assertChatAnchorContract(page, chatLocator, scrollerLocator, composerLocator, "compact");
+      await page.getByRole("button", { name: "收起原生 Chat", exact: true }).click();
+      await page.locator(".oh-story-editor").waitFor({ state: "visible", timeout: 10_000 });
       const compactFileTextWidth = await page.locator(`button[data-file-path=${JSON.stringify(compactPath)}]`).evaluate((element) => {
         const style = getComputedStyle(element);
         return element.clientWidth - Number.parseFloat(style.paddingLeft) - Number.parseFloat(style.paddingRight);
       });
       const compactHeaderWidth = await page.locator(".oh-story-editor-path > strong").evaluate((element) => element.getBoundingClientRect().width);
-      const compactShotHeadingWidth = await page.getByRole("heading", { name: /^SHOT-EP001-/u }).first().evaluate((element) => element.getBoundingClientRect().width);
-      const pageOverflow = await page.evaluate(() => Math.max(document.body.scrollWidth, document.documentElement.scrollWidth) - document.documentElement.clientWidth);
-      if (!compactOrdered || !compactVisible
-        || await scrollerLocator.getAttribute("data-oh-story-layout") !== "compact"
-        || compactFileTextWidth < 32 || compactHeaderWidth < 40 || compactShotHeadingWidth < 32 || pageOverflow > 1) {
-        throw new Error(`500px viewport clipped the workbench or made its content unreadable: ${JSON.stringify({ compactScroller, compactBoxes, compactFileTextWidth, compactHeaderWidth, compactShotHeadingWidth, pageOverflow })}`);
+      if (compactFileTextWidth < 32 || compactHeaderWidth < 40) {
+        throw new Error(`500px document mode made the project tree or editor unreadable: ${JSON.stringify({ compactFileTextWidth, compactHeaderWidth })}`);
       }
-      await assertChatAnchorContract(page, chatLocator, scrollerLocator, composerLocator, "compact");
+      await page.getByRole("button", { name: "收起项目文稿", exact: true }).click();
       await page.getByRole("tab", { name: "生产", exact: true }).click();
-      await page.getByRole("tablist", { name: "短剧生产视图" }).getByRole("tab", { name: "镜头", exact: true }).click();
+      await page.getByRole("button", { name: "镜头清单", exact: true }).click();
       await page.locator(".oh-story-shot-card").first().waitFor({ state: "visible", timeout: 10_000 });
+      const compactShotHeadingWidth = await page.getByRole("heading", { name: "攥紧的茶杯", exact: true }).first().evaluate((element) => element.getBoundingClientRect().width);
       const compactProductionOverflow = await page.evaluate(() => Math.max(document.body.scrollWidth, document.documentElement.scrollWidth) - document.documentElement.clientWidth);
       const compactProduction = await page.locator(".oh-story-production").evaluate((element) => ({ clientWidth: element.clientWidth, scrollWidth: element.scrollWidth }));
-      if (compactProductionOverflow > 1 || compactProduction.scrollWidth > compactProduction.clientWidth + 1) {
-        throw new Error(`500px production view overflowed its DSH editor column: ${JSON.stringify({ compactProductionOverflow, compactProduction })}`);
+      if (compactShotHeadingWidth < 32 || compactProductionOverflow > 1 || compactProduction.scrollWidth > compactProduction.clientWidth + 1) {
+        throw new Error(`500px production view overflowed or made its shot list unreadable: ${JSON.stringify({ compactShotHeadingWidth, compactProductionOverflow, compactProduction })}`);
       }
+      const dramaProductionTab = dramaWorkspaceTabs.getByRole("tab", { name: "制作", exact: true });
+      const dramaDocumentsTab = dramaWorkspaceTabs.getByRole("tab", { name: "文稿", exact: true });
+      const dramaTabHasFocus = async (tab: typeof dramaProductionTab): Promise<boolean> => await tab.getAttribute("aria-selected") === "true" && await tab.getAttribute("tabindex") === "0" && await tab.evaluate((element) => document.activeElement === element);
+      await dramaProductionTab.focus();
+      await dramaProductionTab.press("ArrowRight");
+      if (!await dramaTabHasFocus(dramaDocumentsTab)) throw new Error("ArrowRight did not move the drama workspace tabs to 文稿.");
+      await dramaDocumentsTab.press("ArrowLeft");
+      if (!await dramaTabHasFocus(dramaProductionTab)) throw new Error("ArrowLeft did not move the drama workspace tabs to 制作.");
+      await dramaProductionTab.press("ArrowRight");
+      await page.getByRole("button", { name: "收起项目文稿", exact: true }).click();
       await page.getByRole("tab", { name: "源码" }).click();
       const compactSource = page.getByRole("textbox", { name: compactPath });
       await compactSource.press("End");
@@ -2459,7 +3148,7 @@ async function main(): Promise<void> {
       workbenchCollapse: "per-workspace",
       threeColumn: true,
       gameStudio: "preview-left-chat-right",
-      videoStudio: "preview-left-chat-right",
+      videoStudio: "preview-canvas-documents",
       videoPreviewRoles: ["source", "edited", "final"],
       playableIframe: true,
       gameAdvSaveRestore: true,

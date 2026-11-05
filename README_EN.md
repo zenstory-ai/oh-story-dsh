@@ -48,7 +48,7 @@ The table describes the current source. Published packages pin their upstream co
 
 ## The four workbenches
 
-All four animations below are the packaged plugin running inside the official DSH Web, captured during a native integration-test run; the Chat on the right, the model, token usage and timing are DSH's own.
+The screenshots and animations below show the packaged plugin running inside the official DSH Web. Native integration tests provide deterministic interface evidence; they do not establish paid model output quality. Chat, model selection, token usage and timing remain DSH's own.
 
 ### Novel
 
@@ -58,23 +58,25 @@ File tree, editor and Chat in three panes. The editor follows the agent as it wr
 
 ### Short drama
 
-![Short-drama workbench](docs/images/drama-workbench-demo.gif)
+![Short-drama workbench](docs/images/drama-canvas-workbench.png)
 
-Each episode maintains up to five core creative Markdown files as needed: `剧本.md` (screenplay), `视觉设定.md` (visual bible), `分镜.md` (storyboard), `图片提示词.md` (image prompts) and `视频提示词.md` (video prompts). The Production view projects them into a shot board, an asset board, jobs/versions, final-cut order and an infinite, pannable and zoomable relationship canvas, and flags duplicate IDs, dangling references and format errors in place. Image, video, speech and music jobs are previewed and confirmed by you before any vendor API is called; the final cut is rendered by `/short-drama-edit` from `剪辑单.md` (the edit decision list) into `剧集/<EP>/制作成果/成片/`.
+Each episode maintains up to five core creative Markdown files as needed: `剧本.md` (screenplay), `视觉设定.md` (visual bible), `分镜.md` (storyboard), `图片提示词.md` (image prompts) and `视频提示词.md` (video prompts). The episode opens on an infinite canvas of story scenes, characters, settings, shots and real media. Document navigation and native Chat can collapse independently; selecting a card offers contextual actions and access to its source. Assets, jobs, versions and final-cut order remain available, with production details and document diagnostics shown on demand. Image, video, speech and music jobs are previewed and confirmed by you before any vendor API is called; the final cut is rendered by `/short-drama-edit` from `剪辑单.md` (the edit decision list) into `剧集/<EP>/制作成果/成片/`.
 
 ### Game
 
-![Game workbench](docs/images/game-workbench-demo.gif)
+![Game workbench](docs/images/game-creative-workbench.png)
 
-Live playtest on the left, Chat on the right. Output from `/novel-to-game quick` goes to `game-adaptations/<project>/`; once `build/app/index.html` is ready the project appears in the list and can be refreshed, made full-screen or switched. Games run on a separate origin inside an iframe sandbox. The bundled Jin Ping Mei ADV sample plays without an API key: before you have any work, click 「先玩内置示例」 (play the bundled sample) on the welcome card; afterwards pick it under 「内置示例」 in the 「游戏项目」 (game project) list. Adapted from the classical novel, it contains adult content (18+) and asks you to confirm your age before it starts.
+The game workspace offers Playtest, Creative canvas and Documents. The canvas organizes actual story, gameplay and art documents alongside the playable build. Edit and save documents with draft and conflict protection, and continue in native Chat. View changes preserve the running game, Chat can collapse, and new builds load only when selected. Output from `/novel-to-game quick` goes to `game-adaptations/<project>/`; once `build/app/index.html` is ready the project appears in the list and can be refreshed, made full-screen or switched. Games run on a separate origin inside an iframe sandbox. The bundled Jin Ping Mei ADV sample plays without an API key: before you have any work, click 「先玩内置示例」 (play the bundled sample) on the welcome card; afterwards pick it under 「内置示例」 in the 「游戏项目」 (game project) list. Adapted from the classical novel, it contains adult content (18+) and asks you to confirm your age before it starts.
 
 ### Video recap
 
-![Video workbench](docs/images/video-workbench-demo.gif)
+![Video workbench](docs/images/video-narrative-workbench.png)
 
-Preview on the left, Chat on the right. Projects live in `video-recaps/<project>/`: source footage in `sources/`, working files in `work/`, deliverables in `outputs/`. Switch between source, rough cut and final, and inspect stage hints, the run checklist and QC artifacts; video streams over HTTP Range. Before any video project exists, the empty state lists the runtime check: whether Python 3.10+, ffmpeg/ffprobe and `MIMO_API_KEY` are ready.
+The video workspace offers Preview, Creative canvas and Documents. Review footage beside narration, compare source, edited footage and final, and jump back to source when validated mappings exist. The canvas presents actual creative intent, narration, original audio and playable media. Edit narration paragraph by paragraph while retaining timing and metadata; saving text does not regenerate existing audio or video. Native Chat opens when needed, view changes preserve playback position, and new media loads only when explicitly selected. Projects live in `video-recaps/<project>/`: source footage in `sources/`, working files in `work/`, deliverables in `outputs/`; video streams over HTTP Range. Runtime checks, production records and QC source files are available under Production details, including before a project exists.
 
 ### Rules shared by all four
+
+Selected content can continue in native Chat while preserving existing text, references and attachments. Older DSH hosts such as `0.2.0-rc.2` lack the safe draft initializer; the workbench retains a visible, copyable context card instead of replacing the draft.
 
 - **Files are the creative truth**: the workbench only projects the project's files and writes no parallel database; editing a file is editing that layer of the decision. Unsaved manual edits are never overwritten by a concurrent agent write.
 - **Confirm media production first**: short-drama media jobs show exact content and preflight results in Chat and run after you confirm that job. Media keys stay in host environment variables; the plugin reports only whether they are configured.

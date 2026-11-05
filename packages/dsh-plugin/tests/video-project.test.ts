@@ -73,4 +73,38 @@ describe("video recap project projection", () => {
     expect(videoProjectRoot("video-recaps/.hidden/work/timeline.json")).toBeUndefined();
     expect(videoProjectRoot("正文/demo.md")).toBeUndefined();
   });
+
+  it("binds a narrative projection to the unique narration file without dropping lifecycle facts", () => {
+    const root = "video-recaps/narrative";
+    const summary = summarizeVideoProject(root, [
+      file(`${root}/sources/source.mp4`, "media", "video/mp4"),
+      file(`${root}/work/recap_run_manifest.json`),
+      file(`${root}/work/narration.json`)
+    ], {
+      runManifest: { settings: { edit_mode: "full" } },
+      narration: [{ start: 1, end: 3, narration: "只投影创作事实。", emotion: "平静" }]
+    });
+    expect(summary).toMatchObject({
+      narrationPath: `${root}/work/narration.json`,
+      narrationVersion: `v:${root}/work/narration.json`,
+      narrative: {
+        authoredClock: "source",
+        facts: { narrationCount: 1, mappedNarrationCount: 1 },
+        segments: [{ index: 0, text: "只投影创作事实。", sourceMapping: "identity" }]
+      }
+    });
+    expect(summary.state).toBe("working");
+    expect(summary.stage).toBe("voiceover");
+  });
+
+  it("does not choose an ambiguous narration file for editing", () => {
+    const root = "video-recaps/ambiguous";
+    const summary = summarizeVideoProject(root, [
+      file(`${root}/work/narration.json`),
+      file(`${root}/archive/narration.json`)
+    ], { narration: [] });
+    expect(summary.narrationPath).toBeUndefined();
+    expect(summary.narrationVersion).toBeUndefined();
+    expect(summary.narrative).toBeDefined();
+  });
 });

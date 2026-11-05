@@ -2,6 +2,29 @@
 
 Candidate: `@oh-story/dsh` 0.1.22 on DeepSeek Harness `0.2.1-rc.5`, with the earlier `0.2.0-rc.2` and the `0.2.2-alpha.3` trial line covered. Local aggregate acceptance passed on 2026-11-03.
 
+## Unreleased creative workbench regression — 2026-11-04
+
+This change redesigns the short-drama, game and video surfaces and regresses all four workbenches, including the existing novel workflow. It does not publish a package or change the pinned upstream assets.
+
+| Check | Result |
+| --- | --- |
+| `pnpm verify` | Passed: lint, types, four asset parity checks, DSH boundary, release/upstream-update scripts, 34 test files / 245 tests, and build |
+| `pnpm test:contract` | Passed: 7 targeted tests using real Cordis Context/Fiber |
+| `pnpm test:dsh` | Passed on official DSH 0.2.1-rc.5 with packaged plugin and isolated Chrome |
+| `pnpm test:dsh:rc` | Passed on official DSH 0.2.0-rc.2 with packaged plugin and isolated Chrome |
+
+Both native runs returned `ok: true`, `provider: local-fixture` and `videoStudio: preview-canvas-documents`. The browser bundle is 380,312 bytes, below the unchanged 400,000-byte budget. No dependencies or pinned knowledge files changed. The contract command is a targeted rerun, not seven additional distinct tests beyond the verify total.
+
+- Novel: file navigation, Markdown, streamed Agent writes, saves, draft recovery, CAS conflicts, native Chat and responsive layout.
+- Short drama: episode-scoped content canvas, real media and version selection, document navigation, production preflight/confirmation, task queue/cancellation, mixed composition and episode isolation.
+- Game: actual playable iframe, canvas/document switching, editing and CAS, an existing `PLAYTEST_NOTES.md` opening unchanged as an ordinary project file, draft protection and explicit new-build loading.
+- Video: output/source interval mapping and actual seek, media/document/canvas switching, JSON narration metadata preservation, CAS, native Chat context, authoritative file updates during a running task and explicit new-version loading.
+- Cross-workbench regression: unsaved game documents visit novel/drama/video and return; unsaved video documents visit novel/drama/game and return. The target workbench remains selected after effects settle and drafts survive. Hidden studios retain their media runtime without selecting documents in another workbench.
+- Chat compatibility: current DSH uses the public keep-draft transaction and honors applied/preserved/blocked results; preserved or blocked contexts remain visibly copyable. Older DSH without that transaction only focuses the native Composer and retains a copyable context card. Neither path replaces existing text, references or attachments.
+- Desktop and 500px interaction checks passed, including mouse navigation and keyboard switching between Studio and Chat.
+
+Interface evidence: [short drama](images/drama-canvas-workbench.png), [game preview](images/game-creative-workbench.png), [game canvas](images/game-creative-canvas.png), [video preview](images/video-narrative-workbench.png), [video canvas](images/video-narrative-canvas.png). Failure and final-run logs remain in the ignored local `.omx/ui-review/` directory. Paid DeepSeek/provider and real media-generation runs were not executed in this regression; deterministic fixture success is not evidence of their output quality. The alpha host line was not rerun for this PR.
+
 ## 0.1.22 release evidence
 
 0.1.22 syncs Oh Story 0.10.0 and Drama Skills 0.10.2 and moves the trial line to DSH `0.2.2-alpha.3`. The default host stays `0.2.1-rc.5`; NovelToGame 0.6.1 and video-recap 0.6.2 keep their pins.

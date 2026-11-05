@@ -11,14 +11,18 @@ const missing: VideoPreflight = {
 
 describe("video runtime check", () => {
   // Audit 2026-10-19 #13: the requirements were only visible after a video project existed.
-  it("is part of the empty state, before any video project exists", () => {
+  it("keeps production details reachable before a project exists without showing setup as the creative home", () => {
     const html = renderToStaticMarkup(<VideoStudio
       sessionId="s" projects={[]} running={false} projectId={undefined} tab="preview" hidden={false}
-      workbenches={["story", "video"]} paneId="pane" labelledBy="tab"
+      paneId="pane" labelledBy="tab"
+      files={[]} chatOpen={false} onChatOpen={() => undefined} onContinueInChat={() => undefined} canvasByProject={{}} onCanvasChange={() => undefined}
+      editor={{ selected: undefined, buffers: {}, mode: "preview", textareaRef: { current: null }, errors: {}, onSelect: () => undefined, onEdit: () => undefined, onSave: async () => undefined, onMode: () => undefined, onConflict: () => undefined, onDiscard: () => undefined, onRememberPosition: () => undefined, onRetry: () => undefined }}
       onProject={() => undefined} onTab={() => undefined} onWorkbench={() => undefined} onCollapse={() => undefined}
     />);
-    expect(html).toContain("还没有视频项目");
-    expect(html).toContain('aria-label="视频运行环境"');
+    expect(html).toContain("把这段故事，讲给更多人听");
+    expect(html).toContain("制作详情");
+    expect(html).not.toContain("Python");
+    expect(html).not.toContain("video-recaps/&lt;");
   });
 
   it("names each missing requirement and the version floor", () => {

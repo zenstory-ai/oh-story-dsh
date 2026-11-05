@@ -567,7 +567,10 @@ async function workspaceVideoProjects(realm: WorkspaceRealm, files: readonly Wor
     return root === undefined ? [] : [root];
   }))].sort((left, right) => left.localeCompare(right, "zh-Hans-CN"));
   return Promise.all(roots.map(async (root) => {
-    const findPath = (name: string): string | undefined => files.find((file) => file.path.startsWith(`${root}/`) && file.path.split("/").at(-1) === name)?.path;
+    const findPath = (name: string): string | undefined => {
+      const matches = files.filter((file) => file.path.startsWith(`${root}/`) && file.path.split("/").at(-1) === name);
+      return matches.length === 1 ? matches[0]?.path : undefined;
+    };
     const readJson = async (name: string): Promise<unknown> => {
       const path = findPath(name);
       if (path === undefined) return undefined;
@@ -576,12 +579,11 @@ async function workspaceVideoProjects(realm: WorkspaceRealm, files: readonly Wor
       try { return JSON.parse(content) as unknown; }
       catch { return undefined; }
     };
-    const [project, runManifest, assembly] = await Promise.all([
-      readJson("project.json"),
-      readJson("recap_run_manifest.json"),
-      readJson("assembly_manifest.json")
+    const [project, runManifest, assembly, narration, validatedClips, visualAudioBoard, storyPlan] = await Promise.all([
+      readJson("project.json"), readJson("recap_run_manifest.json"), readJson("assembly_manifest.json"),
+      readJson("narration.json"), readJson("clip_plan_validated.json"), readJson("visual_audio_board.json"), readJson("recap_story_plan.json")
     ]);
-    return summarizeVideoProject(root, files, { project, runManifest, assembly });
+    return summarizeVideoProject(root, files, { project, runManifest, assembly, narration, validatedClips, visualAudioBoard, storyPlan });
   }));
 }
 

@@ -44,29 +44,31 @@ npx -y @deepseek-ai/dsh@0.2.1-rc.5 web
 
 配置模型后，在普通 Agent 会话中使用 `/story`、`/short-drama`、`/novel-to-game quick` 或 `/video-recap`。空目录会保留 DSH 原生 Chat，Agent 写出第一个创作文件后工作台才会自动出现。工作台收起后，可通过会话区的「创作工作台」按钮重新打开。模型、凭据、Preset、权限、会话记录、停止/继续、Todo、审批和 Composer 均沿用当前 DeepSeek Harness 配置与界面。
 
+旧版 DSH（如 `0.2.0-rc.2`）缺少安全的草稿初始化接口时，「带到 Chat」只聚焦原生会话并保留可查看、复制的讨论内容，不替换已有输入、引用与附件。
+
 ## 短剧工作台
 
-![短剧工作台](https://raw.githubusercontent.com/zenstory-ai/oh-story-dsh/main/docs/images/drama-workbench-demo.gif)
+![短剧工作台](https://raw.githubusercontent.com/zenstory-ai/oh-story-dsh/main/docs/images/drama-canvas-workbench.png)
 
-选择某集的创作文档后可切换到「生产」，查看镜头板、素材板、任务、成片顺序与关系画布（无限画布：拖动空白处平移、滚轮以光标为中心缩放、方向键移动选中节点、Enter 打开原文，「适应」框选全部节点）；图片与视频按钮先准备完整生产预检，创作者在 Chat 明确确认同一任务后才会运行。
+短剧默认进入集级无限画布，组织已有故事场次、人物、场景、镜头与真实媒体。文稿目录和原生 Chat 可分别收起，卡片可拖动、缩放、选中后操作并打开原文；素材、任务、版本和成片顺序保留入口，环境与文档诊断收进「制作详情」。图片与视频先准备生产预检，创作者在 Chat 明确确认同一任务后才会运行。
 
 ## 游戏工作台
 
-![游戏工作台](https://raw.githubusercontent.com/zenstory-ai/oh-story-dsh/main/docs/images/game-workbench-demo.gif)
+![游戏工作台](https://raw.githubusercontent.com/zenstory-ai/oh-story-dsh/main/docs/images/game-creative-workbench.png)
 
-游戏产物写入 `game-adaptations/<project>`；`build/app/index.html` 就绪后即可在左侧隔离预览中实时试玩，切换项目文件或窄屏对话不会卸载当前运行时，新构建也只在用户主动选择后载入。`/game-qa` 与 `qa/verification.json` 保留为 Agent/自动化质量契约，不在制作面板展示独立 QA UI。
+游戏区提供「试玩 / 创作画布 / 文稿」，画布组织真实故事、玩法、美术与构建。文稿可编辑保存并处理冲突，可带到原生 Chat 继续讨论。游戏产物写入 `game-adaptations/<project>`；`build/app/index.html` 就绪后即可在左侧隔离预览中实时试玩，切换项目文件或窄屏对话不会卸载当前运行时，新构建也只在用户主动选择后载入。`/game-qa` 与 `qa/verification.json` 保留为 Agent/自动化质量契约，不在制作面板展示独立 QA UI。
 
 ## 视频工作台
 
-![视频工作台](https://raw.githubusercontent.com/zenstory-ai/oh-story-dsh/main/docs/images/video-workbench-demo.gif)
+![视频工作台](https://raw.githubusercontent.com/zenstory-ai/oh-story-dsh/main/docs/images/video-narrative-workbench.png)
 
-视频项目写入 `video-recaps/<project>`：`sources/` 保存原片，`work/` 保存流水线权威产物，`outputs/` 保存交付文件。左侧工作台只负责预览原片、剪后片、最终成片和关键计划/字幕/质检文件；Agent 在右侧 Chat 中完成理解、剪辑、写稿、配音与合成，不引入多轨时间线。
+视频项目写入 `video-recaps/<project>`：`sources/` 保存原片，`work/` 保存流水线权威产物，`outputs/` 保存交付文件。工作台提供「预览 / 创作画布 / 文稿」，看视频时可以逐段读解说、按可靠映射回看原片、改稿与保存。画布组织实际文稿、原声与媒体，切换视图保留播放位置，制作中保留旧版，新版明确载入。原生 Chat 按需展开，Agent 继续在同一会话里完成理解、剪辑、写稿、配音与合成；文字修改不会自动重做现有配音，不引入多轨时间线。
 
 ```text
 给 /path/to/video.mp4 做一个 3 分钟中文解说成片，保留关键原声，字幕烧进画面。
 ```
 
-宿主机需要 Python 3.10+、`PATH` 上的 ffmpeg/ffprobe，以及 `MIMO_API_KEY`；Fish Audio TTS 另需 `FISH_API_KEY`，自建 IndexTTS 需 `INDEX_TTS_ENDPOINT` 与 `INDEX_TTS_VOICE`（`TTS_PROVIDER=index-tts`）。Debian/Ubuntu 用 `sudo apt install ffmpeg`；有 libass `subtitles` 滤镜时烧录字幕，没有时交付外部 SRT（也可另装带 libass 的构建）。Key 与 `PATH` 在启动 DSH 的终端里设置，重启后生效。视频空状态和「产物」页的「运行环境」检查只报告 DSH Host 进程是否就绪，不返回 Key 内容，密钥也不会写入项目；Agent 实际的执行世界以 `video-recap --doctor` 为准。
+宿主机需要 Python 3.10+、`PATH` 上的 ffmpeg/ffprobe，以及 `MIMO_API_KEY`；Fish Audio TTS 另需 `FISH_API_KEY`，自建 IndexTTS 需 `INDEX_TTS_ENDPOINT` 与 `INDEX_TTS_VOICE`（`TTS_PROVIDER=index-tts`）。Debian/Ubuntu 用 `sudo apt install ffmpeg`；有 libass `subtitles` 滤镜时烧录字幕，没有时交付外部 SRT（也可另装带 libass 的构建）。Key 与 `PATH` 在启动 DSH 的终端里设置，重启后生效。视频「制作详情」里的「运行环境」检查（没有项目时也可打开）只报告 DSH Host 进程是否就绪，不返回 Key 内容，密钥也不会写入项目；Agent 实际的执行世界以 `video-recap --doctor` 为准。
 
 短剧生产的图片、视频、语音与音乐不由 DeepSeek 生成，而是由 `short-drama-produce` 调用 GPT Image 2（`OPENAI_API_KEY`）、Seedance（`ARK_API_KEY` + `SEEDANCE_MODEL`）、MiniMax H3（`MINIMAX_API_KEY` + `MINIMAX_VIDEO_MODEL` + `MINIMAX_VIDEO_RESOLUTIONS` + `MINIMAX_VIDEO_MIN_DURATION`/`MINIMAX_VIDEO_MAX_DURATION`）、MiniMax Speech（`MINIMAX_API_KEY`）或 MiniMax Music（`MINIMAX_API_KEY`）生成；生产与检查脚本需要 Python 3.9+；Key 在启动 DSH 前写入环境变量，「生产」视图会显示 Python 与每个供应商是否就绪，插件只向界面返回配置是否存在，不返回 Key 的值。内置 adapter 会自动登记到一份不含凭据的配置文件，自定义时用 `OH_STORY_DRAMA_ADAPTER_CONFIG` 指向自己的文件。
 

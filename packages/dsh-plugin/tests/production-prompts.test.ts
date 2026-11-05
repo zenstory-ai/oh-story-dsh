@@ -29,6 +29,7 @@ describe("DSH-native production prompts", () => {
     const prompt = nativeProductionPrompt(production, job, [reference]);
 
     expect(prompt).toMatch(/^\/short-drama-produce/u);
+    expect(prompt).toContain("请为「门外停步」准备一份视频生成预览，先让我核对内容和成本，再决定是否开始生成。");
     expect(prompt).toContain("任务 ID：job-001");
     expect(prompt).toContain("剧集/EP001/制作成果/SHOT-EP001-001");
     expect(prompt).toContain(reference.path);
@@ -78,6 +79,7 @@ describe("DSH-native production prompts", () => {
       { id: "SHOT-EP001-002", prompt: "第二镜" }
     ]);
     expect(batchPrompt).toContain("对应镜头 ID 与批次任务 ID batch-001");
+    expect(batchPrompt).toContain("请为这 2 个镜头准备一份关键帧生成预览，先让我核对内容和成本，再决定是否开始生成。");
     expect(batchPrompt).toContain("## SHOT-EP001-002\n第二镜");
     expect(batchPrompt).toContain("建议 adapter 契约：gpt-image-2");
     expect(batchPrompt).toContain("不得 confirm 或 run");
