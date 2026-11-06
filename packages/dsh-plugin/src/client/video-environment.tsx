@@ -20,7 +20,7 @@ export function VideoEnvironmentReport({ preflight }: { readonly preflight: Vide
     {fish && <span data-ready={preflight.credentials.fish || undefined}>Fish Key {preflight.credentials.fish ? "已配置" : "未配置"}</span>}
     {preflight.credentials.ttsProvider === "index-tts"
       && <span data-ready={preflight.credentials.indexTts || undefined}>IndexTTS {preflight.credentials.indexTts ? "已配置" : "缺 INDEX_TTS_ENDPOINT / INDEX_TTS_VOICE"}</span>}
-    <em>Key 与 PATH 在启动 DSH 的终端里设置，重启 DSH 后生效。这里检查 DSH Host 进程；Agent 执行世界以 <code>video-recap --doctor</code> 为准。</em>
+    <em>Key 与 PATH 在启动 DSH 的终端里设置，重启 DSH 后生效。这里检查 DSH Host 进程；Agent 运行环境以 <code>video-recap --doctor</code> 为准。</em>
   </>;
 }
 

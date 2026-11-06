@@ -163,7 +163,7 @@ Agent 过程通过右侧动态栏或官方 Chat 查看。禁止启动独立 Dash
    也不写 追踪/_tracking-state.json：追踪在第一章正文动笔前，由 story-long-write
    单章流程用它的 scripts/tracking_commit.py init 初始化（事务 JSON 放书目录
    .story/work/，check 通过后删掉），之后每章由脚本提交。_tracking-state.json 与
-   上下文.md 等派生 Tracking 视图只由脚本生成，绝不手改。
+   上下文.md 等追踪视图文件只由脚本自动生成，绝不手改。
    第一章正文落盘前必须有对应细纲。短篇保持轻量结构，不强加长篇 Tracking。
 4. 已有正文却没有 追踪/_tracking-state.json 时，不自行补建追踪文件：已有旧 追踪/
    的是旧追踪结构，建议走 story-import 的「旧追踪项目迁移」；没有 追踪/ 的既有书稿

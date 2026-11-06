@@ -10,7 +10,7 @@ import {
 } from "./production-intent.js";
 
 function intentMessage(intent: ProductionIntentArgs): string {
-  if (intent.action === "track_job") return `已把 ${intent.targetId ?? "生产对象"} 的 ${intent.jobKind ?? "媒体"} 任务投影到 ${intent.episode} 的任务板。`;
+  if (intent.action === "track_job") return `已把 ${intent.targetId ?? "生产对象"} 的 ${intent.jobKind ?? "媒体"} 任务同步到 ${intent.episode} 的任务板。`;
   if (intent.action === "set_sequence") return `已把 ${String(intent.shotIds?.length ?? 0)} 个镜头的顺序发送到 ${intent.episode} 成片视图。`;
   if (intent.action === "focus_target") return `已请求 ${intent.episode} 生产视图聚焦 ${intent.targetId ?? "目标"}。`;
   return `已把 ${intent.action} 界面意图发送到 ${intent.episode} 生产工作台。`;
