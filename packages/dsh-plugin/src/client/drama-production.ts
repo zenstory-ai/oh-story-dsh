@@ -258,7 +258,7 @@ function validateProductionProtocol(input: {
     if (visual.stableId) continue;
     add(visual.declaredId === undefined
       ? { severity: "warning", code: "generated_visual_id", path: visual.path, offset: visual.offset, targetId: visual.id, message: `${visual.title} 缺少稳定的 “- ID：VISUAL-*”；修改标题会改变画布节点身份。` }
-      : { severity: "warning", code: "invalid_visual_id", path: visual.path, offset: visual.offset, targetId: visual.id, message: `${visual.title} 的 “- ID：${visual.declaredId}” 不是可用形式，已回退到标题派生 ID；请写成 VISUAL- 加大写字母、数字或连字符。` });
+      : { severity: "warning", code: "invalid_visual_id", path: visual.path, offset: visual.offset, targetId: visual.id, message: `${visual.title} 的 “- ID：${visual.declaredId}” 格式无效，已回退为按标题生成的 ID；请写成 VISUAL- 加大写字母、数字或连字符。` });
   }
 
   const knownReferences = new Set([...input.assets, ...input.visualAssets, ...input.shots, ...input.motions].map((item) => item.id));

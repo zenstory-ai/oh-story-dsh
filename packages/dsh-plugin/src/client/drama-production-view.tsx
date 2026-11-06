@@ -377,7 +377,7 @@ function MissingDocument({ document, documentPaths, what, skill, onNavigate }: {
 }) {
   const present = documentPaths.includes(document);
   return <div className="oh-story-production-empty">
-    <strong>还没有可投影的{what}。</strong>
+    <strong>还没有可展示的{what}。</strong>
     <p>{present
       ? `${document} 已存在，但没有解析出条目。请检查二级标题是否为稳定的 ID 形式。`
       : `本集还没有 ${document}。在右侧 Chat 用 ${skill} 写好这份文档后，这里会自动出现。`}</p>

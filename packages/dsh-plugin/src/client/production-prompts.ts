@@ -12,7 +12,7 @@ const authorityBoundary = "只使用当前 DSH Preset 可见的工具；所有�
  * mixed group goes out whole as full-reference reference_image (upstream minimax-h3.md, and
  * target-model-profile.md 参考条件方式).
  */
-const referenceRules = "参考输入以来源条目自己的声明为准（IMG-* 的「参考」，SHOT-*／MOTION-* 的「输入参考图」，以及 MOTION-* 独立的「参考音频」）：reference_bindings 必须与该条目逐槽一致，工作台列出的补充参考只作核对，条目里没有声明的不要直接加进 job，确需使用时先请拥有该条目的阶段修订文档。起始帧与结束帧的角色只取自来源条目自己「输入参考图」各槽位记录的用途（起始帧／结束帧）：SHOT-* 看《分镜.md》，MOTION-* 看《视频提示词.md》；再由目标模型方言翻成 adapter 的 role，不按文件名或工作台清单推断。目标方言用 first_frame／last_frame 位置承接这组输入时，结束帧只进 last_frame，绝不降级成普通参考图；方言要求整组走多槽参考时（如 MiniMax H3 的 full-reference：首尾帧输入与参考输入互斥，起始帧、结束帧都随整组以 reference_image 送入），按方言翻译，并在预览里写明结束帧将作为参考图送入，或先请分镜 owner 取舍。MOTION-* 的「参考音频」不混入「输入参考图」：它排在图片 binding 之后，role 固定为 reference_audio，character 逐字照抄该行「角色」，音频顺序仍独立从 1 编号；adapter profile 未显式声明支持 reference_audio 时必须在提交前失败，不能静默丢弃或把音频当图片。";
+const referenceRules = "参考输入以来源条目自己的声明为准（IMG-* 的「参考」，SHOT-*／MOTION-* 的「输入参考图」，以及 MOTION-* 独立的「参考音频」）：reference_bindings 必须与该条目逐槽一致，工作台列出的补充参考只作核对，条目里没有声明的不要直接加进 job，确需使用时先请拥有该条目的阶段修订文档。起始帧与结束帧的角色只取自来源条目自己「输入参考图」各槽位记录的用途（起始帧／结束帧）：SHOT-* 看《分镜.md》，MOTION-* 看《视频提示词.md》；再由目标模型方言翻成 adapter 的 role，不按文件名或工作台清单推断。目标方言用 first_frame／last_frame 位置承接这组输入时，结束帧只进 last_frame，绝不降级成普通参考图；方言要求整组走多槽参考时（如 MiniMax H3 的 full-reference：首尾帧输入与参考输入互斥，起始帧、结束帧都随整组以 reference_image 送入），按方言翻译，并在预览里写明结束帧将作为参考图送入，或先请分镜 owner 取舍。MOTION-* 的「参考音频」不混入「输入参考图」：它排在图片 binding 之后，role 固定为 reference_audio，character 逐字照抄该行「角色」，音频顺序仍独立从 1 编号；adapter profile 未显式声明支持 reference_audio 时必须在提交前失败，不能直接丢弃或把音频当图片。";
 /** Upstream's SHOT-* selector extracts only the start frame, so the note belongs to image jobs alone. */
 const shotStartFrameNote = "分镜.md 的 SHOT-* 只产出起始帧；要产出结束帧，先由图片提示词阶段建立独立的 IMG-* 条目再投产。";
 

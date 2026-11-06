@@ -68,17 +68,17 @@ npx -y @deepseek-ai/dsh@0.2.1-rc.5 web
 给 /path/to/video.mp4 做一个 3 分钟中文解说成片，保留关键原声，字幕烧进画面。
 ```
 
-宿主机需要 Python 3.10+、`PATH` 上的 ffmpeg/ffprobe，以及 `MIMO_API_KEY`；Fish Audio TTS 另需 `FISH_API_KEY`，自建 IndexTTS 需 `INDEX_TTS_ENDPOINT` 与 `INDEX_TTS_VOICE`（`TTS_PROVIDER=index-tts`）。Debian/Ubuntu 用 `sudo apt install ffmpeg`；有 libass `subtitles` 滤镜时烧录字幕，没有时交付外部 SRT（也可另装带 libass 的构建）。Key 与 `PATH` 在启动 DSH 的终端里设置，重启后生效。视频「制作详情」里的「运行环境」检查（没有项目时也可打开）只报告 DSH Host 进程是否就绪，不返回 Key 内容，密钥也不会写入项目；Agent 实际的执行世界以 `video-recap --doctor` 为准。
+宿主机需要 Python 3.10+、`PATH` 上的 ffmpeg/ffprobe，以及 `MIMO_API_KEY`；Fish Audio TTS 另需 `FISH_API_KEY`，自建 IndexTTS 需 `INDEX_TTS_ENDPOINT` 与 `INDEX_TTS_VOICE`（`TTS_PROVIDER=index-tts`）。Debian/Ubuntu 用 `sudo apt install ffmpeg`；有 libass `subtitles` 滤镜时烧录字幕，没有时交付外部 SRT（也可另装带 libass 的构建）。Key 与 `PATH` 在启动 DSH 的终端里设置，重启后生效。视频「制作详情」里的「运行环境」检查（没有项目时也可打开）只报告 DSH Host 进程是否就绪，不返回 Key 内容，密钥也不会写入项目；Agent 实际的运行环境以 `video-recap --doctor` 为准。
 
 短剧生产的图片、视频、语音与音乐不由 DeepSeek 生成，而是由 `short-drama-produce` 调用 GPT Image 2（`OPENAI_API_KEY`）、Seedance（`ARK_API_KEY` + `SEEDANCE_MODEL`）、MiniMax H3（`MINIMAX_API_KEY` + `MINIMAX_VIDEO_MODEL` + `MINIMAX_VIDEO_RESOLUTIONS` + `MINIMAX_VIDEO_MIN_DURATION`/`MINIMAX_VIDEO_MAX_DURATION`）、MiniMax Speech（`MINIMAX_API_KEY`）或 MiniMax Music（`MINIMAX_API_KEY`）生成；生产与检查脚本需要 Python 3.9+；Key 在启动 DSH 前写入环境变量，「生产」视图会显示 Python 与每个供应商是否就绪，插件只向界面返回配置是否存在，不返回 Key 的值。内置 adapter 会自动登记到一份不含凭据的配置文件，自定义时用 `OH_STORY_DRAMA_ADAPTER_CONFIG` 指向自己的文件。
 
-声音参考需要额外显式配置：自动生成的通用 profile 不声明 `reference_audio`，因为环境变量里的具体模型未必支持声音输入；只有确认所选模型支持后，才在项目外的自定义 adapter 配置里为该 profile 声明 `reference_roles`（包含 `reference_audio`），并用 `OH_STORY_DRAMA_ADAPTER_CONFIG` 指向它。未声明时会在付费提交前拒绝，不会静默丢掉声音。
+声音参考需要额外显式配置：自动生成的通用 profile 不声明 `reference_audio`，因为环境变量里的具体模型未必支持声音输入；只有确认所选模型支持后，才在项目外的自定义 adapter 配置里为该 profile 声明 `reference_roles`（包含 `reference_audio`），并用 `OH_STORY_DRAMA_ADAPTER_CONFIG` 指向它。未声明时会在付费提交前报错拦截，不会悄无声息地丢掉参考音频。
 
 Drama Skills 0.6.0 不支持把 v0.5 结构化项目原地升级为 creator-first 项目。旧项目应继续锁定 v0.5 并只读保留；迁移时请新建项目根，逐集人工确认当前工作实际需要的 `剧本.md`、`视觉设定.md`、`分镜.md`、`图片提示词.md` 或 `视频提示词.md`，不要预建空文档。
 
 0.8.1 的角色参考音频必须绑定具体角色，并通过严格的 `reference_roles`、身份与禁控校验；音频不会出现在图片参考选择器里。NovelToGame 0.5.0 的 ADV 示例不迁移旧存档，升级后清除旧站点存储并重新开始。video-recap 0.6.1 改用 QC schema 2，删除旧 QC 标志/路径；升级既有 `work/` 时可能重新生成 ASR、剪辑、TTS 与索引，不得沿用或伪造旧 PASS。0.6.2 起 dub（英译中原声复刻）必须带 `--confirm-voice-rights`，包括旧 `work/` 打印的续跑命令；没有 `MIMO_API_KEY` 时旁白评审直接退出，不再外发稿件。
 
-Oh Story 0.9.0 按写书步骤重整参考资料，书稿、设定、追踪和作者记忆不用迁移；之前导入的长篇续写前，先让 `/story-long-write` 把旧剧情单元改写成单元卡。作者习惯仍由长篇、短篇写作入口管理，独立审稿与去味只消费本次提供的偏好，检测或标注不会改正文。Oh Story 0.9.1 的续写状态卡最多列 20 个活跃角色。Drama 0.9 继续按当前需要维护 Markdown 创作文档，旧模板不再补建；0.9.1 起旧 JSON 检查器不再随包，结构检查统一用 `creator_markdown_check.py`，0.9.2 可在每写完一份文档后加 `--partial` 只核对已有文档。
+Oh Story 0.9.0 按写书步骤重整参考资料，书稿、设定、追踪和作者记忆不用迁移；之前导入的长篇续写前，先让 `/story-long-write` 把旧剧情单元改写成单元卡。作者习惯仍由长篇、短篇写作入口管理，独立审稿与去 AI 味只按本次提供的偏好执行，检测或标注不会改正文。Oh Story 0.9.1 的续写状态卡最多列 20 个活跃角色。Drama 0.9 继续按当前需要维护 Markdown 创作文档，旧模板不再补建；0.9.1 起旧 JSON 检查器不再随包，结构检查统一用 `creator_markdown_check.py`，0.9.2 可在每写完一份文档后加 `--partial` 只核对已有文档。
 
 ## 没看到界面时
 
