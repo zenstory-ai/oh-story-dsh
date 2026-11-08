@@ -11,6 +11,8 @@
 
 ## [Unreleased]
 
+## [0.1.24] - 2026-11-08
+
 ### Added
 
 - `/short-drama-breakdown` 新增字幕时间扫描、音轨测量、逐镜切片和整集还原。还原需要当前 DSH 会话有能同时读取视频画面和音轨的工具。还原文档保存在 `输入/对标/<REF-ID>/还原/`，自有或已获授权的还原项目可单独打开，在「短剧」工作台继续制作。
@@ -20,6 +22,7 @@
 - 同步 [Oh Story 0.10.3](https://github.com/zenstory-ai/oh-story-claudecode/releases/tag/v0.10.3)（`78011b2077410207a7bd6490942618d83fb282c8`，`agents_version` 39 → 42，14 Skills、7 Roles）。精简写作和拆文说明，发布资料可边填边存，番茄短故事省略简介。更新插件并开启新会话即可加载新 Roles，现有书稿、设定和追踪照常可用。
 - 同步 [Drama Skills 0.11.2](https://github.com/zenstory-ai/drama-skills/releases/tag/v0.11.2)（`3d813c30871b4db5f2387d83bdc3a49db8ce7b2b`，12 Skills）。精简短剧创作说明，补充跨镜空间、角色音色和剪辑衔接的做法。已登记的对标素材要补记允许用途和外部模型上传许可。未允许上传时只在本机测量。
 - 同步 [NovelToGame 0.7.1](https://github.com/zenstory-ai/novel-to-game/releases/tag/v0.7.1)（`f342e23d46c08a8b659e738ef4453f1e40a08042`，7 Skills），合并重复的改编、制作与试玩说明，现有游戏项目可继续制作和试玩。
+- 调整短剧生产提示、视频环境提示和安装文档的中文表述。相关改动见 [#110](https://github.com/zenstory-ai/oh-story-dsh/pull/110)。
 
 ### Fixed
 
@@ -455,7 +458,8 @@
 - 提供 13 个 Oh Story 小说 Skills、7 个专业 Roles 与 10 个 Drama Skills。
 - 提供文件树、Markdown/JSONL 编辑预览与官方 DSH Chat 同屏的三栏工作台。
 
-[Unreleased]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.23...HEAD
+[Unreleased]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.24...HEAD
+[0.1.24]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.23...v0.1.24
 [0.1.23]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.22...v0.1.23
 [0.1.22]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.21...v0.1.22
 [0.1.21]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.20...v0.1.21

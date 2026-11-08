@@ -1,6 +1,11 @@
 # Validation
 
-Candidate: `@oh-story/dsh` 0.1.23 on DeepSeek Harness `0.2.1-rc.5`, with the earlier `0.2.0-rc.2` and the `0.2.2-rc.1` trial line covered. Local aggregate acceptance passed on 2026-11-05.
+Candidate: `@oh-story/dsh` 0.1.24 on DeepSeek Harness `0.2.1-rc.5`, with `0.2.0-rc.2` and `0.2.2-rc.1` also covered. Local aggregate acceptance passed on 2026-11-08.
+
+## 0.1.24 release evidence
+
+- Oh Story 0.10.3 bundles 14 Skills and 7 Roles with `agents_version` 42. Drama Skills 0.11.2 bundles 12 Skills and passes all 7 upstream selftests. NovelToGame 0.7.1 bundles 7 Skills. Asset parity also verifies the video-recap 0.6.2 pin.
+- `pnpm verify:release` passed on 2026-11-08, including 251 plugin tests and packaged Chrome on DSH `0.2.1-rc.5`, `0.2.0-rc.2` and `0.2.2-rc.1`. Each run reported `ok: true` and `roleToolE2e: true` with the local fixture provider. The tarball checks include the new cross-book recall and short-drama reconstruction references.
 
 ## 0.1.23 release evidence
 
