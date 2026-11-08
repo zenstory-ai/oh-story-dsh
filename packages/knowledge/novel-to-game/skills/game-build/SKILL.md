@@ -1,76 +1,35 @@
 ---
 name: game-build
-description: "Build a risk-matched whitebox or the approved production game for its target runtime. Turn GAME_DESIGN, and ART_DIRECTION when production begins, into a minimal BUILD_BRIEF and a runnable candidate that can be iterated with replayable evidence. Use for prototype the riskiest design question, implement the approved game design, or turn this design into a running game. 游戏构建执行。先按最大风险做白盒，或在正式生产时把批准后的 GAME_DESIGN 与 ART_DIRECTION 压缩成最小 BUILD_BRIEF，在目标运行环境中实现可运行候选并用可回放证据迭代。用于验证高风险设计问题、构建游戏原型或实现批准方案。"
+description: "Build a risk-matched whitebox or the approved production game for its target runtime. Turn GAME_DESIGN, and ART_DIRECTION when production begins, into a minimal BUILD_BRIEF and a runnable candidate that can be iterated with replayable evidence. Use for prototype the riskiest design question, implement the approved game design, or turn this design into a running game. 游戏构建执行。先针对头号设计风险搭建白盒原型，或在正式生产时将已批准的 GAME_DESIGN 与 ART_DIRECTION 提炼为精简的 BUILD_BRIEF，在目标运行环境中实现可运行版本并用可复现的实机记录迭代。用于验证高风险设计问题、构建游戏原型或实现已批准的设计方案。"
 ---
 # 游戏构建执行
 
-保护已批准的体验边界；正式生产时再保护已批准的美术边界。驱动实现模型完成真实可玩的候选，不在
-构建阶段重新做概念、关卡或美术方向。
-
-读取 [build-brief-contract.md](references/build-brief-contract.md)。白盒阶段必须已有 `GAME_DESIGN.md`；
-完整候选还必须已有 `ART_DIRECTION.md`。缺产品决定时回对应 owner，不在 BUILD_BRIEF 就地发明。
+守住已批准的体验设计与美术方向边界，产出真实可玩的构建版本（白盒阶段须有 `GAME_DESIGN.md`，正式生产阶段还须有 `ART_DIRECTION.md`；上游决策缺失时退回补齐，不在 `BUILD_BRIEF.md` 里私自发明或重做设计）。先读 [build-brief-contract.md](references/build-brief-contract.md)。
 
 产物语言由 `PRODUCT_BRIEF.md` 锁定；未锁定时跟随对话语言，不默认产出中文。
 
-## 目标与自由
+## 目标、路径与按需规范
 
-按 PRODUCT_BRIEF 锁定的平台、生产引擎、目标运行时、显示/输入、范围、分级和联网边界交付。
-目标工具链不可用时不得自动改做网页；只有 brief 已批准替代运行时才可使用，并分开记录
-`targetRuntime`、`testedRuntime` 与未覆盖项。
+严格按 `PRODUCT_BRIEF.md` 锁定的平台、引擎、运行环境、视口/输入、范围、分级和联网边界交付；目标工具链不可用时不得擅自改做网页版顶替，仅在 `PRODUCT_BRIEF.md` 明确批准替代运行环境时才可使用，并分别记清 `targetRuntime`、`testedRuntime` 与未覆盖特性。
 
-正式生产继承 `ART_DIRECTION.md` 的可观察视觉约束与批准目标图，在实际运行中验证焦点资产。
-正式生产需要新绘制位图且无合适现成资产时，使用当前环境的图像生成能力；在 Codex 中优先使用内置 ImageGen。已有图标体系与适合代码表达的简单图形继续复用。成品保存到项目并接入真实界面，不以文字徽章、emoji 或生成请求充当已完成美术；白盒占位按阶段标明。
+构建前声明 `buildStage: whitebox|production` 与 `buildPath: template|custom`：仅当成熟模板能完整保留原著独有的动作、代价和世界反馈时才走 `template`；核心体验依赖实时手感、空间走位、视线遮挡、物理碰撞或独创动词时一律走 `custom`（白盒同样必须选用能真实检验最大风险的交互形态，绝不把所有项目降级为纯文字选项）。
 
-BUILD_BRIEF 只压缩产品边界、必须保真的体验事实、运行方式与完成证据，实现细节交给实现模型。
+正式生产阶段继承 `ART_DIRECTION.md` 与批准目标图：缺少现成位图素材时直接调用当前环境的图像生成工具（Codex 环境优先用内置 ImageGen），已有成套图标与适合代码绘制的简洁几何图形可复用；构建期生成的成品资产必须落盘到项目工作区并接入真实界面，严禁拿文字徽章、Emoji、未执行的提示词或云端任务链接冒充完工资产（白盒阶段的临时占位图须明确标明阶段属性；调用外部工具时只传当前资产所需输入，不上传无关的原著全文，也不把 API 密钥写进仓库）。当前会话无任何可用实现途径时，如实报告阻塞原因并仅交付 `BUILD_BRIEF.md`。
 
-先声明 `buildStage: whitebox|production` 与 `buildPath: template|custom`。已有交互语法只有在能保留原作
-独有动作、代价和世界回应时才采用；实时手感、空间、视线、物理或模板覆盖不了的核心动词走 custom。
-白盒也必须选择能验证最大风险的形态，不能把所有项目降成文游。
+按项目实际用到的能力读取可选参考：
+- Blender 可编辑 3D 资产：[blender-asset-workflow.md](references/blender-asset-workflow.md)（不为 3D 项目默认绑定 Blender 或强装 MCP）；
+- 2.5D 多朝向/多动作序列帧烘焙：[baked-sprite-workflow.md](references/baked-sprite-workflow.md)；
+- 生成式自由输入、知情权限、事件回放或存档迁移：[playable-model-contract.md](references/playable-model-contract.md)；
+- 角色配音：[tts-production-contract.md](references/tts-production-contract.md)；
+- 动态视频、生成式音乐或音效：[generative-media-pipeline.md](references/generative-media-pipeline.md)；选择后播放剧情过场（互动影游）再读 [cutscene-production.md](references/cutscene-production.md)。
 
-当前会话具备实现能力时直接构建，否则使用其他可用实现方式。确无可用实现方式时，报告阻塞并
-交付构建说明，不声称候选已生成。不要发送与原型无关的完整受版权保护原文。
+## 构建循环
 
-## 按能力读取可选合同
+1. **落地状态与规则**：`whitebox` 只实现验证头号设计风险所需的真实输入、状态流转与反馈；`production` 完整实现 `GAME_DESIGN.md` 的状态、动作与结局闭环。
+2. **固定复现与排障**：保留能稳定复现问题的初态与输入序列（涉及随机时固定 `seed`），修改后重跑原失败路径及相邻分支反例；同一手感或表现问题连续两次修改未果时，先检索成熟开源做法理清机制再改。
+3. **回写工具链与对齐文档**：在 `BUILD_BRIEF.md` 如实回写实际工具链、版本号与命令（无法获取的版本填 `NOT_AVAILABLE: 原因`，严禁臆测）；若实现与设计/美术文档存在偏差，退回对应环节修订或在 `BUILD_BRIEF.md` 标明冲突。
 
-- 已选择 Blender 制作或修改可编辑三维资产时，读取 [blender-asset-workflow.md](references/blender-asset-workflow.md)；
-  不因项目是 3D 就默认采用 Blender 或安装 MCP。
-- 采用生成式自由输入、知识权限、事件回放、存档迁移或 `signature_command` 时，读取
-  [playable-model-contract.md](references/playable-model-contract.md) 的相关部分。
-- 语音策略不是 `none` 时读取 [tts-production-contract.md](references/tts-production-contract.md)。
-- 实际采用动态媒体（影像短片、生成的音乐或音效）时读取 [generative-media-pipeline.md](references/generative-media-pipeline.md)；
-  要在选择之后播剧情过场（互动影游）时再读 [cutscene-production.md](references/cutscene-production.md)。
-- 2.5D 角色或物件需要多方向、多动作且身份一致的序列帧时，读取
-  [baked-sprite-workflow.md](references/baked-sprite-workflow.md)。
+`whitebox` 执行完第 3 步后运行最窄风险检查并交回设计负责人迭代；`production` 继续执行：
 
-## 共同构建循环
-
-1. 按阶段实现候选：`whitebox` 只实现验证最大风险所需的真实输入、状态变化与反馈；`production`
-   先实现启动、核心动作、设计结果与重开的完整闭环。
-2. 实现该候选涉及的 GAME_DESIGN 状态、动作与结果；使用生成模型时，模型只解释输入和结果，规则器拥有提交权。
-   存在 `signature_command` 时再执行可选合同的专属边界。
-3. 保留能复现问题的初态与输入路径，涉及随机性时固定 seed；修订后重放失败路径与相邻反例。
-   同一手感或表现问题连续两次修复无效时停止换方案，先查成熟作品处理同类问题的公开资料（开发者
-   演讲、技术复盘或开源实现），理解其原理后再实现。
-4. 回写实际工具链、install/build/start 命令和版本；未知值写 `NOT_AVAILABLE: 原因`，不猜。
-   实际候选与 GAME_DESIGN、ART_DIRECTION 的事实描述不符时，交回对应 owner 修订或在 BUILD_BRIEF 标明冲突，
-   不留下描述已不存在的玩法、表现或声音的文档。
-
-`whitebox` 到此按 build-brief-contract「完成证据」运行最窄检查并交回 design owner；设计修订后
-重放受影响路径，直到最大风险已被实际暴露或当前方向被否决。
-
-`production` 继续：
-
-5. 提供一条权威验证命令和最小可观察状态，使 `game-qa` 能一次走完
-   `clean start → 核心动作 → 设计结果 → restart`。
-6. 运行最窄的开发检查与启动 smoke，修复构建失败、阻断日志、资源失败和崩溃；替代运行时未覆盖的
-   目标平台输入、性能、打包或设备项写入 limitation。
-7. 达到 brief 的 `targetFinish`；更高完成度只处理已批准的焦点资产和招牌时刻，不制造与可玩闭环
-   无关的发布审计。有批准目标图的界面与焦点资产，在目标视口截取实际运行画面与目标图并排比对，
-   逐项列出布局、比例、字体、色光与层级差异后修正；连续两轮没有改善就停止，把剩余差异写进
-   BUILD_BRIEF 的限制，不修改目标图去迁就实现。
-8. 交给 `game-qa`；诊断、复跑与事实源规则见契约「完成证据」。
-
-## 输出
-
-生成 `build/BUILD_BRIEF.md` 与实际候选；production 还生成权威验证入口。截图、录制与 raw trace 只保留
-调试所需的最小集合。
+4. 提供权威 `verify` 命令与最小可观察状态接口，并运行冒烟自检清零构建报错、控制台阻断异常、资源加载失败与崩溃。
+5. 对配有批准目标图的界面与核心资产，在目标视口下截实机图与目标图并排比对布局、比例、字体、色光与层级并修正（连续两轮无改善则停手记入 `limitations`，绝不篡改目标图迁就缺陷），最后移交 `game-qa`。

@@ -219,10 +219,10 @@ describe("Oh Story bundled skill provider", () => {
     }
     const deslop = await readFile(resolve(skillRoot, "story-deslop/SKILL.md"), "utf8");
     expect(deslop).toContain("用户只要检测或标注时，只出诊断，不修改正文");
-    expect(deslop).toContain("作者已授权的剧情重写按执行边界直接执行或转交，不重复询问同一授权");
+    expect(deslop).toContain("已授权的剧情重写按执行边界直接执行或转交");
     for (const name of ["story-deslop", "story-review"]) {
       const source = await readFile(resolve(skillRoot, name, "SKILL.md"), "utf8");
-      expect(source).toContain("只接收调用方已有的作者偏好，不查询或记录作者记忆");
+      expect(source).toMatch(/只接收调用方已有的作者偏好，(?:独立调用时)?不查询或记录作者记忆/u);
     }
   });
 
@@ -261,10 +261,12 @@ describe("Drama Skills bundled provider", () => {
     expect(listed.map((candidate) => candidate.name)).toEqual(expect.arrayContaining([
       "short-drama", "short-drama-write", "short-drama-storyboard", "short-drama-produce", "short-drama-edit", "short-drama-breakdown"
     ]));
-    // Drama 0.10.2: benchmark breakdown measures only creator-supplied media with the host ffmpeg.
     const breakdown = await provider.get(listed.find((candidate) => candidate.name === "short-drama-breakdown")!, {});
     expect(breakdown?.content).toContain("never search for or download a benchmark through a browser or web tool");
     expect(breakdown?.content).toContain("instead of estimating cuts or durations by eye");
+    expect(breakdown?.content).toContain("Without recorded upload permission, use local measurement only");
+    expect(breakdown?.content).toContain("use a tool visible in the current DSH preset that can read both video and audio");
+    expect(breakdown?.content).toContain("copied out as a separate project only when registered as owned or licensed with a recorded basis");
     for (const candidate of listed) {
       const skill = await provider.get(candidate, {});
       expect(skill?.content).toContain("each episode keeps only the requested documents, up to five creator-facing sources");
