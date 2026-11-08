@@ -39,9 +39,9 @@ The table describes the current source. Published packages pin their upstream co
 
 | Workbench | Upstream capability (pinned, bundled with the plugin) | Main entry points |
 | --- | --- | --- |
-| Novel | [Oh Story 0.10.0](https://github.com/zenstory-ai/oh-story-claudecode/releases/tag/v0.10.0) · 14 Skills · 7 Roles | `/story`, `/story-long-write`, `/story-review`, `/story-publish` |
-| Short drama | [Drama Skills 0.10.2](https://github.com/zenstory-ai/drama-skills/releases/tag/v0.10.2) · 12 Skills | `/short-drama`, `/short-drama-write`, `/short-drama-storyboard`, `/short-drama-edit` |
-| Game | [NovelToGame 0.7.0](https://github.com/zenstory-ai/novel-to-game/releases/tag/v0.7.0) · 7 Skills | `/novel-to-game quick`, `/game-build`, `/game-qa` |
+| Novel | [Oh Story 0.10.3](https://github.com/zenstory-ai/oh-story-claudecode/releases/tag/v0.10.3) · 14 Skills · 7 Roles | `/story`, `/story-long-write`, `/story-review`, `/story-publish` |
+| Short drama | [Drama Skills 0.11.2](https://github.com/zenstory-ai/drama-skills/releases/tag/v0.11.2) · 12 Skills | `/short-drama`, `/short-drama-write`, `/short-drama-storyboard`, `/short-drama-edit` |
+| Game | [NovelToGame 0.7.1](https://github.com/zenstory-ai/novel-to-game/releases/tag/v0.7.1) · 7 Skills | `/novel-to-game quick`, `/game-build`, `/game-qa` |
 | Video | [video-recap-skills 0.6.2](https://github.com/zenstory-ai/video-recap-skills/releases/tag/v0.6.2) · 7 Skills (3 user entry points) | `/video-recap`, `/video-script`, `/video-reference` |
 
 > Latest release **v0.1.23** (2026-11-05). The default install pins DeepSeek Harness `0.2.1-rc.5` (the npm `latest`); the earlier `0.2.0-rc.2` and `0.2.2-rc.1` (the npm `next`) are also supported. See [CHANGELOG.md](CHANGELOG.md) and [Releases](https://github.com/zenstory-ai/oh-story-dsh/releases); upgrade steps are in the FAQ entry [“What do I do after upgrading?”](#what-do-i-do-after-upgrading).
@@ -195,7 +195,7 @@ The requests below can be copied and adapted; replace the bracketed parts before
 
 ## See what it produces
 
-Excerpts from the bundled sample projects (synchronized from the [oh-story-claudecode demo](https://github.com/zenstory-ai/oh-story-claudecode/tree/abe96630d115afbd528f2329e2d8d604d5d5673c/demo/%E9%95%BF%E7%AF%87) and the [drama-skills public sample](https://github.com/zenstory-ai/drama-skills/tree/bc96c5eb9c91cccd1c613c2b34645c35f1989a28/examples/creator-first/EP001)); omissions are marked "……".
+Excerpts from the bundled sample projects (synchronized from the [oh-story-claudecode demo](https://github.com/zenstory-ai/oh-story-claudecode/tree/abe96630d115afbd528f2329e2d8d604d5d5673c/demo/%E9%95%BF%E7%AF%87) and the [drama-skills public sample](https://github.com/zenstory-ai/drama-skills/tree/3d813c30871b4db5f2387d83bdc3a49db8ce7b2b/examples/creator-first/EP001)); omissions are marked "……".
 
 ### Use tracking files to locate the continuation
 

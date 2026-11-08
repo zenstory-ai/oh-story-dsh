@@ -44,15 +44,12 @@ describe("bundled Drama media adapters", () => {
   it("requires exactly the environment each pinned upstream provider reference lists as required", async () => {
     const envName = /`([A-Z][A-Z0-9]*_[A-Z0-9_]+)`/gu;
     for (const adapter of DRAMA_ADAPTERS) {
-      const lines = (await readFile(join(dramaRoot, adapter.reference), "utf8")).split(/\r?\n/u);
-      const start = lines.findIndex((line) => line.startsWith("Required environment:"));
-      expect(start, adapter.name).toBeGreaterThanOrEqual(0);
-      const inline = lines[start]!.slice("Required environment:".length).trim();
-      // Either one sentence on the heading line, or a list that ends at "Optional environment:".
-      const text = inline !== ""
-        ? inline.split(". ", 1)[0]!
-        : lines.slice(start + 1, lines.findIndex((line, index) => index > start && line.startsWith("Optional environment:"))).join("\n");
-      const required = [...new Set([...text.matchAll(envName)].map((match) => match[1]!))];
+      const reference = await readFile(join(dramaRoot, adapter.reference), "utf8");
+      const requiredSection = /^- \*\*Required environment\*\*:([^\r\n]*(?:\r?\n {2}- [^\r\n]*)*)/mu.exec(reference)?.[1];
+      const environmentLine = /^- \*\*Environment\*\*: ([^\r\n]+)/mu.exec(reference)?.[1];
+      const required = requiredSection === undefined
+        ? [...(environmentLine ?? "").matchAll(/`([A-Z][A-Z0-9]*_[A-Z0-9_]+)` \(required\)/gu)].map((match) => match[1]!)
+        : [...requiredSection.matchAll(envName)].map((match) => match[1]!);
       expect(required.sort(), adapter.name).toEqual([...adapter.requiredEnv].sort());
     }
   });

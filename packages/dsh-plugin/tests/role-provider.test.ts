@@ -34,4 +34,9 @@ describe("bundled Oh Story roles", () => {
     expect(procedure).toContain("profile_missing: true");
     expect(procedure).toContain("expected_path");
   });
+
+  it("resolves the architect brief's relative reference paths through the bundled reference tool", async () => {
+    const persona = await loadBundledRole("story-architect", undefined, "native-tools");
+    expect(persona).toContain("When a task brief lists agent-references/<file>.md, call oh_story_bundled_reference with story-setup/references/agent-references/<file>.md.");
+  });
 });

@@ -1,12 +1,12 @@
-# 质量验证契约
+# 实机验收规范
 
-本契约只规定什么结论需要什么证据。测试框架、调试接口和实现结构由项目决定。
+本规范只规定验收结论所需的实机运行记录；测试框架、调试接口与代码组织由项目自行决定。`targetFinish` 只代表视觉与制作完成度，不增减六项基础门禁。
 
-## 状态与事实源
+## 状态与记录文件
 
-状态只取 `NOT_RUN` / `FAIL` / `PASS`。未验证不是通过，安全失败也不是成功降级。
+检查状态只取 `NOT_RUN`、`FAIL` 或 `PASS`：未跑过测试不能算通过，报错后走兜底分支也不算成功过关。
 
-`qa/verification.json` schema v3 恰好使用以下顶层字段，`checks` 恰好只含六键：
+`qa/verification.json` 采用 schema v3，顶层只允许使用以下字段，且 `checks` 必须且只能包含六个固定键：
 
 ```json
 {
@@ -30,37 +30,12 @@
 }
 ```
 
-`completeRun.evidence` 指向非空的 JSON 观察清单。清单只保存事实，不复制 command、exitCode 或
-六项 PASS/FAIL：`schemaVersion: 1`、与 `completeRun.id` 相同的 `runId`、非空 `environment`、
-非空 `inputTrace`，以及恰好包含六键的 `observations`。每项观察含非空 `id`、实际 `inputs` 和
-`state`；`render.visual` 必须指向工作区内非空画面，`outcome.state` 与 `restart.state` 分别记录
-`completeRun.terminal` 和 `completeRun.restart`。其他观察也可引用同次运行的画面。
+`completeRun.evidence` 必须指向工作区内非空的 JSON 观察记录文件（只存同次完整运行采集到的客观事实，不重复抄写 `command`、`exitCode` 或 `PASS`/`FAIL`）：顶层固定包含 `schemaVersion: 1`、与 `completeRun.id` 一致的 `runId`、非空 `environment`、非空 `inputTrace` 步骤数组，以及恰好包含六个同名键的 `observations` 对象。每条观察记录含非空 `id`、实际执行的 `inputs` 数组和非空 `state` 快照；其中 `render.visual` 必须指向工作区内非空的真实画面截图，`outcome.state` 与 `restart.state` 必须分别包含 `completeRun.terminal` 和 `completeRun.restart` 声明的终态与初态值（光有静态截图不能证明底层状态正确，光导出状态 JSON 也不能证明屏幕真实绘出画面）。
 
-权威命令无论成功失败都原子重写 `verification.json`，旧 PASS 不得在失败复跑后幸存。项目回归只放
-`verify.suites` 或证据诊断；若其失败破坏六项之一，映射到该键。
+权威验证命令无论成败都必须整份重写覆盖 `qa/verification.json`，严禁复跑失败后残留旧 `PASS`。专项回归套件记在 `verify.suites` 或证据文件中；若专项回归失败破坏了六项基础能力之一，同步将对应 `checks` 键标为 `FAIL`。
 
-## 最小可玩闭环
+## 六项闭环与边界
 
-一次权威运行至少证明：
+单次 `completeRun` 必须连续证明：`launch`（在 `testedRuntime` 正常启动无阻断报错）、`render`（画面非空且随时间或操作发生肉眼可见的画面变化）、`input`（真实输入触发可观察状态变化）、`coreLoop`（核心玩法循环跑通）、`outcome`（至少达成一个设计结局）、`restart`（重开后干净回到初始状态）。当 `targetRuntime` 与 `testedRuntime` 不同时，必须将目标平台独有的外设、安装包、真机性能与硬件特性记入 `limitations`（在替代环境中跑通不能代表目标平台已验证通过）。
 
-1. 候选在实际 `testedRuntime` 启动，无阻断错误；
-2. 画面非空且会随时间或操作变化；
-3. 真实输入引起可观察状态变化；
-4. 核心循环完整执行；
-5. 至少一个设计结果可达；
-6. restart 回到定义初态。
-
-步骤、状态和画面必须属于同一次 complete run；截图不能证明隐藏状态，状态 dump 不能证明真实画面。
-目标运行环境与实际测试环境不同时，把目标独有输入、打包、性能和设备行为写 limitation；替代版本
-不能证明目标平台已通过。
-
-## 条件检查与边界
-
-连续 3D、多语言、无障碍、语音、媒体或生成资产只在游戏实际采用时运行诊断。只看玩家能否正确
-看到、听到、操作和完成核心流程，不审计供应商请求、营销素材或生产身份。
-
-只有 brief/ledger 预先批准的 fallback 才能继续，并证明核心动作、状态、结果、可读反馈和 restart
-仍成立。安全失败仍是 FAIL；测试替身只证明测试层；placeholder 只描述完成度；历史证据只说明旧候选。
-
-不要求真人试玩、人工审查或另写 QA 报告。主观趣味、平衡、沉浸、选择重量、权利合规和发布质量
-不由本合同确定性证明；需要这类研究时另立任务，不影响本合同的机器 PASS。
+连续 3D 空间、多语言、无障碍、配音或动态视频仅在实际采用时运行专项检查；QA 只检验玩家侧的视听、交互与闭环，不跨界审计上游供应商请求日志或资产生成身份。仅预先批准的降级方案（fallback）且实测闭环正常时才允许放行；报错后勉强没崩仍属 `FAIL`，单元替身（Mock/Stub）、占位图或历史运行截图均不得冒充当前版本的实机通关记录。
