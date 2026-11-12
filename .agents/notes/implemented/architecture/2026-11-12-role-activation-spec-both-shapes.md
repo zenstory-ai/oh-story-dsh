@@ -30,4 +30,4 @@ Status: implemented
 
 - 开发宿主 `0.2.2-rc.1`：typecheck 与 7 个真实 Cordis 契约测试通过。
 - 临时副本切到 `0.2.2-rc.2`：修复前 typecheck 在 `role-tool.ts` 报 2 处错误、契约测试报 1 处；修复后 typecheck、7 个契约测试、251 个单元测试与构建全部通过。
-- 打包 Chrome 在 rc.2 上的 Role 调用结果见本次发布 PR。
+- 打包 Chrome 在 `0.2.2-rc.2`、`0.2.2-rc.1`、`0.2.1-rc.5` 与 `0.2.0-rc.2` 上均 `"ok": true`（含 Role 调用）；真实 DeepSeek 在 rc.2 上派出的 2 个 Role 都成功。

@@ -36,4 +36,5 @@ Status: implemented
 ## Verification
 
 - 四个 parity 通过：Oh Story 0.10.3、Drama 0.11.2、NovelToGame 0.8.0（5 Skills）、video-recap 0.7.0（video-recap + video-reference）。typecheck、lint 与 251 个单元测试通过。
-- 打包 Chrome 与真实 provider 结果见本次发布 PR。
+- 候选源码 `1e7fc31` 在干净克隆中 `pnpm verify:release` 退出 0，打包 Chrome 在 `0.2.2-rc.1`、`0.2.0-rc.2` 与 `0.2.2-rc.2` 均 `"ok": true`；另跑 `0.2.1-rc.5` 也是 `"ok": true`。
+- `pnpm test:dsh:real` 在 `0.2.2-rc.1` 与 `0.2.2-rc.2` 上均 `ok: true`，2 个必需 Role 都成功，项目摘要不变；凭据只在 0600 临时文件中，跑完即删；两次共花费约 0.85 元。
