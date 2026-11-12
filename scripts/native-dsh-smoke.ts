@@ -1208,7 +1208,8 @@ async function main(): Promise<void> {
     // Registrations appear both minified and pretty-printed in the combined bundle, so the
     // module boundaries have to tolerate the whitespace. Anchoring on the minified form only
     // silently ran the slice past the plugin and into whichever DSH module followed it.
-    const registration = /window\.__ModuleLoader__\.load\(\{\s*id:\s*"(?<id>[^"]+)"/gu;
+    // DSH 0.2.2-rc.2 writes its own module ids as template literals (`id:\`...\``).
+    const registration = /window\.__ModuleLoader__\.load\(\{\s*id:\s*(?<quote>["`])(?<id>[^"`]+)\k<quote>/gu;
     const registrations = [...bundle.matchAll(registration)];
     const startIndex = registrations.findIndex((match) => match.groups?.id === "@oh-story/dsh");
     if (startIndex < 0) throw new Error("DSH did not serve the Oh Story Browser module.");

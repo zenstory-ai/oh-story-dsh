@@ -1869,9 +1869,10 @@ function SessionWorkbenchBridge({ sessionId, useSession, useSessions, useProject
     if (document === undefined) return;
     const locate = (): void => {
       // DSH 0.1.7 renders the same conversation content inside the right sidebar's subagent
-      // chats, so only this Session's main column is a valid seat.
+      // chats, so only this Session's main column is a valid seat. DSH 0.2.2-rc.2 wraps the
+      // scroll container in the conversation.hero.frame slot, so it is a descendant, not a child.
       const anchor = document.querySelector<HTMLElement>(
-        `[data-conversation-content][data-conversation-session="${CSS.escape(sessionId)}"]:not([data-sidebar-chat] *) > [data-conversation-scroll] > [data-slot='conversation.session']`
+        `[data-conversation-content][data-conversation-session="${CSS.escape(sessionId)}"]:not([data-sidebar-chat] *) [data-conversation-scroll] > [data-slot='conversation.session']`
       );
       setTarget((current) => current === anchor ? current : anchor ?? undefined);
     };
@@ -2049,7 +2050,8 @@ function WorkbenchWelcome() {
     const document = marker.current?.ownerDocument;
     if (document === undefined) return;
     const locate = (): void => {
-      const anchor = document.querySelector<HTMLElement>("[data-conversation-content]:not([data-sidebar-chat] *) > [data-conversation-scroll]");
+      // DSH 0.2.2-rc.2 wraps the scroll container in the conversation.hero.frame slot.
+      const anchor = document.querySelector<HTMLElement>("[data-conversation-content]:not([data-sidebar-chat] *) [data-conversation-scroll]");
       setTarget((current) => current === anchor ? current : anchor ?? undefined);
     };
     locate();
