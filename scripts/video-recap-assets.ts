@@ -61,10 +61,10 @@ function isPortableSourceAsset(path: string): boolean {
     && !normalized.endsWith("/.DS_Store");
 }
 
-// 0.6.0 ships a standalone local dashboard (its own web server and UI over run directories). The
-// native 视频 tab owns that view in DSH, so the server, its helpers and its static assets stay out.
-// Listed per file: library.py, project_binding.py and resource_lock.py sit beside them but are
-// imported by recap_runner.py and belong to the pipeline.
+// Upstream ships a standalone local dashboard (0.7.0's read-only 审片台: its own web server and UI over
+// run directories). The native 视频 tab owns that view in DSH, so the server, its dashboard/ package
+// and its static assets stay out. Listed per path: library.py and resources/ sit beside them but are
+// imported by the pipeline.
 export const videoRecapPlatformGlue: readonly string[] = [
   "video-recap/scripts/dashboard_server.py",
   "video-recap/scripts/dashboard/",

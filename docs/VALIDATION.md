@@ -1,6 +1,23 @@
 # Validation
 
-Candidate: `@oh-story/dsh` 0.1.24 on DeepSeek Harness `0.2.1-rc.5`, with `0.2.0-rc.2` and `0.2.2-rc.1` also covered. Local aggregate acceptance passed on 2026-11-08.
+Candidate: `@oh-story/dsh` 0.1.25 on DeepSeek Harness `0.2.2-rc.1` (the npm `latest`), with `0.2.1-rc.5`, `0.2.0-rc.2` and `0.2.2-rc.2` (the npm `next`) also covered. Local aggregate acceptance passed on 2026-11-12.
+
+## 0.1.25 release evidence
+
+0.1.25 follows two breaking upstream releases, video-recap-skills 0.7.0 and NovelToGame 0.8.0, and moves the default and development host to DSH `0.2.2-rc.1`. Oh Story 0.10.3 and Drama Skills 0.11.2 keep the pins from 0.1.24.
+
+### Local evidence
+
+- video-recap 0.7.0 (`fc40ffd3f235`) bundles exactly `video-recap` and `video-reference`, both user-invocable; parity requires the merged pipeline scripts under `skills/video-recap/scripts/` and still keeps the 审片台 dashboard out. NovelToGame 0.8.0 (`270a603c9035`) bundles 5 Skills.
+- Every plugin read of a video artifact (fields of `recap_run_manifest.json`, `assembly_manifest.json`, `narration.json`, `clip_plan_validated.json`, `visual_audio_board.json`, `recap_story_plan.json`, and the source, edited and final output paths) was checked against the 0.7.0 writers and still holds. `narration_review.md` is no longer listed; `packaging_plan.json` and `shot_review.json` are.
+- DSH `0.2.2-rc.2` changed two host contracts the plugin relies on. Subagent activation now reads `parent`, `prompt` and `maxDepth` from the spec itself; `oh_story_role` sends both shapes, and a scratch copy typechecked against rc.2 fails before the fix and passes after it. The conversation scroll container now sits inside the `conversation.hero.frame` slot; the welcome guide and workbench lookups use a descendant combinator. The packaged smoke's module-boundary regex also accepts rc.2's template-literal module ids.
+- On 2026-11-12, `pnpm verify:release` passed in a clean clone of the candidate (`1e7fc31`) with the four upstream release checkouts: lint, typecheck, four parity checks, the DSH boundary, release and upstream-update tests, 251 unit/contract tests, and the build. Packaged Chrome on DSH `0.2.2-rc.1`, `0.2.0-rc.2` and `0.2.2-rc.2` returned `"ok": true`; a separate packaged Chrome run on `0.2.1-rc.5` also returned `"ok": true`.
+
+### Release gates
+
+- **Local aggregate acceptance:** passed 2026-11-12.
+- **Paid provider:** passed 2026-11-12 on DSH `0.2.2-rc.1` and `0.2.2-rc.2` with `deepseek-official/deepseek-flash` (candidate `5136557`, which carries the same server code and Role fix as `1e7fc31`): both runs made 2 Role calls with both required Roles successful and non-empty, durable events 116/86 and 118/72, and project digests unchanged. The operator-authorized credential was read from a 0600 temporary file, deleted after the runs, and never appeared in logs; the shared account balance dropped 0.85 CNY. The runs cover the review chain, not the video or game pipelines.
+- **New-user audit:** not rerun.
 
 ## 0.1.24 release evidence
 

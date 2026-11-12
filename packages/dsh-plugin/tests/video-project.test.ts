@@ -64,7 +64,7 @@ describe("video recap project projection", () => {
     expect(summarizeVideoProject(root, base, { runManifest: cut })).toMatchObject({ state: "waiting", nextArtifact: "clip_plan.json" });
     const edited = [...base, file(`${root}/work/clip_plan.json`), file(`${root}/work/edited_source.mp4`, "media", "video/mp4")];
     expect(summarizeVideoProject(root, edited, { runManifest: cut })).toMatchObject({ state: "working", stage: "assemble", nextArtifact: undefined });
-    const full = { settings: { edit_mode: "full" }, audio: { mode: "adopted-packet-copy" } };
+    const full = { settings: { edit_mode: "full" }, audio: { mode: "source-mix" } };
     expect(summarizeVideoProject(root, base, { runManifest: full })).toMatchObject({ state: "working", stage: "assemble", nextArtifact: undefined });
   });
 

@@ -46,7 +46,7 @@ interface WorkspaceRouteOptions {
   readonly trustedHosts?: readonly string[];
 }
 
-/** Host-process capability probe. The Agent's execution world may differ; `video-recap --doctor` is authoritative there. */
+/** Host-process capability probe. The Agent's execution world may differ; upstream `scripts/doctor.py` is authoritative there. */
 interface VideoPreflightSummary {
   readonly python: PythonProbe;
   readonly ffmpeg: { readonly ok: boolean; readonly subtitles: boolean };
@@ -145,10 +145,11 @@ async function videoPreflight(): Promise<VideoPreflightSummary> {
     ffmpeg: { ok: ffmpegOutput !== undefined, subtitles: /\bsubtitles\b/u.test(ffmpegFilters ?? "") },
     ffprobe: { ok: ffprobeOutput !== undefined },
     credentials: {
-      // Upstream falls back to the shared MIMO_API_KEY only when a per-service key is unset.
-      mimo: configured("MIMO_API_KEY", "MIMO_VIDEO_API_KEY", "MIMO_TTS_API_KEY", "MIMO_ASR_API_KEY"),
+      // Upstream falls back to the shared MIMO_API_KEY only when a per-service key is unset; 0.7.0 no
+      // longer reads MIMO_VIDEO_API_KEY (lib.py), so it does not count.
+      mimo: configured("MIMO_API_KEY", "MIMO_TTS_API_KEY", "MIMO_ASR_API_KEY"),
       fish: configured("FISH_API_KEY"),
-      // index-tts fails before any request unless both are set (video-voiceover/references/index-tts.md).
+      // index-tts fails before any request unless both are set (video-recap/references/index-tts.md).
       indexTts: configured("INDEX_TTS_ENDPOINT") && configured("INDEX_TTS_VOICE"),
       // Upstream accepts auto | mimo-tts | fish-audio | index-tts and defaults to auto (voiceover.py).
       ttsProvider: (process.env.TTS_PROVIDER ?? "").trim().toLowerCase() || "auto"

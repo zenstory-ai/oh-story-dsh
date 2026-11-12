@@ -340,16 +340,15 @@ describe("Drama Skills bundled provider", () => {
 });
 
 describe("NovelToGame bundled provider", () => {
-  it("publishes the complete seven-Skill playable adaptation pipeline through DSH", async () => {
+  it("publishes the complete five-Skill playable adaptation pipeline through DSH", async () => {
     const provider = createNovelToGameSkillProvider(gameRoot);
     const listed = await provider.list({});
     if (!Array.isArray(listed)) throw new Error("Expected a complete NovelToGame catalog.");
+    // NovelToGame 0.8.0 folds game-concept, game-world-design and game-art-direction into game-design.
     expect(listed.map((candidate) => candidate.name)).toEqual([
-      "game-art-direction",
       "game-build",
-      "game-concept",
+      "game-design",
       "game-qa",
-      "game-world-design",
       "novel-game-analyze",
       "novel-to-game"
     ]);
@@ -358,7 +357,8 @@ describe("NovelToGame bundled provider", () => {
       expect(skill?.content).toContain("The 游戏 tab is the playable Game Studio");
       expect(skill?.content).toContain("game-adaptations/<project>/");
       expect(skill?.content).toContain("qa/verification.json remains the sole machine QA truth");
-      expect(skill?.content).toContain("run it as a DSH subagent visible in this preset, giving it only the playable entry and normal player input");
+      expect(skill?.content).toContain("run it as a DSH subagent visible in this preset, giving it only the playable entry, the run instructions game-qa allows, and normal player input");
+      expect(skill?.content).toContain("game-qa's first-round blind playtest");
       expect(skill?.content).toContain("tell the user in one sentence that they can already play it in the 游戏 tab");
       expect(skill?.resourceBase).toEqual({ kind: "directory", path: resolve(gameRoot, candidate.name) });
     }
@@ -375,23 +375,14 @@ describe("NovelToGame bundled provider", () => {
 });
 
 describe("video-recap bundled provider", () => {
-  it("publishes the production pipeline and optional video-reference with native DSH boundaries", async () => {
+  it("publishes the self-contained video-recap and on-demand video-reference with native DSH boundaries", async () => {
     const provider = createVideoRecapSkillProvider(videoRoot);
     const listed = await provider.list({});
     if (!Array.isArray(listed)) throw new Error("Expected a complete video-recap catalog.");
-    expect(listed.map((candidate) => candidate.name)).toEqual([
-      "video-assemble",
-      "video-cut",
-      "video-recap",
-      "video-reference",
-      "video-script",
-      "video-understanding",
-      "video-voiceover"
-    ]);
-    expect(listed.find((candidate) => candidate.name === "video-recap")?.invocation.userInvocable).toBe(true);
-    expect(listed.find((candidate) => candidate.name === "video-cut")?.invocation.userInvocable).toBe(false);
-    expect(listed.find((candidate) => candidate.name === "video-understanding")?.description).toContain("结构化理解索引");
-    // The bridge names a script that 0.6.0's SKILL.md §6.1 asks the Agent to start; the sync must keep it out.
+    // video-recap 0.7.0 merges the six production Skills into one self-contained Skill.
+    expect(listed.map((candidate) => candidate.name)).toEqual(["video-recap", "video-reference"]);
+    expect(listed.every((candidate) => candidate.invocation.userInvocable)).toBe(true);
+    // The bridge names the 审片台 server that 0.7.0's SKILL.md §5 asks the Agent to start; the sync must keep it out.
     await expect(stat(resolve(videoRoot, "video-recap/scripts/dashboard_server.py"))).rejects.toThrow();
     await expect(stat(resolve(videoRoot, "video-recap/scripts/library.py"))).resolves.toBeDefined();
     for (const candidate of listed) {
@@ -403,7 +394,12 @@ describe("video-recap bundled provider", () => {
       expect(skill?.content).toContain("final_qc.json uses schema 2 findings");
       expect(skill?.content).toContain("deliver external .srt");
       expect(skill?.content).toContain("MIMO_API_KEY, FISH_API_KEY");
-      expect(skill?.content).toContain("dashboard_server.py and its dashboard assets are not bundled");
+      expect(skill?.content).toContain("its dashboard/ package and its assets are not bundled");
+      expect(skill?.content).toContain("Check the environment with scripts/doctor.py");
+      expect(skill?.content).toContain("Never set EDIT_MODE or TARGET_DURATION");
+      expect(skill?.content).toContain("pass --no-require-final-qc only when the user explicitly asks");
+      expect(skill?.content).toContain("--voice-ref (VOICE_REF) sends the reference recording to MiMo's voice-clone model");
+      expect(skill?.content).not.toContain("--edit-mode dub sends");
       expect(skill?.resourceBase).toEqual({ kind: "directory", path: resolve(videoRoot, candidate.name) });
     }
   });

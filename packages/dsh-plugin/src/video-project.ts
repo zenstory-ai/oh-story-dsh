@@ -59,13 +59,14 @@ const VISIBLE_TEXT_FILES = new Set([
   "clip_plan.json",
   "clip_plan_validated.json",
   "narration.json",
-  "narration_review.md",
+  "packaging_plan.json",
   "tts_meta.json",
   "timeline.json",
   "assembly_manifest.json",
   "assembly_qc.json",
   "final_qc.json",
   "final_qc.md",
+  "shot_review.json",
   "delivery_qc.json",
   "cut_delivery_qc.json",
   "recap_project.json",
@@ -86,12 +87,13 @@ const ARTIFACT_META: Readonly<Record<string, { readonly label: string; readonly 
   "clip_plan.json": { label: "剪辑计划", kind: "plan" },
   "clip_plan_validated.json": { label: "已校验剪辑计划", kind: "plan" },
   "narration.json": { label: "解说词", kind: "script" },
-  "narration_review.md": { label: "解说复核", kind: "quality" },
+  "packaging_plan.json": { label: "包装方案", kind: "plan" },
   "timeline.json": { label: "成片时间线", kind: "plan" },
   "assembly_manifest.json": { label: "合成清单", kind: "manifest" },
   "assembly_qc.json": { label: "合成质检", kind: "quality" },
   "final_qc.json": { label: "最终质检", kind: "quality" },
   "final_qc.md": { label: "最终质检报告", kind: "quality" },
+  "shot_review.json": { label: "镜头复核", kind: "quality" },
   "delivery_qc.json": { label: "交付质检", kind: "quality" },
   "cut_delivery_qc.json": { label: "剪后片质检", kind: "quality" },
   "recap_project.json": { label: "项目绑定", kind: "manifest" },
@@ -180,7 +182,7 @@ export function summarizeVideoProject(
   ].filter((value): value is VideoPreviewAsset => value !== undefined);
   const names = new Set(projectFiles.map((file) => file.path.split("/").at(-1)));
   const cutMode = settings?.edit_mode === "cut" || names.has("clip_plan.json") || edited !== undefined;
-  // 0.6.0 records --audio-mode in the run manifest; source-mix and adopted-packet-copy never write
+  // The run manifest records --audio-mode (0.7.0: narration or source-mix); source-mix never writes
   // narration, so a cut goes straight from edited_source.mp4 to assembly and full has no pause at all.
   const narrated = (text(record(manifest?.audio)?.mode) ?? "narration") === "narration";
   let state: VideoProjectSummary["state"] = "not-started";

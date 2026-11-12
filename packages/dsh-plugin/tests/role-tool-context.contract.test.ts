@@ -130,10 +130,17 @@ describe("oh_story_role Cordis Context contract", () => {
       const definition = topology.registeredDefinition()!;
       await expect(executeStoryArchitect(definition, topology.agent, "call-managed"))
         .resolves.toMatchObject({ role: "story-architect", runId: expect.any(String), content: [{ type: "text", text: "受限角色结果" }] });
-      expect(start).toHaveBeenCalledWith(expect.objectContaining({
-        provider: "spawn", label: "oh-story:story-architect", delivery: "caller",
-        request: { parent: topology.agent, prompt: [{ type: "text", text: "检查故事架构" }], maxDepth: 1 }
-      }));
+      // DSH 0.2.2-rc.2 reads the task from the spec itself; earlier hosts read `request`.
+      // DSH 0.2.2-rc.2 reads the task from the spec itself; earlier hosts read `request`. The parent
+      // is a Cordis proxy, so compare it by identity rather than with a recursive matcher.
+      const spec = start.mock.calls[0]![0] as unknown as Record<string, unknown> & { readonly request: Record<string, unknown> };
+      expect({ provider: spec.provider, label: spec.label, delivery: spec.delivery })
+        .toEqual({ provider: "spawn", label: "oh-story:story-architect", delivery: "caller" });
+      for (const task of [spec, spec.request]) {
+        expect(task.parent).toBe(topology.agent);
+        expect(task.prompt).toEqual([{ type: "text", text: "检查故事架构" }]);
+        expect(task.maxDepth).toBe(1);
+      }
       expect(child!.section).toHaveBeenCalledWith(expect.objectContaining({
         name: "deployment:persona-prefix", text: expect.stringContaining("OH_STORY_DSH_ROLE:story-architect")
       }));
