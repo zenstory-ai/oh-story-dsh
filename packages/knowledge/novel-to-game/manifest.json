@@ -2,16 +2,14 @@
   "schemaVersion": 1,
   "upstream": {
     "repository": "https://github.com/zenstory-ai/novel-to-game.git",
-    "commit": "f342e23d46c08a8b659e738ef4453f1e40a08042",
-    "releaseVersion": "0.7.1"
+    "commit": "270a603c903536fdccb6049237d138314e1209ac",
+    "releaseVersion": "0.8.0"
   },
-  "generatedAt": "2026-11-08T09:52:12.736Z",
+  "generatedAt": "2026-11-12T07:45:57.342Z",
   "skills": [
-    "game-art-direction",
     "game-build",
-    "game-concept",
+    "game-design",
     "game-qa",
-    "game-world-design",
     "novel-game-analyze",
     "novel-to-game"
   ],
@@ -23,38 +21,23 @@
     },
     {
       "path": "README.md",
-      "sha256": "8a3c7fadf5ae13baced6322aca95b0477c32719c882e92ddace2d38d3306a1a7",
-      "bytes": 35699
+      "sha256": "8e9f79bf70d80709dc0b3b083ff487c61916a2585f15dd2b2e4906ef778a2e49",
+      "bytes": 37209
     },
     {
       "path": "README_ZH.md",
-      "sha256": "9f6419226ede5da867999fcce679e66f175eb638a52a96e6c4fc35df91a279ba",
-      "bytes": 32887
+      "sha256": "a261dfd1fef37f54b8bcf73e0b43dd65745cc1a4bb32c4ed8d0ecf26fb62ae2a",
+      "bytes": 34181
     },
     {
       "path": "VERSION",
-      "sha256": "902311c7bb38fa1658ff403def6158ee7378fe9d6e2e284fa1c38735c31bd30b",
+      "sha256": "a66780da23103beaf12432b418508966b31a2a3a787f9468a5b6cdaa8667c1ef",
       "bytes": 6
     },
     {
-      "path": "skills/game-art-direction/SKILL.md",
-      "sha256": "bccf2e7999eec77d5ffca0c0b24b53ba3929dc61d262793cb1dfecd45595cd6c",
-      "bytes": 3170
-    },
-    {
-      "path": "skills/game-art-direction/agents/openai.yaml",
-      "sha256": "6340d41c7dbcacc55aefef0faf795a5eda0cb38a8b83589b053ea43812b71490",
-      "bytes": 283
-    },
-    {
-      "path": "skills/game-art-direction/references/art-direction-method.md",
-      "sha256": "7fd41422c85eef3da1f18497e1f12ca5e4010da1a6296bfedc7dc186bf7d4d64",
-      "bytes": 5063
-    },
-    {
       "path": "skills/game-build/SKILL.md",
-      "sha256": "527d03d8e6bd91ef2b85d1bbb2361eb51c71445acb960d6faa79357455a9dde0",
-      "bytes": 4874
+      "sha256": "688c088ae44138ca2a6e4f9904dc0bae29697178f1d4ecbdee13ee538ed2271b",
+      "bytes": 6735
     },
     {
       "path": "skills/game-build/agents/openai.yaml",
@@ -63,33 +46,38 @@
     },
     {
       "path": "skills/game-build/references/baked-sprite-workflow.md",
-      "sha256": "7642923397ccfd91ba9c43cada6ad7932eb3a0e7bf7d40f809ecebfa0aaa760e",
-      "bytes": 1518
+      "sha256": "58f1d8737c5bde8fe7130cdf7f3153783344c154814b798f593f9e45984fec13",
+      "bytes": 1665
     },
     {
       "path": "skills/game-build/references/blender-asset-workflow.md",
-      "sha256": "126e505f16ed5a0bcd1a321d720400bc3d19ad5b4d2215cda2a3fa12b04718b0",
-      "bytes": 1928
+      "sha256": "9e5b6a4855c8fda9f194343ed2f789ea0137cbfaf0eedf888d21f60d5eb1b6ec",
+      "bytes": 2782
     },
     {
       "path": "skills/game-build/references/build-brief-contract.md",
-      "sha256": "c7703ba0c07357855a92244e9712c682e0c7e6afcd70100893810a3eabb04c3b",
-      "bytes": 3844
+      "sha256": "3baf3096dc4faff69e8b1cda6235217e54cd31741ca0c9e78396dde9f6888041",
+      "bytes": 4300
     },
     {
       "path": "skills/game-build/references/cutscene-production.md",
-      "sha256": "617e29d4b211c981e9acf3fbb258522ac18b9538e799b64f2f97b820d8eeec8f",
-      "bytes": 2627
+      "sha256": "581f759267ba7a0d5c7474773e1a9302a6aae103c0ab58693d3411944f1760e4",
+      "bytes": 2735
     },
     {
       "path": "skills/game-build/references/generative-media-pipeline.md",
-      "sha256": "3132c6e27a0e33cf31bfcdea93104638a907022dfc0b73e1273b8913307f8b54",
+      "sha256": "bb8cb231c31454dac32cfda6b92d49f1bdbff4a1da27fa66c155c3673471ea27",
       "bytes": 2234
     },
     {
       "path": "skills/game-build/references/playable-model-contract.md",
-      "sha256": "03be40e574fa5c499aa0cfae0be69675fe64f47e7168c180c7ff4354417d14c7",
-      "bytes": 2470
+      "sha256": "e56625b444eb84d64322230ede0228029a033c90918c4c6a2b6108367703faca",
+      "bytes": 2500
+    },
+    {
+      "path": "skills/game-build/references/player-copy-polish.md",
+      "sha256": "3348fb8ba7871de7177520e0273b9a2aff22eb9c618da5f425aaa05ccd270b21",
+      "bytes": 4175
     },
     {
       "path": "skills/game-build/references/tts-production-contract.md",
@@ -97,89 +85,84 @@
       "bytes": 1321
     },
     {
-      "path": "skills/game-concept/SKILL.md",
-      "sha256": "cb6d49b0abc7fc857be00868e61e31601821d9c32a37dda73a1547c733918a8a",
-      "bytes": 3109
+      "path": "skills/game-design/SKILL.md",
+      "sha256": "4afae0867254d63a98686558a7b9d0d9fcd941ca53ed2cb59d599c2e08fffb15",
+      "bytes": 8153
     },
     {
-      "path": "skills/game-concept/agents/openai.yaml",
-      "sha256": "51747ea4fcaa7f82dbc5c208e878deab47f2ce68f0514606f8571e684bd4fc0b",
-      "bytes": 256
+      "path": "skills/game-design/agents/openai.yaml",
+      "sha256": "fce936887b1a8c456f08f7ab0859721148f1c47844d31fc122025c506d206e8e",
+      "bytes": 338
     },
     {
-      "path": "skills/game-concept/references/concept-method.md",
-      "sha256": "debaaafd0203ce6db5283ee3d5c884f687b474ad09af548262882f9a5a4a7617",
-      "bytes": 3081
+      "path": "skills/game-design/references/art-direction-method.md",
+      "sha256": "2e8ebf5ae8e01821b6b25a3d4229fbee72d1eb9668e6939d9ea68490e79c17cd",
+      "bytes": 5171
+    },
+    {
+      "path": "skills/game-design/references/concept-method.md",
+      "sha256": "8def88d2a9bc7181f6dc1193f39b538b58d4c4ef2d839aa215cc4797b7ee6a62",
+      "bytes": 3084
+    },
+    {
+      "path": "skills/game-design/references/interactive-film-method.md",
+      "sha256": "47dec6feaaf8a67608055d8cfe968bb95367a205d759268bfc9b2f05ce6ae09a",
+      "bytes": 4586
+    },
+    {
+      "path": "skills/game-design/references/narrative-design-method.md",
+      "sha256": "2ef33015a16800c8c541b5df74f4399f0b5cbbeb9912527c2a6a680df2dcee46",
+      "bytes": 3339
+    },
+    {
+      "path": "skills/game-design/references/numeric-design-method.md",
+      "sha256": "d0793525760ca639cf01dccdc44d2ce07c09f1550a285c30f437dbabd44edcd4",
+      "bytes": 1417
+    },
+    {
+      "path": "skills/game-design/references/world-design-method.md",
+      "sha256": "406d3f47f773146b57097e8e0643e0c2a7cd3e9cc5decd67c55fab10bea88197",
+      "bytes": 3221
     },
     {
       "path": "skills/game-qa/SKILL.md",
-      "sha256": "4cd0204db58a166b68f71add2afd45f1ffa1b6f2263604a49159728d0aba39a0",
-      "bytes": 2578
+      "sha256": "02244570d3a63a20ed51b83fe2c5c707ccc7a65786e9afa815853376f944f7d5",
+      "bytes": 4402
     },
     {
       "path": "skills/game-qa/agents/openai.yaml",
-      "sha256": "b04450a57e3d9a33ba38f4057ccac85a7ea6af4cea2f4c11c94485ec62ec462d",
-      "bytes": 271
+      "sha256": "31a9af84a9af5583f0baf3229003b46d031449edadcc05e27cb5c54bdf484d2a",
+      "bytes": 345
+    },
+    {
+      "path": "skills/game-qa/references/blind-playtest-method.md",
+      "sha256": "65cf326997b499fd22648f3f7038866084649e556dcd355328f5562028e053fa",
+      "bytes": 7585
     },
     {
       "path": "skills/game-qa/references/qa-contract.md",
-      "sha256": "4e637d0d7f7c712db75ea8a0456ad62326502c52c7e9ba6bee91c2d54d945b01",
-      "bytes": 3239
-    },
-    {
-      "path": "skills/game-qa/references/test-design-method.md",
-      "sha256": "422ff7d8a16b1e05f3b81988ed35ba6ff7bcbb128a0d8a4d4113ad2419f0395c",
-      "bytes": 5343
-    },
-    {
-      "path": "skills/game-world-design/SKILL.md",
-      "sha256": "18270c48a91a1cb4168d97483d8ee69491b12bf02c982b509a958e1be6182545",
-      "bytes": 3882
-    },
-    {
-      "path": "skills/game-world-design/agents/openai.yaml",
-      "sha256": "7dd8700b278aa96b4cf68e5c394c958d788a45a8041c8fe4fbd3b5ac817965bf",
-      "bytes": 336
-    },
-    {
-      "path": "skills/game-world-design/references/interactive-film-method.md",
-      "sha256": "181d5d9ff617af32a7709f461f926bf6b3874950642637ef0b71b59017046863",
-      "bytes": 4568
-    },
-    {
-      "path": "skills/game-world-design/references/narrative-design-method.md",
-      "sha256": "26c5208bdee4d86fda7f28c77bc86ea5f322466f550f96392077d8f5d6a8de75",
-      "bytes": 3336
-    },
-    {
-      "path": "skills/game-world-design/references/numeric-design-method.md",
-      "sha256": "5ed3afc7d8cfc2a1f8fceb91fb0fb1ccd1d72b2d14f2fd0512fafb3c22d77912",
-      "bytes": 1402
-    },
-    {
-      "path": "skills/game-world-design/references/world-design-method.md",
-      "sha256": "30638daf07cfd091f7202c2fb2211ab49add9b880e65fb1fe8a959db5dbd21e3",
-      "bytes": 3197
+      "sha256": "263ce2db8785cb6ad77158688a8f34fc26eb3f5ccefcaaac2c616b0c01519380",
+      "bytes": 3488
     },
     {
       "path": "skills/novel-game-analyze/SKILL.md",
-      "sha256": "edda99735633bae8457985f9aacaf3551176fd13fd64e18f4eba83890bb82bb3",
-      "bytes": 3620
+      "sha256": "3661d4fe54352dad7d2c2658a3f0cc571622b2975de8b172ebf29af8a4f2efce",
+      "bytes": 6753
     },
     {
       "path": "skills/novel-game-analyze/agents/openai.yaml",
-      "sha256": "2d52ae8bb8e854e0f255d8d429e106fe9ccc5c318b5ba8daff3896ba2f841432",
-      "bytes": 263
+      "sha256": "83c7468bff5fa66dec10ee441319caeaf1f7523267e51446930835d8c854a1a2",
+      "bytes": 403
     },
     {
       "path": "skills/novel-game-analyze/references/gameability-protocol.md",
-      "sha256": "46911ff61cd6802448ef75046e38acdb99e75e5c92d3dbdaab0135d748dd85d6",
-      "bytes": 3295
+      "sha256": "5fc48ec83e767cdcf0ff4e401e5a15974adcaf0d6b7cd055b4b457200c53283c",
+      "bytes": 3938
     },
     {
       "path": "skills/novel-to-game/SKILL.md",
-      "sha256": "5e609a8ef79baae6876aec88aaebab2820f94312cf0fccfe1c047c4b7138d550",
-      "bytes": 4214
+      "sha256": "ea655e7fabea58a7064ca7762978940e07c9b5e84080e5f079fea710010943f5",
+      "bytes": 4601
     },
     {
       "path": "skills/novel-to-game/agents/openai.yaml",
@@ -193,8 +176,8 @@
     },
     {
       "path": "skills/novel-to-game/references/pipeline-contract.md",
-      "sha256": "7c75440c2a1e0982356835e879b5e38c782d7b90c0221d5a934c036cd9817ad4",
-      "bytes": 3270
+      "sha256": "5ff43991f0da3cd01acb05e508fb38f1ade83e8ee406381cb7def1b91d1bc996",
+      "bytes": 3351
     }
   ]
 }

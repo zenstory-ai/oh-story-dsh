@@ -1,9 +1,9 @@
-"""Resolve a ``recap_project.json`` binding into the settings stage skills already accept.
+"""Resolve a ``recap_project.json`` binding into the settings stage scripts already accept.
 
 Only video-recap reads the library. A bound subtitle style becomes ``SUBTITLE_*`` env for
-video-assemble, a bound voice becomes the voiceover provider / voice arguments, a bound
+assemble.py, a bound voice becomes the voiceover provider / voice arguments, a bound
 BGM becomes ``BGM_PATH``, a bound production reference becomes a marked copy in the work_dir
-that only the writing agent reads. Stage skills keep seeing concrete paths and values; they never
+that only the writing agent reads. Stage scripts keep seeing concrete paths and values; they never
 learn about templates. Anything the caller already set explicitly must agree with the
 binding — a silent override would make the delivered file disagree with the project.
 """
@@ -14,6 +14,7 @@ import os
 from pathlib import Path
 
 import library as library_lib
+from lib import read_json_object
 
 PROJECT_FILE = "recap_project.json"
 PROJECT_SCHEMA = "video-recap.project.v1"
@@ -47,6 +48,16 @@ def _record(entry):
     return json.loads(Path(entry["record"]).read_text(encoding="utf-8"))
 
 
+def _ass_color_param(params, key):
+    raw = _value(params, key)
+    if raw is None:
+        return None
+    try:
+        return library_lib.to_ass_color(raw)
+    except ValueError as exc:
+        raise BindingError(str(exc)) from exc
+
+
 def _subtitle_env(template, record, resources):
     params = record["params"]
     canvas = record["canvas"]
@@ -56,8 +67,8 @@ def _subtitle_env(template, record, resources):
         "SUBTITLE_FONT_SIZE": _value(params, "size_px"),
         "SUBTITLE_OUTLINE": _value(params, "outline_px"),
         "SUBTITLE_SHADOW": _value(params, "shadow_px"),
-        "SUBTITLE_PRIMARY_COLOR": _value(params, "primary_color"),
-        "SUBTITLE_OUTLINE_COLOR": _value(params, "outline_color"),
+        "SUBTITLE_PRIMARY_COLOR": _ass_color_param(params, "primary_color"),
+        "SUBTITLE_OUTLINE_COLOR": _ass_color_param(params, "outline_color"),
         "SUBTITLE_MAX_CHARS": _value(params, "max_chars"),
         "SUBTITLE_MAX_LINES": _value(params, "max_lines"),
     }
@@ -100,6 +111,11 @@ def _voice_updates(resource, args):
 def _same_setting(key, current, value):
     if key.endswith(("_PATH", "_FILE", "VOICE_REF")):
         return Path(current).expanduser().resolve() == Path(value).expanduser().resolve()
+    if key in ("SUBTITLE_PRIMARY_COLOR", "SUBTITLE_OUTLINE_COLOR"):
+        try:
+            return library_lib.to_ass_color(current) == library_lib.to_ass_color(value)
+        except ValueError:
+            return current == value
     try:
         return float(current) == float(value)
     except ValueError:
@@ -134,9 +150,14 @@ def resolve_project(value, args, environ=None, *, include_voice=True) -> dict:
         raise BindingError(f"{path} 的 schema 必须是 {PROJECT_SCHEMA}")
     unknown = sorted(set(project) - PROJECT_KEYS)
     bindings = project.get("bindings") or {}
+    if not isinstance(bindings, dict):
+        raise BindingError(f"{path} 的 bindings 必须是 object")
     unknown += sorted(f"bindings.{k}" for k in set(bindings) - set(BINDING_KINDS))
     if unknown:
         raise BindingError(f"{path} 有未知字段: {', '.join(unknown)}")
+    not_ids = sorted(k for k, v in bindings.items() if v is not None and not isinstance(v, str))
+    if not_ids:
+        raise BindingError(f"{path} 的 bindings.{not_ids[0]} 必须是资源或模板 id 字符串")
     library_root = (path.parent / str(project.get("library", ""))).resolve()
     if not (library_root / "library.json").is_file():
         raise BindingError(f"库目录无效（缺少 library.json）: {library_root}")
@@ -166,6 +187,8 @@ def resolve_project(value, args, environ=None, *, include_voice=True) -> dict:
             if rid not in resources:
                 raise BindingError(f"{ref} 引用的资源 {rid} 不存在或无效（先运行 library.py check）")
             require_valid(resources[rid], f"{ref} 引用的资源 {rid}")
+        used_templates.append({"role": kind, "id": entry["id"], "version": entry["version"],
+                               "status": entry["status"], "canvas": entry["canvas"]})
         return entry
 
     def resource(kind):
@@ -182,19 +205,9 @@ def resolve_project(value, args, environ=None, *, include_voice=True) -> dict:
     subtitle = template("subtitle_style")
     if subtitle:
         env.update(_subtitle_env(subtitle, _record(subtitle), resources))
-        used_templates.append({"role": "subtitle_style", "id": subtitle["id"],
-                               "version": subtitle["version"], "status": subtitle["status"],
-                               "canvas": subtitle["canvas"]})
     packaging = template("packaging")
-    if packaging:
-        used_templates.append({"role": "packaging", "id": packaging["id"],
-                               "version": packaging["version"], "status": packaging["status"],
-                               "canvas": packaging["canvas"]})
     reference = template("production_reference")
     if reference:
-        used_templates.append({"role": "production_reference", "id": reference["id"],
-                               "version": reference["version"], "status": reference["status"],
-                               "canvas": reference["canvas"]})
         reference = {"template": {"id": reference["id"], "version": reference["version"]},
                      "payload": json.loads((Path(reference["record"]).parent / library_lib.REFERENCE_FILE)
                                            .read_text(encoding="utf-8"))}
@@ -204,9 +217,11 @@ def resolve_project(value, args, environ=None, *, include_voice=True) -> dict:
         updates.update(voice_updates)
         env.update(voice_env)
     bgm = resource("bgm")
-    if bgm and getattr(args, "audio_mode", "narration") == "adopted-packet-copy":
-        raise BindingError("adopted-packet-copy 冻结原音轨，不能再绑定 BGM；去掉 bindings.bgm 或换声音模式")
     if bgm:
+        if include_voice and _record(bgm).get("has_vocal") is True:
+            raise BindingError(
+                f"BGM 资源 {bgm['id']} 标记了有人声（has_vocal=true），解说模式下请换用纯音乐 BGM"
+            )
         env["BGM_PATH"] = bgm["files"][0]["path"]
     material_env = environ.get("VIDEO_RECAP_MATERIAL_LIBRARY_DIR", "").strip()
     if (material_env and not getattr(args, "material_library_dir", None)
@@ -229,7 +244,6 @@ def resolve_project(value, args, environ=None, *, include_voice=True) -> dict:
         "env": env,
         "arg_updates": updates,
         "templates": used_templates,
-        "resources": [],
         "packaging": packaging and {"record": _record(packaging), "resources": resources},
         "production_reference": reference,
     }
@@ -266,15 +280,9 @@ def check_canvas(resolved, width, height) -> None:
 
 
 PACKAGING_LAYERS = "packaging_layers.json"
+PACKAGING_PLAN = "packaging_plan.json"
 REFERENCE_COPY = "production_reference.json"
 _WRITTEN_BY = "video-recap --project"
-
-
-def _read_json(path):
-    try:
-        return json.loads(Path(path).read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return None
 
 
 def _ours(data) -> bool:
@@ -288,7 +296,7 @@ def _sync_bound_file(work_dir, name, payload) -> None:
     """
     path = Path(work_dir) / name
     if payload is None:
-        if path.exists() and _ours(_read_json(path)):
+        if path.exists() and _ours(read_json_object(path)):
             path.unlink()
         return
     # The marker goes last so a payload key of the same name can never unmark our copy.
@@ -297,21 +305,49 @@ def _sync_bound_file(work_dir, name, payload) -> None:
 
 
 def sync_packaging_layers(work_dir, resolved) -> None:
-    """Write the bound packaging template's layers for video-assemble, or retire our old copy."""
+    """Write the bound packaging template's layers / studio_plan for assemble.py, or retire our old copy."""
     packaging = (resolved or {}).get("packaging")
     if not packaging:
         _sync_bound_file(work_dir, PACKAGING_LAYERS, None)
+        _sync_bound_file(work_dir, PACKAGING_PLAN, None)
         return
     record, resources = packaging["record"], packaging["resources"]
-    layers = [{"name": layer["name"],
-               "path": resources[layer["image"]["resource"]]["files"][0]["path"],
-               "rect": layer["rect"]}
-              for layer in record["params"]["layers"]]
-    _sync_bound_file(work_dir, PACKAGING_LAYERS, {
-        "template": {"id": record["id"], "version": record["version"]},
-        "canvas": record["canvas"],
-        "layers": layers,
-    })
+    raw_layers = record["params"].get("layers") or []
+    if raw_layers:
+        layers = [{"name": layer["name"],
+                   "path": resources[layer["image"]["resource"]]["files"][0]["path"],
+                   "rect": layer["rect"]}
+                  for layer in raw_layers]
+        _sync_bound_file(work_dir, PACKAGING_LAYERS, {
+            "template": {"id": record["id"], "version": record["version"]},
+            "canvas": record["canvas"],
+            "layers": layers,
+        })
+    else:
+        _sync_bound_file(work_dir, PACKAGING_LAYERS, None)
+
+    studio_plan = record["params"].get("studio_plan")
+    if isinstance(studio_plan, dict):
+        plan_path = Path(work_dir) / PACKAGING_PLAN
+        if plan_path.exists():
+            current = read_json_object(plan_path)
+            if not _ours(current):
+                cur_canvas = (current or {}).get("canvas")
+                if isinstance(cur_canvas, dict) and (
+                    cur_canvas.get("width"), cur_canvas.get("height")
+                ) != (record["canvas"]["width"], record["canvas"]["height"]):
+                    raise BindingError(
+                        f"{plan_path} 的画布与绑定的包装模板 {record['id']}@v{record['version']} 冲突"
+                    )
+                return
+        _sync_bound_file(work_dir, PACKAGING_PLAN, {
+            "schema": "video-recap.packaging_plan.v1",
+            "template": {"id": record["id"], "version": record["version"]},
+            "canvas": record["canvas"],
+            **studio_plan,
+        })
+    else:
+        _sync_bound_file(work_dir, PACKAGING_PLAN, None)
 
 
 def sync_production_reference(work_dir, resolved) -> None:
@@ -323,7 +359,7 @@ def sync_production_reference(work_dir, resolved) -> None:
     bound = (resolved or {}).get("production_reference")
     path = Path(work_dir) / REFERENCE_COPY
     if bound and path.exists():
-        current = _read_json(path)
+        current = read_json_object(path)
         if not _ours(current):
             if current == bound["payload"]:
                 return
@@ -336,7 +372,7 @@ def sync_production_reference(work_dir, resolved) -> None:
 
 def bound_reference_note(work_dir, resolved=None) -> str | None:
     """The pause-banner line for the bound reference in work_dir (our copy or the caller's identical one)."""
-    data = _read_json(Path(work_dir) / REFERENCE_COPY)
+    data = read_json_object(Path(work_dir) / REFERENCE_COPY)
     bound = (resolved or {}).get("production_reference")
     if _ours(data):
         template = data.get("template") or {}

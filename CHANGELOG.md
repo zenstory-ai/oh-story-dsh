@@ -11,6 +11,23 @@
 
 ## [Unreleased]
 
+## [0.1.25] - 2026-11-12
+
+### Changed
+
+- 同步 [video-recap-skills 0.7.0](https://github.com/zenstory-ai/video-recap-skills/releases/tag/v0.7.0)（`fc40ffd3f2356d7738c1b4d7111f6e781f17e811`）：六个视频生产技能（理解、写稿、剪辑、配音、合成与编排）合并为一个自包含的 `/video-recap`，`/video-reference` 仍是按需拆片的独立技能，`/video-script` 等入口不再单独出现。新增声明式包装（`packaging_plan.json`）与自动封面、音效轨和录音室级混音，成片默认必须通过最终质检，残帧、半句被切、冷场等五道底线问题会直接拦下。「视频」标签的文稿里新增「包装方案」与「镜头复核」。
+- 同步 [NovelToGame 0.8.0](https://github.com/zenstory-ai/novel-to-game/releases/tag/v0.8.0)（`270a603c903536fdccb6049237d138314e1209ac`）：概念、世界设计、美术方向三个技能合并为 `game-design`（7 → 5 个技能），`concepts/CONCEPT.md`、`design/GAME_DESIGN.md`、`design/ART_DIRECTION.md` 位置不变；`game-qa` 改为两轮新玩家盲玩，另写 `qa/playtest-report.md`；`game-build` 新增游戏内文字精修，并先探测宿主可用的渲染与 3D 工具再选构建路线。在 DSH 里，首轮盲玩用当前 Preset 可见、没读过设计和源码的子代理进行。
+- 默认宿主更新到 npm `latest` 的 [DeepSeek Harness 0.2.2-rc.1](https://www.npmjs.com/package/@deepseek-ai/dsh/v/0.2.2-rc.1)（需要 Node.js 24.9+），配套 Cordis `4.1.0` / Schemastery `3.19.0`；`0.2.1-rc.5` 与 `0.2.0-rc.2` 继续支持，试用线换成 npm `next` 的 `0.2.2-rc.2`。插件声明的兼容范围不变。
+
+### Removed
+
+- 视频不再提供 dub（英译中、克隆原声替换人声）、「声音已定稿只改画面」路线、MiMo 解说评审与视频分片概览（随 video-recap 0.7.0）。旧版 `work/` 打印的续跑命令若带 `--edit-mode dub`、`--review-narration`、`--mimo-video-overview` 等已删除参数会报错，去掉这些参数再跑；`EDIT_MODE`、`TARGET_DURATION` 环境变量设了就会被拒绝，改用对应命令参数。仍需要 dub 请单独使用 video-recap-skills 0.6.2。
+
+### Fixed
+
+- 写作 Role（`oh_story_role`）在 DSH `0.2.2-rc.2` 上照常可用：新宿主把子代理任务的字段从 `request` 挪到了启动参数本身，插件现在两种写法都带上，新旧宿主各读各的。
+- 「视频」标签的运行环境检查不再把 `MIMO_VIDEO_API_KEY` 算作已配置的 MiMo Key（0.7.0 已不读取它），Agent 侧的环境检查改指 `scripts/doctor.py`。
+
 ## [0.1.24] - 2026-11-08
 
 ### Added
@@ -458,7 +475,8 @@
 - 提供 13 个 Oh Story 小说 Skills、7 个专业 Roles 与 10 个 Drama Skills。
 - 提供文件树、Markdown/JSONL 编辑预览与官方 DSH Chat 同屏的三栏工作台。
 
-[Unreleased]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.24...HEAD
+[Unreleased]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.25...HEAD
+[0.1.25]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.24...v0.1.25
 [0.1.24]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.23...v0.1.24
 [0.1.23]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.22...v0.1.23
 [0.1.22]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.21...v0.1.22

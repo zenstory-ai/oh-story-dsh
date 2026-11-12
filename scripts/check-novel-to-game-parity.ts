@@ -16,12 +16,11 @@ if (JSON.stringify(actualFiles) !== JSON.stringify(manifest.files)) {
   throw new Error("Bundled NovelToGame files differ from manifest; run pnpm assets:sync:game.");
 }
 
+// 0.8.0 folds game-concept, game-world-design and game-art-direction into game-design.
 const expectedSkills = [
-  "game-art-direction",
   "game-build",
-  "game-concept",
+  "game-design",
   "game-qa",
-  "game-world-design",
   "novel-game-analyze",
   "novel-to-game"
 ];
@@ -30,7 +29,7 @@ const skills = (await readdir(join(novelToGameRoot, "skills"), { withFileTypes: 
   .map((entry) => entry.name)
   .sort();
 if (JSON.stringify(skills) !== JSON.stringify(expectedSkills) || JSON.stringify(skills) !== JSON.stringify(manifest.skills)) {
-  throw new Error(`Expected the complete seven-Skill NovelToGame pipeline, found ${String(skills.length)}.`);
+  throw new Error(`Expected the complete five-Skill NovelToGame pipeline, found ${String(skills.length)}.`);
 }
 if ((await readFile(join(novelToGameRoot, "VERSION"), "utf8")).trim() !== manifest.upstream.releaseVersion) {
   throw new Error("NovelToGame release version does not match the bundled manifest.");

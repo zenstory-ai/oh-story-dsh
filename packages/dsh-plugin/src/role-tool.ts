@@ -32,7 +32,11 @@ interface RoleRun {
   dispose(): Promise<void>;
 }
 
-interface ManagedRoleSpec {
+/**
+ * DSH 0.2.2-rc.2 flattens the start request into the spec; earlier hosts read it from `request`.
+ * The spec carries both, and each host ignores the shape it does not read.
+ */
+interface ManagedRoleSpec extends Pick<RoleStartRequest, "parent" | "prompt" | "maxDepth"> {
   readonly provider: string;
   readonly label: string;
   readonly childId: SessionId;
@@ -81,11 +85,13 @@ async function startRole(runtime: OhStoryRoleSubagents, role: OhStoryRoleName, r
     configured = true;
   }, { global: true });
   try {
+    const task = { parent: request.parent, prompt: request.prompt, maxDepth: request.maxDepth };
     const activation = await runtime.startActivation({
       provider: "spawn",
       label: request.label,
       childId,
-      request: { parent: request.parent, prompt: request.prompt, maxDepth: request.maxDepth },
+      ...task,
+      request: task,
       signal: request.signal,
       delivery: "caller"
     });
