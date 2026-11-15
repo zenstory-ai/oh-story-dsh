@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 // Type-only: erased from the browser bundle, but a modality added to the host registry
 // without a label below becomes a type error instead of an unlabelled chip.
 import type { DramaAdapterModality, DramaAdapterStatus } from "../drama-adapters.js";
-import { productionCompleteness, type DramaDocumentTarget, type DramaEpisodeProduction, type DramaProductionSection } from "./drama-production.js";
-import { endpoint } from "./workbench-ui.js";
+import { productionCompleteness, targetDisplayName, type DramaDocumentTarget, type DramaEpisodeProduction, type DramaProductionSection } from "./drama-production.js";
+import { endpoint, handleTabKey } from "./workbench-ui.js";
+
+export { targetDisplayName };
 import type { CanvasViewport } from "./canvas-viewport.js";
 import { ProductionCanvas } from "./production-canvas.js";
 import { nativeBatchPrompt, nativeCompositionPrompt, nativeProductionPrompt } from "./production-prompts.js";
@@ -157,20 +159,6 @@ function ProductionStatus({ sessionId, diagnostics, onNavigate }: {
   </div>;
 }
 
-function handleSectionKey(event: ReactKeyboardEvent<HTMLButtonElement>, current: DramaProductionSection, onChange: (section: DramaProductionSection) => void): void {
-  const index = PRIMARY_SECTIONS.indexOf(current);
-  if (index < 0) return;
-  const next = event.key === "Home" ? 0
-    : event.key === "End" ? PRIMARY_SECTIONS.length - 1
-      : event.key === "ArrowRight" ? (index + 1) % PRIMARY_SECTIONS.length
-        : event.key === "ArrowLeft" ? (index - 1 + PRIMARY_SECTIONS.length) % PRIMARY_SECTIONS.length
-          : undefined;
-  if (next === undefined) return;
-  event.preventDefault();
-  onChange(PRIMARY_SECTIONS[next]!);
-  event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>("[role='tab']")[next]?.focus();
-}
-
 export function DramaProductionView(props: Props) {
   const [notice, setNotice] = useState<string>();
   const jobsRef = useRef(props.jobs);
@@ -250,7 +238,7 @@ export function DramaProductionView(props: Props) {
   const activeJobs = props.jobs.filter((job) => job.status === "awaiting_confirmation" || job.status === "running" || job.status === "pending").length;
   const canvasAvailable = productionCanvasAvailable(props.production, props.documents);
   return <div className="oh-story-production">
-    <div className="oh-story-production-bar"><div className="oh-story-production-tabs" role="tablist" aria-label="短剧生产视图">{PRIMARY_SECTIONS.map((item) => <button type="button" role="tab" tabIndex={props.section === item || (props.section === "shots" && item === "canvas") ? 0 : -1} aria-selected={props.section === item} key={item} onKeyDown={(event) => { handleSectionKey(event, item, props.onSectionChange); }} onClick={() => { props.onSectionChange(item); }}>{SECTION_LABELS[item]}</button>)}</div><div className="oh-story-production-meta"><span className="oh-story-production-summary">{props.production.shots.length} 个镜头 · {props.production.assets.length + props.production.visualAssets.length} 项素材{activeJobs > 0 ? ` · ${String(activeJobs)} 项制作中` : ""}</span><button type="button" className="oh-story-shot-list-trigger" aria-pressed={props.section === "shots"} onClick={() => { props.onSectionChange("shots"); }}>镜头清单</button><button type="button" onClick={props.onRefresh}>刷新</button></div></div>
+    <div className="oh-story-production-bar"><div className="oh-story-production-tabs" role="tablist" aria-label="短剧生产视图">{PRIMARY_SECTIONS.map((item) => <button type="button" role="tab" tabIndex={props.section === item || (props.section === "shots" && item === "canvas") ? 0 : -1} aria-selected={props.section === item} key={item} onKeyDown={(event) => { handleTabKey(event, PRIMARY_SECTIONS, item, props.onSectionChange); }} onClick={() => { props.onSectionChange(item); }}>{SECTION_LABELS[item]}</button>)}</div><div className="oh-story-production-meta"><span className="oh-story-production-summary">{props.production.shots.length} 个镜头 · {props.production.assets.length + props.production.visualAssets.length} 项素材{activeJobs > 0 ? ` · ${String(activeJobs)} 项制作中` : ""}</span><button type="button" className="oh-story-shot-list-trigger" aria-pressed={props.section === "shots"} onClick={() => { props.onSectionChange("shots"); }}>镜头清单</button><button type="button" onClick={props.onRefresh}>刷新</button></div></div>
     <ProductionStatus sessionId={props.sessionId} diagnostics={props.production.diagnostics} onNavigate={props.onNavigate} />
     {notice !== undefined && <div className="oh-story-production-notice" role="status"><span>{notice}</span><button type="button" aria-label="关闭提示" onClick={() => { setNotice(undefined); }}>×</button></div>}
     {props.section === "shots" && <ShotBoard {...props} onCreateJob={createJob} onBatch={createBatch} />}
@@ -294,7 +282,7 @@ function AssetBoard(props: Props & { readonly onCreateJob: (targetId: string, ki
   if (assets.length === 0 && props.libraryVersions.length === 0) return <section className="oh-story-assets"><MissingDocument document={`${props.production.episodeDirectory}/图片提示词.md`} documentPaths={props.production.documentPaths} what="素材" skill="/short-drama-image-prompts" onNavigate={props.onNavigate} /></section>;
   return <section className="oh-story-assets">
     <div className="oh-story-asset-grid">{assets.map((asset) => {
-      const prompt = "prompt" in asset ? asset.prompt : asset.description;
+      const prompt = "stableId" in asset ? asset.description : asset.prompt;
       const description = "stableId" in asset ? asset.description.split("\n").find((line) => line.trim() !== "") : asset.purpose ?? asset.reference;
       const versions = props.versions.filter((version) => version.targetId === asset.id);
       const selected = selectedVersionForTarget(asset.id, props.versions, props.selections, "image");
@@ -354,18 +342,6 @@ function useScrollIntoView(selectedId: string | undefined) {
 
 function MediaStatusBadge({ label, ready }: { readonly label: string; readonly ready: boolean }) {
   return <span data-ready={ready} aria-label={`${label}${ready ? "已生成" : "待生成"}`}><i aria-hidden="true">{ready ? "✓" : "—"}</i>{label}{ready ? "已生成" : "待生成"}</span>;
-}
-
-export function targetDisplayName(production: DramaEpisodeProduction | undefined, id: string): string {
-  if (id === "BATCH-KEYFRAMES") return "批量关键帧";
-  if (id === "BATCH-VIDEOS") return "批量镜头视频";
-  if (production === undefined) return id;
-  if (id === production.episodeDirectory) return "本集成片";
-  return production.shots.find((item) => item.id === id)?.title
-    ?? production.assets.find((item) => item.id === id)?.title
-    ?? production.visualAssets.find((item) => item.id === id)?.title
-    ?? production.motions.find((item) => item.id === id)?.title
-    ?? id;
 }
 
 function MissingDocument({ document, documentPaths, what, skill, onNavigate }: {

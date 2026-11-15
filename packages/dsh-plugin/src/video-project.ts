@@ -1,9 +1,9 @@
 import { basename, extname } from "node:path";
+import { VIDEO_DIRECTORY } from "./creative-paths.js";
 import { projectVideoNarrative, type VideoNarrativeProjection } from "./video-narrative.js";
 
+export { VIDEO_DIRECTORY };
 export type { VideoCreativeSummary, VideoNarrativeKind, VideoNarrativeProjection, VideoNarrativeSegment, VideoTimeRange } from "./video-narrative.js";
-
-export const VIDEO_DIRECTORY = "video-recaps";
 
 export interface VideoWorkspaceFile {
   readonly path: string;
@@ -59,7 +59,11 @@ const VISIBLE_TEXT_FILES = new Set([
   "clip_plan.json",
   "clip_plan_validated.json",
   "narration.json",
+  "narration_lint.json",
   "packaging_plan.json",
+  "promo_copy.json",
+  "sfx_plan.json",
+  "original_subtitles.json",
   "tts_meta.json",
   "timeline.json",
   "assembly_manifest.json",
@@ -87,7 +91,11 @@ const ARTIFACT_META: Readonly<Record<string, { readonly label: string; readonly 
   "clip_plan.json": { label: "剪辑计划", kind: "plan" },
   "clip_plan_validated.json": { label: "已校验剪辑计划", kind: "plan" },
   "narration.json": { label: "解说词", kind: "script" },
+  "narration_lint.json": { label: "解说词校验", kind: "quality" },
   "packaging_plan.json": { label: "包装方案", kind: "plan" },
+  "promo_copy.json": { label: "宣发文案", kind: "plan" },
+  "sfx_plan.json": { label: "音效方案", kind: "plan" },
+  "original_subtitles.json": { label: "原声字幕", kind: "subtitle" },
   "timeline.json": { label: "成片时间线", kind: "plan" },
   "assembly_manifest.json": { label: "合成清单", kind: "manifest" },
   "assembly_qc.json": { label: "合成质检", kind: "quality" },

@@ -69,38 +69,62 @@ function lastSegment(path: string): string {
   return path.replaceAll("\\", "/").split("/").filter((part) => part !== "").at(-1) ?? "";
 }
 
+interface ResolvedStoryMutation {
+  readonly mutation: StoryMutation;
+  readonly book: string;
+}
+
+function storyMutationAt(root: string, relativePath: string): ResolvedStoryMutation | undefined {
+  const normalized = normalizedRelativePath(relativePath);
+  if (normalized === undefined) return undefined;
+  const location = proseLocation(normalized);
+  if (location === undefined) return undefined;
+  const chapterText = /^第0*(\d+)章/u.exec(location.name)?.[1];
+  return {
+    mutation: { root, path: normalized, ...(chapterText === undefined ? {} : { chapter: Number(chapterText) }) },
+    book: location.book
+  };
+}
+
+function insideRootDisplay(root: string, candidate: string): boolean {
+  return /^[a-z]:\//iu.test(root)
+    ? candidate.toLowerCase().startsWith(`${root.toLowerCase()}/`)
+    : candidate.startsWith(`${root}/`);
+}
+
 export function detectStoryMutation(name: string, args: unknown, cwd: string | undefined): StoryMutation | undefined {
   const rawPath = mutationPath(name, args);
   if (cwd === undefined || rawPath === undefined) return undefined;
   const root = cwd.replaceAll("\\", "/").replace(/\/$/u, "");
   const candidate = rawPath.replaceAll("\\", "/");
   const absolute = candidate.startsWith("/") || /^[a-z]:\//iu.test(candidate) || /^[a-z][a-z\d+.-]*:\/\//iu.test(candidate);
-  const insideRoot = /^[a-z]:\//iu.test(root)
-    ? candidate.toLowerCase().startsWith(`${root.toLowerCase()}/`)
-    : candidate.startsWith(`${root}/`);
-  if (absolute && !insideRoot) return undefined;
-  const normalized = normalizedRelativePath(absolute ? candidate.slice(root.length + 1) : candidate);
-  if (normalized === undefined) return undefined;
-  const location = proseLocation(normalized);
-  if (location === undefined) return undefined;
-  const chapterText = /^第0*(\d+)章/u.exec(location.name)?.[1];
-  return { root, path: normalized, ...(chapterText === undefined ? {} : { chapter: Number(chapterText) }) };
+  if (absolute && !insideRootDisplay(root, candidate)) return undefined;
+  return storyMutationAt(root, absolute ? candidate.slice(root.length + 1) : candidate)?.mutation;
 }
 
 type StoryFileSystem = Pick<FileSystem, "resolve" | "contains" | "stat" | "listDir"> & Partial<Pick<FileSystem, "readBytes">>;
 
-async function storyMutation(exec: ToolExecution, fs: StoryFileSystem): Promise<StoryMutation | undefined> {
+async function storyMutation(exec: ToolExecution, fs: StoryFileSystem): Promise<ResolvedStoryMutation | undefined> {
   const cwd = exec.agent?.session.header.cwd;
   const path = mutationPath(exec.name, exec.arguments);
   if (cwd === undefined || path === undefined) return undefined;
+  let rootTarget: FsTarget;
+  let mutationTarget: FsTarget;
   try {
-    const [rootTarget, mutationTarget] = await Promise.all([
+    [rootTarget, mutationTarget] = await Promise.all([
       fs.resolve(cwd, { signal: exec.signal }),
       fs.resolve(path, { cwd, signal: exec.signal })
     ]);
     if (!fs.contains(rootTarget, mutationTarget)) return undefined;
   } catch { return undefined; }
-  return detectStoryMutation(exec.name, exec.arguments, cwd);
+  const rootDisplay = rootTarget.displayPath.replaceAll("\\", "/").replace(/\/$/u, "");
+  const mutationDisplay = mutationTarget.displayPath.replaceAll("\\", "/");
+  if (insideRootDisplay(rootDisplay, mutationDisplay)) {
+    return storyMutationAt(rootDisplay, mutationDisplay.slice(rootDisplay.length + 1));
+  }
+  const fallback = detectStoryMutation(exec.name, exec.arguments, cwd);
+  const location = fallback === undefined ? undefined : proseLocation(fallback.path);
+  return fallback === undefined || location === undefined ? undefined : { mutation: fallback, book: location.book };
 }
 
 async function target(fs: StoryFileSystem, root: string, path: string, signal?: AbortSignal): Promise<FsTarget> {
@@ -224,9 +248,9 @@ export async function decideStoryMutation(
 ): Promise<PreToolDecision> {
   const fs = exec.agent?.ctx.get("fs");
   if (fs === undefined) return next();
-  const mutation = await storyMutation(exec, fs);
-  if (mutation === undefined) return next();
-  const reason = await validateStoryMutation(fs, mutation, exec.signal);
+  const resolved = await storyMutation(exec, fs);
+  if (resolved === undefined) return next();
+  const reason = await validateStoryMutation(fs, resolved.mutation, exec.signal);
   if (reason !== undefined) return { kind: "deny", reason };
   return next();
 }
@@ -282,12 +306,13 @@ export async function validateAnalysisInputWrite(
   const match = ANALYSIS_INPUT.exec(displayName(fileTarget.displayPath));
   if (match === null) reasons.push("文件名必须是 输入-{RAW|REUSE}-{起章}-{止章}.md");
   else if (Number(match[2]) < 1 || Number(match[3]) < Number(match[2])) reasons.push("批次章号范围无效");
+  const insideWorkspace = fs.contains(rootTarget, fileTarget);
   const cacheDirectory = displayParent(fileTarget.displayPath);
   if (displayName(cacheDirectory) !== "_analysis_cache") reasons.push("只能写在拆文目录的 _analysis_cache/ 下");
-  else if (!(await isAnalysisDirectory(fs, displayParent(cacheDirectory), signal))) {
+  else if (insideWorkspace && !(await isAnalysisDirectory(fs, displayParent(cacheDirectory), signal))) {
     reasons.push("上级目录不是拆文目录（缺 chapter_index.csv 与 _progress.md）");
   }
-  if (!fs.contains(rootTarget, fileTarget)) reasons.push("路径在项目目录之外");
+  if (!insideWorkspace) reasons.push("路径在项目目录之外");
   return reasons.length === 0 ? undefined : deny(path, reasons);
 }
 
@@ -348,11 +373,10 @@ export function registerOhStoryHooks(context: Context): void {
     // get the reminder: narrative-writer's Role body forbids writing Tracking.
     if (ohStoryRoleOfSession(exec.agent?.session) !== undefined) return downstream;
     const fs = exec.agent?.ctx.get("fs");
-    const mutation = fs === undefined ? undefined : await storyMutation(exec, fs);
-    const location = mutation === undefined ? undefined : proseLocation(mutation.path);
-    if (fs === undefined || mutation === undefined || location === undefined) return downstream;
+    const resolved = fs === undefined ? undefined : await storyMutation(exec, fs);
+    if (fs === undefined || resolved === undefined) return downstream;
+    const { mutation, book } = resolved;
     const { root } = mutation;
-    const { book } = location;
     if (!(await isLongFormBook(fs, root, book, exec.signal))) return downstream;
     const trackingUninitialized = !(await hasTrackingState(fs, root, book, exec.signal))
       && !(await hasImportSignal(fs, root, book, exec.signal));

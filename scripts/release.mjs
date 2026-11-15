@@ -628,7 +628,6 @@ async function commandNpmPublish(args) {
     localIntegrity: manifest.files[0].integrity,
   });
   if (decision === "publish") {
-    await createCiProof({ repository: args.repository, sha: args.sha, tag: args.tag });
     await run("npm", npmPublishArguments(args.directory, manifest.files[0].name));
   }
   process.stdout.write(`${JSON.stringify({ package: manifest.package, version: manifest.version, decision })}\n`);

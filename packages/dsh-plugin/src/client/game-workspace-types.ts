@@ -1,5 +1,4 @@
-import type { CanvasViewport } from "./canvas-viewport.js";
-import type { CanvasPoint } from "./production-runtime.js";
+import type { CreativeCanvasState } from "./creative-canvas.js";
 
 export interface GameProject {
   readonly id: string;
@@ -29,11 +28,7 @@ export interface GameDocumentBuffer {
   readonly conflict?: { readonly message: string; readonly theirs?: string | undefined; readonly theirsVersion?: string | undefined } | undefined;
 }
 
-export interface GameCanvasState {
-  readonly positions: Readonly<Record<string, CanvasPoint>>;
-  readonly viewport?: CanvasViewport | undefined;
-  readonly selectedId?: string | undefined;
-}
+export type GameCanvasState = CreativeCanvasState;
 
 export const EMPTY_GAME_CANVAS: GameCanvasState = { positions: {} };
 export type GameWorkspaceTab = "preview" | "canvas" | "design";

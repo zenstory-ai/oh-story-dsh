@@ -68,8 +68,8 @@ export function productionCanvasNodes(production: DramaEpisodeProduction, docume
       id: asset.id,
       title: asset.title,
       kind: asset.kind,
-      description: asset.purpose ?? asset.reference ?? asset.description,
-      prompt: asset.prompt ?? asset.description,
+      description: asset.purpose ?? asset.reference,
+      prompt: asset.prompt,
       target: production.targets.get(asset.id)
     })),
     ...production.visualAssets.filter((asset) => !declaredTitles.has(asset.title)).map((asset) => ({
@@ -112,8 +112,11 @@ export function productionCanvasNodes(production: DramaEpisodeProduction, docume
   ];
 }
 
-export function productionCanvasEdges(production: DramaEpisodeProduction): ProductionCanvasEdge[] {
-  const nodeIds = new Set(productionCanvasNodes(production).map((node) => node.id));
+export function productionCanvasEdges(
+  production: DramaEpisodeProduction,
+  knownNodeIds?: ReadonlySet<string>
+): ProductionCanvasEdge[] {
+  const nodeIds = knownNodeIds ?? new Set(productionCanvasNodes(production).map((node) => node.id));
   const edges: ProductionCanvasEdge[] = [];
   for (const [index, shot] of production.shots.entries()) {
     const stories = shot.sceneIds.length > 0 ? shot.sceneIds : shot.source === undefined ? [] : [shot.source];

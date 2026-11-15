@@ -27,7 +27,7 @@ describe("creative project presence", () => {
 
   it("recognizes creative files, workspace games and video projects", () => {
     expect(hasCreativeProject(workspace({ files: [{ path: "正文/第001章.md" }] }))).toBe(true);
-    expect(hasCreativeProject(workspace({ games: [{ id: "workspace:letter" }] }))).toBe(true);
+    expect(hasCreativeProject(workspace({ games: [{ id: "letter" }] }))).toBe(true);
     expect(hasCreativeProject(workspace({ videos: [{ id: "recap" }] }))).toBe(true);
   });
 });

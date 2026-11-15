@@ -1,20 +1,18 @@
-import { createHash } from "node:crypto";
 import { cp, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
-import { basename, dirname, join, relative, resolve, sep } from "node:path";
-import { fileURLToPath } from "node:url";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
+import { basename, join, resolve } from "node:path";
 
-const execFileAsync = promisify(execFile);
-const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-
-function portableRelative(root: string, path: string): string {
-  return relative(root, path).split(sep).join("/");
-}
+import {
+  git,
+  isPortableSourceAsset,
+  manifestFiles,
+  matchesExcludedPrefix,
+  portableRelative,
+  repoRoot,
+  type ManifestFileEntry
+} from "./asset-sync-utils.js";
 
 export const ohStoryRoot = join(repoRoot, "packages/knowledge/oh-story");
-export const generatedRoot = join(repoRoot, "packages/knowledge/generated");
-const platformGlue = [
+export const ohStoryPlatformGlue = [
   // Ignored local backup, not an upstream runtime asset.
   "story-long-analyze.zip",
   "story/assets/",
@@ -47,14 +45,6 @@ const platformGlue = [
   "story-setup/UPGRADING.md"
 ] as const;
 
-function isPortableSourceAsset(path: string): boolean {
-  const normalized = path.split(sep).join("/");
-  return !normalized.includes("/__pycache__/")
-    && !normalized.endsWith("/__pycache__")
-    && !normalized.endsWith(".pyc")
-    && !normalized.endsWith("/.DS_Store");
-}
-
 export interface AssetManifest {
   readonly schemaVersion: 2;
   readonly upstream: {
@@ -66,38 +56,11 @@ export interface AssetManifest {
   readonly generatedAt: string;
   readonly skills: readonly string[];
   readonly roles: readonly string[];
-  readonly files: readonly {
-    readonly path: string;
-    readonly sha256: string;
-    readonly bytes: number;
-  }[];
+  readonly files: readonly ManifestFileEntry[];
 }
 
 export function upstreamRoot(): string {
   return resolve(process.env.OH_STORY_UPSTREAM_DIR ?? join(repoRoot, "..", "oh-story-claudecode"));
-}
-
-async function git(root: string, ...args: string[]): Promise<string> {
-  const { stdout } = await execFileAsync("git", ["-C", root, ...args], { encoding: "utf8" });
-  return stdout.trim();
-}
-
-async function regularFiles(root: string): Promise<string[]> {
-  const output: string[] = [];
-  async function visit(directory: string): Promise<void> {
-    for (const entry of await readdir(directory, { withFileTypes: true })) {
-      const path = join(directory, entry.name);
-      if (entry.isDirectory()) await visit(path);
-      else if (entry.isFile()) output.push(path);
-    }
-  }
-  await visit(root);
-  return output.sort();
-}
-
-async function fileDigest(path: string): Promise<{ sha256: string; bytes: number }> {
-  const bytes = await readFile(path);
-  return { sha256: createHash("sha256").update(bytes).digest("hex"), bytes: bytes.byteLength };
 }
 
 export async function buildManifest(root: string, generatedAt: string): Promise<AssetManifest> {
@@ -120,16 +83,13 @@ export async function buildManifest(root: string, generatedAt: string): Promise<
   const agentsVersion = Number(agentsVersionMatch[1]);
   const commit = await git(root, "rev-parse", "HEAD");
   const repository = await git(root, "remote", "get-url", "origin");
-  const files = await Promise.all((await regularFiles(ohStoryRoot))
-    .filter((path) => basename(path) !== "manifest.json")
-    .map(async (path) => ({ path: portableRelative(ohStoryRoot, path), ...await fileDigest(path) })));
   return {
     schemaVersion: 2,
     upstream: { repository, commit, releaseVersion, agentsVersion },
     generatedAt,
     skills,
     roles,
-    files
+    files: await manifestFiles(ohStoryRoot)
   };
 }
 
@@ -141,16 +101,12 @@ export async function synchronizeAssets(): Promise<AssetManifest> {
   }
   await rm(ohStoryRoot, { recursive: true, force: true });
   await mkdir(ohStoryRoot, { recursive: true });
-  await mkdir(generatedRoot, { recursive: true });
   const sourceSkills = join(source, "skills");
   await cp(sourceSkills, join(ohStoryRoot, "skills"), {
     recursive: true,
     dereference: false,
-    filter: (path) => {
-      const bundledPath = portableRelative(sourceSkills, path);
-      return isPortableSourceAsset(path)
-        && !platformGlue.some((entry) => bundledPath === entry.replace(/\/$/u, "") || bundledPath.startsWith(entry));
-    }
+    filter: (path) => isPortableSourceAsset(path)
+      && !matchesExcludedPrefix(portableRelative(sourceSkills, path), ohStoryPlatformGlue)
   });
   await cp(join(source, "skills/story-setup/references/templates/agents"), join(ohStoryRoot, "roles"), { recursive: true });
   await cp(join(source, "LICENSE"), join(ohStoryRoot, "LICENSE.upstream"));
@@ -165,8 +121,5 @@ export async function readManifest(): Promise<AssetManifest> {
 }
 
 export async function currentOhStoryFiles(): Promise<AssetManifest["files"]> {
-  const files = await regularFiles(ohStoryRoot);
-  return Promise.all(files
-    .filter((path) => basename(path) !== "manifest.json")
-    .map(async (path) => ({ path: portableRelative(ohStoryRoot, path), ...await fileDigest(path) })));
+  return manifestFiles(ohStoryRoot);
 }

@@ -1,58 +1,39 @@
-import { createHash } from "node:crypto";
 import { cp, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
-import { basename, dirname, join, relative, resolve, sep } from "node:path";
-import { fileURLToPath } from "node:url";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
+import { join, resolve } from "node:path";
 
-const execFileAsync = promisify(execFile);
-const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+import {
+  git,
+  isPortableSourceAsset,
+  manifestFiles,
+  matchesExcludedPrefix,
+  portableRelative,
+  repoRoot,
+  type ManifestFileEntry
+} from "./asset-sync-utils.js";
 
 export const dramaRoot = join(repoRoot, "packages/knowledge/drama");
+
+export const dramaPlatformGlue = [
+  "short-drama/scripts/dashboard_server.py",
+  // 创作台 v2 (0.8.0) view models, imported only by dashboard_server.py.
+  "short-drama/scripts/creator_views.py",
+  "short-drama/assets/dashboard/"
+] as const;
 
 export interface DramaAssetManifest {
   readonly schemaVersion: 1;
   readonly upstream: { readonly repository: string; readonly commit: string };
   readonly generatedAt: string;
   readonly skills: readonly string[];
-  readonly files: readonly { readonly path: string; readonly sha256: string; readonly bytes: number }[];
-}
-
-function portableRelative(root: string, path: string): string {
-  return relative(root, path).split(sep).join("/");
+  readonly files: readonly ManifestFileEntry[];
 }
 
 export function dramaUpstreamRoot(): string {
   return resolve(process.env.DRAMA_SKILLS_UPSTREAM_DIR ?? join(repoRoot, "..", "drama-skills"));
 }
 
-async function git(root: string, ...args: string[]): Promise<string> {
-  const { stdout } = await execFileAsync("git", ["-C", root, ...args], { encoding: "utf8" });
-  return stdout.trim();
-}
-
-async function regularFiles(root: string): Promise<string[]> {
-  const output: string[] = [];
-  const visit = async (directory: string): Promise<void> => {
-    for (const entry of await readdir(directory, { withFileTypes: true })) {
-      const path = join(directory, entry.name);
-      if (entry.isDirectory()) await visit(path);
-      else if (entry.isFile()) output.push(path);
-    }
-  };
-  await visit(root);
-  return output.sort();
-}
-
-async function fileDigest(path: string): Promise<{ readonly sha256: string; readonly bytes: number }> {
-  const bytes = await readFile(path);
-  return { sha256: createHash("sha256").update(bytes).digest("hex"), bytes: bytes.byteLength };
-}
-
 export async function currentDramaFiles(): Promise<DramaAssetManifest["files"]> {
-  return Promise.all((await regularFiles(dramaRoot))
-    .filter((path) => basename(path) !== "manifest.json")
-    .map(async (path) => ({ path: portableRelative(dramaRoot, path), ...await fileDigest(path) })));
+  return manifestFiles(dramaRoot);
 }
 
 export async function synchronizeDramaAssets(): Promise<DramaAssetManifest> {
@@ -66,18 +47,8 @@ export async function synchronizeDramaAssets(): Promise<DramaAssetManifest> {
   await cp(sourceSkills, join(dramaRoot, "skills"), {
     recursive: true,
     dereference: false,
-    filter: (path) => {
-      const normalized = path.split(sep).join("/");
-      const bundledPath = portableRelative(sourceSkills, path);
-      return !normalized.includes("/__pycache__/")
-        && !normalized.endsWith("/__pycache__")
-        && !normalized.endsWith(".pyc")
-        && !normalized.endsWith("/.DS_Store")
-        && bundledPath !== "short-drama/scripts/dashboard_server.py"
-        // 创作台 v2 (0.8.0) view models, imported only by dashboard_server.py.
-        && bundledPath !== "short-drama/scripts/creator_views.py"
-        && !bundledPath.startsWith("short-drama/assets/dashboard/");
-    }
+    filter: (path) => isPortableSourceAsset(path)
+      && !matchesExcludedPrefix(portableRelative(sourceSkills, path), dramaPlatformGlue)
   });
   await cp(join(source, "LICENSE"), join(dramaRoot, "LICENSE.upstream"));
   const skills = (await readdir(join(dramaRoot, "skills"), { withFileTypes: true }))

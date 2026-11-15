@@ -17,7 +17,7 @@ export { createDramaSkillProvider, createNovelToGameSkillProvider, createOhStory
 export { OH_STORY_ROLE_NAMES, loadBundledRole } from "./role-provider.js";
 export { createOhStoryRoleTool, OH_STORY_ROLE_TOOL_NAME, registerOhStoryRoleTool, roleToolFilter, type OhStoryRoleSubagents } from "./role-tool.js";
 export { createOhStoryProductionTool, registerOhStoryProductionTool } from "./production-tool.js";
-export { OH_STORY_PRODUCTION_TOOL_NAME, validateProductionIntent, type ProductionIntentArgs } from "./production-intent.js";
+export { OH_STORY_PRODUCTION_TOOL_NAME, validateProductionIntent, type ProductionIntentArgs, type ValidatedProductionIntent } from "./production-intent.js";
 export { bundledReferenceGuard, createOhStoryReferenceTool, OH_STORY_REFERENCE_TOOL_NAME } from "./reference-tool.js";
 export { registerWorkspaceRoute } from "./workspace-route.js";
 export { registerOhStoryHooks } from "./native-hooks.js";

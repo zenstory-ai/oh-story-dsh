@@ -266,6 +266,10 @@ describe("official DSH file activity", () => {
     const cwd = "/books/demo";
     expect(creativeRelativePath("/books/demo/正文/第003章.md", cwd)).toBe("正文/第003章.md");
     expect(creativeRelativePath("设定/人物.json", cwd)).toBe("设定/人物.json");
+    expect(creativeRelativePath("正文/script.ts", cwd)).toBeUndefined();
+    expect(creativeRelativePath("剧集/EP001/index.html", cwd)).toBeUndefined();
+    expect(creativeRelativePath("video-recaps/ep1/work/subtitles.srt", cwd)).toBe("video-recaps/ep1/work/subtitles.srt");
+    expect(creativeRelativePath("video-recaps/ep1/work/subtitles.ass", cwd)).toBe("video-recaps/ep1/work/subtitles.ass");
     expect(creativeRelativePath("/books/demo/src/app.ts", cwd)).toBeUndefined();
     expect(creativeRelativePath("/正文/越界.md", cwd)).toBeUndefined();
     expect(creativeRelativePath("../正文/逃逸.md", cwd)).toBeUndefined();
@@ -293,7 +297,7 @@ describe("official DSH file activity", () => {
 
   it("opens a new Session on the workbench that holds the workspace's work", () => {
     expect(initialWorkbenchMode("story", [{ path: "剧集/EP001/剧本.md" }], [], [])).toBe("drama");
-    expect(initialWorkbenchMode("story", [], [{ id: "workspace:letter" }], [])).toBe("game");
+    expect(initialWorkbenchMode("story", [], [{ id: "letter" }], [])).toBe("game");
     expect(initialWorkbenchMode("story", [], [], [{}])).toBe("video");
     expect(initialWorkbenchMode("story", [{ path: "正文.md" }, { path: "剧集/EP001/剧本.md" }], [], [])).toBe("story");
     expect(initialWorkbenchMode("drama", [{ path: "正文/第001章.md" }, { path: "剧集/EP001/剧本.md" }], [], [])).toBe("drama");

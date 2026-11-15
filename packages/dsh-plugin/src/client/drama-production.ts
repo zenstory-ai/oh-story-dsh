@@ -46,7 +46,6 @@ export interface DramaAsset {
   readonly purpose?: string | undefined;
   readonly reference?: string | undefined;
   readonly prompt?: string | undefined;
-  readonly description?: string | undefined;
 }
 
 export interface DramaMotionPrompt {
@@ -175,7 +174,7 @@ export function parseStoryboard(path: string, content: string): DramaShot[] {
       start: firstField(fields, "起点", "起始"),
       end: firstField(fields, "终点", "结束"),
       references: splitReferences(firstField(fields, "图片提示词项", "参考", "关联资产")),
-      keyframePrompt: quoteUnderHeading(section.body, "冻结关键帧提示词")
+      keyframePrompt: quoteUnderHeading(section.body, "首帧提示词") ?? quoteUnderHeading(section.body, "冻结关键帧提示词")
     }];
   });
 }
@@ -214,8 +213,8 @@ export function parseVideoPrompts(path: string, content: string): DramaMotionPro
       offset: section.offset,
       shotId,
       durationSeconds: seconds(firstField(fields, "时长")),
-      startFrame: firstField(fields, "起始帧", "起点"),
-      end: firstField(fields, "终点", "结束"),
+      startFrame: firstField(fields, "起始帧", "开场画面", "起点"),
+      end: firstField(fields, "终点", "动作过程", "结束"),
       prompt: quoteUnderHeading(section.body, "可复制提示词")
     }];
   });
@@ -296,8 +295,12 @@ function validateProductionProtocol(input: {
     [`${input.episodeDirectory}/视频提示词.md`, "MOTION"]
   ] as const) {
     for (const section of levelTwoSections(input.documents[path] ?? "")) {
-      if (section.heading.toLocaleUpperCase().startsWith(prefix) && !parsedOffsets.has(`${path}:${String(section.offset)}`)) {
-        add({ severity: "error", code: "malformed_heading", path, offset: section.offset, message: `无法解析标题 “${section.heading.trim()}”，需要稳定的 ${prefix}-* ID。` });
+      const heading = section.heading.trim();
+      if (heading.toLocaleUpperCase().startsWith(prefix) && !parsedOffsets.has(`${path}:${String(section.offset)}`)) {
+        add({ severity: "error", code: "malformed_heading", path, offset: section.offset, message: `无法解析标题 “${heading}”，需要稳定的 ${prefix}-* ID。` });
+      }
+      if (prefix === "MOTION" && heading.toLocaleUpperCase().startsWith("GROUP") && !/^GROUP-[A-Z0-9-]+(?:\s*(?:[·｜|]|$))/iu.test(heading)) {
+        add({ severity: "error", code: "malformed_heading", path, offset: section.offset, message: `无法解析标题 “${heading}”，需要稳定的 GROUP-* ID。` });
       }
     }
   }
@@ -369,10 +372,10 @@ function splitReferences(value: string | undefined): string[] {
 }
 
 function inferAssetKind(value: string): DramaAssetKind {
-  if (/(人物|角色|造型|character|portrait|sheet)/iu.test(value)) return "character";
-  if (/(地点|场景|环境|scene|location|corridor|room)/iu.test(value)) return "scene";
-  if (/(道具|物件|prop|object)/iu.test(value)) return "prop";
-  if (/(状态|state|look)/iu.test(value)) return "state";
+  if (/(人物|角色|外貌|造型(?!状态)|character|portrait|sheet)/iu.test(value)) return "character";
+  if (/(地点|场景|环境|空间布局|scene|location|corridor|room|plate)/iu.test(value)) return "scene";
+  if (/(道具|物件|主体|prop|object)/iu.test(value)) return "prop";
+  if (/(造型状态|状态|state|look)/iu.test(value)) return "state";
   return "unknown";
 }
 
@@ -408,4 +411,26 @@ function sectionTarget(path: string, content: string, id: string): DramaDocument
 function creatorDocumentOrder(path: string): number {
   const name = path.split("/").at(-1);
   return ["剧本.md", "视觉设定.md", "分镜.md", "图片提示词.md", "视频提示词.md"].indexOf(name ?? "");
+}
+
+export function targetDisplayName(
+  production: DramaEpisodeProduction | undefined,
+  id: string,
+  documents?: Readonly<Record<string, string>>
+): string {
+  if (id === "BATCH-KEYFRAMES") return "批量关键帧";
+  if (id === "BATCH-VIDEOS") return "批量镜头视频";
+  if (production === undefined) return id;
+  if (id === production.episodeDirectory) return "本集成片";
+  const matched = production.shots.find((item) => item.id === id)?.title
+    ?? production.assets.find((item) => item.id === id)?.title
+    ?? production.visualAssets.find((item) => item.id === id)?.title
+    ?? production.motions.find((item) => item.id === id)?.title;
+  if (matched !== undefined) return matched;
+  const screenplay = documents?.[`${production.episodeDirectory}/剧本.md`];
+  if (screenplay !== undefined) {
+    const heading = new RegExp(`^##\\s+${id.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}(?:\\s*[·｜|]?\\s*(.*))?$`, "imu").exec(screenplay)?.[1]?.trim();
+    if (heading) return heading;
+  }
+  return id;
 }

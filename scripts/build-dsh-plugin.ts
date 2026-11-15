@@ -4,44 +4,24 @@ import { relative, resolve } from "node:path";
 import { build, type Plugin } from "esbuild";
 
 import { isLocalArtifactPath } from "../packages/dsh-plugin/build-path-policy.js";
+import { matchesExcludedPrefix } from "./asset-sync-utils.js";
+import { dramaPlatformGlue, dramaRoot } from "./drama-assets.js";
+import { ohStoryPlatformGlue, ohStoryRoot } from "./knowledge-assets.js";
+import { novelToGameRoot } from "./novel-to-game-assets.js";
+import { videoRecapPlatformGlue, videoRecapRoot } from "./video-recap-assets.js";
 
 const root = resolve(import.meta.dirname, "..");
 const packageRoot = resolve(root, "packages/dsh-plugin");
 const outputRoot = resolve(packageRoot, "lib");
-const ohStoryRoot = resolve(root, "packages/knowledge/oh-story");
-const dramaRoot = resolve(root, "packages/knowledge/drama");
-const novelToGameRoot = resolve(root, "packages/knowledge/novel-to-game");
-const videoRecapRoot = resolve(root, "packages/knowledge/video-recap");
-const platformGlue = [
-  "skills/story/assets/",
-  "skills/story/scripts/dashboard-server.mjs",
-  "skills/browser-cdp/scripts/setup-cdp-chrome.js",
+const ohStoryBundleExcluded = [
   "skills/story-long-scan/scripts/",
   "skills/story-short-scan/scripts/",
-  "skills/story-setup/references/antigravity/",
-  "skills/story-setup/references/codex/",
-  "skills/story-setup/references/generic/",
-  "skills/story-setup/references/openclaw/",
-  "skills/story-setup/references/opencode/",
-  "skills/story-setup/references/reasonix/",
-  "skills/story-setup/references/templates/",
-  "skills/story-setup/references/zcode/",
-  "skills/story-setup/references/deploy-antigravity.md",
-  "skills/story-setup/references/deploy-claude-code.md",
-  "skills/story-setup/references/deploy-codex.md",
-  "skills/story-setup/references/deploy-generic.md",
-  "skills/story-setup/references/deploy-openclaw.md",
-  "skills/story-setup/references/deploy-opencode.md",
-  "skills/story-setup/references/deploy-reasonix.md",
-  "skills/story-setup/references/deploy-zcode.md",
-  "skills/story-setup/scripts/deploy-antigravity-skills.py",
-  "skills/story-setup/scripts/generate-antigravity-agents.mjs",
-  "skills/story-setup/scripts/merge-antigravity-hooks.py",
-  "skills/story-setup/scripts/merge-claude-settings.py",
-  "skills/story-setup/scripts/merge-codex-hooks.py",
-  "skills/story-setup/scripts/copy-path-safety.py",
-  "skills/story-setup/UPGRADING.md"
-] as const;
+  ...ohStoryPlatformGlue
+    .filter((entry) => entry !== "story-long-analyze.zip")
+    .map((entry) => `skills/${entry}`)
+];
+const dramaBundleExcluded = dramaPlatformGlue.map((entry) => `skills/${entry}`);
+const videoRecapBundleExcluded = videoRecapPlatformGlue.map((entry) => `skills/${entry}`);
 
 const inlineCss: Plugin = {
   name: "inline-css",
@@ -103,13 +83,17 @@ await cp(ohStoryRoot, resolve(outputRoot, "oh-story"), {
   filter: (source) => {
     const bundledPath = relative(ohStoryRoot, source).replaceAll("\\", "/");
     return !isLocalArtifactPath(ohStoryRoot, source)
-      && !platformGlue.some((entry) => bundledPath === entry.replace(/\/$/u, "") || bundledPath.startsWith(entry));
+      && !matchesExcludedPrefix(bundledPath, ohStoryBundleExcluded);
   }
 });
 
 await cp(dramaRoot, resolve(outputRoot, "drama"), {
   recursive: true,
-  filter: (source) => !isLocalArtifactPath(dramaRoot, source)
+  filter: (source) => {
+    const bundledPath = relative(dramaRoot, source).replaceAll("\\", "/");
+    return !isLocalArtifactPath(dramaRoot, source)
+      && !matchesExcludedPrefix(bundledPath, dramaBundleExcluded);
+  }
 });
 
 await cp(novelToGameRoot, resolve(outputRoot, "novel-to-game"), {
@@ -119,7 +103,11 @@ await cp(novelToGameRoot, resolve(outputRoot, "novel-to-game"), {
 
 await cp(videoRecapRoot, resolve(outputRoot, "video-recap"), {
   recursive: true,
-  filter: (source) => !isLocalArtifactPath(videoRecapRoot, source)
+  filter: (source) => {
+    const bundledPath = relative(videoRecapRoot, source).replaceAll("\\", "/");
+    return !isLocalArtifactPath(videoRecapRoot, source)
+      && !matchesExcludedPrefix(bundledPath, videoRecapBundleExcluded);
+  }
 });
 
 // The plugin's own package.json declares "type": "module", which would make Node load every
@@ -140,20 +128,9 @@ if (!outlineCheck.stdout.includes("story-long-write.outline-contract")) {
 }
 
 for (const excluded of [
-  "oh-story/skills/browser-cdp/scripts/setup-cdp-chrome.js",
-  "oh-story/skills/story-long-scan/scripts",
-  "oh-story/skills/story-short-scan/scripts",
-  "oh-story/skills/story-setup/scripts/copy-path-safety.py",
-  "oh-story/skills/story-setup/scripts/deploy-antigravity-skills.py",
-  "oh-story/skills/story-setup/references/antigravity",
-  "oh-story/skills/story-setup/references/deploy-claude-code.md",
-  "video-recap/skills/video-recap/scripts/dashboard_server.py",
-  "video-recap/skills/video-recap/scripts/dashboard_data.py",
-  "video-recap/skills/video-recap/scripts/dashboard_io.py",
-  "video-recap/skills/video-recap/scripts/dashboard_runs.py",
-  "video-recap/skills/video-recap/scripts/dashboard_templates.py",
-  "video-recap/skills/video-recap/scripts/dashboard",
-  "video-recap/skills/video-recap/assets/dashboard"
+  ...ohStoryBundleExcluded.map((entry) => `oh-story/${entry.replace(/\/$/u, "")}`),
+  ...dramaPlatformGlue.map((entry) => `drama/skills/${entry.replace(/\/$/u, "")}`),
+  ...videoRecapPlatformGlue.map((entry) => `video-recap/skills/${entry.replace(/\/$/u, "")}`)
 ]) {
   const present = await access(resolve(outputRoot, excluded)).then(() => true, () => false);
   if (present) throw new Error(`Release bundle retained excluded platform/scraper code: ${excluded}`);

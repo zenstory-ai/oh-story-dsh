@@ -37,12 +37,12 @@
 
 | 工作台 | 上游能力（固定版本，随插件打包） | 主要入口 |
 | --- | --- | --- |
-| 小说 | [Oh Story 0.10.3](https://github.com/zenstory-ai/oh-story-claudecode/releases/tag/v0.10.3) · 14 Skills · 7 Roles | `/story`、`/story-long-write`、`/story-review`、`/story-publish` |
-| 短剧 | [Drama Skills 0.11.2](https://github.com/zenstory-ai/drama-skills/releases/tag/v0.11.2) · 12 Skills | `/short-drama`、`/short-drama-write`、`/short-drama-storyboard`、`/short-drama-edit` |
-| 游戏 | [NovelToGame 0.8.0](https://github.com/zenstory-ai/novel-to-game/releases/tag/v0.8.0) · 5 Skills | `/novel-to-game quick`、`/game-build`、`/game-qa` |
-| 视频 | [video-recap-skills 0.7.0](https://github.com/zenstory-ai/video-recap-skills/releases/tag/v0.7.0) · 2 Skills | `/video-recap`、`/video-reference` |
+| 小说 | [Oh Story 0.10.5](https://github.com/zenstory-ai/oh-story-claudecode/releases/tag/v0.10.5) · 14 Skills · 7 Roles | `/story`、`/story-long-write`、`/story-review`、`/story-publish` |
+| 短剧 | [Drama Skills 0.12.0](https://github.com/zenstory-ai/drama-skills/releases/tag/v0.12.0) · 12 Skills | `/short-drama`、`/short-drama-write`、`/short-drama-storyboard`、`/short-drama-edit` |
+| 游戏 | [NovelToGame 0.9.0](https://github.com/zenstory-ai/novel-to-game/releases/tag/v0.9.0) · 5 Skills | `/novel-to-game quick`、`/game-build`、`/game-qa` |
+| 视频 | [video-recap-skills 0.7.1](https://github.com/zenstory-ai/video-recap-skills/releases/tag/v0.7.1) · 2 Skills | `/video-recap`、`/video-reference` |
 
-> 最新版本 **v0.1.25**（2026-11-12）。默认安装固定使用 DeepSeek Harness `0.2.2-rc.1`（npm `latest`，需要 Node.js 24.9+）。也支持 `0.2.1-rc.5`、`0.2.0-rc.2` 和 `0.2.2-rc.2`。变更见 [CHANGELOG.md](CHANGELOG.md) 与 [Releases](https://github.com/zenstory-ai/oh-story-dsh/releases)；升级步骤见常见问题[「升级到新版本后要做什么」](#升级到新版本后要做什么)。
+> 最新版本 **v0.1.26**（2026-11-15）。默认安装固定使用 DeepSeek Harness `0.2.2-rc.1`（npm `latest`，需要 Node.js 24.9+）。也支持 `0.2.1-rc.5`、`0.2.0-rc.2` 和 `0.2.2-rc.3`。变更见 [CHANGELOG.md](CHANGELOG.md) 与 [Releases](https://github.com/zenstory-ai/oh-story-dsh/releases)；升级步骤见常见问题[「升级到新版本后要做什么」](#升级到新版本后要做什么)。
 
 ## 四个工作台
 
@@ -89,11 +89,11 @@
 需要 Node.js 24+。安装命令会临时提供 pnpm，只装了 Node.js 的机器也能执行：
 
 ```bash
-npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.2-rc.1 dsh plugin --profile web add @oh-story/dsh@0.1.25 &&
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.2-rc.1 dsh plugin --profile web add @oh-story/dsh@0.1.26 &&
 npx -y @deepseek-ai/dsh@0.2.2-rc.1 web
 ```
 
-保持终端运行，浏览器默认自动打开；没有自动打开就复制终端打印的完整 `http://127.0.0.1:3080/?token=...` 链接访问，首次认证需要链接里的 token。关闭终端会停止服务。安装与启动请使用同一个 dsh 版本。本页默认命令固定使用 npm `latest` 的 `0.2.2-rc.1`（需要 Node.js 24.9+）。本插件接受 `>=0.2.0-rc.2 <0.2.1-0`、`>=0.2.1-alpha.1 <0.2.2-0` 与 `>=0.2.2-alpha.2 <0.2.3-0`。仍在用 `0.2.1-rc.5` 或 `0.2.0-rc.2`，或想试 npm `next` 的 `0.2.2-rc.2` 时，安装与启动两条命令都要换成同一个版本；不要把两个宿主版本混用。DSH 会在安装与加载时检查版本，不匹配时给出明确提示（`dsh plugin allow-version` 可自担风险放行）。
+保持终端运行，浏览器默认自动打开；没有自动打开就复制终端打印的完整 `http://127.0.0.1:3080/?token=...` 链接访问，首次认证需要链接里的 token。关闭终端会停止服务。安装与启动请使用同一个 dsh 版本。本页默认命令固定使用 npm `latest` 的 `0.2.2-rc.1`（需要 Node.js 24.9+）。本插件接受 `>=0.2.0-rc.2 <0.2.1-0`、`>=0.2.1-alpha.1 <0.2.2-0` 与 `>=0.2.2-alpha.2 <0.2.3-0`。仍在用 `0.2.1-rc.5` 或 `0.2.0-rc.2`，或想试 npm `next` 的 `0.2.2-rc.3` 时，安装与启动两条命令都要换成同一个版本；不要把两个宿主版本混用。DSH 会在安装与加载时检查版本，不匹配时给出明确提示（`dsh plugin allow-version` 可自担风险放行）。
 
 开始 AI 创作前，在 DSH 的「设置 → 模型」中添加 Provider 并填入 API Key，或在启动前设置环境变量 `DEEPSEEK_API_KEY`。只查看已有作品可在首次引导中选择「稍后配置 / Configure later」。
 
@@ -103,7 +103,7 @@ npx -y @deepseek-ai/dsh@0.2.2-rc.1 web
 GitHub Release 中的预构建包经过同一套测试：
 
 ```bash
-npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.2-rc.1 dsh plugin --profile web add https://github.com/zenstory-ai/oh-story-dsh/releases/download/v0.1.25/oh-story-dsh-0.1.25.tgz &&
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.2-rc.1 dsh plugin --profile web add https://github.com/zenstory-ai/oh-story-dsh/releases/download/v0.1.26/oh-story-dsh-0.1.26.tgz &&
 npx -y @deepseek-ai/dsh@0.2.2-rc.1 web
 ```
 
@@ -124,8 +124,8 @@ DeepSeek 负责写剧本、分镜和提示词；生图、生视频、配音、�
 | 能力 | 供应商 | 必需环境变量 | 可选 |
 | --- | --- | --- | --- |
 | 图片 | GPT Image 2 | `OPENAI_API_KEY` | `OPENAI_BASE_URL` |
-| 视频 | Seedance（火山方舟） | `ARK_API_KEY`、`SEEDANCE_MODEL` | `SEEDANCE_BASE_URL`、`SEEDANCE_ALLOWED_RATIOS`、`SEEDANCE_MIN_DURATION`/`SEEDANCE_MAX_DURATION` |
-| 视频 | MiniMax H3 | `MINIMAX_API_KEY`、`MINIMAX_VIDEO_MODEL`、`MINIMAX_VIDEO_RESOLUTIONS`、`MINIMAX_VIDEO_MIN_DURATION`/`MINIMAX_VIDEO_MAX_DURATION` | `MINIMAX_VIDEO_BASE_URL`、`MINIMAX_VIDEO_RATIOS` |
+| 视频 | Seedance（火山方舟） | `ARK_API_KEY`、`SEEDANCE_MODEL` | `SEEDANCE_BASE_URL`、`SEEDANCE_POLL_INTERVAL`、`SEEDANCE_TIMEOUT_SECONDS`、`SEEDANCE_ALLOWED_RATIOS`、`SEEDANCE_MIN_DURATION`/`SEEDANCE_MAX_DURATION` |
+| 视频 | MiniMax H3 | `MINIMAX_API_KEY`、`MINIMAX_VIDEO_MODEL` | `MINIMAX_VIDEO_BASE_URL`、`MINIMAX_VIDEO_POLL_INTERVAL`、`MINIMAX_VIDEO_TIMEOUT_SECONDS`、`MINIMAX_VIDEO_ALLOWED_RESOLUTIONS`（或 `MINIMAX_VIDEO_RESOLUTIONS`）、`MINIMAX_VIDEO_ALLOWED_RATIOS`（或 `MINIMAX_VIDEO_RATIOS`）、`MINIMAX_VIDEO_MIN_DURATION`/`MINIMAX_VIDEO_MAX_DURATION` |
 | 语音 | MiniMax Speech | `MINIMAX_API_KEY` | `MINIMAX_BASE_URL` |
 | 音乐 | MiniMax Music | `MINIMAX_API_KEY` | `MINIMAX_BASE_URL` |
 
@@ -135,9 +135,9 @@ export ARK_API_KEY=... SEEDANCE_MODEL=...   # 视频，模型/Endpoint ID 以账
 npx -y @deepseek-ai/dsh@0.2.2-rc.1 web
 ```
 
-只配置用得到的那几个即可：没有视频 Key 仍然可以写分镜、生成关键帧图片。「生产」视图顶部会显示每个供应商是否已配置、缺哪个变量。插件启动时会把这五个内置 adapter 登记到一份不含凭据的配置文件（默认在系统临时目录下仅当前用户可读写的 `oh-story-dsh-<uid>/` 里，「生成环境」条会显示完整路径），Agent 运行 `production_tool.py run` 时直接引用它；自己写 adapter 或改超时，就把文件路径写进 `OH_STORY_DRAMA_ADAPTER_CONFIG`。每个供应商的参数、分辨率与时长约束见随包的 `short-drama-produce/references/providers/`。小说封面使用当前 Preset 里可见的图片生成工具。
+只配置用得到的那几个即可：没有视频 Key 仍然可以写分镜、生成关键帧图片。「生产」视图顶部会显示每个供应商是否已配置、缺哪个变量。插件启动时会把这五个内置 adapter 登记到一份不含凭据的配置文件（默认在系统临时目录下仅当前用户可读写的 `oh-story-dsh-<uid>/` 里，「生成环境」条会显示完整路径），Agent 运行 `production_tool.py run` 时直接引用它；自己写 adapter 或改超时，就把文件路径写进 `OH_STORY_DRAMA_ADAPTER_CONFIG`。每个供应商的参数、分辨率与时长约束见随包的 `short-drama-produce/references/builtin-providers.md`。小说封面使用当前 Preset 里可见的图片生成工具。
 
-声音参考需要额外显式配置：自动生成的通用 profile 不声明 `reference_audio`，因为环境变量里的具体模型未必支持声音输入；只有确认所选模型支持后，才在项目外的自定义 adapter 配置里为该 profile 声明 `reference_roles`（包含 `reference_audio`），并用 `OH_STORY_DRAMA_ADAPTER_CONFIG` 指向它。未声明时会在付费提交前报错拦截，不会悄无声息地丢掉参考音频。
+角色参考音频按接口类型校验：内置的 `seedance` 与 `minimax-h3` profile 默认放行 `reference_audio`（仍须确认环境变量中选定的具体模型支持声音输入）；自定义外部 adapter 则须在项目外的配置文件里声明 `reference_roles`（包含 `reference_audio`），并用 `OH_STORY_DRAMA_ADAPTER_CONFIG` 指向它。不支持或未声明的接口会在付费提交前报错拦截，不会悄无声息地丢掉参考音频。
 
 </details>
 
@@ -147,7 +147,7 @@ npx -y @deepseek-ai/dsh@0.2.2-rc.1 web
 插件装进哪个 profile，那个 profile 的每个 Session 就都会加载创作 Skills。想让原版 `web` 保持干净，就把插件装进独立 profile：
 
 ```bash
-npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.2-rc.1 dsh plugin --profile story add @oh-story/dsh@0.1.25
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.2-rc.1 dsh plugin --profile story add @oh-story/dsh@0.1.26
 ```
 
 新 profile 默认没有界面。编辑 `~/.dsh/profiles/story/package.json`，把 `dsh.profile.bundles` 改成：
@@ -193,7 +193,7 @@ npx -y @deepseek-ai/dsh@0.2.2-rc.1 --profile story --port 3081  # 创作工作�
 
 ## 看看它的输出
 
-节选自随包示例工程（同步自 [oh-story-claudecode 的 demo](https://github.com/zenstory-ai/oh-story-claudecode/tree/abe96630d115afbd528f2329e2d8d604d5d5673c/demo/%E9%95%BF%E7%AF%87) 与 [drama-skills 的公开样例](https://github.com/zenstory-ai/drama-skills/tree/3d813c30871b4db5f2387d83bdc3a49db8ce7b2b/examples/creator-first/EP001)），省略处以「……」标出。
+节选自随包示例工程（同步自 [oh-story-claudecode 的 demo](https://github.com/zenstory-ai/oh-story-claudecode/tree/abe96630d115afbd528f2329e2d8d604d5d5673c/demo/%E9%95%BF%E7%AF%87) 与 [drama-skills 的公开样例](https://github.com/zenstory-ai/drama-skills/tree/047ae8625021f038ee7581d6222064f0c169ce59/examples/creator-first/EP001)），省略处以「……」标出。
 
 ### 用追踪文件定位续写
 
@@ -219,10 +219,10 @@ Oh Story 阻止写入第 21 章：未找到对应的 大纲/细纲_第021章*.md
 
 ### 一个镜头在短剧五份文档里各管一层
 
-`视觉设定.md` 给跨镜不变的造型上锁，锁面能原样贴进提示词；`分镜.md` 只写起点、唯一动作、终点和依据；`视频提示词.md` 把两点之间的动作写成模型能执行的英文：
+`视觉设定.md` 给跨镜不变的造型上锁，锁定词能原样贴进提示词；`分镜.md` 只写起点、动作、终点和出场设定；`视频提示词.md` 把两点之间的动作写成模型能执行的英文：
 
 ```markdown
-- 连续性锁：LOCK-JIANGCHEN-DRESS《江晨松枝绿常服》（镜头：SHOT-EP001-002、SHOT-EP001-003、SHOT-EP001-007……；图片提示词项：IMG-JIANGCHEN-SHEET）· 锁面：pine-green lapel service jacket
+- 连戏锁：LOCK-JIANGCHEN-DRESS《江晨松枝绿常服》（镜头：SHOT-EP001-002、SHOT-EP001-003、SHOT-EP001-007……；图片提示词项：IMG-JIANGCHEN-SHEET）· 锁定词：pine-green lapel service jacket
 ```
 
 ```markdown
@@ -230,9 +230,9 @@ Oh Story 阻止写入第 21 章：未找到对应的 大纲/细纲_第021章*.md
 - 来源：EP001-SC001
 - 时长：4s
 - 起点：周薄森面对笔记本坐得笔直，右手搭在茶杯旁；江晨双手掌心朝下撑在玻璃桌沿，眼神涣散。
-- 唯一动作：哄笑声滚过来，周薄森下颌收紧、腰背又挺直一分；江晨眨了一下眼，眼神猛地聚拢。
+- 动作：哄笑声滚过来，周薄森下颌收紧、腰背又挺直一分；江晨眨了一下眼，眼神猛地聚拢。
 - 终点：画面停在周薄森绷紧的脸与屏幕冷光；江晨仍撑着桌沿，留在画右边缘。
-- 视觉依据：《视觉设定.md》·人物「江晨」……；道具「玻璃泡茶杯」（控制：双层玻璃杯身、沉底茶叶）。
+- 出场设定：《视觉设定.md》·人物「江晨」……；道具「玻璃泡茶杯」（控制：双层玻璃杯身、沉底茶叶）。
 ```
 
 ```markdown
@@ -248,8 +248,8 @@ Oh Story 阻止写入第 21 章：未找到对应的 大纲/细纲_第021章*.md
 把这集样例故意改坏三处（来源指向不存在的场景、视频提示词指向不存在的镜头、图片提示词 ID 重复），「生产」视图报的是原因和行号：
 
 ```text
-SHOT-EP001-002 的来源 EP001-SC009 在剧本中不存在。            分镜.md:25
-MOTION-EP001-003 指向不存在的 SHOT-EP001-030。                 视频提示词.md:33
+SHOT-EP001-002 的来源 EP001-SC009 在剧本中不存在。            分镜.md:36
+MOTION-EP001-003 指向不存在的 SHOT-EP001-030。                 视频提示词.md:31
 IMG-JIANGCHEN-SHEET 在当前集内重复，后出现的条目会遮蔽前一条。   图片提示词.md:3
 ```
 
@@ -300,7 +300,7 @@ IMG-JIANGCHEN-SHEET 在当前集内重复，后出现的条目会遮蔽前一条
 
 ### 装好后工作台一片空白，面板和「创作工作台」按钮都不出现？
 
-先核对插件与 DSH 版本，再按[安装](#安装)使用同一条受支持的宿主线：默认 `0.2.2-rc.1`，或更早的 `0.2.1-rc.5`、`0.2.0-rc.2`，或试用的 `0.2.2-rc.2`。安装和启动两条命令都要一致。检查同一 profile 中是否已加载插件；仍然空白时，附版本号和终端错误开 Issue。历史 Queue 接口故障见 [#50](https://github.com/zenstory-ai/oh-story-dsh/issues/50)。
+先核对插件与 DSH 版本，再按[安装](#安装)使用同一条受支持的宿主线：默认 `0.2.2-rc.1`，或更早的 `0.2.1-rc.5`、`0.2.0-rc.2`，或试用的 `0.2.2-rc.3`。安装和启动两条命令都要一致。检查同一 profile 中是否已加载插件；仍然空白时，附版本号和终端错误开 Issue。历史 Queue 接口故障见 [#50](https://github.com/zenstory-ai/oh-story-dsh/issues/50)。
 
 ### 我另外给 Codex 或 OpenCode 装过 Oh Story，DSH 里用的是哪一份？
 
@@ -326,6 +326,8 @@ DSH 的 `plugin add` 内部需要 pnpm，单独运行 `npx @deepseek-ai/dsh ... 
 
 重新执行安装命令，把 `@oh-story/dsh@` 后的版本号换成目标版本，再重启 DSH。安装与启动使用同一个宿主版本；当前支持范围见[安装](#安装)。Skills 与 Roles 随插件打包，无需在项目里重新部署。
 
+0.1.26 同步 Drama Skills 0.12.0、NovelToGame 0.9.0、Oh Story 0.10.5 与 video-recap-skills 0.7.1，DSH 试用线更新到 `0.2.2-rc.3`（默认宿主仍为 `0.2.2-rc.1`）。0.12.0 之前的短剧项目若要续写下游文档或运行 `creator_markdown_check.py`，先把现有五份 Markdown 里的旧字段改成现行直白名称（见下方「短剧项目」）；只浏览已有项目无需改动，短剧工作台仍兼容《分镜.md》的 `### 冻结关键帧提示词`。`MiniMax H3` 现在只需配置 `MINIMAX_API_KEY` 与 `MINIMAX_VIDEO_MODEL`，内置 `seedance` 与 `minimax-h3` 默认放行角色参考音频。小说、游戏和视频项目无需迁移，重装后新开会话即可。
+
 0.1.25 跟进两个破坏性上游版本，并把默认宿主改为 DSH `0.2.2-rc.1`（需要 Node.js 24.9+）。video-recap 0.7.0 把六个视频生产技能合成一个 `/video-recap`，删掉 dub 与 MiMo 解说评审，成片默认必须通过最终质检，旧 `work/` 的续跑命令要去掉已删除的参数（见下方「视频项目」）。NovelToGame 0.8.0 把概念、世界设计、美术方向三个技能合成 `game-design`（7 → 5 个技能，文稿位置不变），`game-qa` 改为两轮新玩家盲玩，游戏里给玩家看的文字增加一道精修。插件同时适配了 DSH `0.2.2-rc.2` 的子代理接口，写作 Role 在新宿主上照常可用。书稿、短剧文档和游戏项目都不用迁移，重装后新开会话即可。
 
 0.1.24 同步 Oh Story 0.10.3、Drama Skills 0.11.2 与 NovelToGame 0.7.1。更新后新开会话即可加载随包技能。若要还原已登记的短剧对标，先补记素材允许用途和外部模型上传许可。
@@ -348,8 +350,8 @@ DSH 的 `plugin add` 内部需要 pnpm，单独运行 `npx @deepseek-ai/dsh ... 
 
 - **小说作者记忆**：Oh Story 0.8.0 之前留在工作区的「本书：」条目，需要逐书执行 `author_memory_commit.py migrate --workspace {工作区} --book-root {书目录}`；单书布局的两个参数均为工作区本身，也可让 Agent「整理作者记忆」。已经迁移的记忆无需重复操作。写手容纳不下的习惯会在汇报里点名，可再整理合并相近条目。
 - **小说细纲**：开始正文前补全本章细纲；只有标题、不计 `#` 与空白不足 30 字的细纲会被拦下。
-- **短剧项目**：v0.5 结构化项目不能原地迁为 creator-first 项目。新建项目根，只保留当前需要的创作文档。每镜保留真实场景来源和视觉依据，`REF-*` 声明用途；`剪辑单.md` 在第一个 `## CUT-` 之前列明未采用的 `MOTION-*`。画面文字需要 Remotion；从 Drama Skills 0.8 之前升级时，在 `~/.cache/short-drama-edit/remotion` 重新 `npm install`。想关闭默认同场景接镜匹配，在交付规格写 `- 接镜匹配：无`。
-- **角色参考音频**：绑定具体角色，并声明和校验 `reference_roles`、人物身份与禁控条件；音频不进入图片选择器。
+- **短剧项目**：v0.5 结构化项目不能原地迁为 creator-first 项目。新建项目根，只保留当前需要的创作文档。每镜保留真实场景来源和出场设定，`REF-*` 声明用途；0.12.0 之前的创作者文档续写或跑检查前先把字段名改成现行写法（连戏锁/锁定词、外观特征、提示词名称、首帧提示词、动作、出场设定、开场画面/动作过程；工作台仍兼容已有《分镜.md》的 `### 冻结关键帧提示词`）；`剪辑单.md` 在第一个 `## CUT-` 之前列明未采用的 `MOTION-*` 或 `GROUP-*`。画面文字需要 Remotion；从 Drama Skills 0.8 之前升级时，在 `~/.cache/short-drama-edit/remotion` 重新 `npm install`。想关闭默认同场景接镜匹配，在交付规格写 `- 接镜匹配：无`。
+- **角色参考音频**：绑定具体角色，校验人物身份与禁控条件（内置 `seedance` 与 `minimax-h3` 默认放行 `reference_audio`，自定义外部接口须显式声明 `reference_roles`）；音频不进入图片选择器。
 - **视频项目**：video-recap 0.7.0 把六个生产技能合并成一个 `video-recap`，删除了 dub（英译中原声复刻）、「声音已定稿只改画面」路线和 MiMo 解说评审；旧版 `work/` 打印的续跑命令若带 `--edit-mode dub`、`--review-narration` 等已删除参数会直接报错，去掉这些参数再跑；不要再设置 `EDIT_MODE`、`TARGET_DURATION` 环境变量。仍需要 dub 的项目请单独使用 video-recap-skills 0.6.2。成片默认要通过最终质检才算完成，旧 PASS 不能当成新结果。缺少 libass 时交付外部 SRT。
 
 逐版变化与既有验证证据见 [CHANGELOG.md](CHANGELOG.md) 和[验证说明](docs/VALIDATION.md)。

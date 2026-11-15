@@ -12,7 +12,7 @@ import {
   OH_STORY_REFERENCE_TOOL_NAME
 } from "./reference-tool.js";
 import { markOhStoryRoleSession, observeOhStoryRoleDescriptor, ohStoryRoleLabel, ohStoryRoleOfSession } from "./role-identity.js";
-import { OH_STORY_ROLE_NAMES, loadBundledRole, type OhStoryRoleName } from "./role-provider.js";
+import { OH_STORY_ROLE_NAMES, loadBundledRolePersonas, type OhStoryRoleName } from "./role-provider.js";
 
 export const OH_STORY_ROLE_TOOL_NAME = "oh_story_role";
 interface RoleStartRequest {
@@ -133,11 +133,11 @@ function resultText(output: readonly ContentBlock[]): string {
   return output.map((block) => block.type === "text" ? block.text : JSON.stringify(block)).join("\n");
 }
 
-export async function createOhStoryRoleTool(subagents?: OhStoryRoleSubagents): Promise<ToolDefinition> {
-  const personas = new Map<OhStoryRoleName, string>();
-  await Promise.all(OH_STORY_ROLE_NAMES.map(async (role) => {
-    personas.set(role, await loadBundledRole(role, undefined, "native-tools"));
-  }));
+export async function createOhStoryRoleTool(
+  subagents?: OhStoryRoleSubagents,
+  loadedPersonas?: ReadonlyMap<OhStoryRoleName, string>
+): Promise<ToolDefinition> {
+  const personas = loadedPersonas ?? await loadBundledRolePersonas();
   return defineTool({
     name: OH_STORY_ROLE_TOOL_NAME,
     description: "Run one focused Oh Story specialist as a child of the current DSH Agent. The child inherits DSH model, workspace, permissions, lifecycle, and UI.",
@@ -205,17 +205,16 @@ export async function createOhStoryRoleTool(subagents?: OhStoryRoleSubagents): P
 }
 
 export async function registerOhStoryRoleTool(context: Context): Promise<void> {
-  const [definition, referenceDefinition] = await Promise.all([
-    createOhStoryRoleTool(context.subagents),
+  const [personas, referenceDefinition] = await Promise.all([
+    loadBundledRolePersonas(),
     createOhStoryReferenceTool()
   ]);
+  const definition = await createOhStoryRoleTool(context.subagents, personas);
   context.tools.register(referenceDefinition);
   context.tools.guard(bundledReferenceGuard(referenceDefinition, context.tools));
   if ("startActivation" in context.subagents) {
     // Managed children remain in DSH's durable catalog. Reapply the same Role on
     // a resumed child, whose descriptor already exists instead of being appended.
-    const personas = new Map(await Promise.all(OH_STORY_ROLE_NAMES.map(async (role) =>
-      [role, await loadBundledRole(role, undefined, "native-tools")] as const)));
     context.on("agent/created", ({ agent }) => {
       const events = agent.session.ownEvents();
       for (const event of events) observeOhStoryRoleDescriptor(agent.session, event);

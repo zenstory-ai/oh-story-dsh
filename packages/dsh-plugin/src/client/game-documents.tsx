@@ -1,15 +1,7 @@
 import type { RefObject } from "react";
+import { KNOWN_CREATIVE_DOCUMENTS } from "./game-canvas-model.js";
 import { MarkdownPreview } from "./markdown-preview.js";
 import type { GameDocumentBuffer, GameProject, GameWorkspaceFile } from "./game-workspace-types.js";
-
-const DOCUMENT_NAMES: Readonly<Record<string, string>> = {
-  "PRODUCT_BRIEF.md": "我们想做的游戏",
-  "analysis/SOURCE_BIBLE.md": "原著与故事依据",
-  "concepts/CONCEPT.md": "玩家为什么想继续",
-  "design/GAME_DESIGN.md": "选择与玩法",
-  "design/ART_DIRECTION.md": "画面与氛围",
-  "build/BUILD_BRIEF.md": "这一版想做什么"
-};
 
 export interface GameDocumentEditor {
   readonly selected: string | undefined;
@@ -34,8 +26,8 @@ export function GameDocuments({ project, files, editor, onChat }: {
   readonly onChat: (prompt: string) => void;
 }) {
   const available = files.filter((file) => file.kind === "text" && file.path.startsWith(`${project.root}/`));
-  const creative = Object.entries(DOCUMENT_NAMES).flatMap(([relative, title]) => {
-    const file = available.find((item) => item.path === `${project.root}/${relative}`);
+  const creative = KNOWN_CREATIVE_DOCUMENTS.flatMap(({ relativePath, title }) => {
+    const file = available.find((item) => item.path === `${project.root}/${relativePath}`);
     return file === undefined ? [] : [{ ...file, title }];
   });
   const other = available.filter((file) => !creative.some((item) => item.path === file.path));

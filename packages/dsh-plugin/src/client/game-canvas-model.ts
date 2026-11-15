@@ -30,7 +30,7 @@ export interface GameCanvasEdge {
   readonly label: string;
 }
 
-interface KnownCreativeDocument {
+export interface KnownCreativeDocument {
   readonly relativePath: string;
   readonly title: string;
   readonly kind: GameCreativeDocumentKind;
@@ -43,7 +43,7 @@ const DOCUMENT_HEIGHT = 188;
 const PREVIEW_WIDTH = 316;
 const PREVIEW_HEIGHT = 208;
 
-const KNOWN_CREATIVE_DOCUMENTS: readonly KnownCreativeDocument[] = [
+export const KNOWN_CREATIVE_DOCUMENTS: readonly KnownCreativeDocument[] = [
   { relativePath: "PRODUCT_BRIEF.md", title: "我们想做的游戏", kind: "brief", eyebrow: "创作方向", initial: { x: 80, y: 96 } },
   { relativePath: "analysis/SOURCE_BIBLE.md", title: "原著与故事依据", kind: "source", eyebrow: "故事来源", initial: { x: 80, y: 342 } },
   { relativePath: "concepts/CONCEPT.md", title: "玩家为什么想继续", kind: "concept", eyebrow: "核心构想", initial: { x: 80, y: 588 } },

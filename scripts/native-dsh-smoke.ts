@@ -1,24 +1,29 @@
 import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { cp, mkdir, mkdtemp, readFile, readdir, realpath, rm, writeFile } from "node:fs/promises";
 import { createServer as createHttpServer, request as httpRequest, type Server as HttpServer } from "node:http";
-import { createServer as createNetServer } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium, type Locator, type Page } from "@playwright/test";
 
+import {
+  authorizeDsh,
+  dshFetch,
+  freePort,
+  isolateFirstUseWorkspace,
+  rpc,
+  sessionEvents,
+  stopDshProcess,
+  type HistoryEvent
+} from "./native-dsh-helpers.js";
+
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const dshVersion = process.env.DSH_TEST_VERSION ?? process.argv[2] ?? "0.2.2-rc.1";
-/** Exact WebSocket route carrying every Typert Remote stream. */
-const REMOTE_STREAM_MUX_PATH = "/api/remote.mux";
 /** ChatFlow may wrap rows in its slot; nested process rows do not belong to the main tail. */
 const CHAT_FLOW_ROW_SELECTOR = ":is([data-chat-flow-key], [data-chat-running]):not([data-step-process-content] *)";
 const demoFramesDirectory = process.env.OH_STORY_DEMO_FRAMES_DIR;
 const gameEvidenceDirectory = process.env.OH_STORY_GAME_E2E_DIR;
 const dramaEvidenceDirectory = process.env.OH_STORY_DRAMA_E2E_DIR;
-const videoEvidenceDirectory = join(repositoryRoot, ".omx", "ui-review", "video-product-evidence");
-const gameProductEvidenceDirectory = join(repositoryRoot, ".omx", "ui-review", "game-product-evidence");
-const dramaProductEvidenceDirectory = join(repositoryRoot, ".omx", "ui-review", "drama-product-evidence");
 const useRealDeepSeek = process.env.OH_STORY_DEMO_USE_REAL_DEEPSEEK === "1";
 const browserChannel = process.env.DSH_SMOKE_BROWSER_CHANNEL ?? (process.platform === "win32" ? "msedge" : "chrome");
 const storyProjectName = "让你管账号，你高燃混剪炸全网";
@@ -133,15 +138,6 @@ function runPnpm(args: readonly string[]): void {
     return;
   }
   run("pnpm", args);
-}
-
-async function freePort(): Promise<number> {
-  const server = createNetServer();
-  await new Promise<void>((accept, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", accept); });
-  const address = server.address();
-  if (address === null || typeof address === "string") throw new Error("Could not reserve a DSH test port.");
-  await new Promise<void>((accept, reject) => server.close((error) => error ? reject(error) : accept()));
-  return address.port;
 }
 
 interface MockDeepSeek {
@@ -312,122 +308,6 @@ async function closeServer(server: HttpServer): Promise<void> {
   await new Promise<void>((accept, reject) => server.close((error) => error ? reject(error) : accept()));
 }
 
-let dshAuthCookie: string | undefined;
-
-/**
- * DSH 0.1.2 gates Web and `/api` behind a session cookie. Exchange the one-time
- * token the CLI prints at startup for that cookie, and hand the same URL to
- * Chrome so the browser authorizes itself the way a user would.
- */
-async function authorizeDsh(origin: string, logs: readonly string[]): Promise<string> {
-  const pattern = new RegExp(`${origin.replaceAll(".", "\\.")}/\\?token=[A-Za-z0-9_.-]+`, "u");
-  const deadline = Date.now() + 90_000;
-  while (Date.now() < deadline) {
-    const tokenUrl = pattern.exec(logs.join(""))?.[0];
-    if (tokenUrl !== undefined) {
-      try {
-        const response = await fetch(tokenUrl, { redirect: "manual" });
-        const cookie = response.headers.getSetCookie().map((entry) => entry.split(";", 1)[0]).join("; ");
-        if (cookie !== "") {
-          dshAuthCookie = cookie;
-          return tokenUrl;
-        }
-      } catch { /* retry */ }
-    }
-    await new Promise((accept) => setTimeout(accept, 150));
-  }
-  throw new Error("Timed out waiting for official DSH Web.");
-}
-
-/**
- * DSH 0.1.7 creates its first-use workspace under the account's Documents folder, outside
- * DSH_HOME. Point it into the temporary root so a run never writes to the real home.
- */
-async function isolateFirstUseWorkspace(dshHome: string, documents: string): Promise<void> {
-  await mkdir(documents, { recursive: true });
-  await writeFile(join(dshHome, "profiles", "web", "cordis.patch.yml"),
-    `- id: workspace-controller\n  config:\n    documentsDirectory: ${JSON.stringify(documents)}\n`);
-}
-
-/** Every request to DSH carries the session cookie obtained by {@link authorizeDsh}. */
-async function dshFetch(input: string | URL, init: RequestInit = {}): Promise<Response> {
-  return fetch(input, { ...init, headers: { ...init.headers as Record<string, string>, cookie: dshAuthCookie ?? "" } });
-}
-
-interface HistoryEvent { readonly seq: number; readonly type: string; readonly data: unknown }
-
-/**
- * DSH 0.1.2 addresses Remotes as `<namespace>/<method>` and carries the call in
- * a single `args` field, so the wire method must equal the endpoint path.
- */
-async function rpc<T>(origin: string, endpoint: string, args: object): Promise<T> {
-  const rpcId = `oh-story-smoke-${crypto.randomUUID()}`;
-  const deadline = Date.now() + 15_000;
-  while (true) {
-    const response = await dshFetch(`${origin}/api/${endpoint}`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ type: "client-request", rpcId, method: endpoint, payload: { args } })
-    });
-    const body = await response.text();
-    if (response.status === 404 && body.trim() === "not found" && Date.now() < deadline) {
-      await new Promise((accept) => setTimeout(accept, 100));
-      continue;
-    }
-    let envelope: {
-      readonly rpcId: string;
-      readonly result: { readonly ok: true; readonly value: T } | { readonly ok: false; readonly error: { readonly code: string; readonly message: string } };
-    };
-    try { envelope = JSON.parse(body) as typeof envelope; }
-    catch { throw new Error(`DSH ${endpoint} returned HTTP ${String(response.status)} with a non-JSON body: ${body.slice(0, 200)}`); }
-    if (!response.ok || envelope.rpcId !== rpcId || !envelope.result.ok) {
-      throw new Error(`DSH ${endpoint} failed: ${JSON.stringify(envelope)}`);
-    }
-    return envelope.result.value;
-  }
-}
-
-interface HistoryRecord { readonly type: string; readonly event: HistoryEvent }
-
-/**
- * `session.history` is gone: the durable log now arrives as the opening
- * snapshot of the `session/follow` stream, multiplexed over one WebSocket.
- */
-async function sessionEvents(origin: string, sessionId: string): Promise<readonly HistoryEvent[]> {
-  const address = `${origin.replace(/^http/u, "ws")}${REMOTE_STREAM_MUX_PATH}`;
-  // Node's WebSocket takes request headers through an option its DOM types omit.
-  const socket = new WebSocket(address, { headers: { cookie: dshAuthCookie ?? "" } } as unknown as string[]);
-  let stalled: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await new Promise<readonly HistoryEvent[]>((accept, reject) => {
-      const streamId = crypto.randomUUID();
-      stalled = setTimeout(() => { reject(new Error("DSH session/follow produced no opening snapshot.")); }, 30_000);
-      socket.addEventListener("error", () => { reject(new Error("DSH session/follow stream failed to open.")); });
-      socket.addEventListener("close", () => { reject(new Error("DSH closed session/follow before the opening snapshot.")); });
-      socket.addEventListener("open", () => {
-        socket.send(JSON.stringify({
-          type: "open",
-          streamId,
-          endpoint: "session/follow",
-          payload: { args: { request: { address: { kind: "session", sessionId }, maxMessages: 1_000 } } }
-        }));
-      });
-      socket.addEventListener("message", (message: MessageEvent) => {
-        const frame = JSON.parse(String(message.data)) as {
-          readonly type: string;
-          readonly streamId: string;
-          readonly value?: { readonly type: string; readonly records?: readonly HistoryRecord[] };
-          readonly error?: { readonly message: string };
-        };
-        if (frame.streamId !== streamId) return;
-        if (frame.type === "error") { reject(new Error(`DSH session/follow failed: ${frame.error?.message ?? "unknown"}`)); return; }
-        if (frame.type !== "item" || frame.value?.type !== "snapshot") return;
-        accept((frame.value.records ?? []).filter((record) => record.type === "event").map((record) => record.event));
-      });
-    });
-  } finally { clearTimeout(stalled); socket.close(); }
-}
-
 async function waitForCompletedTurn(origin: string, sessionId: string, afterSeq = -1): Promise<readonly HistoryEvent[]> {
   const timeout = useRealDeepSeek ? 600_000 : 30_000;
   const deadline = Date.now() + timeout;
@@ -579,16 +459,6 @@ async function assertChatAnchorContract(
       && composerBox.x + composerBox.width <= chatBox.x + chatBox.width + 1) return;
   }
   throw new Error(`Chat anchor contract failed in ${expectedLayout} layout: ${JSON.stringify(measurement)}`);
-}
-
-async function stop(child: ChildProcess): Promise<void> {
-  if (child.exitCode !== null || child.signalCode !== null) return;
-  child.kill("SIGINT");
-  await Promise.race([
-    new Promise<void>((accept) => child.once("exit", () => accept())),
-    new Promise<void>((accept) => setTimeout(accept, 3_000))
-  ]);
-  if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
 }
 
 async function main(): Promise<void> {
@@ -743,8 +613,10 @@ async function main(): Promise<void> {
       "package/lib/oh-story/skills/story-setup/references/agent-references/cross-book-recall.md",
       "package/lib/drama/skills/short-drama/references/creator-documents.md",
       "package/lib/drama/skills/short-drama-breakdown/references/reconstruct.md",
-      "package/lib/drama/skills/short-drama-storyboard/references/comic-keyframe-lexicon.md",
-      "package/lib/novel-to-game/skills/novel-to-game/references/pipeline-contract.md",
+      "package/lib/drama/skills/short-drama-storyboard/references/keyframe-craft.md",
+      "package/lib/drama/skills/short-drama-produce/references/builtin-providers.md",
+      "package/lib/novel-to-game/skills/novel-to-game/SKILL.md",
+      "package/lib/novel-to-game/skills/game-qa/references/qa-contract.md",
       "package/lib/video-recap/skills/video-recap/scripts/recap.py",
       "package/lib/video-recap/skills/video-recap/scripts/recap_inspect.py",
       "package/lib/video-recap/skills/video-reference/scripts/reference.py"
@@ -918,17 +790,16 @@ async function main(): Promise<void> {
       || await firstRunPage.locator('[data-slot="conversation.session"] > :not(.oh-story-split-surface)').count() !== 1) {
       throw new Error("A drama Session without Agent UI intent did not default to canvas with files and native Chat collapsed.");
     }
-    await mkdir(dramaProductEvidenceDirectory, { recursive: true });
-    await firstRunPage.waitForTimeout(500);
-    await firstRunPage.screenshot({ path: join(dramaProductEvidenceDirectory, "drama-canvas.png"), animations: "disabled" });
-    const initialCanvasKinds = await firstRunPage.locator(".oh-story-canvas-viewport").evaluate((viewport) => {
+    await firstRunPage.waitForFunction(() => {
+      const viewport = document.querySelector(".oh-story-canvas-viewport");
+      if (viewport === null) return false;
       const bounds = viewport.getBoundingClientRect();
-      return [...viewport.querySelectorAll<HTMLElement>("article[data-node-type]")].filter((card) => {
+      const kinds = [...viewport.querySelectorAll<HTMLElement>("article[data-node-type]")].filter((card) => {
         const box = card.getBoundingClientRect();
         return box.left >= bounds.left && box.right <= bounds.right && box.top >= bounds.top && box.bottom <= bounds.bottom;
       }).map((card) => card.dataset.nodeType);
-    });
-    if (!initialCanvasKinds.includes("story") || !initialCanvasKinds.includes("shot")) throw new Error(`The initial canvas framed partial document loading instead of the story and a shot: ${JSON.stringify(initialCanvasKinds)}`);
+      return kinds.includes("story") && kinds.includes("shot");
+    }, undefined, { timeout: 5_000 });
     await selectSession(firstRunPage, storyWorkspace.workspace.title, storySessionTitle);
     if (firstRunErrors.length > 0) throw new Error(`First-launch browser errors: ${JSON.stringify(firstRunErrors)}`);
     await firstRunBrowser.close();
@@ -996,10 +867,9 @@ async function main(): Promise<void> {
 
     const storyWorkspaceResponse = await dshFetch(`${origin}/oh-story/workspace?sessionId=${encodeURIComponent(storySession.sessionId)}`);
     const storyWorkspacePayload = await storyWorkspaceResponse.json() as {
-      readonly mode?: string;
       readonly cwd?: string;
       readonly files?: readonly { readonly path: string }[];
-      readonly games?: readonly { readonly id: string; readonly root: string; readonly title: string; readonly previewUrl?: string; readonly previewVersion: string; readonly verification?: { readonly status?: string; readonly binding?: string } }[];
+      readonly games?: readonly { readonly id: string; readonly root: string; readonly title: string; readonly previewUrl?: string; readonly previewVersion: string }[];
       readonly videos?: readonly {
         readonly id: string;
         readonly title: string;
@@ -1012,17 +882,15 @@ async function main(): Promise<void> {
           readonly segments: readonly { readonly text?: string; readonly output: { readonly start: number; readonly end: number }; readonly sourceRanges: readonly { readonly start: number; readonly end: number }[] }[];
         };
       }[];
-      readonly shortDrama?: unknown;
     };
-    const generatedGame = storyWorkspacePayload.games?.find((game) => game.id === `workspace:${generatedGameId}`);
+    const generatedGame = storyWorkspacePayload.games?.find((game) => game.id === generatedGameId);
     const generatedVideo = storyWorkspacePayload.videos?.find((video) => video.id === "smoke-recap");
-    if (!storyWorkspaceResponse.ok || storyWorkspacePayload.mode !== "dsh-session" || storyWorkspacePayload.cwd !== await realpath(storyRoot)
-      || !storyWorkspacePayload.files?.some((file) => file.path.startsWith("正文/")) || storyWorkspacePayload.shortDrama !== null
-      || storyWorkspacePayload.games?.some((game) => !game.id.startsWith("workspace:")) !== false
-      || storyWorkspacePayload.games.find((game) => game.id === `workspace:${altGameId}`)?.title !== altGameTitle
+    if (!storyWorkspaceResponse.ok || storyWorkspacePayload.cwd !== await realpath(storyRoot)
+      || !storyWorkspacePayload.files?.some((file) => file.path.startsWith("正文/"))
+      || storyWorkspacePayload.games?.some((game) => game.id.startsWith("workspace:")) !== false
+      || storyWorkspacePayload.games.find((game) => game.id === altGameId)?.title !== altGameTitle
       || generatedGame?.previewUrl === undefined
       || generatedGame.root !== `game-adaptations/${generatedGameId}` || generatedGame.previewVersion === ""
-      || generatedGame.verification?.status !== "PASS" || generatedGame.verification.binding !== "UNBOUND"
       || !storyWorkspacePayload.files?.some((file) => file.path.endsWith("/production_reference.json"))
       || generatedVideo?.title !== "DSH Video Recap Smoke" || generatedVideo.state !== "ready"
       || JSON.stringify(generatedVideo.previews.map((preview) => preview.role)) !== JSON.stringify(["source", "edited", "final"])
@@ -1048,22 +916,21 @@ async function main(): Promise<void> {
     }
     const plainWorkspaceResponse = await dshFetch(`${origin}/oh-story/workspace?sessionId=${encodeURIComponent(plainSession.sessionId)}`);
     const plainWorkspacePayload = await plainWorkspaceResponse.json() as {
-      readonly mode?: string;
       readonly files?: readonly unknown[];
       readonly videos?: readonly unknown[];
       readonly games?: readonly unknown[];
     };
-    if (!plainWorkspaceResponse.ok || plainWorkspacePayload.mode !== "dsh-session"
+    if (!plainWorkspaceResponse.ok
       || plainWorkspacePayload.files?.length !== 0 || plainWorkspacePayload.videos?.length !== 0
       || plainWorkspacePayload.games?.length !== 0) {
       throw new Error(`Plain workspace was not reported free of creative projects: ${JSON.stringify(plainWorkspacePayload)}`);
     }
     const dramaWorkspaceResponse = await dshFetch(`${origin}/oh-story/workspace?sessionId=${encodeURIComponent(dramaSession.sessionId)}`);
-    const dramaWorkspacePayload = await dramaWorkspaceResponse.json() as { readonly mode?: string; readonly cwd?: string; readonly files?: readonly { readonly path: string; readonly kind?: string; readonly mimeType?: string }[]; readonly shortDrama?: unknown };
+    const dramaWorkspacePayload = await dramaWorkspaceResponse.json() as { readonly cwd?: string; readonly files?: readonly { readonly path: string; readonly kind?: string; readonly mimeType?: string }[] };
     const dramaPaths = dramaWorkspacePayload.files?.map((file) => file.path).sort() ?? [];
     const expectedDramaPaths = ["EP001", "EP002"].flatMap((episode) => dramaCreatorFiles.map((name) => `剧集/${episode}/${name}`)).sort();
-    if (!dramaWorkspaceResponse.ok || dramaWorkspacePayload.mode !== "dsh-session" || dramaWorkspacePayload.cwd !== await realpath(dramaRoot)
-      || JSON.stringify(dramaPaths) !== JSON.stringify(expectedDramaPaths) || dramaWorkspacePayload.shortDrama !== null
+    if (!dramaWorkspaceResponse.ok || dramaWorkspacePayload.cwd !== await realpath(dramaRoot)
+      || JSON.stringify(dramaPaths) !== JSON.stringify(expectedDramaPaths)
       || dramaPaths.some((path) => /\.jsonl?$/u.test(path))) {
       throw new Error(`Drama Session workspace route failed: ${JSON.stringify(dramaWorkspacePayload)}`);
     }
@@ -1674,7 +1541,7 @@ async function main(): Promise<void> {
         throw new Error("Game Studio still exposed the removed QA surface.");
       }
       const projectSelect = page.getByRole("combobox", { name: "游戏项目" });
-      await projectSelect.selectOption(`workspace:${generatedGameId}`);
+      await projectSelect.selectOption(generatedGameId);
       const generatedFrame = page.frameLocator('iframe[title="《DSH Game Studio Smoke》可试玩预览"]');
       const generatedPlay = generatedFrame.getByRole("button", { name: "试玩成功", exact: true });
       try { await generatedPlay.waitFor({ state: "visible", timeout: 20_000 }); }
@@ -1714,7 +1581,7 @@ async function main(): Promise<void> {
       await gameStudio.getByRole("button", { name: "展开原生 Chat", exact: true }).click();
       await closeGameChat.waitFor({ state: "visible", timeout: 10_000 });
       const generatedInputState = async () => {
-        const frame = page.frames().find((candidate) => candidate.url().includes("/oh-story/game-preview/workspace/"));
+        const frame = page.frames().find((candidate) => candidate.url().includes("/oh-story/game-preview/"));
         const button = await generatedFrame.locator("#play").boundingBox();
         return {
           browserVersion: browser.version(),
@@ -1765,8 +1632,6 @@ async function main(): Promise<void> {
       if (await gameStudio.getByText(/试玩笔记|正在创作|看看创作画布|Oh Story/u).count() !== 0) {
         throw new Error("Game preview kept a removed notes entry or repeated heading.");
       }
-      await mkdir(gameProductEvidenceDirectory, { recursive: true });
-      await page.screenshot({ path: join(gameProductEvidenceDirectory, "game-preview.png"), animations: "disabled" });
       await gameTabs.getByRole("tab", { name: "文稿", exact: true }).click();
       // Notes written by an earlier version stay on disk and open as an ordinary project file.
       const existingNotesPath = `game-adaptations/${generatedGameId}/PLAYTEST_NOTES.md`;
@@ -1799,7 +1664,6 @@ async function main(): Promise<void> {
       if (!/创作方向：DSH Game Studio Smoke/u.test(await gameBriefNode.getAttribute("aria-label") ?? "")) {
         throw new Error("Game canvas exposed the template filename instead of its creator-facing title.");
       }
-      await page.screenshot({ path: join(gameProductEvidenceDirectory, "game-canvas.png"), animations: "disabled" });
       const briefLeft = await gameBriefNode.evaluate((element) => (element as HTMLElement).style.left);
       await gameBriefNode.press("Shift+ArrowRight");
       const movedBriefLeft = await gameBriefNode.evaluate((element) => (element as HTMLElement).style.left);
@@ -1869,17 +1733,17 @@ async function main(): Promise<void> {
         throw new Error("Preview/Canvas/Document switching remounted the generated game iframe.");
       }
       await requireGeneratedInput("after Preview/Design restoration");
-      const generatedBrowserFrame = page.frames().find((frame) => frame.url().includes("/oh-story/game-preview/workspace/"));
+      const generatedBrowserFrame = page.frames().find((frame) => frame.url().includes("/oh-story/game-preview/"));
       if (generatedBrowserFrame === undefined) throw new Error("Generated workspace game frame was not attached.");
       const previewEscapeBlocked = await generatedBrowserFrame.evaluate(async (sessionId) => {
         try {
-          await dshFetch(`/oh-story/workspace?sessionId=${encodeURIComponent(sessionId)}`);
+          await fetch(`/oh-story/workspace?sessionId=${encodeURIComponent(sessionId)}`);
           return false;
         } catch { return true; }
       }, gameSession.sessionId);
       if (!previewEscapeBlocked) throw new Error("Generated game CSP allowed access to the workspace API outside its preview asset prefix.");
-      await projectSelect.selectOption(`workspace:${altGameId}`);
-      if (!await projectSelect.inputValue().then((value) => value === `workspace:${altGameId}`)) {
+      await projectSelect.selectOption(altGameId);
+      if (!await projectSelect.inputValue().then((value) => value === altGameId)) {
         throw new Error("Game Studio did not select the second workspace game.");
       }
       await gameTabs.getByRole("tab", { name: "创作画布", exact: true }).click();
@@ -1888,13 +1752,13 @@ async function main(): Promise<void> {
       if (await gameBriefNode.count() !== 0 || await gameCanvas.getByText("DSH Game Studio Smoke", { exact: false }).count() !== 0) {
         throw new Error("Switching game projects leaked generated-project documents or canvas state into the second game.");
       }
-      await projectSelect.selectOption(`workspace:${generatedGameId}`);
+      await projectSelect.selectOption(generatedGameId);
       await gameTabs.getByRole("tab", { name: "创作画布", exact: true }).click();
       await gameBriefNode.waitFor({ state: "visible", timeout: 10_000 });
       if (await gameBriefNode.evaluate((element) => (element as HTMLElement).style.left) !== movedBriefLeft) {
         throw new Error("Returning to a workspace game lost its project-isolated canvas layout.");
       }
-      await projectSelect.selectOption(`workspace:${altGameId}`);
+      await projectSelect.selectOption(altGameId);
       await gameTabs.getByRole("tab", { name: "试玩", exact: true }).click();
       const gameFrame = page.frameLocator(`iframe[title="《${altGameTitle}》可试玩预览"]`);
       const startGame = gameFrame.locator("#start:enabled");
@@ -1999,7 +1863,6 @@ async function main(): Promise<void> {
       }
       await gameOpening.waitFor({ state: "visible", timeout: 10_000 });
       await captureGameEvidence(page, "game-studio-compact");
-      await page.screenshot({ path: join(gameProductEvidenceDirectory, "game-compact.png"), animations: "disabled" });
       await page.setViewportSize({ width: 1_440, height: 900 });
       await page.waitForFunction(() => document.querySelector("[data-conversation-scroll]")?.getAttribute("data-oh-story-layout") === "wide");
       await gameStudio.getByRole("tab", { name: "小说", exact: true }).click();
@@ -2012,7 +1875,7 @@ async function main(): Promise<void> {
       }
       await gameOpening.waitFor({ state: "visible", timeout: 10_000 });
       if (!useRealDeepSeek) {
-        await projectSelect.selectOption(`workspace:${generatedGameId}`);
+        await projectSelect.selectOption(generatedGameId);
         await generatedFrame.getByRole("button", { name: "试玩成功", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
         await generatedFrame.locator("#play:enabled").waitFor({ state: "visible", timeout: 10_000 });
         // Selecting a different project intentionally creates a fresh iframe.
@@ -2072,8 +1935,6 @@ async function main(): Promise<void> {
       if (await page.locator("[data-conversation-scroll]").getAttribute("data-oh-story-workbench") !== "video") throw new Error("Video Studio did not claim the native conversation layout.");
       await prepareDemoSurface(page);
       await captureDemoFrame(page, "video", 1);
-      await mkdir(videoEvidenceDirectory, { recursive: true });
-      await page.screenshot({ path: join(videoEvidenceDirectory, "video-preview.png"), animations: "disabled" });
       if (await videoStudio.getByText(/视频解说|段落概览|在画布里看故事|讨论这一段|边看画面|文稿用于定位|完整文稿|已载入/u).count() !== 0 || await videoStudio.locator(".oh-video-player-caption").count() !== 0) {
         throw new Error("Video preview kept a removed heading, information bar or explanatory line.");
       }
@@ -2152,7 +2013,6 @@ async function main(): Promise<void> {
       const narrationLeftAfter = await narrationNode.evaluate((element) => (element as HTMLElement).style.left);
       if (narrationLeftAfter === narrationLeftBefore) throw new Error("Pointer dragging did not move the video canvas node.");
       await captureDemoFrame(page, "video", 2);
-      await page.screenshot({ path: join(videoEvidenceDirectory, "video-canvas.png"), animations: "disabled" });
 
       await videoProject.selectOption("smoke-recap-alt");
       await page.waitForFunction(() => (document.querySelector('.oh-video-studio select[aria-label="视频项目"]') as HTMLSelectElement | null)?.value === "smoke-recap-alt");
@@ -2190,7 +2050,6 @@ async function main(): Promise<void> {
       }
       await videoDocuments.getByRole("button", { name: /^解说稿(?:\s*尚未保存)?$/u }).click();
       await videoStudio.getByRole("button", { name: "编辑解说", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
-      await page.screenshot({ path: join(videoEvidenceDirectory, "video-documents.png"), animations: "disabled" });
       await videoStudio.getByRole("button", { name: "编辑解说", exact: true }).click();
       const narrationEditor = videoStudio.getByRole("textbox", { name: "第 1 段解说", exact: true });
       await narrationEditor.waitFor({ state: "visible", timeout: 10_000 });
@@ -2347,7 +2206,6 @@ async function main(): Promise<void> {
       if (!compactVideoToolbar || !compactVideoProject || !compactVideoViews || compactVideoToolbar.height > 110 || Math.abs(compactVideoProject.y + compactVideoProject.height / 2 - compactVideoViews.y - compactVideoViews.height / 2) > 4) {
         throw new Error(`500px Video Studio stacked its project and view controls: ${JSON.stringify(compactVideoBoxes)}`);
       }
-      await page.screenshot({ path: join(videoEvidenceDirectory, "video-compact.png"), animations: "disabled" });
       await compactVideoStudioTab.focus();
       await compactVideoStudioTab.press("ArrowRight");
       await videoComposer.waitFor({ state: "visible", timeout: 10_000 });
@@ -2371,7 +2229,6 @@ async function main(): Promise<void> {
       if (!await chatOpenScriptToggle.isVisible() || await videoStudio.getByRole("complementary", { name: "分段解说稿", exact: true }).isVisible()) {
         throw new Error("Opening native Chat did not collapse the script panel while keeping its toggle.");
       }
-      await page.screenshot({ path: join(videoEvidenceDirectory, "video-chat-open.png"), animations: "disabled" });
       await videoChatToggle.click();
 
       await videoStudio.getByRole("button", { name: "制作详情", exact: true }).click();
@@ -3161,7 +3018,7 @@ async function main(): Promise<void> {
     throw new Error(`${redact(String(error))}\nMock requests: ${JSON.stringify(mockDeepSeek?.requests ?? [])}\nDSH logs:\n${redact(logs.join("").slice(-16_000))}`);
   } finally {
     if (firstRunBrowser !== undefined) await firstRunBrowser.close();
-    if (child !== undefined) await stop(child);
+    if (child !== undefined) await stopDshProcess(child);
     if (mockDeepSeek !== undefined) await closeServer(mockDeepSeek.server);
     await rm(temporaryRoot, { recursive: true, force: true });
   }

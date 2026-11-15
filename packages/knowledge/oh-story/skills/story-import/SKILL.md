@@ -10,7 +10,7 @@ metadata: {"openclaw":{"source":"https://github.com/zenstory-ai/oh-story-claudec
 
 > Agent 兼容性：只检查当前宿主：Claude `.claude/agents/{agent}.md`（`subagent_type`）、OpenCode `.opencode/agents/{agent}.md`（`subagent` 的 `agent`）、Codex `.codex/agents/{agent}.toml`（`agent_type`）、Antigravity `.agents/agents/agent-name/agent.md`（`invoke_subagent` + `TypeName`）。ZCode 查插件注册的同名角色，用 `Agent` 按实际 schema 派发，不要求 `.zcode/agents`。仅角色/工具不可用或返回未知 agent 时降级 solo/direct，不因其他端目录存在或宿主名固定串行。
 >
-> Spawn 版本提示（不阻断 spawn）：先读取项目根 `.story-deployed` 的 `agents_version`。与本版 `agents_version: 42` 不一致时（标记缺失、字段缺失/非整数、小于或大于 42）**照常按当前宿主角色来源检查并 spawn**，同时用一句白话提示作者「分析助手是旧版，运行 /story-setup（ZCode 先更新插件）后新开会话」，`Notice: agents bundle 版本不匹配（项目 {N}，本版 42）` 原文写进汇报最后一行「技术备注：」；大于 42 时额外提示先更新 oh-story-claudecode，不要用本地旧版 setup 降级覆盖。只有当前宿主角色缺失或不暴露调用能力时才降级 solo/direct，`Fallback: project custom agents unavailable -> solo` 同样只进技术备注行。
+> Spawn 版本提示（不阻断 spawn）：先读取项目根 `.story-deployed` 的 `agents_version`。与本版 `agents_version: 44` 不一致时（标记缺失、字段缺失/非整数、小于或大于 44）**照常按当前宿主角色来源检查并 spawn**，同时用一句白话提示作者「分析助手是旧版，运行 /story-setup（ZCode 先更新插件）后新开会话」，`Notice: agents bundle 版本不匹配（项目 {N}，本版 44）` 原文写进汇报最后一行「技术备注：」；大于 44 时额外提示先更新 oh-story-claudecode，不要用本地旧版 setup 降级覆盖。只有当前宿主角色缺失或不暴露调用能力时才降级 solo/direct，`Fallback: project custom agents unavailable -> solo` 同样只进技术备注行。
 
 ## 名词与目录边界（全流程硬约束）
 
@@ -54,7 +54,7 @@ metadata: {"openclaw":{"source":"https://github.com/zenstory-ai/oh-story-claudec
 ### Step 3：基本信息确认
 
 1. 自动检测书名（如有）、总章数、总字数、章节格式。
-2. 请作者确认：导入书名、题材类型、目标平台（长篇：起点/番茄/晋江/其他；短篇：知乎盐言/番茄/七猫/黑岩/红果/小程序/未定）、是否完本（半成品写到第 N 章）、**篇幅**（长篇/短篇，按 length-routing.md 检测：用户显式声明 > 结构信号 > 字数兜底，向作者复述结果请其确认；决定结构迁移走长篇还是短篇）、**最后一章是否完整**——残稿时告诉作者，请他决定「接着残章写」还是「先补完再导入」，本 skill 只记录决定，不替作者选。
+2. 请作者确认：导入书名、题材类型、目标平台（长篇：起点/番茄/晋江/其他；短篇：知乎盐言/番茄/七猫/黑岩/小程序/未定）、是否完本（半成品写到第 N 章）、**篇幅**（长篇/短篇，按 length-routing.md 检测：用户显式声明 > 结构信号 > 字数兜底，向作者复述结果请其确认；决定结构迁移走长篇还是短篇）、**最后一章是否完整**——残稿时告诉作者，请他决定「接着残章写」还是「先补完再导入」，本 skill 只记录决定，不替作者选。
 3. 外部对标（可选、与导入源分离）：作者已明确指定时记录 `{对标书名}`，并确认 `拆文库/{对标书名}/` 是该参考作品的独立拆解产物；不得把 `{导入书名}` 或本次刚生成的拆文目录当候选。未指定时不追问，记为“未绑定”。
 4. 向作者展示检测到的章节范围、字数、篇幅、最后一章状态与“外部对标：{对标书名/未绑定}”，确认后往下走。
 

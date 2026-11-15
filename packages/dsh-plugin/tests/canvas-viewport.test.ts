@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MAX_CANVAS_ZOOM, MIN_CANVAS_ZOOM, centerOn, fitNodes, fitRects, initialReadableViewport, nodeVisible, rectVisible, screenToWorld, wheelZoomFactor, zoomAt } from "../src/client/canvas-viewport.js";
+import { MAX_CANVAS_ZOOM, MIN_CANVAS_ZOOM, centerOnRect, fitRects, initialReadableViewport, rectVisible, screenToWorld, wheelZoomFactor, zoomAt } from "../src/client/canvas-viewport.js";
 
 describe("canvas viewport", () => {
   it("zooms around the cursor and stays within the zoom range", () => {
@@ -16,22 +16,18 @@ describe("canvas viewport", () => {
     expect(zoomAt(viewport, 1e-6, cursor).zoom).toBe(MIN_CANVAS_ZOOM);
   });
 
-  it("brings a node at negative or far coordinates into view", () => {
+  it("brings a card at negative or far coordinates into view", () => {
     const size = { width: 600, height: 400 };
     const viewport = { x: 0, y: 0, zoom: 1 };
-    for (const node of [{ x: -2400, y: -900 }, { x: 9000, y: 7000 }]) {
-      expect(nodeVisible(viewport, node, size)).toBe(false);
-      const centered = centerOn(viewport, node, size);
+    for (const card of [
+      { x: -2400, y: -900, width: 260, height: 210 },
+      { x: 9000, y: 7000, width: 292, height: 310 }
+    ]) {
+      expect(rectVisible(viewport, card, size)).toBe(false);
+      const centered = centerOnRect(viewport, card, size);
       expect(centered.zoom).toBe(1);
-      expect(nodeVisible(centered, node, size)).toBe(true);
+      expect(rectVisible(centered, card, size)).toBe(true);
     }
-  });
-
-  it("frames every fixed-size node", () => {
-    const size = { width: 800, height: 600 };
-    const grid = [{ x: -200, y: -100 }, { x: 640, y: 80 }, { x: 300, y: 400 }];
-    const framed = fitNodes(grid, size);
-    for (const node of grid) expect(nodeVisible(framed, node, size)).toBe(true);
   });
 
   it("uses each card's actual bounds when fitting the canvas", () => {

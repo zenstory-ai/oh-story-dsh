@@ -5,6 +5,16 @@ import type {
   RunningToolCall,
   ToolCallBlock
 } from "@deepseek-ai/dsh-client-ui-conversation/client";
+import {
+  editableCreativePath,
+  GAME_DIRECTORY,
+  isCreativeRootPath,
+  isDramaDirectory,
+  isStoryDirectory,
+  safeRelativePath,
+  SHORT_STORY_FILE_SET,
+  VIDEO_DIRECTORY
+} from "../creative-paths.js";
 
 export type MutationToolName = "write" | "edit" | "str_replace_editor";
 
@@ -42,13 +52,8 @@ export interface WorkspaceFilePath {
   readonly path: string;
 }
 
-const STORY_DIRECTORIES = new Set(["正文", "大纲", "设定", "追踪", "对标", "参考资料"]);
-const DRAMA_DIRECTORIES = new Set(["输入", "项目开发", "设定集", "剧集", "交付", "创作者决策", "审查"]);
 /** Oh Story short fiction: one book as three files at the workspace root. */
-export const SHORT_STORY_FILES: ReadonlySet<string> = new Set(["正文.md", "设定.md", "小节大纲.md"]);
-const GAME_DIRECTORY = "game-adaptations";
-const VIDEO_DIRECTORY = "video-recaps";
-const EDITABLE_EXTENSION = /\.(?:md|txt|json|jsonl|html|css|[cm]?js|tsx?|jsx)$/iu;
+export const SHORT_STORY_FILES: ReadonlySet<string> = SHORT_STORY_FILE_SET;
 const MUTATING_CALLS = new Set(["write", "edit", "str_replace_editor", "bash", "run_code", "oh_story_role"]);
 
 /** Read the latest running Assistant step, including tool-only steps hidden from the Chat list. */
@@ -313,19 +318,16 @@ export function creativeRelativePath(path: string | undefined, cwd: string | und
   const insideRoot = root !== undefined && normalized.startsWith(`${root}/`);
   if ((normalized.startsWith("/") || /^[a-z]:\//iu.test(normalized) || normalized.startsWith("file:")) && !insideRoot) return undefined;
   const relative = insideRoot ? normalized.slice(root.length + 1) : normalized.replace(/^\.\//u, "");
-  const [directory] = relative.split("/", 1);
-  const creative = directory !== undefined && (STORY_DIRECTORIES.has(directory) || DRAMA_DIRECTORIES.has(directory) || directory === GAME_DIRECTORY || directory === VIDEO_DIRECTORY);
-  if ((!creative && relative !== "short-drama.json" && !SHORT_STORY_FILES.has(relative)) || !EDITABLE_EXTENSION.test(relative)) return undefined;
-  if (relative.split("/").some((part) => part === ".." || part === "." || part === "")) return undefined;
+  if (!safeRelativePath(relative) || !isCreativeRootPath(relative) || !editableCreativePath(relative)) return undefined;
   return relative;
 }
 
 export function workbenchModeForPath(path: string | undefined): WorkbenchMode | undefined {
   if (path === "short-drama.json") return "drama";
-  if (path !== undefined && SHORT_STORY_FILES.has(path)) return "story";
+  if (path !== undefined && SHORT_STORY_FILE_SET.has(path)) return "story";
   const directory = path?.split("/", 1)[0];
-  if (directory !== undefined && STORY_DIRECTORIES.has(directory)) return "story";
-  if (directory !== undefined && DRAMA_DIRECTORIES.has(directory)) return "drama";
+  if (directory !== undefined && isStoryDirectory(directory)) return "story";
+  if (directory !== undefined && isDramaDirectory(directory)) return "drama";
   if (directory === GAME_DIRECTORY) return "game";
   if (directory === VIDEO_DIRECTORY) return "video";
   return undefined;

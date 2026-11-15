@@ -1,19 +1,9 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { useMemo, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
 import type { DramaDocumentTarget, DramaEpisodeProduction } from "./drama-production.js";
 import { selectedVersionForTarget, type CanvasPoint, type ProductionJob, type ProductionMediaVersion } from "./production-runtime.js";
-import {
-  DEFAULT_CANVAS_VIEWPORT,
-  centerOnRect,
-  fitRects,
-  initialReadableViewport,
-  rectVisible,
-  wheelZoomFactor,
-  zoomAt,
-  type CanvasRect,
-  type CanvasSize,
-  type CanvasViewport
-} from "./canvas-viewport.js";
+import { initialReadableViewport, type CanvasViewport } from "./canvas-viewport.js";
 import { productionCanvasEdges, productionCanvasNodes, type ProductionCanvasNode } from "./production-canvas-model.js";
+import { nodeRects, useInfiniteCanvas } from "./use-infinite-canvas.js";
 
 export interface ProductionCanvasProps {
   readonly production: DramaEpisodeProduction;
@@ -36,261 +26,67 @@ export interface ProductionCanvasProps {
   readonly onContinueInChat?: ((targetId: string) => void) | undefined;
 }
 
-/** Pointer travel below this many pixels is a click, not a drag. */
-const CLICK_SLOP = 4;
-const BUTTON_ZOOM_STEP = 1.2;
-/** Wheel bursts update locally and reach the Store once they settle. */
-const WHEEL_COMMIT_DELAY = 160;
-
-/** Kept as a compatibility export for callers/tests that used the old helper. */
-export const canvasNodes = productionCanvasNodes;
-
 export function ProductionCanvas(props: ProductionCanvasProps) {
   const nodes = useMemo(() => productionCanvasNodes(props.production, props.documents), [props.production, props.documents]);
-  const edges = useMemo(() => productionCanvasEdges(props.production), [props.production]);
+  const edges = useMemo(
+    () => productionCanvasEdges(props.production, new Set(nodes.map((node) => node.id))),
+    [props.production, nodes]
+  );
   const versions = props.versions ?? [];
   const selections = props.selections ?? {};
-  const viewportRef = useRef<HTMLDivElement>(null);
-  const [size, setSize] = useState<CanvasSize>({ width: 0, height: 0 });
-  const [liveViewport, setLiveViewport] = useState<CanvasViewport>();
-  const [liveNode, setLiveNode] = useState<{ readonly id: string; readonly point: CanvasPoint }>();
-  const [panning, setPanning] = useState(false);
-  const wheelCommit = useRef<ReturnType<typeof setTimeout>>(undefined);
-  const selectedHere = useRef<string>(undefined);
-  const followed = useRef<string>(undefined);
-  const followedSize = useRef<CanvasSize>(undefined);
-
-  const positions: Record<string, CanvasPoint> = Object.fromEntries(nodes.map((node) => [node.id, props.canvas[node.id] ?? node.initial]));
-  if (liveNode !== undefined) positions[liveNode.id] = liveNode.point;
-  const rects = nodeRects(nodes, positions);
-  const readableRects = nodeRects(readableNodes(nodes), positions);
-  const committedViewport = props.viewport ?? (size.width > 0 ? initialReadableViewport(readableRects, size) : DEFAULT_CANVAS_VIEWPORT);
-  const viewport = liveViewport ?? committedViewport;
-
-  const latest = useRef({ viewport, committedViewport, props, nodes, size });
-  latest.current = { viewport, committedViewport, props, nodes, size };
-
-  useLayoutEffect(() => {
-    const element = viewportRef.current;
-    if (element === null) return;
-    const measure = () => { setSize({ width: element.clientWidth, height: element.clientHeight }); };
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(element);
-    return () => { observer.disconnect(); };
-  }, []);
-
-  useEffect(() => {
-    const element = viewportRef.current;
-    if (element === null) return;
-    const onWheel = (event: WheelEvent) => {
-      event.preventDefault();
-      const bounds = element.getBoundingClientRect();
-      const next = zoomAt(latest.current.viewport, wheelZoomFactor(event.deltaY, event.deltaMode), { x: event.clientX - bounds.left, y: event.clientY - bounds.top });
-      setLiveViewport(next);
-      clearTimeout(wheelCommit.current);
-      wheelCommit.current = setTimeout(() => {
-        wheelCommit.current = undefined;
-        latest.current.props.onViewportChange(next);
-        setLiveViewport(undefined);
-      }, WHEEL_COMMIT_DELAY);
-    };
-    element.addEventListener("wheel", onWheel, { passive: false });
-    return () => {
-      element.removeEventListener("wheel", onWheel);
-      clearTimeout(wheelCommit.current);
-    };
-  }, []);
-
-  const measured = size.width > 0;
-  useEffect(() => {
-    const { committedViewport: initial, props: currentProps } = latest.current;
-    if (measured && currentProps.viewport === undefined) currentProps.onViewportChange(initial);
-  }, [measured]);
-
-  useEffect(() => {
-    const { viewport: current, props: currentProps, nodes: currentNodes, size: currentSize } = latest.current;
-    const id = currentProps.selectedId;
-    const resized = followedSize.current?.width !== currentSize.width || followedSize.current.height !== currentSize.height;
-    if (!measured || (id === followed.current && !resized)) return;
-    followed.current = id;
-    followedSize.current = currentSize;
-    if (id === undefined) return;
-    if (id === selectedHere.current) {
-      selectedHere.current = undefined;
-      if (!resized) return;
-    }
-    const node = currentNodes.find((candidate) => candidate.id === id);
-    if (node === undefined) return;
-    const point = currentProps.canvas[id] ?? node.initial;
-    const rect = { ...point, width: node.width, height: node.height };
-    if (!rectVisible(current, rect, currentSize)) currentProps.onViewportChange(centerOnRect(current, rect, currentSize));
-  }, [measured, props.selectedId, size.width, size.height]);
-
-  const flushWheel = () => {
-    if (wheelCommit.current === undefined) return;
-    clearTimeout(wheelCommit.current);
-    wheelCommit.current = undefined;
-    props.onViewportChange(viewport);
-    setLiveViewport(undefined);
-  };
-
-  const commitViewport = (next: CanvasViewport) => {
-    clearTimeout(wheelCommit.current);
-    wheelCommit.current = undefined;
-    setLiveViewport(undefined);
-    props.onViewportChange(next);
-  };
-
-  const zoomAtCenter = (factor: number) => {
-    commitViewport(zoomAt(viewport, factor, { x: size.width / 2, y: size.height / 2 }));
-  };
-
-  const startPan = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (event.target instanceof Element && event.target.closest("article") !== null) return;
-    if (event.button !== 0 && event.button !== 1) return;
-    event.preventDefault();
-    flushWheel();
-    const element = event.currentTarget;
-    element.setPointerCapture(event.pointerId);
-    element.focus({ preventScroll: true });
-    const origin = viewport;
-    const start = { x: event.clientX, y: event.clientY };
-    let moved = false;
-    let next = origin;
-    setPanning(true);
-    const move = (moveEvent: PointerEvent) => {
-      const dx = moveEvent.clientX - start.x;
-      const dy = moveEvent.clientY - start.y;
-      if (!moved && Math.hypot(dx, dy) < CLICK_SLOP) return;
-      moved = true;
-      next = { ...origin, x: origin.x + dx, y: origin.y + dy };
-      setLiveViewport(next);
-    };
-    const end = () => {
-      element.removeEventListener("pointermove", move);
-      element.removeEventListener("pointerup", end);
-      element.removeEventListener("pointercancel", end);
-      setPanning(false);
-      if (moved) commitViewport(next);
-      else {
-        selectedHere.current = undefined;
-        props.onSelect(undefined);
-      }
-    };
-    element.addEventListener("pointermove", move);
-    element.addEventListener("pointerup", end);
-    element.addEventListener("pointercancel", end);
-  };
-
-  const startDrag = (event: ReactPointerEvent<HTMLElement>, id: string) => {
-    if (event.button !== 0) return;
-    event.stopPropagation();
-    const element = event.currentTarget;
-    element.setPointerCapture(event.pointerId);
-    const origin = positions[id] ?? { x: 0, y: 0 };
-    const start = { x: event.clientX, y: event.clientY };
-    const zoom = viewport.zoom;
-    let moved = false;
-    let next = origin;
-    const move = (moveEvent: PointerEvent) => {
-      const dx = moveEvent.clientX - start.x;
-      const dy = moveEvent.clientY - start.y;
-      if (!moved && Math.hypot(dx, dy) < CLICK_SLOP) return;
-      moved = true;
-      next = { x: origin.x + dx / zoom, y: origin.y + dy / zoom };
-      setLiveNode({ id, point: next });
-    };
-    const end = () => {
-      element.removeEventListener("pointermove", move);
-      element.removeEventListener("pointerup", end);
-      element.removeEventListener("pointercancel", end);
-      setLiveNode(undefined);
-      if (moved) props.onCanvasChange({ ...props.canvas, [id]: next });
-      else {
-        if (id !== props.selectedId) selectedHere.current = id;
-        props.onSelect(id);
-      }
-    };
-    element.addEventListener("pointermove", move);
-    element.addEventListener("pointerup", end);
-    element.addEventListener("pointercancel", end);
-  };
-
   const navigate = (node: ProductionCanvasNode) => {
     if (node.target !== undefined) props.onNavigate(node.target);
   };
 
-  const onNodeKeyDown = (event: ReactKeyboardEvent<HTMLElement>, node: ProductionCanvasNode) => {
-    if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      navigate(node);
-      return;
+  const canvas = useInfiniteCanvas({
+    nodes,
+    positions: props.canvas,
+    viewport: props.viewport,
+    selectedId: props.selectedId,
+    activateOnSpace: true,
+    defaultViewport: (_rects, size, positions) => initialReadableViewport(nodeRects(readableNodes(nodes), positions), size),
+    onActivate: navigate,
+    onCommit: (patch) => {
+      if (patch.positions !== undefined) props.onCanvasChange(patch.positions);
+      if (patch.viewport !== undefined) props.onViewportChange(patch.viewport);
+      if (patch.selectedId !== undefined) props.onSelect(patch.selectedId ?? undefined);
     }
-    const step = event.shiftKey ? 40 : 10;
-    const delta = arrowDelta(event.key, step);
-    if (delta === undefined) return;
-    event.preventDefault();
-    event.stopPropagation();
-    const origin = positions[node.id] ?? { x: 0, y: 0 };
-    const point = { x: origin.x + delta.x, y: origin.y + delta.y };
-    props.onCanvasChange({ ...props.canvas, [node.id]: point });
-    const rect = { ...point, width: node.width, height: node.height };
-    if (size.width > 0 && !rectVisible(viewport, rect, size)) commitViewport(centerOnRect(viewport, rect, size));
-  };
-
-  const onViewportKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
-    if (event.target !== event.currentTarget) return;
-    const delta = arrowDelta(event.key, event.shiftKey ? 240 : 60);
-    if (delta !== undefined) {
-      event.preventDefault();
-      commitViewport({ ...viewport, x: viewport.x - delta.x, y: viewport.y - delta.y });
-    } else if (event.key === "+" || event.key === "=") {
-      event.preventDefault();
-      zoomAtCenter(BUTTON_ZOOM_STEP);
-    } else if (event.key === "-" || event.key === "_") {
-      event.preventDefault();
-      zoomAtCenter(1 / BUTTON_ZOOM_STEP);
-    } else if (event.key === "0") {
-      event.preventDefault();
-      commitViewport(fitRects(rects, size));
-    }
-  };
+  });
 
   const selectedNode = nodes.find((node) => node.id === props.selectedId);
-  const gridSize = 20 * viewport.zoom;
+  const gridSize = 20 * canvas.viewport.zoom;
 
   return <section className="oh-story-canvas-shell" aria-label="短剧故事与镜头无限画布">
     <div className="oh-story-canvas-toolbar">
       <div className="oh-story-canvas-help" id="oh-story-canvas-help">拖动空白处平移 · 滚轮缩放 · 方向键移动卡片 · 双击打开原文</div>
       <div className="oh-story-canvas-controls">
-        <button type="button" aria-label="缩小画布" onClick={() => { zoomAtCenter(1 / BUTTON_ZOOM_STEP); }}>−</button>
-        <span aria-live="polite">{Math.round(viewport.zoom * 100)}%</span>
-        <button type="button" aria-label="放大画布" onClick={() => { zoomAtCenter(BUTTON_ZOOM_STEP); }}>＋</button>
-        <button type="button" onClick={() => { commitViewport(fitRects(rects, size)); }}>适应</button>
-        <button type="button" onClick={() => { props.onCanvasChange({}); commitViewport(fitRects(nodeRects(nodes, Object.fromEntries(nodes.map((node) => [node.id, node.initial]))), size)); }}>复位</button>
+        <button type="button" aria-label="缩小画布" onClick={canvas.zoomOut}>−</button>
+        <span aria-live="polite">{Math.round(canvas.viewport.zoom * 100)}%</span>
+        <button type="button" aria-label="放大画布" onClick={canvas.zoomIn}>＋</button>
+        <button type="button" onClick={canvas.fitAll}>适应</button>
+        <button type="button" onClick={canvas.resetLayout}>复位</button>
       </div>
     </div>
     <div
-      ref={viewportRef}
+      ref={canvas.viewportRef}
       className="oh-story-canvas-viewport"
       role="application"
       aria-roledescription="无限画布"
       aria-label="画布视野"
       aria-describedby="oh-story-canvas-help"
       tabIndex={0}
-      data-panning={panning || undefined}
-      style={{ backgroundPosition: `${String(viewport.x)}px ${String(viewport.y)}px`, backgroundSize: `${String(gridSize)}px ${String(gridSize)}px` }}
-      onPointerDown={startPan}
-      onKeyDown={onViewportKeyDown}
+      data-panning={canvas.panning || undefined}
+      style={{ backgroundPosition: `${String(canvas.viewport.x)}px ${String(canvas.viewport.y)}px`, backgroundSize: `${String(gridSize)}px ${String(gridSize)}px` }}
+      onPointerDown={canvas.startPan}
+      onKeyDown={canvas.onViewportKeyDown}
     >
-      <div className="oh-story-canvas" style={{ transform: `translate(${String(viewport.x)}px, ${String(viewport.y)}px) scale(${String(viewport.zoom)})` }}>
+      <div className="oh-story-canvas" style={{ transform: `translate(${String(canvas.viewport.x)}px, ${String(canvas.viewport.y)}px) scale(${String(canvas.viewport.zoom)})` }}>
         <CanvasGroupLabels nodes={nodes} />
         <svg aria-hidden="true">{edges.map((edge) => {
           const from = nodes.find((node) => node.id === edge.from);
           const to = nodes.find((node) => node.id === edge.to);
-          const a = from === undefined ? undefined : positions[from.id];
-          const b = to === undefined ? undefined : positions[to.id];
+          const a = from === undefined ? undefined : canvas.positions[from.id];
+          const b = to === undefined ? undefined : canvas.positions[to.id];
           if (a === undefined || b === undefined || from === undefined || to === undefined) return null;
           const y1 = a.y + from.height / 2;
           const y2 = b.y + to.height / 2;
@@ -305,9 +101,9 @@ export function ProductionCanvas(props: ProductionCanvasProps) {
         {nodes.map((node) => <CanvasNodeCard
           key={node.id}
           node={node}
-          point={positions[node.id] ?? node.initial}
+          point={canvas.positions[node.id] ?? node.initial}
           selected={node.id === props.selectedId}
-          dragging={liveNode?.id === node.id}
+          dragging={canvas.draggingId === node.id}
           relations={edges.filter((edge) => edge.from === node.id || edge.to === node.id).length}
           versions={versions.filter((version) => version.targetId === node.id)}
           job={props.jobs?.findLast((job) => job.targetId === node.id)}
@@ -318,8 +114,8 @@ export function ProductionCanvas(props: ProductionCanvasProps) {
             return props.onPrepare?.(targetId, kind, prompt);
           }}
           onOpenMedia={props.onOpenMedia}
-          onKeyDown={onNodeKeyDown}
-          onPointerDown={startDrag}
+          onKeyDown={canvas.onNodeKeyDown}
+          onPointerDown={canvas.startDrag}
           onNavigate={navigate}
         />)}
       </div>
@@ -426,10 +222,6 @@ function readableNodes(nodes: readonly ProductionCanvasNode[]): ProductionCanvas
   ].filter((node): node is ProductionCanvasNode => node !== undefined);
 }
 
-function nodeRects(nodes: readonly ProductionCanvasNode[], positions: Readonly<Record<string, CanvasPoint>>): CanvasRect[] {
-  return nodes.map((node) => ({ ...(positions[node.id] ?? node.initial), width: node.width, height: node.height }));
-}
-
 function kindLabel(kind: ProductionCanvasNode["kind"]): string {
   if (kind === "story") return "故事";
   if (kind === "asset") return "人物与场景";
@@ -442,12 +234,4 @@ function stopPointer(event: ReactPointerEvent<HTMLElement>) {
 
 function stopClick(event: ReactMouseEvent<HTMLElement>) {
   event.stopPropagation();
-}
-
-function arrowDelta(key: string, step: number): CanvasPoint | undefined {
-  if (key === "ArrowLeft") return { x: -step, y: 0 };
-  if (key === "ArrowRight") return { x: step, y: 0 };
-  if (key === "ArrowUp") return { x: 0, y: -step };
-  if (key === "ArrowDown") return { x: 0, y: step };
-  return undefined;
 }

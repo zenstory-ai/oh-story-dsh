@@ -36,14 +36,14 @@ describe("video recap project projection", () => {
     expect(summary.previews.map((item) => item.role)).toEqual(["source", "edited", "final"]);
   });
 
-  it("surfaces optional reference artifacts without inventing a production stage", () => {
+  it("surfaces optional reference and 0.7.1 packaging/promo artifacts without inventing a production stage", () => {
     const root = "video-recaps/reference";
-    const names = ["production_reference.json", "reference_measurements.json", "reference_breakdown.json"];
+    const names = ["production_reference.json", "reference_measurements.json", "reference_breakdown.json", "promo_copy.json", "sfx_plan.json", "original_subtitles.json", "narration_lint.json"];
     const files = names.map((name) => file(`${root}/work/${name}`));
     for (const entry of files) expect(visibleVideoPath(entry.path)).toBe(true);
     const summary = summarizeVideoProject(root, files);
     expect(summary).toMatchObject({ state: "not-started", stage: "source", nextArtifact: undefined });
-    expect(summary.artifacts.map((artifact) => artifact.label).sort()).toEqual(["制作参考", "参考拆解", "参考测量"].sort());
+    expect(summary.artifacts.map((artifact) => artifact.label).sort()).toEqual(["制作参考", "参考拆解", "参考测量", "原声字幕", "宣发文案", "解说词校验", "音效方案"].sort());
     expect(visibleVideoPath(`${root}/work/golden_eval.json`)).toBe(false);
     expect(visibleVideoPath(`${root}/work/mimo_qc.json`)).toBe(false);
   });

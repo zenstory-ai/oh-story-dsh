@@ -27,6 +27,8 @@ export interface DramaAdapterSpec {
   readonly timeoutSeconds: number;
   /** Provider reference shipped with the Skill, relative to the drama skill root. */
   readonly reference: string;
+  /** Section heading in the consolidated `builtin-providers.md` reference. */
+  readonly referenceHeading: string;
 }
 
 export interface DramaAdapterStatus {
@@ -47,6 +49,7 @@ export interface DramaAdapterConfigLocation {
 export const DRAMA_ADAPTER_CONFIG_ENV = "OH_STORY_DRAMA_ADAPTER_CONFIG";
 
 const PROVIDER_SCRIPT = "short-drama-produce/scripts/provider_adapters.py";
+const BUILTIN_PROVIDERS_REFERENCE = "short-drama-produce/references/builtin-providers.md";
 
 export const DRAMA_ADAPTERS: readonly DramaAdapterSpec[] = [
   {
@@ -56,26 +59,45 @@ export const DRAMA_ADAPTERS: readonly DramaAdapterSpec[] = [
     requiredEnv: ["OPENAI_API_KEY"],
     optionalEnv: ["OPENAI_BASE_URL"],
     timeoutSeconds: 600,
-    reference: "short-drama-produce/references/providers/gpt-image-2.md"
+    reference: BUILTIN_PROVIDERS_REFERENCE,
+    referenceHeading: "GPT Image 2"
   },
   {
     name: "seedance",
     label: "Seedance",
     modality: "video",
     requiredEnv: ["ARK_API_KEY", "SEEDANCE_MODEL"],
-    optionalEnv: ["SEEDANCE_BASE_URL", "SEEDANCE_ALLOWED_RATIOS", "SEEDANCE_MIN_DURATION", "SEEDANCE_MAX_DURATION"],
+    optionalEnv: [
+      "SEEDANCE_BASE_URL",
+      "SEEDANCE_POLL_INTERVAL",
+      "SEEDANCE_TIMEOUT_SECONDS",
+      "SEEDANCE_ALLOWED_RATIOS",
+      "SEEDANCE_MIN_DURATION",
+      "SEEDANCE_MAX_DURATION"
+    ],
     timeoutSeconds: 3_600,
-    reference: "short-drama-produce/references/providers/seedance.md"
+    reference: BUILTIN_PROVIDERS_REFERENCE,
+    referenceHeading: "Seedance"
   },
   {
     name: "minimax-h3",
     label: "MiniMax H3",
     modality: "video",
-    // Every H3 job carries an integer duration, and the adapter refuses it without this range.
-    requiredEnv: ["MINIMAX_API_KEY", "MINIMAX_VIDEO_MODEL", "MINIMAX_VIDEO_RESOLUTIONS", "MINIMAX_VIDEO_MIN_DURATION", "MINIMAX_VIDEO_MAX_DURATION"],
-    optionalEnv: ["MINIMAX_VIDEO_BASE_URL", "MINIMAX_VIDEO_RATIOS"],
+    requiredEnv: ["MINIMAX_API_KEY", "MINIMAX_VIDEO_MODEL"],
+    optionalEnv: [
+      "MINIMAX_VIDEO_BASE_URL",
+      "MINIMAX_VIDEO_POLL_INTERVAL",
+      "MINIMAX_VIDEO_TIMEOUT_SECONDS",
+      "MINIMAX_VIDEO_ALLOWED_RESOLUTIONS",
+      "MINIMAX_VIDEO_RESOLUTIONS",
+      "MINIMAX_VIDEO_ALLOWED_RATIOS",
+      "MINIMAX_VIDEO_RATIOS",
+      "MINIMAX_VIDEO_MIN_DURATION",
+      "MINIMAX_VIDEO_MAX_DURATION"
+    ],
     timeoutSeconds: 3_600,
-    reference: "short-drama-produce/references/providers/minimax-h3-video.md"
+    reference: BUILTIN_PROVIDERS_REFERENCE,
+    referenceHeading: "MiniMax H3 视频"
   },
   {
     name: "minimax-music",
@@ -84,7 +106,8 @@ export const DRAMA_ADAPTERS: readonly DramaAdapterSpec[] = [
     requiredEnv: ["MINIMAX_API_KEY"],
     optionalEnv: ["MINIMAX_BASE_URL"],
     timeoutSeconds: 600,
-    reference: "short-drama-produce/references/providers/minimax-music.md"
+    reference: BUILTIN_PROVIDERS_REFERENCE,
+    referenceHeading: "MiniMax 音乐"
   },
   {
     name: "minimax-speech",
@@ -93,7 +116,8 @@ export const DRAMA_ADAPTERS: readonly DramaAdapterSpec[] = [
     requiredEnv: ["MINIMAX_API_KEY"],
     optionalEnv: ["MINIMAX_BASE_URL"],
     timeoutSeconds: 600,
-    reference: "short-drama-produce/references/providers/minimax-speech.md"
+    reference: BUILTIN_PROVIDERS_REFERENCE,
+    referenceHeading: "MiniMax 语音"
   }
 ];
 
