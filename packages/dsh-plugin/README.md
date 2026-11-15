@@ -1,111 +1,83 @@
 # @oh-story/dsh
 
-[GitHub](https://github.com/zenstory-ai/oh-story-dsh) · [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) · [MIT](LICENSE)
+[GitHub](https://github.com/zenstory-ai/oh-story-dsh) · [项目主页](https://zenstory.ai/zh/dsh) · [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) · [CHANGELOG](https://github.com/zenstory-ai/oh-story-dsh/blob/main/CHANGELOG.md) · [MIT](LICENSE)
 
-![小说工作台](https://raw.githubusercontent.com/zenstory-ai/oh-story-dsh/main/docs/images/story-workbench-demo.gif)
+为 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness)（DSH）打造的开源小说、短剧、互动游戏与视频解说创作工作台插件。Agent、会话、模型、权限审批与原生对话全部由 DSH 驱动，所有创作产物直接以普通文件保存在本地工作区中。
 
-`oh-story-dsh` 是基于 DeepSeek Harness（DSH）构建的社区小说、短剧、互动游戏与视频解说创作插件。以下清单对应当前源码；已发布包按各自的 manifest 固定上游提交。
+| 工作台 | 内置技能包（随包固定版本） | 常用命令 |
+| --- | --- | --- |
+| **小说** | Oh Story `0.10.5`（14 Skills · 7 Roles） | `/story`、`/story-long-write`、`/story-review`、`/story-publish` |
+| **短剧** | Drama Skills `0.12.0`（12 Skills） | `/short-drama`、`/short-drama-write`、`/short-drama-storyboard`、`/short-drama-edit` |
+| **互动游戏** | NovelToGame `0.9.0`（5 Skills） | `/novel-to-game quick`、`/game-build`、`/game-qa` |
+| **视频解说** | video-recap-skills `0.7.1`（2 Skills） | `/video-recap`、`/video-reference` |
 
-- 14 个 Oh Story 0.10.5 小说 Skills 与 7 个专业 Roles；
-- 12 个 Drama Skills 0.12.0 短剧流程，每集按请求维护最多五份创作 Markdown（剧本、视觉设定、分镜、图片提示词、视频提示词），成片装配另写《剪辑单.md》；
-- 5 个 NovelToGame 0.9.0 Skills 与 `game-adaptations/<project>` 产物协议；
-- video-recap-skills 0.7.1 的 2 个 Skills（自包含的 `video-recap` 与按需拆片的 `video-reference`）、`video-recaps/<project>` 项目约定与轻量视频预览工作台；
-- 小说协议 hooks 与安全的 Session workspace 文件路由；
-- 小说/短剧的文件树、编辑器、Chat 三栏工作台，以及游戏/视频的“左侧工作台 + 右侧 Chat”制作面板；
-- Markdown 与 JSONL 结构化预览；
-- 短剧镜头/素材/任务/成片/画布生产视图、跨集项目媒体库、成果版本与参考复用；「成片」页把排定的镜序交给 `/short-drama-edit` 写《剪辑单.md》并渲染到 `制作成果/成片/`；轻量 Markdown 协议会诊断重复 ID、悬空引用和畸形标题；
-- `oh_story_role` 原生子 Agent，以及无媒体副作用的 `oh_story_production` 生产界面/任务意图工具视图。
+## 安装与启动
 
-本项目与 DeepSeek 官方无隶属、合作或背书关系；DeepSeek Harness 名称与品牌素材归其权利人所有。
-
-## 安装
-
-安装命令会临时提供 pnpm；只安装 Node.js 的机器也能执行。DSH 的 `plugin add` 内部需要 pnpm，单独运行 `npx @deepseek-ai/dsh ... plugin add` 不会自动补上它。
+环境要求 **Node.js 24.9+**（安装命令已内置临时 `pnpm`，无需提前全局安装）：
 
 ```bash
 npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.2-rc.1 dsh plugin --profile web add @oh-story/dsh@0.1.26 &&
 npx -y @deepseek-ai/dsh@0.2.2-rc.1 web
 ```
 
-也可以直接安装 GitHub Release 中的预构建包：
+也可直接安装 GitHub Release 预构建包：
 
 ```bash
 npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.2-rc.1 dsh plugin --profile web add https://github.com/zenstory-ai/oh-story-dsh/releases/download/v0.1.26/oh-story-dsh-0.1.26.tgz &&
 npx -y @deepseek-ai/dsh@0.2.2-rc.1 web
 ```
 
-保持终端运行。若浏览器未自动打开，访问终端打印的完整 `http://127.0.0.1:3080/?token=...` 链接完成首次认证。
+保持终端运行，若浏览器未自动打开，复制终端打印的完整 `http://127.0.0.1:3080/?token=...` 链接完成首次认证。在 DSH「设置 → 模型」中配置 Provider 与 API Key（或启动前设置环境变量 `DEEPSEEK_API_KEY`）；仅浏览本地已有项目可选择「稍后配置」。
 
-本页默认命令固定使用 npm `latest` 的 `0.2.2-rc.1`（需要 Node.js 24.9+）。仍在用 `0.2.1-rc.5` 或 `0.2.0-rc.2` 时把安装、启动两条命令中的版本同时改回它；插件接受 `>=0.2.0-rc.2 <0.2.1-0`、`>=0.2.1-alpha.1 <0.2.2-0` 或 `>=0.2.2-alpha.2 <0.2.3-0`（npm `next` 的 `0.2.2-rc.3` 也已验证），不要混装宿主版本。
+安装与启动请使用同一个 DSH 版本。默认配套 `0.2.2-rc.1`，同时兼容 `>=0.2.0-rc.2 <0.2.1-0`、`>=0.2.1-alpha.1 <0.2.2-0` 与 `>=0.2.2-alpha.2 <0.2.3-0`（含 `0.2.1-rc.5`、`0.2.0-rc.2` 与 `0.2.2-rc.3`）。
 
-需要 Node.js 24+。开始 AI 创作前需要在 DSH 的「设置 → 模型」中添加 Provider 并填入 API Key，或在启动前设置环境变量 `DEEPSEEK_API_KEY`。
+## 四个创作工作台
 
-首次启动时 DSH 会在「文稿」目录下自动建「默认工作区 / Default workspace」并打开其中的空白会话，Oh Story 的使用引导显示在会话首页。点击左侧 Workspaces 旁的「添加工作区 / Add workspace」选择作品文件夹，再在下方「选择工作区 / Choose workspace」中选中该目录（或打开已有会话），目录里已有创作项目时，会显示「小说 / 短剧 / 游戏 / 视频」标签；查看已有作品无需 API Key。
+### 小说工作台
 
-配置模型后，在普通 Agent 会话中使用 `/story`、`/short-drama`、`/novel-to-game quick` 或 `/video-recap`。空目录会保留 DSH 原生 Chat，Agent 写出第一个创作文件后工作台才会自动出现。工作台收起后，可通过会话区的「创作工作台」按钮重新打开。模型、凭据、Preset、权限、会话记录、停止/继续、Todo、审批和 Composer 均沿用当前 DeepSeek Harness 配置与界面。
+![小说工作台](https://raw.githubusercontent.com/zenstory-ai/oh-story-dsh/main/docs/images/story-workbench-demo.gif)
 
-旧版 DSH（如 `0.2.0-rc.2`）缺少安全的草稿初始化接口时，「带到 Chat」只聚焦原生会话并保留可查看、复制的讨论内容，不替换已有输入、引用与附件。
+文件树、Markdown 编辑器与原生 Chat 三栏联动。Agent 写入设定、大纲或章节时编辑器实时跟进，未保存的人工草稿受并发保护，完整覆盖选题、扫榜、拆文、长短篇写作、审稿、去 AI 味、建书资料与封面提示词。
 
-## 短剧工作台
+### 短剧工作台
 
 ![短剧工作台](https://raw.githubusercontent.com/zenstory-ai/oh-story-dsh/main/docs/images/drama-canvas-workbench.png)
 
-短剧默认进入集级无限画布，组织已有故事场次、人物、场景、镜头与真实媒体。文稿目录和原生 Chat 可分别收起，卡片可拖动、缩放、选中后操作并打开原文；素材、任务、版本和成片顺序保留入口，环境与文档诊断收进「制作详情」。图片与视频先准备生产预检，创作者在 Chat 明确确认同一任务后才会运行。
+每集按需维护 `剧本.md`、`视觉设定.md`、`分镜.md`、`图片提示词.md`、`视频提示词.md` 五份文档。默认进入无限画布串联剧本场次、角色与场景参考板、分镜关键帧与视频素材；支持版本切换、行号级断链诊断，并在调用付费媒体 API 前经你明确确认，成片由 `/short-drama-edit` 按《剪辑单.md》渲染至 `剧集/<EP>/制作成果/成片/`。
 
-## 游戏工作台
+### 互动游戏工作台
 
 ![游戏工作台](https://raw.githubusercontent.com/zenstory-ai/oh-story-dsh/main/docs/images/game-creative-workbench.png)
 
-游戏区提供「试玩 / 创作画布 / 文稿」，画布组织真实故事、玩法、美术与构建。文稿可编辑保存并处理冲突，可带到原生 Chat 继续讨论。游戏产物写入 `game-adaptations/<project>`；`build/app/index.html` 就绪后即可在左侧隔离预览中实时试玩，切换项目文件或窄屏对话不会卸载当前运行时，新构建也只在用户主动选择后载入。`/game-qa` 与 `qa/verification.json` 保留为 Agent/自动化质量契约，不在制作面板展示独立 QA UI。
+围绕 `game-adaptations/<project>` 提供「试玩 / 创作画布 / 文稿」视图。左侧独立沙箱实时试玩 `build/app/index.html`，画布串联原著依据、玩法设计、人物世界与当前构建；切换视图保留试玩进度，新构建由你主动载入。
 
-## 视频工作台
+### 视频解说工作台
 
 ![视频工作台](https://raw.githubusercontent.com/zenstory-ai/oh-story-dsh/main/docs/images/video-narrative-workbench.png)
 
-视频项目写入 `video-recaps/<project>`：`sources/` 保存原片，`work/` 保存流水线权威产物，`outputs/` 保存交付文件。工作台提供「预览 / 创作画布 / 文稿」，看视频时可以逐段读解说、按可靠映射回看原片、改稿与保存。画布组织实际文稿、原声与媒体，切换视图保留播放位置，制作中保留旧版，新版明确载入。原生 Chat 按需展开，Agent 继续在同一会话里完成理解、剪辑、写稿、配音与合成；文字修改不会自动重做现有配音，不引入多轨时间线。
+围绕 `video-recaps/<project>` 提供「预览 / 创作画布 / 文稿」视图。对照查看成片、剪后片与原片，按剪辑映射回看原片片段，逐段改写解说词并保留时间轴。
 
-```text
-给 /path/to/video.mp4 做一个 3 分钟中文解说成片，保留关键原声，字幕烧进画面。
-```
+## 媒体 API 与宿主机依赖
 
-宿主机需要 Python 3.10+、`PATH` 上的 ffmpeg/ffprobe，以及 `MIMO_API_KEY`；Fish Audio TTS 另需 `FISH_API_KEY`，自建 IndexTTS 需 `INDEX_TTS_ENDPOINT` 与 `INDEX_TTS_VOICE`（`TTS_PROVIDER=index-tts`）。Debian/Ubuntu 用 `sudo apt install ffmpeg`；有 libass `subtitles` 滤镜时烧录字幕，没有时交付外部 SRT（也可另装带 libass 的构建）。Key 与 `PATH` 在启动 DSH 的终端里设置，重启后生效。视频「制作详情」里的「运行环境」检查（没有项目时也可打开）只报告 DSH Host 进程是否就绪，不返回 Key 内容，密钥也不会写入项目；Agent 实际的运行环境以 video-recap 的 `scripts/doctor.py` 为准。
+- **短剧媒体生成（可选）**：需宿主机安装 Python 3.9+（成片合成另需 `ffmpeg`/`ffprobe`）。在启动 DSH 前按需设置环境变量：图片 `OPENAI_API_KEY`（GPT Image 2）；视频 `ARK_API_KEY` + `SEEDANCE_MODEL`（Seedance）或 `MINIMAX_API_KEY` + `MINIMAX_VIDEO_MODEL`（MiniMax H3）；语音 / 音乐 `MINIMAX_API_KEY`。内置 `seedance` 与 `minimax-h3` 默认支持角色参考音频 `reference_audio`，自定义外部 adapter 可通过 `OH_STORY_DRAMA_ADAPTER_CONFIG` 配置并声明 `reference_roles`。
+- **视频解说依赖（按需）**：需宿主机安装 Python 3.10+、`PATH` 上的 `ffmpeg`/`ffprobe`，以及 `MIMO_API_KEY`（Fish Audio 配音另配 `FISH_API_KEY`）。带 `libass` 滤镜时自动烧录硬字幕，否则输出外挂 SRT。
 
-短剧生产的图片、视频、语音与音乐不由 DeepSeek 生成，而是由 `short-drama-produce` 调用 GPT Image 2（`OPENAI_API_KEY`）、Seedance（`ARK_API_KEY` + `SEEDANCE_MODEL`）、MiniMax H3（`MINIMAX_API_KEY` + `MINIMAX_VIDEO_MODEL`）、MiniMax Speech（`MINIMAX_API_KEY`）或 MiniMax Music（`MINIMAX_API_KEY`）生成；生产与检查脚本需要 Python 3.9+；Key 在启动 DSH 前写入环境变量，「生产」视图会显示 Python 与每个供应商是否就绪，插件只向界面返回配置是否存在，不返回 Key 的值。内置 adapter 会自动登记到一份不含凭据的配置文件，自定义时用 `OH_STORY_DRAMA_ADAPTER_CONFIG` 指向自己的文件。
+## 独立 Profile 按需加载
 
-角色参考音频按接口类型校验：内置的 `seedance` 与 `minimax-h3` profile 默认放行 `reference_audio`（仍须确认环境变量中选定的具体模型支持声音输入）；自定义外部 adapter 则须在项目外的配置文件里声明 `reference_roles`（包含 `reference_audio`），并用 `OH_STORY_DRAMA_ADAPTER_CONFIG` 指向它。不支持或未声明的接口会在付费提交前报错拦截，不会悄无声息地丢掉参考音频。
-
-Drama Skills 0.6.0 不支持把 v0.5 结构化项目原地升级为 creator-first 项目。旧项目应继续锁定 v0.5 并只读保留；迁移时请新建项目根，逐集人工确认当前工作实际需要的 `剧本.md`、`视觉设定.md`、`分镜.md`、`图片提示词.md` 或 `视频提示词.md`，不要预建空文档。
-
-角色参考音频必须绑定具体角色并通过身份与禁控校验，音频不会出现在图片参考选择器里。video-recap 0.6.1 改用 QC schema 2，删除旧 QC 标志/路径；升级既有 `work/` 时可能重新生成 ASR、剪辑、TTS 与索引，不得沿用或伪造旧 PASS。0.7.0 把六个生产技能合成一个 `video-recap`，删除 dub 与 MiMo 解说评审；旧 `work/` 打印的续跑命令若带已删除参数会报错，去掉后再跑，`EDIT_MODE`、`TARGET_DURATION` 环境变量也不再接受，成片默认必须通过最终质检。仍需要 dub 请单独使用 video-recap-skills 0.6.2。
-
-Oh Story 0.9.0 按写书步骤重整参考资料，书稿、设定、追踪和作者记忆不用迁移；之前导入的长篇续写前，先让 `/story-long-write` 把旧剧情单元改写成单元卡。作者习惯仍由长篇、短篇写作入口管理，独立审稿与去 AI 味只按本次提供的偏好执行，检测或标注不会改正文。Oh Story 0.9.1 起续写状态卡最多列 20 个活跃角色。Drama 0.9 起继续按当前需要维护 Markdown 创作文档，旧 JSON 检查器不再随包，结构检查统一用 `creator_markdown_check.py`（每写完一份文档可加 `--partial` 只核对已有文档）；0.12.0 之前的创作者文档续写或跑检查前需先把旧字段名改成现行直白写法，工作台仍兼容已有《分镜.md》的 `### 冻结关键帧提示词`。
-
-## 没看到界面时
-
-- **安装报 `pnpm not found on PATH`**：重新执行上面带 `--package pnpm@11.7.0` 的完整安装命令，确认安装成功后再启动。
-- **浏览器未打开或要求认证**：打开终端打印的完整带 `?token=...` 链接；端口被占用时用 `web --port 3081`，并访问新打印的链接。
-- **没有四个创作标签**：先添加作品目录并打开会话。空目录需要先在 Chat 中运行创作命令，生成创作文件后工作台才会出现；已收起的工作台可用会话区的「创作工作台」按钮恢复。已有作品仍不显示时，检查安装与启动是否使用同一个 profile，重启 DSH 并刷新页面。
-- **独立 `story` profile 没有网页服务**：按下节补上 `@deepseek-ai/dsh-web-app`，仅安装创作插件不会给新 profile 添加 Web 界面。
-
-## 按需加载
-
-插件装进哪个 profile，那个 profile 的每个 Session 都能发现创作 Skills，具体指令在使用时读取；工作台只在有创作项目时显示。想让原版 `web` 保持干净、只在创作时打开工作台，就装进独立 profile：
+若希望默认 `web` profile 保持纯净，可将插件装入独立 `story` profile：
 
 ```bash
 npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.2-rc.1 dsh plugin --profile story add @oh-story/dsh@0.1.26
 ```
 
-新 profile 默认没有界面。编辑 `~/.dsh/profiles/story/package.json`，把 `dsh.profile.bundles` 改成 `["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-web-app", "@oh-story/dsh"]`。
+将 `~/.dsh/profiles/story/package.json` 中的 `dsh.profile.bundles` 设为 `["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-web-app", "@oh-story/dsh"]`，随后即可用 `npx -y @deepseek-ai/dsh@0.2.2-rc.1 --profile story --port 3081` 独立启动创作工作台。
 
-`@deepseek-ai/dsh-web-app` 是 DSH 自带的 Web 界面包，需要在创作插件之前加载。
+## 常见问题与升级说明
 
-```bash
-npx -y @deepseek-ai/dsh@0.2.2-rc.1 web                          # 原版 DSH
-npx -y @deepseek-ai/dsh@0.2.2-rc.1 --profile story --port 3081  # 创作工作台
-```
+- **安装报 `pnpm not found on PATH`**：执行上方带 `--package pnpm@11.7.0` 的完整安装命令。
+- **未看到工作台标签**：添加并打开作品目录；空目录需先在 Chat 中运行 `/story`、`/short-drama`、`/novel-to-game quick` 或 `/video-recap` 生成首个创作文件；已收起的工作台可点会话区的「创作工作台」恢复。
+- **旧项目升级提示**：Drama Skills `0.12.0` 前的短剧文档只浏览无需改动，续写或跑 `creator_markdown_check.py` 前需将旧字段名改为现行直白名称；video-recap `0.7+` 续跑旧 `work/` 时需去掉 `--edit-mode dub`、`--review-narration` 等已移除参数。完整说明见仓库 [README](https://github.com/zenstory-ai/oh-story-dsh#升级到新版本后要做什么) 与 [CHANGELOG](https://github.com/zenstory-ai/oh-story-dsh/blob/main/CHANGELOG.md)。
 
-模型、凭据、workspace 与历史会话由 DSH 统一保存，切换 profile 不会丢。安装与启动请使用同一个 dsh 版本。
+---
 
-## License
-
-[Changelog](https://github.com/zenstory-ai/oh-story-dsh/blob/main/CHANGELOG.md) · [MIT](LICENSE)
+本项目与 DeepSeek 官方无隶属、合作或背书关系；DeepSeek Harness 名称与品牌标识归其权利人所有。 · [MIT License](LICENSE)

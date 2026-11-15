@@ -26,7 +26,7 @@ export interface ProductionCanvasEdge {
 }
 
 const STORY_SIZE = { width: 260, height: 210 } as const;
-const ASSET_SIZE = { width: 248, height: 270 } as const;
+const ASSET_SIZE = { width: 248, height: 282 } as const;
 const SHOT_SIZE = { width: 292, height: 310 } as const;
 const ORIGIN = { x: 80, y: 80 } as const;
 const COLUMN_GAP = 36;
