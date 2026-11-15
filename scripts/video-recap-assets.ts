@@ -1,12 +1,15 @@
-import { createHash } from "node:crypto";
 import { cp, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
-import { basename, dirname, join, relative, resolve, sep } from "node:path";
-import { fileURLToPath } from "node:url";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
+import { join, resolve } from "node:path";
 
-const execFileAsync = promisify(execFile);
-const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+import {
+  git,
+  isPortableSourceAsset,
+  manifestFiles,
+  matchesExcludedPrefix,
+  portableRelative,
+  repoRoot,
+  type ManifestFileEntry
+} from "./asset-sync-utils.js";
 
 export const videoRecapRoot = join(repoRoot, "packages/knowledge/video-recap");
 
@@ -19,46 +22,11 @@ export interface VideoRecapAssetManifest {
   };
   readonly generatedAt: string;
   readonly skills: readonly string[];
-  readonly files: readonly { readonly path: string; readonly sha256: string; readonly bytes: number }[];
-}
-
-function portableRelative(root: string, path: string): string {
-  return relative(root, path).split(sep).join("/");
+  readonly files: readonly ManifestFileEntry[];
 }
 
 export function videoRecapUpstreamRoot(): string {
   return resolve(process.env.VIDEO_RECAP_UPSTREAM_DIR ?? join(repoRoot, "..", "video-recap-skills"));
-}
-
-async function git(root: string, ...args: string[]): Promise<string> {
-  const { stdout } = await execFileAsync("git", ["-C", root, ...args], { encoding: "utf8" });
-  return stdout.trim();
-}
-
-async function regularFiles(root: string): Promise<string[]> {
-  const output: string[] = [];
-  const visit = async (directory: string): Promise<void> => {
-    for (const entry of await readdir(directory, { withFileTypes: true })) {
-      const path = join(directory, entry.name);
-      if (entry.isDirectory()) await visit(path);
-      else if (entry.isFile()) output.push(path);
-    }
-  };
-  await visit(root);
-  return output.sort();
-}
-
-async function fileDigest(path: string): Promise<{ readonly sha256: string; readonly bytes: number }> {
-  const bytes = await readFile(path);
-  return { sha256: createHash("sha256").update(bytes).digest("hex"), bytes: bytes.byteLength };
-}
-
-function isPortableSourceAsset(path: string): boolean {
-  const normalized = path.split(sep).join("/");
-  return !normalized.includes("/__pycache__/")
-    && !normalized.endsWith("/__pycache__")
-    && !normalized.endsWith(".pyc")
-    && !normalized.endsWith("/.DS_Store");
 }
 
 // Upstream ships a standalone local dashboard (0.7.0's read-only 审片台: its own web server and UI over
@@ -75,15 +43,8 @@ export const videoRecapPlatformGlue: readonly string[] = [
   "video-recap/assets/dashboard/"
 ];
 
-function isVideoRecapPlatformGlue(bundledPath: string): boolean {
-  return videoRecapPlatformGlue.some((entry) => bundledPath === entry.replace(/\/$/u, "") || bundledPath.startsWith(entry));
-}
-
 export async function currentVideoRecapFiles(): Promise<VideoRecapAssetManifest["files"]> {
-  return Promise.all((await regularFiles(videoRecapRoot))
-    .filter(isPortableSourceAsset)
-    .filter((path) => basename(path) !== "manifest.json")
-    .map(async (path) => ({ path: portableRelative(videoRecapRoot, path), ...await fileDigest(path) })));
+  return manifestFiles(videoRecapRoot);
 }
 
 export async function synchronizeVideoRecapAssets(): Promise<VideoRecapAssetManifest> {
@@ -97,7 +58,8 @@ export async function synchronizeVideoRecapAssets(): Promise<VideoRecapAssetMani
   await cp(sourceSkills, join(videoRecapRoot, "skills"), {
     recursive: true,
     dereference: false,
-    filter: (path) => isPortableSourceAsset(path) && !isVideoRecapPlatformGlue(portableRelative(sourceSkills, path))
+    filter: (path) => isPortableSourceAsset(path)
+      && !matchesExcludedPrefix(portableRelative(sourceSkills, path), videoRecapPlatformGlue)
   });
   for (const file of ["LICENSE", "README.md", "README.en.md", "CHANGELOG.md"]) {
     await cp(join(source, file), join(videoRecapRoot, file));

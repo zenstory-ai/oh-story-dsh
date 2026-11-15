@@ -10,25 +10,22 @@ import type {} from "@deepseek-ai/dsh-host-webserver";
 import type { SandboxPolicyService } from "@deepseek-ai/dsh-sandbox-policy";
 import { SessionId } from "@deepseek-ai/dsh-session";
 import type {} from "@deepseek-ai/dsh-typert-registry";
-import { type GameVerificationBinding, WorkspaceVerificationTracker } from "./game-verification.js";
+import {
+  CREATIVE_DIRECTORIES,
+  editableCreativePath,
+  GAME_DIRECTORY,
+  isCreativeRootPath,
+  pathExtension,
+  ROOT_FILES,
+  safeRelativePath,
+  VIDEO_DIRECTORY
+} from "./creative-paths.js";
 import { dramaAdapterStatuses, ensureDramaAdapterConfig, type DramaAdapterStatus } from "./drama-adapters.js";
 import { commandOutput, DRAMA_PYTHON, hostPython, VIDEO_PYTHON, type PythonProbe } from "./host-python.js";
 import { defaultDramaSkillRoot } from "./skill-provider.js";
-import { skipVideoDirectory, summarizeVideoProject, VIDEO_DIRECTORY, videoProjectRoot, visibleVideoPath, type VideoProjectSummary } from "./video-project.js";
+import { skipVideoDirectory, summarizeVideoProject, videoProjectRoot, visibleVideoPath, type VideoProjectSummary } from "./video-project.js";
 import { isTrustedPreviewNavigation, isTrustedWorkspaceRequest } from "./workspace-request-trust.js";
 
-const STORY_DIRECTORIES = ["正文", "大纲", "设定", "追踪", "对标", "参考资料"] as const;
-const DRAMA_DIRECTORIES = ["输入", "项目开发", "设定集", "剧集", "交付", "创作者决策", "审查"] as const;
-const GAME_DIRECTORY = "game-adaptations";
-// Preview studios need only a small manifest-driven subset, so discover them before a very large
-// prose workspace can consume the shared listing budget.
-const CREATIVE_DIRECTORIES = [VIDEO_DIRECTORY, GAME_DIRECTORY, ...STORY_DIRECTORIES, ...DRAMA_DIRECTORIES] as const;
-// Oh Story short fiction keeps one book as three files at the book root (DSH: the workspace root).
-const SHORT_STORY_FILES = ["正文.md", "设定.md", "小节大纲.md"] as const;
-const ROOT_FILES = new Set<string>(["short-drama.json", ...SHORT_STORY_FILES]);
-const EDITABLE_EXTENSIONS = new Set([".md", ".txt", ".json", ".jsonl"]);
-const GAME_EDITABLE_EXTENSIONS = new Set([...EDITABLE_EXTENSIONS, ".html", ".css", ".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx"]);
-const VIDEO_EDITABLE_EXTENSIONS = new Set([...EDITABLE_EXTENSIONS, ".srt", ".ass"]);
 const MEDIA_TYPES: ReadonlyMap<string, string> = new Map([
   [".png", "image/png"], [".jpg", "image/jpeg"], [".jpeg", "image/jpeg"], [".webp", "image/webp"], [".gif", "image/gif"],
   [".mp4", "video/mp4"], [".webm", "video/webm"], [".mov", "video/quicktime"], [".mkv", "video/x-matroska"],
@@ -37,7 +34,6 @@ const MEDIA_TYPES: ReadonlyMap<string, string> = new Map([
 const MEDIA_MAX_BYTES = 256 * 1_024 * 1_024;
 const FILE_LIMIT = 1_000;
 const PREVIEW_FILE_LIMIT = 32 * 1024 * 1024;
-const workspaceVerificationTracker = new WorkspaceVerificationTracker();
 let videoPreflightCache: { readonly expires: number; readonly value: VideoPreflightSummary } | undefined;
 let dramaPreflightCache: { readonly expires: number; readonly value: DramaPreflightSummary } | undefined;
 
@@ -62,15 +58,6 @@ interface WorkspaceFile {
   readonly mimeType?: string | undefined;
 }
 
-interface GameVerificationSummary {
-  readonly status: "NOT_RUN" | "FAIL" | "PASS";
-  readonly checks: Readonly<Record<string, "NOT_RUN" | "FAIL" | "PASS">>;
-  readonly runId?: string | undefined;
-  readonly limitations: readonly { readonly scope: string; readonly reason: string }[];
-  readonly binding: GameVerificationBinding;
-  readonly verifiedPreviewVersion?: string | undefined;
-}
-
 interface GameProjectSummary {
   readonly id: string;
   readonly root: string;
@@ -78,10 +65,10 @@ interface GameProjectSummary {
   readonly previewReady: boolean;
   readonly previewUrl?: string | undefined;
   readonly previewVersion: string;
-  readonly verification: GameVerificationSummary;
 }
 
 interface WorkspaceRealm {
+  readonly sessionId: string;
   readonly agent: Agent;
   readonly fs: FileSystem;
   readonly sandboxPolicy: SandboxPolicyService;
@@ -280,35 +267,17 @@ async function jsonBody(request: IncomingMessage, maxBytes: number): Promise<Rec
   }
 }
 
-function safeRelativePath(path: string): boolean {
-  return path !== ""
-    && !path.startsWith("/")
-    && !path.includes("\\")
-    && !path.split("/").some((segment) => segment === "" || segment === "." || segment === "..");
-}
-
-function editablePath(path: string): boolean {
-  const extensions = path.startsWith(`${GAME_DIRECTORY}/`) ? GAME_EDITABLE_EXTENSIONS
-    : path.startsWith(`${VIDEO_DIRECTORY}/`) ? VIDEO_EDITABLE_EXTENSIONS
-      : EDITABLE_EXTENSIONS;
-  return extensions.has(extname(path).toLocaleLowerCase());
-}
-
 export function assertCreativePath(path: string, kind: "text" | "media"): void {
-  if (kind === "text" ? !editablePath(path) : !MEDIA_TYPES.has(extname(path).toLocaleLowerCase())) {
+  if (kind === "text" ? !editableCreativePath(path) : !MEDIA_TYPES.has(pathExtension(path))) {
     throw new WorkspaceHttpError(415, kind === "text" ? "工作台不支持编辑该文件类型。" : "目标不是受支持的短剧媒体文件。");
   }
-  if (!safeRelativePath(path)) {
-    throw new WorkspaceHttpError(403, "文件路径不在创作工作台中。");
-  }
-  const root = path.split("/", 1)[0];
-  if (!CREATIVE_DIRECTORIES.some((directory) => directory === root) && !ROOT_FILES.has(path)) {
+  if (!safeRelativePath(path) || !isCreativeRootPath(path)) {
     throw new WorkspaceHttpError(403, "文件路径不在创作工作台中。");
   }
 }
 
 export function mediaMimeTypeForPath(path: string): string | undefined {
-  return MEDIA_TYPES.get(extname(path).toLocaleLowerCase());
+  return MEDIA_TYPES.get(pathExtension(path));
 }
 
 async function workspaceRealmForSession(context: Context, rawId: string): Promise<WorkspaceRealm> {
@@ -330,7 +299,7 @@ async function workspaceRealmForSession(context: Context, rawId: string): Promis
   const fs = agent.ctx.get("fs");
   const sandboxPolicy = agent.ctx.get("sandboxPolicy");
   if (fs === undefined || sandboxPolicy === undefined) throw new WorkspaceHttpError(503, "DSH 文件系统当前不可用。");
-  return { agent, fs, sandboxPolicy, cwd, root: await fs.resolve(cwd) };
+  return { sessionId: rawId, agent, fs, sandboxPolicy, cwd, root: await fs.resolve(cwd) };
 }
 
 async function workspaceRealm(context: Context, url: URL): Promise<WorkspaceRealm> {
@@ -380,10 +349,10 @@ async function listFiles(realm: WorkspaceRealm): Promise<WorkspaceFile[]> {
       if (entry.type === "directory") {
         if (!skipVideoDirectory(childPath)) await walk(childPath, entry.target);
       }
-      else if (entry.type === "file" && (editablePath(childPath) || MEDIA_TYPES.has(extname(entry.name).toLocaleLowerCase()))) {
+      else if (entry.type === "file" && (editableCreativePath(childPath) || MEDIA_TYPES.has(pathExtension(entry.name)))) {
         const info = entry.version === undefined || entry.size === undefined ? await realm.fs.stat(entry.target) : undefined;
         const version = entry.version ?? info?.version;
-        const mimeType = MEDIA_TYPES.get(extname(entry.name).toLocaleLowerCase());
+        const mimeType = MEDIA_TYPES.get(pathExtension(entry.name));
         if (version !== undefined && (!childPath.startsWith(`${VIDEO_DIRECTORY}/`) || visibleVideoPath(childPath))) {
           files.push({ path: childPath, bytes: entry.size ?? info?.size ?? 0, version, kind: mimeType === undefined ? "text" : "media", mimeType });
         }
@@ -406,13 +375,14 @@ async function listFiles(realm: WorkspaceRealm): Promise<WorkspaceFile[]> {
   return files.sort((left, right) => left.path.localeCompare(right.path, "zh-Hans-CN"));
 }
 
-async function metadata(realm: WorkspaceRealm, files: readonly WorkspaceFile[], path: string, maxBytes: number): Promise<{ readonly value: unknown; readonly error?: string }> {
-  if (!files.some((file) => file.path === path)) return { value: null };
+async function metadataError(realm: WorkspaceRealm, files: readonly WorkspaceFile[], path: string, maxBytes: number): Promise<string | undefined> {
+  if (!files.some((file) => file.path === path)) return undefined;
   try {
     const target = await creativeTarget(realm, path);
-    return { value: JSON.parse((await readVersionedFile(realm.fs, target, maxBytes)).content) as unknown };
+    JSON.parse((await readVersionedFile(realm.fs, target, maxBytes)).content);
+    return undefined;
   } catch (error) {
-    return { value: null, error: error instanceof SyntaxError ? `${path} 不是有效的 JSON。` : `${path} 暂时无法读取。` };
+    return error instanceof SyntaxError ? `${path} 不是有效的 JSON。` : `${path} 暂时无法读取。`;
   }
 }
 
@@ -420,9 +390,11 @@ function token(value: string): string {
   return Buffer.from(value, "utf8").toString("base64url");
 }
 
-function untoken(value: string): string {
-  try { return Buffer.from(value, "base64url").toString("utf8"); }
-  catch { throw new WorkspaceHttpError(400, "游戏预览标识无效。"); }
+export function decodePreviewToken(value: string): string {
+  if (!/^[A-Za-z0-9_-]+$/u.test(value)) throw new WorkspaceHttpError(400, "游戏预览标识无效。");
+  const decoded = Buffer.from(value, "base64url").toString("utf8");
+  if (decoded === "" || token(decoded) !== value) throw new WorkspaceHttpError(400, "游戏预览标识无效。");
+  return decoded;
 }
 
 export function gameRoot(path: string): boolean {
@@ -433,44 +405,6 @@ export function gameRoot(path: string): boolean {
   return parts.length === 2 && parts[0] === GAME_DIRECTORY && name !== undefined
     && name !== "" && name !== "." && name !== ".." && name.length <= 128
     && !name.startsWith(".") && !name.includes("\\");
-}
-
-function normalizedVerification(
-  value: unknown,
-  binding: GameVerificationBinding,
-  verifiedPreviewVersion?: string
-): GameVerificationSummary {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return { status: "NOT_RUN", checks: {}, limitations: [], binding };
-  }
-  const record = value as Record<string, unknown>;
-  const status = record.status === "PASS" || record.status === "FAIL" ? record.status : "NOT_RUN";
-  const rawChecks = typeof record.checks === "object" && record.checks !== null && !Array.isArray(record.checks)
-    ? record.checks as Record<string, unknown>
-    : {};
-  const checks: Record<string, "NOT_RUN" | "FAIL" | "PASS"> = {};
-  for (const name of ["launch", "render", "input", "coreLoop", "outcome", "restart"]) {
-    const check = rawChecks[name];
-    checks[name] = check === "PASS" || check === "FAIL" ? check : "NOT_RUN";
-  }
-  const completeRun = typeof record.completeRun === "object" && record.completeRun !== null && !Array.isArray(record.completeRun)
-    ? record.completeRun as Record<string, unknown>
-    : {};
-  const limitations = Array.isArray(record.limitations) ? record.limitations.flatMap((entry) => {
-    if (typeof entry !== "object" || entry === null || Array.isArray(entry)) return [];
-    const item = entry as Record<string, unknown>;
-    return typeof item.scope === "string" && typeof item.reason === "string"
-      ? [{ scope: item.scope, reason: item.reason }]
-      : [];
-  }) : [];
-  return {
-    status,
-    checks,
-    runId: typeof completeRun.id === "string" ? completeRun.id : undefined,
-    limitations,
-    binding,
-    verifiedPreviewVersion
-  };
 }
 
 async function workspaceText(realm: WorkspaceRealm, path: string, maxBytes: number): Promise<string | undefined> {
@@ -522,7 +456,6 @@ export function gameProjectTitle(content: string | undefined, fallback: string):
 async function workspaceGameProjects(
   realm: WorkspaceRealm,
   files: readonly WorkspaceFile[],
-  sessionId: string,
   maxBytes: number
 ): Promise<GameProjectSummary[]> {
   const roots = [...new Set(files.flatMap((file) => {
@@ -531,30 +464,21 @@ async function workspaceGameProjects(
   }))].filter(gameRoot).sort();
   return Promise.all(roots.map(async (root) => {
     const id = root.slice(`${GAME_DIRECTORY}/`.length);
-    const qaPath = `${root}/qa/verification.json`;
-    const qaFile = files.find((file) => file.path === qaPath);
-    // Isolate per-project metadata failures: an unreadable brief, a non-UTF-8 or oversized
-    // verification file, or a build/app subtree removed mid-rebuild must degrade this one card,
-    // never abort the shared workspace listing (which also carries the story and drama trees).
-    const [brief, qa, preview] = await Promise.all([
+    // Isolate per-project metadata failures: an unreadable brief or a build/app subtree removed
+    // mid-rebuild must degrade this one card, never abort the shared workspace listing.
+    const [brief, preview] = await Promise.all([
       workspaceText(realm, `${root}/PRODUCT_BRIEF.md`, maxBytes).catch(() => undefined),
-      workspaceText(realm, qaPath, maxBytes).catch(() => undefined),
       previewDigest(realm, root).catch(() => ({ ready: false, version: "unavailable" }))
     ]);
-    let verification: unknown;
-    try { verification = qa === undefined ? undefined : JSON.parse(qa) as unknown; }
-    catch { verification = undefined; }
-    const freshness = workspaceVerificationTracker.observe(`${sessionId}\0${root}`, qaFile?.version, preview.version);
     return {
-      id: `workspace:${id}`,
+      id,
       root,
       title: gameProjectTitle(brief, id),
       previewReady: preview.ready,
       previewUrl: preview.ready
-        ? `/oh-story/game-preview/workspace/${token(sessionId)}/${token(root)}/index.html`
+        ? `/oh-story/game-preview/${token(realm.sessionId)}/${token(root)}/index.html`
         : undefined,
-      previewVersion: preview.version,
-      verification: normalizedVerification(verification, freshness.binding, freshness.verifiedPreviewVersion)
+      previewVersion: preview.version
     };
   }));
 }
@@ -661,25 +585,21 @@ async function previewBytes(context: Context, pathname: string): Promise<{ reado
   } catch {
     throw new WorkspaceHttpError(400, "游戏预览地址无效。");
   }
-  const kind = segments.shift();
-  if (kind === "workspace") {
-    const session = segments.shift();
-    const project = segments.shift();
-    const path = segments.join("/") || "index.html";
-    if (session === undefined || project === undefined || !safeRelativePath(path)) throw new WorkspaceHttpError(400, "游戏预览地址无效。");
-    const realm = await workspaceRealmForSession(context, untoken(session));
-    const root = untoken(project);
-    if (!gameRoot(root)) throw new WorkspaceHttpError(403, "游戏项目路径无效。");
-    const appRoot = await realm.fs.resolve(`${root}/build/app`, { cwd: realm.cwd });
-    const target = await realm.fs.resolve(`${root}/build/app/${path}`, { cwd: realm.cwd });
-    if (!realm.fs.contains(realm.root, appRoot) || !realm.fs.contains(appRoot, target)) {
-      throw new WorkspaceHttpError(403, "预览资源离开了游戏目录。");
-    }
-    const info = requireRegularFile(await realm.fs.stat(target));
-    if (info.size !== undefined && info.size > PREVIEW_FILE_LIMIT) throw new WorkspaceHttpError(413, "预览资源过大。");
-    return { path, bytes: await realm.fs.readBytes(target, undefined, PREVIEW_FILE_LIMIT) };
+  const session = segments.shift();
+  const project = segments.shift();
+  const path = segments.join("/") || "index.html";
+  if (session === undefined || project === undefined || !safeRelativePath(path)) throw new WorkspaceHttpError(400, "游戏预览地址无效。");
+  const realm = await workspaceRealmForSession(context, decodePreviewToken(session));
+  const root = decodePreviewToken(project);
+  if (!gameRoot(root)) throw new WorkspaceHttpError(403, "游戏项目路径无效。");
+  const appRoot = await realm.fs.resolve(`${root}/build/app`, { cwd: realm.cwd });
+  const target = await realm.fs.resolve(`${root}/build/app/${path}`, { cwd: realm.cwd });
+  if (!realm.fs.contains(realm.root, appRoot) || !realm.fs.contains(appRoot, target)) {
+    throw new WorkspaceHttpError(403, "预览资源离开了游戏目录。");
   }
-  throw new WorkspaceHttpError(404, "游戏预览不存在。");
+  const info = requireRegularFile(await realm.fs.stat(target));
+  if (info.size !== undefined && info.size > PREVIEW_FILE_LIMIT) throw new WorkspaceHttpError(413, "预览资源过大。");
+  return { path, bytes: await realm.fs.readBytes(target, undefined, PREVIEW_FILE_LIMIT) };
 }
 
 function mapFsError(error: unknown): WorkspaceHttpError | undefined {
@@ -714,14 +634,14 @@ async function handle(context: Context, request: IncomingMessage, response: Serv
     if (url.pathname === "/oh-story/workspace" && request.method === "GET") {
       const realm = await workspaceRealm(context, url);
       const files = await listFiles(realm);
-      const tracking = await metadata(realm, files, "追踪/_tracking-state.json", options.maxBytes);
-      const shortDrama = await metadata(realm, files, "short-drama.json", options.maxBytes);
-      const metadataErrors = [tracking.error, shortDrama.error].filter((value): value is string => value !== undefined);
-      const sessionId = url.searchParams.get("sessionId");
-      if (sessionId === null) throw new WorkspaceHttpError(400, "缺少 DSH sessionId。");
-      const games = await workspaceGameProjects(realm, files, sessionId, options.maxBytes);
-      const videos = await workspaceVideoProjects(realm, files, options.maxBytes);
-      send(response, 200, { cwd: realm.cwd, files, games, videos, tracking: tracking.value, shortDrama: shortDrama.value, metadataErrors, mode: "dsh-session" });
+      const [trackingError, dramaError, games, videos] = await Promise.all([
+        metadataError(realm, files, "追踪/_tracking-state.json", options.maxBytes),
+        metadataError(realm, files, "short-drama.json", options.maxBytes),
+        workspaceGameProjects(realm, files, options.maxBytes),
+        workspaceVideoProjects(realm, files, options.maxBytes)
+      ]);
+      const metadataErrors = [trackingError, dramaError].filter((value): value is string => value !== undefined);
+      send(response, 200, { cwd: realm.cwd, files, games, videos, metadataErrors });
       return;
     }
     if (url.pathname === "/oh-story/video-preflight" && request.method === "GET") {
@@ -744,11 +664,9 @@ async function handle(context: Context, request: IncomingMessage, response: Serv
       const realm = await workspaceRealm(context, url);
       const path = url.searchParams.get("path");
       if (path === null) throw new WorkspaceHttpError(400, "缺少媒体文件路径。");
-      const mimeType = mediaMimeTypeForPath(path);
-      if (mimeType === undefined) throw new WorkspaceHttpError(415, "目标不是受支持的短剧媒体文件。");
       const target = await creativeTarget(realm, path, "media");
       const info = requireRegularFile(await realm.fs.stat(target));
-      await sendWorkspaceMedia(request, response, realm, target, info, mimeType);
+      await sendWorkspaceMedia(request, response, realm, target, info, mediaMimeTypeForPath(path)!);
       return;
     }
     if (url.pathname === "/oh-story/file" && request.method === "PUT") {

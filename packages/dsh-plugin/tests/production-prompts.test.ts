@@ -53,7 +53,8 @@ describe("DSH-native production prompts", () => {
     expect(prompt).toContain("并在预览里写明结束帧将作为参考图送入，或先请分镜 owner 取舍");
     expect(prompt).toContain("MOTION-* 的「参考音频」不混入「输入参考图」");
     expect(prompt).toContain("role 固定为 reference_audio，character 逐字照抄该行「角色」");
-    expect(prompt).toContain("adapter profile 未显式声明支持 reference_audio 时必须在提交前失败");
+    expect(prompt).toContain("内置 seedance 与 minimax-h3 在所选模型支持时默认承接 reference_audio");
+    expect(prompt).toContain("自定义外部 adapter profile 未显式声明支持 reference_audio 时必须在提交前失败");
     expect(prompt).not.toContain("绝不能当普通参考图提交");
     // Upstream's SHOT-* selector only yields the start frame; that note matters to image jobs alone.
     expect(prompt).not.toContain("SHOT-* 只产出起始帧");
@@ -111,7 +112,7 @@ describe("DSH-native production prompts", () => {
     expect(prompt).toContain("须先量出真实有声区间并据此排时长，不能截断台词");
   });
 
-  it("hands assembly the edit_tool 0.8.1 rules for static cuts, unused shots, audio and delivery", () => {
+  it("hands assembly the edit_tool 0.12.0 rules for static cuts, GROUP/MOTION accounting, aspect-ratio normalisation, audio and delivery", () => {
     const composition = createPendingJob({ id: "compose-002", targetId: episodeDirectory, kind: "composition", prompt: "合成" });
     const prompt = nativeCompositionPrompt(production, composition, videoSources.slice(0, 1));
     expect(prompt).toContain("静帧段来源写分镜里的 SHOT-* 或图片提示词里的 IMG-*");
@@ -119,9 +120,9 @@ describe("DSH-native production prompts", () => {
     expect(prompt).toContain("同一镜用了 SHOT-* 可同时覆盖对应 MOTION-*");
     expect(prompt).toContain("第一个「## CUT-」之前");
     expect(prompt).toContain("写明属于文件缺失、质量不可用还是叙事取舍");
-    expect(prompt).toContain("视频 CUT 的素材必须同宽、同高、同帧率");
+    expect(prompt).toContain("同宽高比但分辨率或帧率不同的视频素材由 check 提醒、render 自动缩放并转换帧率至交付规格");
     expect(prompt).toContain("静帧则按交付规格等比铺满、居中裁切并按运镜出画");
-    expect(prompt).toContain("静帧来源入点写 0.00、出点等于时长且至少 0.50 秒");
+    expect(prompt).toContain("静帧来源入点写 0.00、出点等于时长（硬下限为 2 帧即 24fps 下 0.08 秒，短于 0.50 秒会列入提醒）");
     expect(prompt).toContain("新文件写到 剧集/EP001/制作成果/成片/规格统一/——这是剪辑阶段自己的中间文件，不放在生产阶段的原素材旁边、不覆盖已生产的素材");
     expect(prompt).toContain("文件名也不沿用原文件里的任务 ID");
     expect(prompt).not.toContain("原文件旁边的新文件");
@@ -133,7 +134,7 @@ describe("DSH-native production prompts", () => {
     expect(prompt).toContain("配音可用负起点做 J-cut，也可跨切点做 L-cut");
     expect(prompt).not.toContain("零依赖");
     expect(prompt).toContain("剪辑单的「声音」行只是记录，render 不执行它");
-    expect(prompt).toContain("这一步最后要像 render 一样按剪辑单的「交付响度」对整片做两遍 loudnorm（I=交付响度、TP=-1.5、LRA=11，第二遍代入第一遍的实测值并用 linear=true），音频编码为 AAC 192k、48 kHz，然后才替换 剧集/EP001/制作成果/成片/成片.mp4");
+    expect(prompt).toContain("这一步最后要像 render 一样按剪辑单的「交付响度」对整片做两遍 loudnorm（I=交付响度、TP=真峰值上限（默认 -1.5）、LRA=11，第二遍代入第一遍的实测值并用 linear=true），音频编码为 AAC 192k、48 kHz，然后才替换 剧集/EP001/制作成果/成片/成片.mp4");
     expect(prompt).toContain("最后对交付的这份成片.mp4 运行 edit_tool.py verify");
     expect(prompt).toContain("「未测」项照实写未测");
   });
@@ -141,24 +142,25 @@ describe("DSH-native production prompts", () => {
   it("ends an external mix with the loudnorm pass the pinned render runs", async () => {
     // Pin render's own two-pass loudnorm and audio encode, then hold both the prompt and the overlay to them.
     const tool = await readFile(resolve(dramaRoot, "short-drama-edit/scripts/edit_tool.py"), "utf8");
-    expect(tool).toContain('common = f"I={target}:TP=-1.5:LRA=11"');
+    expect(tool).toContain("DEFAULT_TRUE_PEAK_DBTP = -1.5");
+    expect(tool).toContain('common = f"I={target}:TP={true_peak:g}:LRA=11"');
     expect(tool).toContain(":offset={measured['target_offset']}:linear=true:print_format=summary");
-    expect(tool).toContain('command += ["-c:a", "aac", "-b:a", "192k", "-ar", "48000"]');
+    expect(tool).toContain('command += ["-af", loudnorm, "-c:a", "aac", "-b:a", "192k", "-ar", "48000"]');
 
     const composition = createPendingJob({ id: "compose-004", targetId: episodeDirectory, kind: "composition", prompt: "合成" });
-    expect(nativeCompositionPrompt(production, composition, videoSources.slice(0, 1))).toContain("I=交付响度、TP=-1.5、LRA=11");
+    expect(nativeCompositionPrompt(production, composition, videoSources.slice(0, 1))).toContain("I=交付响度、TP=真峰值上限（默认 -1.5）、LRA=11");
     const overlay = dshDramaSkillContent("short-drama-edit", "", dramaRoot);
-    expect(overlay).toContain("ends as render does with whole-film two-pass loudnorm to the declared 交付响度 (I=<交付响度>:TP=-1.5:LRA=11, the second pass fed the first pass's measurements with linear=true, audio re-encoded as AAC 192k at 48 kHz), and only then replaces 剧集/<EP>/制作成果/成片/成片.mp4");
+    expect(overlay).toContain("ends as render does with whole-film two-pass loudnorm to the declared 交付响度 (I=<交付响度>:TP=<真峰值上限，默认 -1.5>:LRA=11, the second pass fed the first pass's measurements with linear=true, audio re-encoded as AAC 192k at 48 kHz), and only then replaces 剧集/<EP>/制作成果/成片/成片.mp4");
   });
 
   it("writes 未采用镜头 in the exact form the pinned edit_tool.py accepts", async () => {
     // Pin the upstream parser, then hold both the composition prompt and the edit overlay to it.
     const tool = await readFile(resolve(dramaRoot, "short-drama-edit/scripts/edit_tool.py"), "utf8");
-    expect(tool).toContain(String.raw`UNUSED_LINE = re.compile(r"^-\s*未采用镜头：\s*(.*)$")`);
-    expect(tool).toContain(String.raw`item.strip() for item in unused_match.group(1).split("；")`);
-    expect(tool).toContain(String.raw`r"((?:MOTION|SHOT|IMG)-[\w-]+)\s*[（(]理由[：:]\s*(.+?)[）)]", note.strip()`);
+    expect(tool).toContain("UNUSED_LINE = re.compile(");
+    expect(tool).toContain("unused.extend(_split_unused_items(unused_match.group(1)))");
+    expect(tool).toContain(String.raw`r"^((?:MOTION|GROUP|SHOT|IMG)-[\w-]+)\s*([（(])(.*)$"`);
     const unusedLine = /^-\s*未采用镜头：\s*(.*)$/u;
-    const unusedItem = /^((?:MOTION|SHOT|IMG)-[\w-]+)\s*[（(]理由[：:]\s*(.+?)[）)]$/u;
+    const unusedItem = /^((?:MOTION|GROUP|SHOT|IMG)-[\w-]+)\s*[（(]理由[：:]\s*(.+?)[）)]$/u;
 
     const composition = createPendingJob({ id: "compose-003", targetId: episodeDirectory, kind: "composition", prompt: "合成" });
     const sources = [
@@ -172,10 +174,11 @@ describe("DSH-native production prompts", () => {
       let counter = 0;
       const line = template!
         .replaceAll("MOTION-…", () => `MOTION-EP001-00${String(++counter)}`)
+        .replaceAll("GROUP-…", () => `GROUP-EP001-0${String(++counter)}`)
         .replaceAll("SHOT-…", () => `SHOT-EP001-00${String(++counter)}`)
         .replaceAll("…", "尚未生产");
       const items = unusedLine.exec(line)?.[1]?.split("；").map((item) => item.trim()).filter((item) => item !== "") ?? [];
-      expect(items.length).toBeGreaterThanOrEqual(2);
+      expect(items.length).toBeGreaterThanOrEqual(3);
       for (const item of items) expect(unusedItem.exec(item)?.[2]?.trim(), item).toBeTruthy();
     }
   });

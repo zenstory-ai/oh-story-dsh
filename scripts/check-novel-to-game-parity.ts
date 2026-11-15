@@ -35,8 +35,8 @@ if ((await readFile(join(novelToGameRoot, "VERSION"), "utf8")).trim() !== manife
   throw new Error("NovelToGame release version does not match the bundled manifest.");
 }
 for (const required of [
-  "skills/novel-to-game/references/pipeline-contract.md",
-  "skills/game-build/references/playable-model-contract.md",
+  "skills/game-build/references/build-brief-contract.md",
+  "skills/game-build/references/generative-media.md",
   "skills/game-qa/references/qa-contract.md"
 ]) {
   if (!manifest.files.some((entry) => entry.path === required)) throw new Error(`Bundled NovelToGame asset is missing ${required}.`);

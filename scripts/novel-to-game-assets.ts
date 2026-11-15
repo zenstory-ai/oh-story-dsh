@@ -1,12 +1,7 @@
-import { createHash } from "node:crypto";
 import { cp, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
-import { basename, dirname, join, relative, resolve, sep } from "node:path";
-import { fileURLToPath } from "node:url";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
+import { join, resolve } from "node:path";
 
-const execFileAsync = promisify(execFile);
-const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+import { git, isPortableSourceAsset, manifestFiles, repoRoot, type ManifestFileEntry } from "./asset-sync-utils.js";
 
 export const novelToGameRoot = join(repoRoot, "packages/knowledge/novel-to-game");
 
@@ -19,55 +14,15 @@ export interface NovelToGameAssetManifest {
   };
   readonly generatedAt: string;
   readonly skills: readonly string[];
-  readonly files: readonly { readonly path: string; readonly sha256: string; readonly bytes: number }[];
-}
-
-function portableRelative(root: string, path: string): string {
-  return relative(root, path).split(sep).join("/");
+  readonly files: readonly ManifestFileEntry[];
 }
 
 export function novelToGameUpstreamRoot(): string {
   return resolve(process.env.NOVEL_TO_GAME_UPSTREAM_DIR ?? join(repoRoot, "..", "novel-to-game"));
 }
 
-async function git(root: string, ...args: string[]): Promise<string> {
-  const { stdout } = await execFileAsync("git", ["-C", root, ...args], { encoding: "utf8" });
-  return stdout.trim();
-}
-
-async function regularFiles(root: string): Promise<string[]> {
-  const output: string[] = [];
-  const visit = async (directory: string): Promise<void> => {
-    for (const entry of await readdir(directory, { withFileTypes: true })) {
-      const path = join(directory, entry.name);
-      if (entry.isDirectory()) await visit(path);
-      else if (entry.isFile()) output.push(path);
-    }
-  };
-  await visit(root);
-  return output.sort();
-}
-
-async function fileDigest(path: string): Promise<{ readonly sha256: string; readonly bytes: number }> {
-  const bytes = await readFile(path);
-  return { sha256: createHash("sha256").update(bytes).digest("hex"), bytes: bytes.byteLength };
-}
-
 export async function currentNovelToGameFiles(): Promise<NovelToGameAssetManifest["files"]> {
-  return Promise.all((await regularFiles(novelToGameRoot))
-    .filter((path) => basename(path) !== "manifest.json")
-    .map(async (path) => ({ path: portableRelative(novelToGameRoot, path), ...await fileDigest(path) })));
-}
-
-function isPortableSourceAsset(path: string): boolean {
-  const normalized = path.split(sep).join("/");
-  // A local checkout can hold ignored agent state (.omc/) next to tracked files; never ship it.
-  return !normalized.includes("/.omc/")
-    && !normalized.endsWith("/.omc")
-    && !normalized.includes("/__pycache__/")
-    && !normalized.endsWith("/__pycache__")
-    && !normalized.endsWith(".pyc")
-    && !normalized.endsWith("/.DS_Store");
+  return manifestFiles(novelToGameRoot);
 }
 
 export async function synchronizeNovelToGameAssets(): Promise<NovelToGameAssetManifest> {

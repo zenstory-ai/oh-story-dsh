@@ -36,7 +36,7 @@ describe("game preview status", () => {
 
 describe("game preview URLs", () => {
   it("frames the other loopback alias but probes the page's own origin, which the route trusts", () => {
-    const urls = previewUrls("/oh-story/game-preview/workspace/s/p/index.html", "v1", 2, "http://127.0.0.1:3180");
+    const urls = previewUrls("/oh-story/game-preview/s/p/index.html", "v1", 2, "http://127.0.0.1:3180");
     expect(urls.isolated).toBe(true);
     expect(new URL(urls.href).origin).toBe("http://localhost:3180");
     expect(new URL(urls.probeHref).origin).toBe("http://127.0.0.1:3180");
@@ -45,7 +45,7 @@ describe("game preview URLs", () => {
   });
 
   it("is not isolated on a host without a loopback alias", () => {
-    const urls = previewUrls("/oh-story/game-preview/workspace/s/p/index.html", "v1", 0, "https://dsh.example.test");
+    const urls = previewUrls("/oh-story/game-preview/s/p/index.html", "v1", 0, "https://dsh.example.test");
     expect(urls.isolated).toBe(false);
     expect(urls.href).toBe(urls.probeHref);
   });

@@ -125,7 +125,7 @@ describe("Oh Story bundled skill provider", () => {
     expect((await provider.get(candidates.find((value) => value.name === "story-short-scan")!, {}))?.content).toContain("短篇扫榜结论.md");
     const shortScan = await provider.get(candidates.find((value) => value.name === "story-short-scan")!, {});
     expect(shortScan?.content).toContain("可信度：样本多少篇、来自哪几个榜");
-    for (const phrase of ["知乎盐言", "征稿要求.md", "在架数量", "可行性最高写「中」"]) {
+    for (const phrase of ["知乎盐言", "征稿要求.md", "在架数量", "可行性最高写「中」", "优先根据简介判断"]) {
       expect(shortScan?.content).toContain(phrase);
     }
     for (const name of ["story-long-analyze", "story-import"]) {
@@ -289,7 +289,8 @@ describe("Drama Skills bundled provider", () => {
     expect(route?.content).toContain("never create a parallel JSON/JSONL lifecycle truth");
     expect(route?.content).toContain("Never upgrade a v0.5 structured project in place");
     expect(route?.content).toContain("New projects follow only the v0.6 creator-first contract and create only documents required by the current request");
-    expect(route?.content).toContain("不建立并行的结构化创作真相");
+    expect(route?.content).toContain("upstream's dashboard_server.py and its assets are not bundled");
+    expect(route?.content).toContain("不另存重复的结构化副本");
     const reviewCandidate = listed.find((candidate) => candidate.name === "short-drama-review");
     const review = await provider.get(reviewCandidate!, {});
     expect(review?.content).toContain("审查/EP001-审查.md");
@@ -306,6 +307,8 @@ describe("Drama Skills bundled provider", () => {
     expect(production?.content).toContain("speech (tts) and music jobs pass through the same prepare → explicit creator confirmation → run gate but are never registered with track_job");
     expect(production?.content).toContain("Compile them as reference_audio bindings, preserve character exactly from 角色");
     expect(production?.content).toContain("separate 参考音频 line, never in 输入参考图 or the workbench image picker");
+    expect(production?.content).toContain("The bundled seedance and minimax-h3 profiles accept reference_audio by default");
+    expect(production?.content).toContain("custom external adapter in OH_STORY_DRAMA_ADAPTER_CONFIG must explicitly declare reference_audio in reference_roles");
     expect(production?.content).toContain("reject before paid submission, never drop or substitute the binding");
     expect(production?.content).not.toContain("audio is never bound");
     // The claim above rests on prepare's creator-first declaration grammar.
@@ -317,9 +320,9 @@ describe("Drama Skills bundled provider", () => {
     expect(edit?.content).toContain("剧集/<EP>/制作成果/成片/");
     expect(edit?.content).toContain("The default burned-subtitle route needs an ffmpeg built with libass");
     expect(edit?.content).not.toContain("zero-dependency");
-    expect(edit?.content).toContain("`- 未采用镜头：MOTION-…（理由：…）；SHOT-…（理由：…）`");
+    expect(edit?.content).toContain("`- 未采用镜头：MOTION-…（理由：…）；GROUP-…（理由：…）；SHOT-…（理由：…）`");
     expect(edit?.content).toContain("reasons name 文件缺失, 质量不可用 or 叙事取舍");
-    expect(edit?.content).toContain("Every video cut must share one width, height and frame rate");
+    expect(edit?.content).toContain("Same-aspect-ratio video clips whose resolution or frame rate differs from the delivery spec raise a check reminder and are automatically scaled and frame-rate-converted by render");
     expect(edit?.content).toContain("Write them under 剧集/<EP>/制作成果/成片/规格统一/, an edit-owned intermediate, never beside the produce-stage originals and never over produced footage, and name them without the original's job-id token");
     expect(edit?.content).not.toContain("beside the originals");
     expect(edit?.content).toContain("point 来源 at the new file");
@@ -358,7 +361,7 @@ describe("NovelToGame bundled provider", () => {
       expect(skill?.content).toContain("game-adaptations/<project>/");
       expect(skill?.content).toContain("qa/verification.json remains the sole machine QA truth");
       expect(skill?.content).toContain("run it as a DSH subagent visible in this preset, giving it only the playable entry, the run instructions game-qa allows, and normal player input");
-      expect(skill?.content).toContain("game-qa's first-round blind playtest");
+      expect(skill?.content).toContain("game-build's graybox playtest or game-qa's first-round blind playtest");
       expect(skill?.content).toContain("tell the user in one sentence that they can already play it in the 游戏 tab");
       expect(skill?.resourceBase).toEqual({ kind: "directory", path: resolve(gameRoot, candidate.name) });
     }

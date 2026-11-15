@@ -11,6 +11,18 @@
 
 ## [Unreleased]
 
+## [0.1.26] - 2026-11-15
+
+0.12.0 之前的短剧项目若要续写下游文档或运行 `creator_markdown_check.py`，需先把现有五份 Markdown 文档中的旧字段改成现行直白名称；只浏览已有项目无需改动，短剧工作台仍兼容已有《分镜.md》里的 `### 冻结关键帧提示词`。小说、游戏与视频项目无需迁移。
+
+### Changed
+
+- 同步 [Drama Skills 0.12.0](https://github.com/zenstory-ai/drama-skills/releases/tag/v0.12.0)（`047ae8625021f038ee7581d6222064f0c169ce59`，12 Skills）：五份创作者文档统一改用直白字段名（`时代背景` / `室内照明` / `外观特征` / `提示词名称` / `连戏锁` / `锁定词`、`### 首帧提示词` / `动作` / `出场设定`、`开场画面` / `动作过程`），0.12.0 之前的项目续写或跑检查前需把旧字段改名，短剧工作台仍兼容已有《分镜.md》里的 `### 冻结关键帧提示词`。`MiniMax H3` 只要求 `MINIMAX_API_KEY` 与 `MINIMAX_VIDEO_MODEL`，分辨率和时长范围改为可选覆盖，供应商说明合并为 `short-drama-produce/references/builtin-providers.md`；内置 `seedance` 与 `minimax-h3` 默认放行角色参考音频（`reference_audio`），自定义外部接口仍需在 `reference_roles` 中显式声明。`/short-drama-edit` 支持 `GROUP-*` 多镜容器计入剪辑单，同画幅不同分辨率或帧率的片段在渲染时自动统一，画幅不一致仍会拦下。
+- 同步 [NovelToGame 0.9.0](https://github.com/zenstory-ai/novel-to-game/releases/tag/v0.9.0)（`48328cd756cd400e617e97dc3bd5c4b42cda3f72`，5 Skills）：`game-build` 改为先做灰盒可玩切片并通过试玩再做正式美术，`targetFinish: graybox` 的项目跳过 `design/ART_DIRECTION.md`；在 DSH 里，灰盒试玩和 `game-qa` 首轮盲玩都用当前 Preset 可见、没读过设计与源码的子代理完成。
+- 同步 [Oh Story 0.10.5](https://github.com/zenstory-ai/oh-story-claudecode/releases/tag/v0.10.5)（`41a9b6c855d7d29a2bf214b4eefda2b10a0e8afb`，`agents_version` 42 → 44，14 Skills、7 Roles）：精简长短篇规划、审稿与去 AI 味参考说明，短篇选题按故事处境与转折找读后感受；现有书稿、设定、追踪和作者记忆无需迁移，重装后新开会话即可加载新 Roles。
+- 同步 [video-recap-skills 0.7.1](https://github.com/zenstory-ai/video-recap-skills/releases/tag/v0.7.1)（`36df69fe9e702dc2f15ccd05fac878ad623cf346`，2 Skills）：默认多模态理解模型改为 `mimo-v2.6-flash`；宣发文案从 `packaging_plan.json` 拆成独立的 `promo_copy.json`，「视频」标签的文稿同步展示「宣发文案」以及音效方案、原片字幕、解说稿检查记录。
+- DSH 0.2.2 试用线更新到 npm `next` 的 [DeepSeek Harness 0.2.2-rc.3](https://www.npmjs.com/package/@deepseek-ai/dsh/v/0.2.2-rc.3)，默认宿主仍为 `0.2.2-rc.1`，兼容范围不变。
+
 ## [0.1.25] - 2026-11-12
 
 ### Changed
@@ -476,7 +488,8 @@
 - 提供 13 个 Oh Story 小说 Skills、7 个专业 Roles 与 10 个 Drama Skills。
 - 提供文件树、Markdown/JSONL 编辑预览与官方 DSH Chat 同屏的三栏工作台。
 
-[Unreleased]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.25...HEAD
+[Unreleased]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.26...HEAD
+[0.1.26]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.25...v0.1.26
 [0.1.25]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.24...v0.1.25
 [0.1.24]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.23...v0.1.24
 [0.1.23]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.22...v0.1.23

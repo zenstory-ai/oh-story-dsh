@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { gameRoot, previewContentSecurityPolicy } from "../src/workspace-route.js";
+import { decodePreviewToken, gameRoot, previewContentSecurityPolicy } from "../src/workspace-route.js";
 
 const assets = "http://127.0.0.1:4000/oh-story/game-preview/";
 
@@ -41,6 +41,24 @@ describe("game project root validation", () => {
       `game-adaptations/${"x".repeat(129)}`
     ]) {
       expect(gameRoot(path)).toBe(false);
+    }
+  });
+});
+
+describe("game preview token validation", () => {
+  it("round-trips canonical UTF-8 base64url tokens and rejects malformed inputs", () => {
+    const encoded = Buffer.from("game-adaptations/金瓶梅 · 风月总账", "utf8").toString("base64url");
+    expect(decodePreviewToken(encoded)).toBe("game-adaptations/金瓶梅 · 风月总账");
+    for (const invalid of [
+      "",
+      "not+base64url",
+      "not/base64url",
+      `${encoded}=`,
+      "abc%20def",
+      // Non-UTF-8 byte sequence (0xff) cannot round-trip through UTF-8 -> base64url.
+      Buffer.from([0xff, 0xfe]).toString("base64url")
+    ]) {
+      expect(() => decodePreviewToken(invalid)).toThrow("游戏预览标识无效。");
     }
   });
 });

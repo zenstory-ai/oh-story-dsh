@@ -37,12 +37,12 @@ import {
   episodeDirectoryForPath,
   isCreatorDocumentPath,
   parseEpisodeProduction,
+  targetDisplayName,
   type DramaDocumentTarget,
   type DramaProductionSection
 } from "./drama-production.js";
 import { DramaProductionView } from "./drama-production-view.js";
 import type { CanvasViewport } from "./canvas-viewport.js";
-import { productionCanvasNodes } from "./production-canvas-model.js";
 import { createPendingJob, type
   CanvasPoint,
   mediaTargetFromPath,
@@ -75,6 +75,9 @@ import { focusChatContext } from "./chat-context.js";
 import { WorkbenchModeTabs } from "./workbench-mode-tabs.js";
 import { endpoint, handleTabKey } from "./workbench-ui.js";
 import styles from "./plugin.css?inline";
+import toolCardStyles from "./tool-card.css?inline";
+
+const workbenchStyles = [styles, gameCanvasStyles, videoStudioStyles].join("\n");
 
 export const name = "oh-story";
 export const inject = ["slots", "sessions", "conversation"];
@@ -97,9 +100,7 @@ interface WorkspacePayload {
   readonly files: readonly WorkspaceFile[];
   readonly games: readonly GameProject[];
   readonly videos: readonly VideoProject[];
-  readonly shortDrama: Record<string, unknown> | null;
   readonly metadataErrors: readonly string[];
-  readonly mode: "dsh-session";
 }
 interface FilePayload {
   readonly path: string;
@@ -845,7 +846,7 @@ function CreativeWorkbench({
       ...episodeProduction.motions.map((motion) => motion.id)
     ].sort((left, right) => right.length - left.length);
     const motionTargets = new Map(episodeProduction.motions.flatMap((motion) => motion.shotId === undefined ? [] : [[motion.id, motion.shotId] as const]));
-    const fromWorkspace = productionLibrary.flatMap((version) => {
+    return productionLibrary.flatMap((version) => {
       if (version.path === undefined || (!version.path.startsWith(`${episodeProduction.episodeDirectory}/`) && !version.path.startsWith(`交付/${episodeName}/`))) return [];
       const matched = mediaTargetFromPath(version.path, knownTargets);
       // Drama Skills 0.7 renders the assembled cut into 制作成果/成片/; earlier native
@@ -856,9 +857,6 @@ function CreativeWorkbench({
       const targetId = matched === undefined ? episodeProduction.episodeDirectory : motionTargets.get(matched) ?? matched;
       return [{ ...version, targetId }];
     });
-    const byId = new Map<string, ProductionMediaVersion>();
-    for (const version of fromWorkspace) byId.set(version.id, version);
-    return [...byId.values()];
   }, [episodeProduction, productionLibrary]);
   const productionSelectedId = episodeDirectory === undefined ? undefined : productionSelectedIds[episodeDirectory];
   const productionJobs = episodeDirectory === undefined ? [] : productionJobsByEpisode[episodeDirectory] ?? [];
@@ -986,16 +984,16 @@ function CreativeWorkbench({
           globalThis.setTimeout(() => { setEditorMode("production"); }, 0);
         }
       }
-      if (intent.action === "open_section") setProductionSection(intent.section ?? "shots");
+      if (intent.action === "open_section") setProductionSection(intent.section);
       else if (intent.action === "focus_target") {
         actions.setProductionSelectedIds((current) => ({ ...current, [intent.episode]: intent.targetId }));
-        setProductionSection(intent.section ?? (intent.targetId?.startsWith("SHOT-") === true ? "shots" : "assets"));
+        setProductionSection(intent.section ?? (intent.targetId.startsWith("SHOT-") ? "shots" : "assets"));
       } else if (intent.action === "set_sequence") {
         actions.setProductionSequence((current) => ({
           ...current,
-          [intent.episode]: (intent.shotIds ?? []).map((shotId) => ({ shotId }))
+          [intent.episode]: intent.shotIds.map((shotId) => ({ shotId }))
         }));
-      } else if (intent.action === "track_job" && intent.jobId !== undefined && intent.targetId !== undefined && intent.jobKind !== undefined) {
+      } else {
         const { jobId, targetId, jobKind } = intent;
         actions.setProductionJobs((current) => {
           const jobs = current[intent.episode] ?? [];
@@ -1479,8 +1477,11 @@ function CreativeWorkbench({
   };
   const continueDramaInChat = (targetId?: string): void => {
     actions.setDramaChatOpen(true);
-    const title = targetId === undefined || episodeProduction === undefined ? undefined
-      : productionCanvasNodes(episodeProduction, episodeDocuments).find((node) => node.id === targetId)?.title;
+    let title: string | undefined;
+    if (targetId !== undefined && episodeProduction !== undefined) {
+      const resolved = targetDisplayName(episodeProduction, targetId, episodeDocuments);
+      title = resolved !== targetId || episodeProduction.targets.has(targetId) ? resolved : undefined;
+    }
     const prompt = title === undefined
       ? episodeDirectory === undefined ? "我想先讨论这部短剧的第一集，从故事和角色开始。" : undefined
       : `我想继续调整 ${episodeDirectory?.split("/").at(-1) ?? "本集"} 的「${title}」。请先和我讨论思路，不生成任何素材。`;
@@ -1505,10 +1506,25 @@ function CreativeWorkbench({
     actions.setGameChatOpen(visible);
     if (!visible) setGamePane("studio");
   };
+  const resolveConflict = (keepLocal: boolean): void => {
+    if (selected === undefined || conflict?.theirs === undefined || conflict.theirsVersion === undefined) return;
+    const theirs = conflict.theirs;
+    const theirsVersion = conflict.theirsVersion;
+    setBuffers((current) => {
+      const existing = current[selected];
+      if (existing === undefined) return current;
+      return {
+        ...current,
+        [selected]: keepLocal
+          ? { ...existing, saved: theirs, version: theirsVersion, source: "human", conflict: undefined }
+          : { content: theirs, saved: theirs, source: "disk", version: theirsVersion }
+      };
+    });
+  };
   const refreshGame = (): void => { setGameLoadAttempt((current) => current + 1); reload(); };
   const gameEditor: GameDocumentEditor = {
     selected, buffers, mode: editorMode, textareaRef, errors: gameReadErrors,
-    onSelect: revealPath, onMode: setEditorMode, onSave: savePath, onConflict: resolveGameConflict,
+    onSelect: revealPath, onMode: setEditorMode, onSave: savePath, onConflict: resolveConflict,
     onEdit: (path, content) => { setBuffers((current) => {
       const existing = current[path];
       return existing === undefined ? current : { ...current, [path]: { ...existing, content, source: "human" } };
@@ -1563,22 +1579,6 @@ function CreativeWorkbench({
   const toggleGroup = (key: string, open: boolean): void => {
     setExpanded((current) => ({ ...current, [key]: open }));
   };
-  function resolveGameConflict(keepLocal: boolean): void { resolveConflict(keepLocal); }
-  const resolveConflict = (keepLocal: boolean): void => {
-    if (selected === undefined || conflict?.theirs === undefined || conflict.theirsVersion === undefined) return;
-    const theirs = conflict.theirs;
-    const theirsVersion = conflict.theirsVersion;
-    setBuffers((current) => {
-      const existing = current[selected];
-      if (existing === undefined) return current;
-      return {
-        ...current,
-        [selected]: keepLocal
-          ? { ...existing, saved: theirs, version: theirsVersion, source: "human", conflict: undefined }
-          : { content: theirs, saved: theirs, source: "disk", version: theirsVersion }
-      };
-    });
-  };
 
   if (!open) {
     // Without creative work there is nothing to reveal, so the plugin leaves the
@@ -1586,7 +1586,7 @@ function CreativeWorkbench({
     // still offers the way in, because that error is only readable inside the workbench.
     if (!creativeProject && error === undefined) return welcome ? <WelcomeGuide /> : null;
     return <div ref={surfaceRef} className="oh-story-split-surface" data-open="false">
-      <style>{[styles, gameCanvasStyles, videoStudioStyles].join("\n")}</style>
+      <style>{workbenchStyles}</style>
       <button className="oh-story-launcher" type="button" title={error ?? "打开创作工作台"} aria-label="打开创作工作台" onClick={() => { applyWorkbenchPreference("open"); }}>
         <span aria-hidden>✦</span><b>创作工作台</b>
       </button>
@@ -1594,7 +1594,7 @@ function CreativeWorkbench({
   }
 
   return <div ref={surfaceRef} className="oh-story-split-surface" data-open="true" data-workbench={workbench} data-drama-pane={dramaPane} data-drama-files={dramaFilesOpen ? "open" : "closed"} data-drama-chat={dramaChatOpen ? "open" : "closed"}>
-    <style>{[styles, gameCanvasStyles, videoStudioStyles].join("\n")}</style>
+    <style>{workbenchStyles}</style>
     {manualChatContext !== undefined && <aside className="oh-story-context-fallback" aria-live="polite" aria-label="带到 Chat 的讨论内容">
       <header><strong>讨论内容已保留</strong><button type="button" aria-label="关闭讨论内容" onClick={() => { setManualChatContext(undefined); }}>×</button></header>
       <p>讨论内容未自动填入 Chat，已有输入保持原样。你可以在这里查看或复制选中内容。</p>
@@ -2031,7 +2031,7 @@ type WorkbenchSeatProps = PropsRuntime<"shell.overlay"> & PropsRenderSlots<"oh-s
 /** How to reach the workbench from a DSH that has no creative work open yet. */
 function WelcomeGuide() {
   return <section className="oh-story-welcome" aria-label="Oh Story 使用引导">
-    <style>{[styles, gameCanvasStyles, videoStudioStyles].join("\n")}</style>
+    <style>{workbenchStyles}</style>
     <h2>Oh Story 已加载</h2>
     <p>直接在下方输入框说你想写什么，比如「写一篇 8000 字的重生复仇短篇」，或输入 <code>/story</code>、<code>/short-drama</code>、<code>/novel-to-game quick</code>、<code>/video-recap</code>。写出第一个创作文件后，小说、短剧、游戏、视频工作台会自动出现。</p>
     <ol>
@@ -2088,7 +2088,7 @@ function RoleToolView({ block, inspect }: ToolCallViewProps) {
   const output = resultOf(block);
   const state = !("kind" in block) ? "running" : block.isError ? "error" : "done";
   return <details className="oh-story-role" data-state={state}>
-    <style>{[styles, gameCanvasStyles, videoStudioStyles].join("\n")}</style>
+    <style>{toolCardStyles}</style>
     <summary><span>✦ Role</span><strong>{role}</strong><em>{state === "running" ? "运行中" : state === "error" ? "失败" : "完成"}</em></summary>
     {output !== undefined && <pre>{output}</pre>}
     {inspect !== undefined && <button type="button" onClick={inspect}>在轨迹中检查</button>}
@@ -2099,11 +2099,12 @@ function ProductionToolView({ block, inspect }: ToolCallViewProps) {
   const args = argsOf(block);
   const action = typeof args.action === "string" ? args.action : "production";
   const episode = typeof args.episode === "string" ? args.episode : "短剧";
+  const output = resultOf(block);
   const state = !("kind" in block) ? "running" : block.isError ? "error" : "done";
   return <details className="oh-story-role" data-state={state}>
-    <style>{[styles, gameCanvasStyles, videoStudioStyles].join("\n")}</style>
+    <style>{toolCardStyles}</style>
     <summary><span>▦ 生产</span><strong>{episode} · {action}</strong><em>{state === "running" ? "执行中" : state === "error" ? "失败" : "已应用"}</em></summary>
-    {resultOf(block) !== undefined && <pre>{resultOf(block)}</pre>}
+    {output !== undefined && <pre>{output}</pre>}
     {inspect !== undefined && <button type="button" onClick={inspect}>在轨迹中检查</button>}
   </details>;
 }

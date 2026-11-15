@@ -20,8 +20,6 @@ export interface CanvasRect extends CanvasPoint {
   readonly height: number;
 }
 
-export const CANVAS_NODE_WIDTH = 180;
-export const CANVAS_NODE_HEIGHT = 76;
 export const MIN_CANVAS_ZOOM = .01;
 export const MAX_CANVAS_ZOOM = 3;
 export const DEFAULT_CANVAS_VIEWPORT: CanvasViewport = { x: 0, y: 0, zoom: .65 };
@@ -49,11 +47,7 @@ export function screenToWorld(viewport: CanvasViewport, point: CanvasPoint): Can
   return { x: (point.x - viewport.x) / viewport.zoom, y: (point.y - viewport.y) / viewport.zoom };
 }
 
-/** Pans so the node's centre sits in the middle of the viewport, keeping the zoom. */
-export function centerOn(viewport: CanvasViewport, node: CanvasPoint, size: CanvasSize): CanvasViewport {
-  return centerOnRect(viewport, { ...node, width: CANVAS_NODE_WIDTH, height: CANVAS_NODE_HEIGHT }, size);
-}
-
+/** Pans so the rectangle's centre sits in the middle of the viewport, keeping the zoom. */
 export function centerOnRect(viewport: CanvasViewport, node: CanvasRect, size: CanvasSize): CanvasViewport {
   return {
     x: size.width / 2 - (node.x + node.width / 2) * viewport.zoom,
@@ -62,19 +56,10 @@ export function centerOnRect(viewport: CanvasViewport, node: CanvasRect, size: C
   };
 }
 
-export function nodeVisible(viewport: CanvasViewport, node: CanvasPoint, size: CanvasSize): boolean {
-  return rectVisible(viewport, { ...node, width: CANVAS_NODE_WIDTH, height: CANVAS_NODE_HEIGHT }, size);
-}
-
 export function rectVisible(viewport: CanvasViewport, node: CanvasRect, size: CanvasSize): boolean {
   const left = node.x * viewport.zoom + viewport.x;
   const top = node.y * viewport.zoom + viewport.y;
   return left >= 0 && top >= 0 && left + node.width * viewport.zoom <= size.width && top + node.height * viewport.zoom <= size.height;
-}
-
-/** Compatibility wrapper for the old fixed-size nodes. */
-export function fitNodes(nodes: readonly CanvasPoint[], size: CanvasSize, fallback: CanvasViewport = DEFAULT_CANVAS_VIEWPORT): CanvasViewport {
-  return fitRects(nodes.map((node) => ({ ...node, width: CANVAS_NODE_WIDTH, height: CANVAS_NODE_HEIGHT })), size, fallback);
 }
 
 /** Frames the complete bounds of every variable-sized canvas object. */

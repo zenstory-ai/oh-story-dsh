@@ -7,11 +7,13 @@ export function handleTabKey<T extends string>(
   current: T,
   select: (value: T) => void
 ): void {
+  const currentIndex = values.indexOf(current);
+  if (currentIndex < 0) return;
   let index: number | undefined;
   if (event.key === "Home") index = 0;
   else if (event.key === "End") index = values.length - 1;
-  else if (event.key === "ArrowRight") index = (values.indexOf(current) + 1) % values.length;
-  else if (event.key === "ArrowLeft") index = (values.indexOf(current) - 1 + values.length) % values.length;
+  else if (event.key === "ArrowRight") index = (currentIndex + 1) % values.length;
+  else if (event.key === "ArrowLeft") index = (currentIndex - 1 + values.length) % values.length;
   if (index === undefined) return;
   event.preventDefault();
   const value = values[index];

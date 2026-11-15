@@ -26,6 +26,33 @@ export interface ProductionIntentArgs {
   readonly prompt?: string | undefined;
 }
 
+export type ValidatedProductionIntent =
+  | {
+      readonly action: "open_section";
+      readonly episode: string;
+      readonly section: ProductionIntentSection;
+    }
+  | {
+      readonly action: "focus_target";
+      readonly episode: string;
+      readonly targetId: string;
+      readonly section?: ProductionIntentSection | undefined;
+    }
+  | {
+      readonly action: "set_sequence";
+      readonly episode: string;
+      readonly shotIds: readonly string[];
+    }
+  | {
+      readonly action: "track_job";
+      readonly episode: string;
+      readonly jobId: string;
+      readonly targetId: string;
+      readonly jobKind: ProductionIntentJobKind;
+      readonly expectedOutputs?: number | undefined;
+      readonly prompt?: string | undefined;
+    };
+
 function requiredText(value: string | undefined, field: string): string {
   const normalized = value?.trim();
   if (!normalized) throw new Error(`oh_story_production ${field} is required for this action.`);
@@ -34,7 +61,11 @@ function requiredText(value: string | undefined, field: string): string {
 }
 
 /** Validate the cross-runtime UI intent without reading or mutating workspace state. */
-export function validateProductionIntent(args: ProductionIntentArgs): ProductionIntentArgs {
+export function validateProductionIntent<A extends ProductionIntentAction>(
+  args: ProductionIntentArgs & { readonly action: A }
+): Extract<ValidatedProductionIntent, { readonly action: A }>;
+export function validateProductionIntent(args: ProductionIntentArgs): ValidatedProductionIntent;
+export function validateProductionIntent(args: ProductionIntentArgs): ValidatedProductionIntent {
   const episode = args.episode.trim().replaceAll("\\", "/").replace(/\/$/u, "");
   if (!/^剧集\/EP\d{3,}$/u.test(episode)) {
     throw new Error("oh_story_production episode must use the creator path form 剧集/EP001.");

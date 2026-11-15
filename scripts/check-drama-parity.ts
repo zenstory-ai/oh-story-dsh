@@ -36,11 +36,11 @@ if (!manifest.skills.includes("short-drama-edit")) {
 const paths = new Set(manifest.files.map(({ path }) => path));
 for (const required of [
   "skills/short-drama/references/creator-documents.md",
-  "skills/short-drama-storyboard/references/comic-keyframe-lexicon.md",
+  "skills/short-drama-storyboard/references/keyframe-craft.md",
+  "skills/short-drama-produce/references/builtin-providers.md",
   "skills/short-drama-edit/scripts/edit_tool.py",
-  "skills/short-drama-breakdown/scripts/breakdown_tool.py",
-  "skills/short-drama-edit/references/still-cuts.md",
-  "skills/short-drama-edit/references/delivery-verify.md"
+  "skills/short-drama-edit/references/editing-guide.md",
+  "skills/short-drama-breakdown/scripts/breakdown_tool.py"
 ]) {
   if (!paths.has(required)) throw new Error(`Bundled Drama Skills are missing the contract asset ${required}.`);
 }
@@ -71,7 +71,13 @@ const reviewSkill = await readFile(join(dramaRoot, "skills/short-drama-review/SK
 if (!reviewSkill.includes("审查/EP001-审查.md")) throw new Error("Drama v0.6 review Markdown contract is missing.");
 const produceSkill = await readFile(join(dramaRoot, "skills/short-drama-produce/SKILL.md"), "utf8");
 if (!produceSkill.includes("剧集/<EP>/制作成果/")) throw new Error("Drama v0.6 production output contract is missing.");
-if (!produceSkill.includes("reference_audio") || !produceSkill.includes("character")) {
+const adapterContract = await readFile(join(dramaRoot, "skills/short-drama-produce/references/adapter-contract.md"), "utf8");
+if (
+  !produceSkill.includes("reference_audio") ||
+  !adapterContract.includes('"reference_audio"') ||
+  !adapterContract.includes("character") ||
+  !adapterContract.includes("reference_roles")
+) {
   throw new Error("Drama v0.8.1 reference-audio production contract is missing.");
 }
 const productionTool = await readFile(join(dramaRoot, "skills/short-drama-produce/scripts/production_tool.py"), "utf8");
@@ -79,8 +85,8 @@ if (!productionTool.includes('AUDIO_REFERENCE_ROLE = "reference_audio"') || !pro
   throw new Error("Drama v0.8.1 reference-audio enforcement is missing.");
 }
 const creatorCheck = await readFile(join(dramaRoot, "skills/short-drama/scripts/creator_markdown_check.py"), "utf8");
-if (!creatorCheck.includes("参考音频不得控制至少包含台词、语气、情绪") || !creatorCheck.includes("声音参考重复")) {
-  throw new Error("Drama v0.8.1 voice identity and control checks are missing.");
+if (!creatorCheck.includes("不说话的人物不绑定参考音频") || !creatorCheck.includes("声音参考重复")) {
+  throw new Error("Drama v0.12.0 voice identity and control checks are missing.");
 }
 const fixtureSources = JSON.parse(await readFile(join(import.meta.dirname, "demo-fixtures/sources.json"), "utf8")) as {
   readonly fixtures: readonly {

@@ -3,12 +3,13 @@ import type { ToolCallBlock } from "@deepseek-ai/dsh-client-ui-conversation/clie
 import {
   OH_STORY_PRODUCTION_TOOL_NAME,
   validateProductionIntent,
-  type ProductionIntentArgs
+  type ProductionIntentArgs,
+  type ValidatedProductionIntent
 } from "../production-intent.js";
 
 export interface SettledProductionIntent {
   readonly callId: string;
-  readonly intent: ProductionIntentArgs;
+  readonly intent: ValidatedProductionIntent;
 }
 
 function parsedIntent(block: ToolCallBlock): SettledProductionIntent | undefined {

@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, realpath, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, isAbsolute, join, relative, resolve } from "node:path";
 import { Context } from "@deepseek-ai/cordis";
@@ -297,6 +297,31 @@ describe("native DSH prose guards", () => {
     expect(agent?.ctx.get).toHaveBeenCalledWith("fs");
     expect(calls).toEqual(expect.arrayContaining(["/virtual-story/大纲", "/virtual-story/正文/第002章.md", "/virtual-story/大纲/细纲_第002章_虚拟.md"]));
   });
+
+  it("enforces the outline gate when the workspace cwd is a symlink and the tool writes the canonical path", async () => {
+    const actualRoot = await project();
+    const linkParent = await workspace("oh-story-hook-link-");
+    const symlinkRoot = join(linkParent, "book-link");
+    await symlink(actualRoot, symlinkRoot);
+    const canonicalRoot = await realpath(actualRoot);
+    const baseFs = localDshFs();
+    const canonicalFs: StoryFileSystem = {
+      ...baseFs,
+      resolve: vi.fn(async (path: string, options?: { readonly cwd?: string }): Promise<FsTarget> => {
+        const raw = isAbsolute(path) ? resolve(path) : resolve(options?.cwd ?? ".", path);
+        const parentReal = await realpath(resolve(raw, "..")).catch(() => resolve(raw, ".."));
+        const displayPath = await realpath(raw).catch(() => join(parentReal, basename(raw)));
+        return { targetKey: displayPath as FsTarget["targetKey"], displayPath };
+      })
+    };
+    const agent = agentOn(symlinkRoot, canonicalFs);
+    const canonicalChapter = join(canonicalRoot, "正文", "第002章.md");
+    await expect(decideStoryMutation(execution("write", { file_path: canonicalChapter }, agent), allow))
+      .resolves.toEqual({ kind: "deny", reason: outlineDenial(2, "大纲") });
+    await writeFile(join(actualRoot, "大纲", "细纲_第002章.md"), OUTLINE);
+    await expect(decideStoryMutation(execution("write", { file_path: canonicalChapter }, agent), allow))
+      .resolves.toEqual({ kind: "allow" });
+  });
 });
 
 describe("chapter-extractor write fence", () => {
@@ -345,6 +370,11 @@ describe("chapter-extractor write fence", () => {
       expect(reason).toContain("只允许写调用方给的 {拆文目录}/_analysis_cache/输入-{批次ID}.md");
       for (const expected of reasons) expect(reason).toContain(expected);
     }
+
+    const statSpy = vi.fn((...args: Parameters<StoryFileSystem["stat"]>) => fs.stat(...args));
+    const trackedFs: StoryFileSystem = { ...fs, stat: statSpy };
+    await validateAnalysisInputWrite(trackedFs, root, join(outside, "_analysis_cache", "输入-RAW-1-3.md"));
+    expect(statSpy).not.toHaveBeenCalled();
   });
 
   it("identifies the extractor from its DSH subagent descriptor and fences only its file mutations", async () => {

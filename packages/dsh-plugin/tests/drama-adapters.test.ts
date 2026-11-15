@@ -27,6 +27,13 @@ async function bundledDramaScripts(): Promise<{ readonly path: string; readonly 
   return Promise.all(paths.map(async (path) => ({ path, source: await readFile(join(dramaRoot, path), "utf8") })));
 }
 
+function providerSection(document: string, heading: string): string {
+  const escaped = heading.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+  const match = new RegExp(`^## ${escaped}\\r?\\n([\\s\\S]*?)(?=^## |(?![\\s\\S]))`, "mu").exec(document);
+  if (match?.[1] === undefined) throw new Error(`Missing provider section: ${heading}`);
+  return match[1];
+}
+
 describe("bundled Drama media adapters", () => {
   it("names exactly the adapters the pinned upstream provider script accepts", async () => {
     const script = await readFile(join(dramaRoot, "short-drama-produce/scripts/provider_adapters.py"), "utf8");
@@ -34,34 +41,38 @@ describe("bundled Drama media adapters", () => {
     expect(choices?.sort()).toEqual(DRAMA_ADAPTERS.map((adapter) => adapter.name).sort());
   });
 
-  it("documents each required environment variable in the pinned upstream provider reference", async () => {
+  it("documents each required and optional environment variable in the pinned upstream provider reference", async () => {
     for (const adapter of DRAMA_ADAPTERS) {
-      const reference = await readFile(join(dramaRoot, adapter.reference), "utf8");
-      for (const name of [...adapter.requiredEnv, ...adapter.optionalEnv]) expect(reference, `${adapter.name} ${name}`).toContain(`\`${name}\``);
+      const section = providerSection(await readFile(join(dramaRoot, adapter.reference), "utf8"), adapter.referenceHeading);
+      for (const name of [...adapter.requiredEnv, ...adapter.optionalEnv]) expect(section, `${adapter.name} ${name}`).toContain(`\`${name}\``);
     }
   });
 
-  it("requires exactly the environment each pinned upstream provider reference lists as required", async () => {
+  it("requires and allows exactly the environment each pinned upstream provider section lists", async () => {
     const envName = /`([A-Z][A-Z0-9]*_[A-Z0-9_]+)`/gu;
     for (const adapter of DRAMA_ADAPTERS) {
-      const reference = await readFile(join(dramaRoot, adapter.reference), "utf8");
-      const requiredSection = /^- \*\*Required environment\*\*:([^\r\n]*(?:\r?\n {2}- [^\r\n]*)*)/mu.exec(reference)?.[1];
-      const environmentLine = /^- \*\*Environment\*\*: ([^\r\n]+)/mu.exec(reference)?.[1];
-      const required = requiredSection === undefined
-        ? [...(environmentLine ?? "").matchAll(/`([A-Z][A-Z0-9]*_[A-Z0-9_]+)` \(required\)/gu)].map((match) => match[1]!)
-        : [...requiredSection.matchAll(envName)].map((match) => match[1]!);
-      expect(required.sort(), adapter.name).toEqual([...adapter.requiredEnv].sort());
+      const section = providerSection(await readFile(join(dramaRoot, adapter.reference), "utf8"), adapter.referenceHeading);
+      const requiredLine = /^- \*\*必填环境变量\*\*：([^\r\n]+)/mu.exec(section)?.[1];
+      const optionalLine = /^- \*\*可选环境变量\*\*：([^\r\n]+)/mu.exec(section)?.[1];
+      const combinedLine = /^- \*\*环境变量\*\*：([^\r\n]+)/mu.exec(section)?.[1];
+      const required = requiredLine === undefined
+        ? [...(combinedLine ?? "").matchAll(/`([A-Z][A-Z0-9]*_[A-Z0-9_]+)`（必填）/gu)].map((match) => match[1]!)
+        : [...requiredLine.matchAll(envName)].map((match) => match[1]!);
+      const optional = optionalLine === undefined
+        ? [...(combinedLine ?? "").matchAll(/`([A-Z][A-Z0-9]*_[A-Z0-9_]+)`（可选/gu)].map((match) => match[1]!)
+        : [...optionalLine.matchAll(envName)].map((match) => match[1]!);
+      expect(required.sort(), `${adapter.name} required`).toEqual([...adapter.requiredEnv].sort());
+      expect(optional.sort(), `${adapter.name} optional`).toEqual([...adapter.optionalEnv].sort());
     }
   });
 
   it("takes each adapter's timeout and job modality from its pinned upstream provider reference", async () => {
     for (const adapter of DRAMA_ADAPTERS) {
-      const reference = await readFile(join(dramaRoot, adapter.reference), "utf8");
-      // Every provider reference opens with the adapter-config entry upstream expects.
-      const command = /\{"command": \[[^\]]*"([^"]+)"\], "timeout_seconds": (\d+)\}/u.exec(reference);
+      const section = providerSection(await readFile(join(dramaRoot, adapter.reference), "utf8"), adapter.referenceHeading);
+      const command = /\{"command": \[[^\]]*"([^"]+)"\], "timeout_seconds": (\d+)\}/u.exec(section);
       expect(command?.slice(1), adapter.name).toEqual([adapter.name, String(adapter.timeoutSeconds)]);
-      const modality = /modality `([a-z]+)`|`([a-z]+)` modality/u.exec(reference);
-      expect(modality?.[1] ?? modality?.[2], adapter.name).toBe(adapter.modality);
+      const modality = /`modality` 为 `([a-z]+)`/u.exec(section);
+      expect(modality?.[1], adapter.name).toBe(adapter.modality);
     }
   });
 
@@ -102,36 +113,48 @@ describe("bundled Drama media adapters", () => {
     expect(await readFile(custom, "utf8")).toBe(document);
   });
 
-  it("lets upstream reject generic voice bindings and accepts an explicit known-model profile", async () => {
+  it("admits built-in video reference_audio by default while requiring explicit reference_roles on custom adapters", async () => {
     const root = await mkdtemp(join(tmpdir(), "oh-story-adapter-roles-"));
     temporary.push(root);
     const project = join(root, "project");
     await mkdir(project);
-    const generic = join(root, "generic.json");
-    const custom = join(root, "custom.json");
-    await writeFile(generic, JSON.stringify(dramaAdapterConfigDocument(dramaRoot, "python")));
-    await writeFile(custom, JSON.stringify({ adapters: { seedance: {
+    const builtin = join(root, "builtin.json");
+    const customUndeclared = join(root, "custom-undeclared.json");
+    const customDeclared = join(root, "custom-declared.json");
+    await writeFile(builtin, JSON.stringify(dramaAdapterConfigDocument(dramaRoot, "python")));
+    await writeFile(customUndeclared, JSON.stringify({ adapters: { custom: { command: ["python", "adapter.py"], timeout_seconds: 10 } } }));
+    await writeFile(customDeclared, JSON.stringify({ adapters: { custom: {
       command: ["python", "adapter.py"], timeout_seconds: 10, reference_roles: ["reference_audio"]
     } } }));
     const script = String.raw`
 import runpy, sys
 from pathlib import Path
 tool = runpy.run_path(sys.argv[1])
-job = {"adapter": "seedance", "reference_bindings": [{"role": "reference_audio"}]}
-_, _, generic_roles = tool["_load_adapter"](Path(sys.argv[2]), "seedance", Path(sys.argv[4]))
+project = Path(sys.argv[5])
+for builtin_video in ("seedance", "minimax-h3"):
+    _, _, roles = tool["_load_adapter"](Path(sys.argv[2]), builtin_video, project)
+    tool["_require_adapter_roles"]({"adapter": builtin_video, "reference_bindings": [{"role": "reference_audio"}]}, roles)
+_, _, image_roles = tool["_load_adapter"](Path(sys.argv[2]), "gpt-image-2", project)
 try:
-    tool["_require_adapter_roles"](job, generic_roles)
+    tool["_require_adapter_roles"]({"adapter": "gpt-image-2", "reference_bindings": [{"role": "reference_audio"}]}, image_roles)
 except ValueError as error:
     assert "reference_audio; nothing was submitted" in str(error), error
 else:
-    raise AssertionError("generic generated profile admitted reference_audio")
-_, _, custom_roles = tool["_load_adapter"](Path(sys.argv[3]), "seedance", Path(sys.argv[4]))
-tool["_require_adapter_roles"](job, custom_roles)
-print("generic rejected; explicit profile admitted")
+    raise AssertionError("gpt-image-2 admitted reference_audio")
+_, _, undeclared_roles = tool["_load_adapter"](Path(sys.argv[3]), "custom", project)
+try:
+    tool["_require_adapter_roles"]({"adapter": "custom", "reference_bindings": [{"role": "reference_audio"}]}, undeclared_roles)
+except ValueError as error:
+    assert "reference_audio; nothing was submitted" in str(error), error
+else:
+    raise AssertionError("undeclared custom profile admitted reference_audio")
+_, _, declared_roles = tool["_load_adapter"](Path(sys.argv[4]), "custom", project)
+tool["_require_adapter_roles"]({"adapter": "custom", "reference_bindings": [{"role": "reference_audio"}]}, declared_roles)
+print("builtin video admitted; non-video and undeclared custom rejected; explicit profile admitted")
 `;
     const result = await execFileAsync((await hostPython(DRAMA_PYTHON)).command, ["-B", "-c", script,
-      resolve(dramaRoot, "short-drama-produce/scripts/production_tool.py"), generic, custom, project], { encoding: "utf8" });
-    expect(result.stdout.trim()).toBe("generic rejected; explicit profile admitted");
+      resolve(dramaRoot, "short-drama-produce/scripts/production_tool.py"), builtin, customUndeclared, customDeclared, project], { encoding: "utf8" });
+    expect(result.stdout.trim()).toBe("builtin video admitted; non-video and undeclared custom rejected; explicit profile admitted");
   });
 
   it("reports presence per adapter without exposing values", () => {
@@ -139,7 +162,7 @@ print("generic rejected; explicit profile admitted")
     expect(statuses.map((status) => [status.name, status.configured, status.missing])).toEqual([
       ["gpt-image-2", true, []],
       ["seedance", false, ["SEEDANCE_MODEL"]],
-      ["minimax-h3", false, ["MINIMAX_VIDEO_MODEL", "MINIMAX_VIDEO_RESOLUTIONS", "MINIMAX_VIDEO_MIN_DURATION", "MINIMAX_VIDEO_MAX_DURATION"]],
+      ["minimax-h3", false, ["MINIMAX_VIDEO_MODEL"]],
       ["minimax-music", true, []],
       ["minimax-speech", true, []]
     ]);

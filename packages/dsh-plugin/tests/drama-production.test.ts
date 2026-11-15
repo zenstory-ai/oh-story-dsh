@@ -204,3 +204,65 @@ describe("storyboard scene sources (Drama Skills 0.6.5, #100)", () => {
       .toEqual(["SHOT-EP001-002 的来源 尾声 在剧本中不存在。"]);
   });
 });
+
+describe("Drama Skills 0.12.0 creator field names and multi-shot groups", () => {
+  it("parses 首帧提示词, 开场画面/动作过程, 0.12 asset purposes and valid GROUP-* sections", () => {
+    const production = parseEpisodeProduction({
+      [`${episode}/剧本.md`]: "## EP001-SC001 内 · 门外 · 夜\n江辰停步。",
+      [`${episode}/视觉设定.md`]: "## 人物 · 江辰\n- ID：VISUAL-CHAR-JIANGCHEN\n- 外观特征：左眉尾旧疤。\n- 提示词名称：Jiangchen\n",
+      [`${episode}/分镜.md`]: "## SHOT-EP001-001 · 门外停步\n- 来源：EP001-SC001\n- 时长：4s\n- 动作：右手收回。\n- 出场设定：《视觉设定.md》·人物「江辰」\n\n### 首帧提示词\n> 江辰站在旧门外。\n",
+      [`${episode}/图片提示词.md`]: [
+        "## IMG-CHAR-A · 江辰",
+        "- 用途：外貌",
+        "### 可复制提示词",
+        "> 人物参考。",
+        "## IMG-ROOM-A · 走廊",
+        "- 用途：空间布局",
+        "### 可复制提示词",
+        "> 空间参考。",
+        "## IMG-ITEM-A · 钥匙",
+        "- 用途：主体",
+        "### 可复制提示词",
+        "> 物件参考。",
+        "## IMG-WET-A · 雨衣湿透",
+        "- 用途：造型状态",
+        "### 可复制提示词",
+        "> 状态参考。"
+      ].join("\n"),
+      [`${episode}/视频提示词.md`]: [
+        "## MOTION-EP001-001 · 门外停步",
+        "- 分镜：SHOT-EP001-001",
+        "- 时长：4s",
+        "- 开场画面：A lean man at an old door.",
+        "- 动作过程：悬停 → 收回右手",
+        "### 可复制提示词",
+        "> He pulls his hand back.",
+        "",
+        "## GROUP-EP001-01 · 门外连镜",
+        "- 成员：MOTION-EP001-001",
+        "",
+        "## 成片配乐与主题曲",
+        "- 曲风：悬疑低频。"
+      ].join("\n")
+    }, episode);
+    expect(production.shots[0]?.keyframePrompt).toBe("江辰站在旧门外。");
+    expect(production.shots[0]?.motion).toMatchObject({
+      startFrame: "A lean man at an old door.",
+      end: "悬停 → 收回右手"
+    });
+    expect(production.assets.map((asset) => [asset.id, asset.kind])).toEqual([
+      ["IMG-CHAR-A", "character"],
+      ["IMG-ROOM-A", "scene"],
+      ["IMG-ITEM-A", "prop"],
+      ["IMG-WET-A", "state"]
+    ]);
+    expect(production.diagnostics).toEqual([]);
+  });
+
+  it("reports a malformed GROUP heading without rejecting valid GROUP-* IDs", () => {
+    const production = parseEpisodeProduction({
+      [`${episode}/视频提示词.md`]: "## GROUP 待补编号\n"
+    }, episode);
+    expect(production.diagnostics.map((item) => item.code)).toContain("malformed_heading");
+  });
+});
