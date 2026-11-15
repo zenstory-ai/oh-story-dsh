@@ -1878,6 +1878,10 @@ async function main(): Promise<void> {
         await projectSelect.selectOption(generatedGameId);
         await generatedFrame.getByRole("button", { name: "试玩成功", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
         await generatedFrame.locator("#play:enabled").waitFor({ state: "visible", timeout: 10_000 });
+        await Promise.all([
+          page.evaluate(() => new Promise<void>((accept) => { requestAnimationFrame(() => { requestAnimationFrame(() => { accept(); }); }); })),
+          generatedFrame.locator("#play:enabled").evaluate(() => new Promise<void>((accept) => { requestAnimationFrame(() => { requestAnimationFrame(() => { accept(); }); }); }))
+        ]);
         // Selecting a different project intentionally creates a fresh iframe.
         // Diagnose this click against that instance, not the discarded first one.
         await generatedIframe.evaluate((element) => {

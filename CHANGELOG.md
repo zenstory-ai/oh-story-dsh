@@ -23,6 +23,10 @@
 - 同步 [video-recap-skills 0.7.1](https://github.com/zenstory-ai/video-recap-skills/releases/tag/v0.7.1)（`36df69fe9e702dc2f15ccd05fac878ad623cf346`，2 Skills）：默认多模态理解模型改为 `mimo-v2.6-flash`；宣发文案从 `packaging_plan.json` 拆成独立的 `promo_copy.json`，「视频」标签的文稿同步展示「宣发文案」以及音效方案、原片字幕、解说稿检查记录。
 - DSH 0.2.2 试用线更新到 npm `next` 的 [DeepSeek Harness 0.2.2-rc.3](https://www.npmjs.com/package/@deepseek-ai/dsh/v/0.2.2-rc.3)，默认宿主仍为 `0.2.2-rc.1`，兼容范围不变。
 
+### Fixed
+
+- 修复短剧无限画布中素材参考卡片第二行说明文字被底部裁切，以及小说文件树顶栏标题窄列截断的问题。
+
 ## [0.1.25] - 2026-11-12
 
 ### Changed
