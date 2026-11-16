@@ -13,9 +13,87 @@
   font: 14px/1.7 var(--dsw-font-family);
   overflow-wrap: anywhere;
 }
-.oh-story-welcome h2 { margin: 0 0 8px; font-size: 20px; }
+.oh-story-welcome h2 { margin: 0; font-size: 20px; }
 .oh-story-welcome p { margin: 8px 0 0; }
 .oh-story-welcome ol { margin: 12px 0; padding-left: 24px; }
+.oh-story-welcome code,
+.oh-story-plugin-config code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--dsw-alias-markdown-inline-code);
+  font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.oh-story-welcome-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  margin-bottom: 8px;
+}
+.oh-story-welcome-dismiss {
+  min-height: 28px;
+  flex: none;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 999px;
+  color: var(--dsw-alias-label-secondary);
+  background: var(--dsw-alias-bg-base);
+  padding: 3px 11px;
+  cursor: pointer;
+  font: 12px/1.4 var(--dsw-font-family);
+}
+.oh-story-welcome-dismiss:hover:not(:disabled) { color: var(--dsw-alias-label-primary); background: var(--dsw-alias-interactive-bg-hover); }
+.oh-story-welcome-dismiss:focus-visible,
+.oh-story-plugin-switch:focus-visible { outline: 2px solid var(--dsw-alias-state-business-primary); outline-offset: 2px; }
+.oh-story-welcome-dismiss:disabled,
+.oh-story-plugin-switch:disabled { opacity: .5; cursor: default; }
+.oh-story-welcome-note { color: var(--dsw-alias-label-secondary); font-size: 12px; }
+.oh-story-plugin-config {
+  box-sizing: border-box;
+  display: grid;
+  gap: 8px;
+  padding: 14px 16px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 10px;
+  color: var(--dsw-alias-label-primary);
+  background: var(--dsw-alias-bg-layer-1);
+  font: 13px/1.55 var(--dsw-font-family);
+}
+.oh-story-plugin-config-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+.oh-story-plugin-config-copy { display: grid; min-width: 0; gap: 3px; }
+.oh-story-plugin-config-copy strong { font-size: 13px; font-weight: 600; }
+.oh-story-plugin-config-copy span { color: var(--dsw-alias-label-secondary); font-size: 12px; }
+.oh-story-plugin-switch {
+  position: relative;
+  width: 38px;
+  height: 22px;
+  flex: none;
+  padding: 2px;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 999px;
+  background: var(--dsw-alias-bg-base);
+  cursor: pointer;
+  transition: background-color .15s ease, border-color .15s ease;
+}
+.oh-story-plugin-switch[aria-checked="true"] {
+  border-color: var(--dsw-alias-state-business-primary);
+  background: var(--dsw-alias-state-business-primary);
+}
+.oh-story-plugin-switch > i {
+  display: block;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--dsw-alias-label-secondary);
+  transition: transform .15s ease, background-color .15s ease;
+}
+.oh-story-plugin-switch[aria-checked="true"] > i { transform: translateX(16px); background: #fff; }
+.oh-story-plugin-config-error { margin: 0; color: var(--dsw-alias-state-error-primary); font-size: 12px; }
 .oh-story-split-surface { display: contents; font-family: var(--dsw-font-family); }
 
 /* Collapsed, the plugin owns nothing but this control: DSH renders the
