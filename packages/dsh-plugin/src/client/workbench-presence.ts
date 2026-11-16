@@ -55,3 +55,46 @@ export function workbenchPreferenceStorage(): WorkbenchPreferenceStorage | undef
   try { return globalThis.localStorage; }
   catch { return undefined; }
 }
+
+export const WELCOME_GUIDE_STORAGE_KEY = "oh-story.welcome-guide";
+
+export type WelcomeConfigFormStatus = "absent" | "loading" | "ready" | "unavailable";
+
+export interface WelcomeGuideResolutionInput {
+  readonly formStatus: WelcomeConfigFormStatus;
+  readonly hostValue: boolean | undefined;
+  readonly writable: boolean;
+  readonly optimisticValue: boolean | undefined;
+  readonly localPreference: WorkbenchPreference | undefined;
+  readonly workspaceWelcomeGuide?: boolean | undefined;
+}
+
+export function readWelcomeGuidePreference(storage: WorkbenchPreferenceStorage | undefined): WorkbenchPreference | undefined {
+  if (storage === undefined) return undefined;
+  let value: string | null;
+  try { value = storage.getItem(WELCOME_GUIDE_STORAGE_KEY); }
+  catch { return undefined; }
+  return value === "open" || value === "closed" ? value : undefined;
+}
+
+export function writeWelcomeGuidePreference(storage: WorkbenchPreferenceStorage | undefined, enabled: boolean): void {
+  if (storage === undefined) return;
+  try { storage.setItem(WELCOME_GUIDE_STORAGE_KEY, enabled ? "open" : "closed"); }
+  catch { /* in-memory state keeps the choice when site data is blocked */ }
+}
+
+/**
+ * Resolve whether the blank-session welcome guide may appear:
+ * - Wait while the Host settings form is still loading so `welcomeGuide: false` never flashes.
+ * - When DSH's profile settings form is ready and writable, its `welcomeGuide` value is authoritative.
+ * - On read-only or profileless hosts, honor static Host `welcomeGuide: false`, then browser storage.
+ */
+export function resolveWelcomeGuideEnabled(input: WelcomeGuideResolutionInput): boolean {
+  if (input.optimisticValue !== undefined) return input.optimisticValue;
+  if (input.formStatus === "loading") return false;
+  if (input.formStatus === "ready" && input.writable) return input.hostValue !== false;
+  if (input.hostValue === false || input.workspaceWelcomeGuide === false) return false;
+  if (input.localPreference !== undefined) return input.localPreference === "open";
+  if (input.hostValue === undefined && input.workspaceWelcomeGuide === undefined) return false;
+  return true;
+}

@@ -684,7 +684,11 @@ async function main(): Promise<void> {
     await firstRunPage.getByRole("dialog").waitFor({ state: "detached", timeout: 10_000 });
     const welcome = firstRunPage.getByRole("region", { name: "Oh Story 使用引导" });
     await welcome.waitFor({ state: "visible", timeout: 20_000 });
-    if (!(await welcome.innerText()).includes("Oh Story 已加载")) throw new Error("First launch did not explain how to open the workbench.");
+    const welcomeText = await welcome.innerText();
+    if (!welcomeText.includes("Oh Story 创作工作台") || !welcomeText.includes("Minimal") || welcomeText.includes("Oh Story 已加载")) {
+      throw new Error(`First launch did not state the workbench and skill-preset boundary honestly: ${welcomeText}`);
+    }
+    await welcome.getByRole("button", { name: "关闭欢迎引导", exact: true }).waitFor({ state: "visible", timeout: 5_000 });
     // Check compact layout on a separate page so resizing does not switch the
     // desktop page's sidebar into a drawer while fixture Sessions arrive.
     const compactFirstRunPage = await firstRunPage.context().newPage();
@@ -761,6 +765,7 @@ async function main(): Promise<void> {
     // DSH 0.1.7 opens a fresh home straight into a blank Session in its default workspace, so the
     // guide belongs to that blank state: it returns with that Session and retires once it starts.
     if (!useRealDeepSeek) {
+      const profilePatchPath = join(dshHome, "profiles", "web", "cordis.patch.yml");
       // New Session may retain earlier blank Sessions. Bind the assertion to the
       // guide's currently selected conversation and its default-workspace directory.
       await firstRunPage.getByRole("treeitem").filter({ hasText: /^(?:Default workspace|默认工作区)/u }).first().hover();
@@ -774,7 +779,61 @@ async function main(): Promise<void> {
       if (selectedSession?.blank !== true || selectedSession.cwd === undefined || await realpath(selectedSession.cwd) !== defaultWorkspacePath) {
         throw new Error(`Expected the guide's selected blank Session in the default workspace: ${JSON.stringify({ selectedSessionId, selectedSession, defaultWorkspacePath })}`);
       }
-      await prepareSession(origin, selectedSession.sessionId, "你好", "通用 · 首次启动");
+
+      // Dismissing the welcome guide persists welcomeGuide: false to the profile patch,
+      // keeps blank Sessions clean across reloads, and leaves creative project workbenches intact.
+      await welcome.getByRole("button", { name: "关闭欢迎引导", exact: true }).click();
+      await welcome.waitFor({ state: "detached", timeout: 10_000 });
+      let disabledPatch = "";
+      for (let attempt = 0; attempt < 50; attempt += 1) {
+        disabledPatch = await readFile(profilePatchPath, "utf8").catch(() => "");
+        if (/welcomeGuide:\s*false\b/u.test(disabledPatch)) break;
+        await new Promise((resolve) => { setTimeout(resolve, 100); });
+      }
+      if (!/welcomeGuide:\s*false\b/u.test(disabledPatch)) {
+        throw new Error(`Expected welcomeGuide: false in ${profilePatchPath}, found:\n${disabledPatch}`);
+      }
+      await firstRunPage.reload({ waitUntil: "networkidle" });
+      await firstRunPage.locator("[data-conversation-content]").first().waitFor({ state: "visible", timeout: 20_000 });
+      if (await welcome.count() !== 0) {
+        throw new Error("Welcome guide reappeared on a blank Session after welcomeGuide was disabled and the page reloaded.");
+      }
+      await selectSession(firstRunPage, storyWorkspace.workspace.title, storySessionTitle);
+      await firstRunPage.getByRole("tablist", { name: "创作工作台" }).waitFor({ state: "visible", timeout: 20_000 });
+
+      // Re-enabling from Sidebar -> Plugins -> @oh-story/dsh updates the profile patch and restores blank-Session guidance.
+      const openSidebar = firstRunPage.getByRole("button", { name: /^(?:Open sidebar|打开侧边栏)$/u }).first();
+      if (await openSidebar.isVisible()) await openSidebar.click();
+      await firstRunPage.getByRole("button", { name: /^(?:Plugins|插件)$/u }).first().click();
+      const pluginCardButton = firstRunPage.locator('[data-plugin-package="@oh-story/dsh"] button').first();
+      await pluginCardButton.waitFor({ state: "visible", timeout: 20_000 });
+      await pluginCardButton.click();
+      const welcomeSwitch = firstRunPage.locator('[data-plugin-detail="@oh-story/dsh"] [data-plugin-config]')
+        .getByRole("switch", { name: "空白会话欢迎引导" });
+      await welcomeSwitch.waitFor({ state: "visible", timeout: 10_000 });
+      if (await welcomeSwitch.getAttribute("aria-checked") !== "false") {
+        throw new Error("Expected @oh-story/dsh plugin config switch to reflect welcomeGuide: false.");
+      }
+      await welcomeSwitch.click();
+      await firstRunPage.waitForFunction(
+        () => document.querySelector('[data-plugin-detail="@oh-story/dsh"] [data-plugin-config] [role="switch"]:not([disabled])[aria-checked="true"]') !== null,
+        undefined,
+        { timeout: 10_000 }
+      );
+      const reenabledPatch = await readFile(profilePatchPath, "utf8");
+      if (/welcomeGuide:\s*false\b/u.test(reenabledPatch)) {
+        throw new Error(`Expected welcomeGuide to be re-enabled in ${profilePatchPath}, found:\n${reenabledPatch}`);
+      }
+
+      await firstRunPage.getByRole("treeitem").filter({ hasText: /^(?:Default workspace|默认工作区)/u }).first().hover();
+      await firstRunPage.getByRole("button", { name: /^(?:New session in Default workspace|在“默认工作区”中新建会话)$/u }).click();
+      await welcome.waitFor({ state: "visible", timeout: 10_000 });
+      const reenabledSessionId = await welcome.evaluate((guide) =>
+        guide.closest("[data-conversation-content]")?.getAttribute("data-conversation-session"));
+      if (reenabledSessionId === null || reenabledSessionId === undefined) {
+        throw new Error("Expected a data-conversation-session on the re-enabled blank Session.");
+      }
+      await prepareSession(origin, reenabledSessionId, "你好", "通用 · 首次启动");
       await welcome.waitFor({ state: "detached", timeout: 10_000 });
     }
     await selectSession(firstRunPage, dramaWorkspace.workspace.title, dramaSessionTitle);
@@ -2992,7 +3051,7 @@ async function main(): Promise<void> {
       userInvocableVideoSkills: videoSkills.length,
       provider: useRealDeepSeek ? "deepseek-official" : "local-fixture",
       fixtures: [storyProjectName, dramaProjectName, generatedGameId, altGameId],
-      uiSlots: ["shell.overlay", "tool.call.toolview"],
+      uiSlots: ["shell.overlay", "plugins.bundle.config", "tool.call.toolview"],
       workbenchGate: "creative-project-only",
       workbenchCollapse: "per-workspace",
       threeColumn: true,
