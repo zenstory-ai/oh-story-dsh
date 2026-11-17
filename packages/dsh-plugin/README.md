@@ -77,7 +77,7 @@ npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.2-rc.1 dsh plugin --
 ## 常见问题与升级说明
 
 - **安装报 `pnpm not found on PATH`**：执行上方带 `--package pnpm@11.7.0` 的完整安装命令。
-- **未看到工作台标签**：添加并打开作品目录；空目录需先在 Chat 中运行 `/story`、`/short-drama`、`/novel-to-game quick` 或 `/video-recap` 生成首个创作文件；已收起的工作台可点会话区的「创作工作台」恢复。
+- **未看到工作台标签或技能未生效**：添加并打开已有作品目录即可自动展开工作台；空目录新建作品需当前会话模式支持技能加载（如 `Standard`、`PTC`，`Minimal` 模式不加载插件技能），在 Chat 中运行 `/story`、`/short-drama`、`/novel-to-game quick` 或 `/video-recap` 生成首个创作文件；已收起的工作台可点会话区的「创作工作台」恢复。空白会话欢迎引导可点右上角「关闭欢迎引导」，或在「插件 → `@oh-story/dsh`」随时开关。
 - **旧项目升级提示**：Drama Skills `0.12.0` 前的短剧文档只浏览无需改动，续写或跑 `creator_markdown_check.py` 前需将旧字段名改为现行直白名称；video-recap `0.7+` 续跑旧 `work/` 时需去掉 `--edit-mode dub`、`--review-narration` 等已移除参数。完整说明见仓库 [README](https://github.com/zenstory-ai/oh-story-dsh#升级到新版本后要做什么) 与 [CHANGELOG](https://github.com/zenstory-ai/oh-story-dsh/blob/main/CHANGELOG.md)。
 
 ---

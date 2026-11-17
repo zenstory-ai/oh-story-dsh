@@ -96,7 +96,7 @@ npx -y @deepseek-ai/dsh@0.2.2-rc.1 web
 <details>
 <summary>装进独立 profile，与日常编程环境分开</summary>
 
-插件安装到哪个 profile，该 profile 下的会话就会加载创作技能目录。若希望默认 `web` 环境保持纯净，可将插件装入独立的 `story` profile：
+插件安装到哪个 profile，该 profile 下启用了技能工具的会话模式（如 `Standard`、`PTC`；`Minimal` 等精简模式不加载技能工具）就能调用随包创作技能。若希望默认 `web` 环境保持纯净，可将插件装入独立的 `story` profile：
 
 ```bash
 npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.2-rc.1 dsh plugin --profile story add @oh-story/dsh@0.1.26
@@ -165,8 +165,8 @@ npx -y @deepseek-ai/dsh@0.2.2-rc.1 --profile story --port 3081  # 创作工作�
 
 首次启动后，点击左侧 **Workspaces** 旁的 **添加工作区 / Add workspace**，选中你的作品文件夹并新建会话：
 
-- **已有工程目录**：自动识别并展示「小说 / 短剧 / 游戏 / 视频」工作台标签。
-- **全新空目录**：保持原生对话界面，发送 `/story`、`/short-drama`、`/novel-to-game quick` 或 `/video-recap` 启动创作，Agent 写出第一份项目文件后工作台自动展开。
+- **已有工程目录**：自动识别并展示「小说 / 短剧 / 游戏 / 视频」工作台标签（不依赖会话所选模式）。
+- **全新空目录**：确保会话模式启用技能加载（如默认的 `Standard` 或 `PTC`），在原生对话界面发送 `/story`、`/short-drama`、`/novel-to-game quick` 或 `/video-recap` 启动创作，Agent 写出第一份项目文件后工作台自动展开。空白会话顶部的入门引导可一键关闭，也可随时在左侧「插件 → `@oh-story/dsh`」（或 profile 的 `cordis.patch.yml` 中 `welcomeGuide: false`）开关。
 
 可以直接复制以下提示词开局（按需替换方括号内容）：
 

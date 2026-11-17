@@ -98,7 +98,7 @@ The video pipeline requires **Python 3.10+** and **ffmpeg / ffprobe** on `PATH` 
 <details>
 <summary>Install into a separate profile alongside stock DSH</summary>
 
-Every session in the target profile discovers the bundled creation Skills. To keep your default `web` profile untouched, install into a dedicated `story` profile:
+Sessions in the target profile whose selected preset enables the skill tool (such as `Standard` or `PTC`; `Minimal` omits skill loading) discover the bundled creation Skills. To keep your default `web` profile untouched, install into a dedicated `story` profile:
 
 ```bash
 npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.2-rc.1 dsh plugin --profile story add @oh-story/dsh@0.1.26
@@ -167,8 +167,8 @@ Built around `video-recaps/<project>/` with **Preview / Creative canvas / Docume
 
 Click **Add workspace** next to **Workspaces** in the left sidebar, pick your project folder, and start a session:
 
-- **Folder with existing creative work**: the `小说 / 短剧 / 游戏 / 视频` tabs open automatically.
-- **Empty folder**: start in native Chat with `/story`, `/short-drama`, `/novel-to-game quick`, or `/video-recap`; the workbench unfolds as soon as the agent writes the first project file.
+- **Folder with existing creative work**: the `小说 / 短剧 / 游戏 / 视频` tabs open automatically regardless of session preset.
+- **Empty folder**: with a skill-enabled preset (`Standard` or `PTC`), start in native Chat with `/story`, `/short-drama`, `/novel-to-game quick`, or `/video-recap`; the workbench unfolds as soon as the agent writes the first project file. The blank-session welcome guide can be dismissed inline or toggled anytime under **Plugins → `@oh-story/dsh`** (`welcomeGuide: false` in `cordis.patch.yml`).
 
 Copy and adapt any of the starter prompts below:
 

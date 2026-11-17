@@ -26,21 +26,36 @@ export { DRAMA_ADAPTER_CONFIG_ENV, DRAMA_ADAPTERS, dramaAdapterConfigPath, drama
 export const name = "oh-story";
 export const inject = ["skills", "subagents", "tools", "typert", "webServer"];
 
+interface SettingsPolicyService {
+  configure(presentation: { readonly auto?: boolean }, owner?: Context["fiber"]): () => void;
+}
+
 /** DSH owns models, providers, presets, permissions, roots, runs, and sessions. */
 export interface Config {
   readonly editorMaxBytes?: number;
   readonly trustedHosts?: string[];
+  readonly welcomeGuide?: boolean | { readonly get: () => boolean | undefined };
 }
 
 export const Config = z.object({
   editorMaxBytes: z.natural().min(65_536).max(8_388_608).default(2_097_152),
-  trustedHosts: z.array(String).default([])
-}) as z<Config>;
+  trustedHosts: z.array(String).default([]),
+  welcomeGuide: z.boolean().default(true).volatile()
+}) as unknown as z<Config>;
+
+export function readWelcomeGuideConfig(value: Config["welcomeGuide"]): boolean {
+  const resolved = typeof value === "object" && value !== null ? value.get() : value;
+  return resolved ?? true;
+}
 
 /** Mount only domain contributions into the current DSH process. */
 export async function apply(context: Context, config: Config = {}): Promise<void> {
   const trustedHosts = config.trustedHosts ?? [];
   for (const entry of trustedHosts) assertTrustedWorkspaceAuthority(entry);
+  void context.inject(["settings"], (child) => {
+    const settings = child.get("settings") as SettingsPolicyService | undefined;
+    if (settings !== undefined) child.effect(() => settings.configure({ auto: false }, context.fiber));
+  });
   context.skills.registerProvider(() => createOhStorySkillProvider());
   context.skills.registerProvider(() => createDramaSkillProvider());
   context.skills.registerProvider(() => createNovelToGameSkillProvider());
@@ -48,7 +63,11 @@ export async function apply(context: Context, config: Config = {}): Promise<void
   registerOhStoryHooks(context);
   registerOhStoryProductionTool(context);
   await registerOhStoryRoleTool(context);
-  registerWorkspaceRoute(context, { maxBytes: config.editorMaxBytes ?? 2_097_152, trustedHosts });
+  registerWorkspaceRoute(context, {
+    maxBytes: config.editorMaxBytes ?? 2_097_152,
+    trustedHosts,
+    welcomeGuide: () => readWelcomeGuideConfig(config.welcomeGuide)
+  });
   // Register the bundled media adapters for this host up front so the first
   // short-drama-produce run has a config to pass; the preflight route repeats
   // this and reports the outcome, so a failure here only delays the message.

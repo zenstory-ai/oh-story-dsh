@@ -19,6 +19,10 @@
 
 - 同步 [Drama Skills 0.12.1](https://github.com/zenstory-ai/drama-skills/releases/tag/v0.12.1)（`37232f6d22e174c36e321d2e3a1a3ae871e7d602`，12 Skills）：短剧拆解新增从真实成片反推《剧本.md》的路线，烧录字幕拼版带编号和时间轴映射，补齐台词与画面校对并修复字幕测量细节。既有项目无需新增迁移。
 
+### Fixed
+
+- 修复插件启用时在每个空白会话无条件注入欢迎引导屏并误称「Oh Story 已加载」的问题（[#128](https://github.com/zenstory-ai/oh-story-dsh/issues/128)）：欢迎卡可直接点击「关闭欢迎引导」持久关闭，也可在左侧「插件 → `@oh-story/dsh`」开关或 profile 配置 `welcomeGuide: false` 中随时控制；关闭后空白会话不再弹出欢迎屏，含已有作品文件的工作区仍照常打开创作工作台。欢迎文案与文档同步说明真实边界：查看与编辑已有作品不依赖会话模式，新建作品触发 `/story`、`/short-drama`、`/novel-to-game quick`、`/video-recap` 等技能需当前会话所选模式已启用技能工具（如 `Standard`、`PTC`；`Minimal` 等未启用技能工具的模式不会加载本插件技能）。
+
 ## [0.1.26] - 2026-11-15
 
 0.12.0 之前的短剧项目若要续写下游文档或运行 `creator_markdown_check.py`，需先把现有五份 Markdown 文档中的旧字段改成现行直白名称；只浏览已有项目无需改动，短剧工作台仍兼容已有《分镜.md》里的 `### 冻结关键帧提示词`。小说、游戏与视频项目无需迁移。

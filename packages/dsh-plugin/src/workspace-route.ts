@@ -40,6 +40,7 @@ let dramaPreflightCache: { readonly expires: number; readonly value: DramaPrefli
 interface WorkspaceRouteOptions {
   readonly maxBytes: number;
   readonly trustedHosts?: readonly string[];
+  readonly welcomeGuide?: () => boolean;
 }
 
 /** Host-process capability probe. The Agent's execution world may differ; upstream `scripts/doctor.py` is authoritative there. */
@@ -631,6 +632,10 @@ async function handle(context: Context, request: IncomingMessage, response: Serv
       sendPreview(request, response, preview.path, preview.bytes);
       return;
     }
+    if (url.pathname === "/oh-story/config" && request.method === "GET") {
+      send(response, 200, { welcomeGuide: options.welcomeGuide?.() ?? true });
+      return;
+    }
     if (url.pathname === "/oh-story/workspace" && request.method === "GET") {
       const realm = await workspaceRealm(context, url);
       const files = await listFiles(realm);
@@ -641,7 +646,7 @@ async function handle(context: Context, request: IncomingMessage, response: Serv
         workspaceVideoProjects(realm, files, options.maxBytes)
       ]);
       const metadataErrors = [trackingError, dramaError].filter((value): value is string => value !== undefined);
-      send(response, 200, { cwd: realm.cwd, files, games, videos, metadataErrors });
+      send(response, 200, { cwd: realm.cwd, files, games, videos, metadataErrors, welcomeGuide: options.welcomeGuide?.() ?? true });
       return;
     }
     if (url.pathname === "/oh-story/video-preflight" && request.method === "GET") {

@@ -58,11 +58,18 @@ import { VideoStudio, type VideoProject, type VideoWorkspaceTab } from "./video-
 import {
   hasCreativeProject,
   readWorkbenchPreference,
+  resolveWelcomeGuideEnabled,
   resolveWorkbenchOpen,
   workbenchPreferenceStorage,
   writeWorkbenchPreference,
   type WorkbenchPreference
 } from "./workbench-presence.js";
+import {
+  OhStoryPluginConfig,
+  WelcomeGuide,
+  WelcomeGuideController,
+  type WelcomeConfigForm
+} from "./welcome-guide.js";
 import { GameCanvas } from "./game-canvas.js";
 import { gameCreativeDocuments } from "./game-canvas-model.js";
 import { GameDocuments, type GameDocumentEditor } from "./game-documents.js";
@@ -88,8 +95,15 @@ export const inject = ["slots", "sessions", "conversation"];
 declare module "@deepseek-ai/dsh-client-ui-slots" {
   interface SlotMap {
     "oh-story.workspace": { kind: "single"; scope: "session" };
+    "plugins.bundle.config": { kind: "keyed"; scope: "root"; owner: { readonly view: "summary" | "page" } };
   }
 }
+
+interface ConfigFormsService {
+  get(entryId: string): WelcomeConfigForm;
+}
+
+let activeWelcomeGuideController = new WelcomeGuideController();
 
 interface WorkspaceFile {
   readonly path: string;
@@ -104,6 +118,7 @@ interface WorkspacePayload {
   readonly games: readonly GameProject[];
   readonly videos: readonly VideoProject[];
   readonly metadataErrors: readonly string[];
+  readonly welcomeGuide?: boolean | undefined;
 }
 interface FilePayload {
   readonly path: string;
@@ -645,6 +660,8 @@ function CreativeWorkbench({
   open,
   creativeProject,
   welcome,
+  welcomeSaving,
+  onDismissWelcome,
   useStore,
   actions
 }: {
@@ -670,6 +687,8 @@ function CreativeWorkbench({
   readonly creativeProject: boolean;
   /** A blank Session over a workspace without creative work: the first thing a fresh DSH shows. */
   readonly welcome: boolean;
+  readonly welcomeSaving: boolean;
+  readonly onDismissWelcome: () => void;
 } & Pick<WorkbenchSlotProps, "useStore" | "actions" | "sendProductionPrompt" | "focusProductionChat" | "cancelProduction" | "removeQueuedProduction">) {
   const activities = useMemo(
     () => fileMutations(runningCalls, partial, undispatched),
@@ -1610,7 +1629,9 @@ function CreativeWorkbench({
     // Without creative work there is nothing to reveal, so the plugin leaves the
     // official conversation exactly as DSH renders it. A failed workspace request
     // still offers the way in, because that error is only readable inside the workbench.
-    if (!creativeProject && error === undefined) return welcome ? <WelcomeGuide /> : null;
+    if (!creativeProject && error === undefined) {
+      return welcome ? <WelcomeGuide styles={workbenchStyles} dismissing={welcomeSaving} onDismiss={onDismissWelcome} /> : null;
+    }
     return <div ref={surfaceRef} className="oh-story-split-surface" data-open="false">
       <style>{workbenchStyles}</style>
       <button className="oh-story-launcher" type="button" title={error ?? "打开创作工作台"} aria-label="打开创作工作台" onClick={() => { applyWorkbenchPreference("open"); }}>
@@ -1889,10 +1910,25 @@ function SessionWorkbenchBridge({ sessionId, useSession, useSessions, useProject
   }, [actions, selectedWorkbench, workbench]);
   const chosenPreference = useStore((memory) => memory.workbenchPreference);
   const creativeProject = hasCreativeProject(workspace);
+  const welcomeController = activeWelcomeGuideController;
+  const welcomeSnapshot = useSyncExternalStore(welcomeController.subscribe, welcomeController.getSnapshot, welcomeController.getSnapshot);
   // DSH 0.1.7 opens a fresh home straight into a blank Session in its default workspace, so
   // "no Session yet" no longer marks a first launch. A blank Session without creative work does.
   const sessionBlank = useSessions((state) => state.byId[sessionId]?.blank === true);
-  const welcome = sessionBlank && workspace !== undefined && !workspaceLoading && !creativeProject;
+  useEffect(() => {
+    if (sessionBlank && workspace !== undefined && !creativeProject && workspace.welcomeGuide === undefined) {
+      welcomeController.ensureFallbackHostConfig();
+    }
+  }, [creativeProject, sessionBlank, welcomeController, workspace]);
+  const welcomeEnabled = resolveWelcomeGuideEnabled({
+    formStatus: welcomeSnapshot.formStatus,
+    hostValue: welcomeSnapshot.hostValue,
+    writable: welcomeSnapshot.writable,
+    optimisticValue: welcomeSnapshot.optimisticValue,
+    localPreference: welcomeSnapshot.localPreference,
+    workspaceWelcomeGuide: workspace?.welcomeGuide ?? welcomeSnapshot.fallbackHostValue
+  });
+  const welcome = sessionBlank && workspace !== undefined && !workspaceLoading && !creativeProject && welcomeEnabled;
   // The Session Store holds this Session's choice; localStorage carries the workspace's
   // last choice across restarts. Reading it here keeps the decision in the same render
   // that learns the workspace, so a collapsed workbench never flashes the layout open.
@@ -2056,6 +2092,8 @@ function SessionWorkbenchBridge({ sessionId, useSession, useSessions, useProject
       open={open}
       creativeProject={creativeProject}
       welcome={welcome}
+      welcomeSaving={welcomeSnapshot.saving}
+      onDismissWelcome={() => { void welcomeController.setEnabled(false); }}
       sendProductionPrompt={sendProductionPrompt}
       focusProductionChat={focusProductionChat}
       cancelProduction={cancelProduction}
@@ -2068,24 +2106,23 @@ function SessionWorkbenchBridge({ sessionId, useSession, useSessions, useProject
 
 type WorkbenchSeatProps = PropsRuntime<"shell.overlay"> & PropsRenderSlots<"oh-story.workspace">;
 
-/** How to reach the workbench from a DSH that has no creative work open yet. */
-function WelcomeGuide() {
-  return <section className="oh-story-welcome" aria-label="Oh Story 使用引导">
-    <style>{workbenchStyles}</style>
-    <h2>Oh Story 已加载</h2>
-    <p>直接在下方输入框说你想写什么，比如「写一篇 8000 字的重生复仇短篇」，或输入 <code>/story</code>、<code>/short-drama</code>、<code>/novel-to-game quick</code>、<code>/video-recap</code>。写出第一个创作文件后，小说、短剧、游戏、视频工作台会自动出现。</p>
-    <ol>
-      <li>不选文件夹也能开始：作品会写进 DSH 自动建立的「默认工作区 / Default workspace」。</li>
-      <li>想放进自己的作品文件夹：点击左侧「工作区 / Workspaces」旁的「添加工作区 / Add workspace」，在系统弹出的文件夹窗口里选择，再在下方「选择工作区 / Choose workspace」中选中它。</li>
-      <li>输入框右下角显示模型名就说明已配置好；没有模型时，在「设置 → 模型」填入 API Key。只查看已有作品无需 API Key。</li>
-    </ol>
-  </section>;
-}
-
 /** Without any Session the session-scoped workbench cannot mount, so the guide mounts on its own. */
 function WorkbenchWelcome() {
   const marker = useRef<HTMLSpanElement>(null);
   const [target, setTarget] = useState<HTMLElement>();
+  const welcomeController = activeWelcomeGuideController;
+  const welcomeSnapshot = useSyncExternalStore(welcomeController.subscribe, welcomeController.getSnapshot, welcomeController.getSnapshot);
+  useEffect(() => {
+    welcomeController.ensureFallbackHostConfig();
+  }, [welcomeController]);
+  const welcomeEnabled = resolveWelcomeGuideEnabled({
+    formStatus: welcomeSnapshot.formStatus,
+    hostValue: welcomeSnapshot.hostValue,
+    writable: welcomeSnapshot.writable,
+    optimisticValue: welcomeSnapshot.optimisticValue,
+    localPreference: welcomeSnapshot.localPreference,
+    workspaceWelcomeGuide: welcomeSnapshot.fallbackHostValue
+  });
   useLayoutEffect(() => {
     const document = marker.current?.ownerDocument;
     if (document === undefined) return;
@@ -2101,7 +2138,11 @@ function WorkbenchWelcome() {
   }, []);
   return <>
     <span ref={marker} className="oh-story-bridge-marker" aria-hidden />
-    {target === undefined ? null : createPortal(<WelcomeGuide />, target)}
+    {target === undefined || !welcomeEnabled ? null : createPortal(<WelcomeGuide
+      styles={workbenchStyles}
+      dismissing={welcomeSnapshot.saving}
+      onDismiss={() => { void welcomeController.setEnabled(false); }}
+    />, target)}
   </>;
 }
 
@@ -2151,6 +2192,18 @@ function ProductionToolView({ block, inspect }: ToolCallViewProps) {
 
 /** Register only official DSH surfaces; the split bridge never replaces Chat. */
 export function apply(context: ClientContext): void {
+  const controller = new WelcomeGuideController();
+  activeWelcomeGuideController = controller;
+  void context.inject(["configForms"], (child) => {
+    const configForms = child.get("configForms") as ConfigFormsService | undefined;
+    if (configForms === undefined) return;
+    const form = configForms.get("oh-story");
+    child.effect(() => controller.connectForm(form));
+  });
+  context.slots.inject("plugins.bundle.config", () => context.slots.register({
+    name: "plugins.bundle.config",
+    key: "@oh-story/dsh"
+  }, ({ view }) => <OhStoryPluginConfig view={view} controller={controller} styles={styles} />));
   context.slots.inject("shell.overlay", () => {
     const disposeSeat = context.slots.register({
       name: "shell.overlay",
