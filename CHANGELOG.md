@@ -11,6 +11,10 @@
 
 ## [Unreleased]
 
+## [0.1.27] - 2026-11-17
+
+从 0.1.26 升级无需迁移项目。更早版本的短剧字段迁移要求仍见升级说明。
+
 ### Added
 
 - 新增「工作台设置」：可隐藏不常用的小说、短剧、游戏或视频页卡，按浏览器工作区记住选择，也可一键显示全部。隐藏不删除项目、不关闭 Skills 或制作任务；至少保留一个页卡，自动定位与文件跟随不再打开隐藏项。
@@ -504,7 +508,8 @@
 - 提供 13 个 Oh Story 小说 Skills、7 个专业 Roles 与 10 个 Drama Skills。
 - 提供文件树、Markdown/JSONL 编辑预览与官方 DSH Chat 同屏的三栏工作台。
 
-[Unreleased]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.26...HEAD
+[Unreleased]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.27...HEAD
+[0.1.27]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.26...v0.1.27
 [0.1.26]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.25...v0.1.26
 [0.1.25]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.24...v0.1.25
 [0.1.24]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.23...v0.1.24

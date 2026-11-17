@@ -106,7 +106,7 @@ failure and needs investigation rather than a retry that mutates public bytes.
 Do not announce a release until the registry reports the exact version:
 
 ```bash
-VERSION=0.1.26
+VERSION=0.1.27
 npm view "@oh-story/dsh@$VERSION" version dist.integrity
 npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.2-rc.1 dsh plugin --profile web add "@oh-story/dsh@$VERSION"
 ```

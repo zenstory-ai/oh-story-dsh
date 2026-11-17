@@ -1,6 +1,15 @@
 # Validation
 
-Candidate: `@oh-story/dsh` 0.1.26 on DeepSeek Harness `0.2.2-rc.1` (the npm `latest`), with `0.2.1-rc.5`, `0.2.0-rc.2` and `0.2.2-rc.3` (the npm `next`) also covered. Local aggregate acceptance passed on 2026-11-15.
+Candidate: `@oh-story/dsh` 0.1.27 on DeepSeek Harness `0.2.2-rc.1`, with release-gate coverage of `0.2.0-rc.2` and `0.2.2-rc.3`. Local aggregate acceptance passed on 2026-11-17.
+
+## 0.1.27 release evidence
+
+- Workbench settings keep one shared visibility snapshot per workspace across Session A/B/A navigation; browser storage persists it across reloads. Tests cover canonical ordering, malformed data, blocked storage, stable snapshots, last-tab protection and visible-tab keyboard traversal. Hidden tabs do not disable Skills, delete files or cancel production.
+- Drama Skills 0.12.1 (`37232f6d22e174c36e321d2e3a1a3ae871e7d602`) bundles 12 Skills and passes all 7 scripted-Skill selftests. The upstream EP001 fixture contents are unchanged from 0.12.0; provenance advances with the pin. No additional project migration is introduced.
+- This release includes the previously merged welcome-guide controls from #129: persistent dismissal and host plugin configuration, with the conversation-mode Skill boundary stated explicitly.
+- On 2026-11-17, `pnpm verify:release` passed: lint, typecheck, asset parity, DSH boundary, release/upstream tests, 270 unit/contract tests across 36 files, build, and packaged Chrome on DSH `0.2.2-rc.1`, `0.2.0-rc.2` and `0.2.2-rc.3`. Each browser run reported `ok: true`, `workbenchTabs: per-workspace-hide-restore-persist` and `roleToolE2e: true` with the local fixture provider.
+- Browser scenarios exercise hiding the active tab, last-tab protection, Escape/focus return, 500px dialog bounds, official UI creation of Session B, A/B/A preference sharing, reload persistence, workspace isolation and restoring all tabs without reviving a stale selection. Blank Sessions are identified through their mounted conversation ID and selected tree row, not a non-existent hierarchy header. The settings screenshot was visually inspected.
+- No paid provider run was performed for this release.
 
 ## 0.1.26 release evidence
 

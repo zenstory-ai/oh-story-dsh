@@ -408,12 +408,24 @@ async function selectFile(page: Page, path: string): Promise<void> {
   await button.click();
 }
 
-async function selectSession(page: Page, workspaceTitle: string, sessionTitle: string): Promise<void> {
-  const open = page.getByRole("button", { name: /^(?:Open sidebar|打开侧边栏)$/u }).first();
-  if (await open.isVisible()) await open.click();
+async function workspaceInSidebar(page: Page, workspaceTitle: string): Promise<Locator> {
   const workspaceRow = page.getByRole("treeitem").filter({ hasText: workspaceTitle }).first();
+  const open = page.getByRole("button", { name: /^(?:Open sidebar|打开侧边栏)$/u }).first();
+  if (!await workspaceRow.isVisible() && await open.isVisible()) {
+    try { await open.click({ timeout: 2_000 }); }
+    catch (error) {
+      // A responsive/sidebar transition can remove the Open button while the
+      // click waits for stability. Accept only the already-open destination.
+      if (!await workspaceRow.isVisible()) throw error;
+    }
+  }
   await workspaceRow.waitFor({ state: "visible", timeout: 10_000 });
   if (await workspaceRow.getAttribute("aria-expanded") !== "true") await workspaceRow.click();
+  return workspaceRow;
+}
+
+async function selectSession(page: Page, workspaceTitle: string, sessionTitle: string): Promise<void> {
+  await workspaceInSidebar(page, workspaceTitle);
   const sessionRow = page.getByRole("treeitem").filter({ hasText: sessionTitle }).first();
   await sessionRow.waitFor({ state: "visible", timeout: 10_000 });
   await sessionRow.click();
@@ -3064,7 +3076,24 @@ async function main(): Promise<void> {
       if (await visibleWorkbenchTabs.getByRole("tab", { selected: true }).textContent() !== "短剧") {
         throw new Error("Workbench keyboard navigation reopened a hidden tab.");
       }
-      await blankSession.click();
+      // Compact modal behavior is covered above. Return to desktop before sidebar
+      // navigation, whose compact sheet closes asynchronously after each selection.
+      await page.setViewportSize({ width: 1_440, height: 900 });
+      await page.waitForFunction(() => document.querySelector("[data-conversation-scroll]")?.getAttribute("data-oh-story-layout") === "wide");
+      const preferenceWorkspace = await workspaceInSidebar(page, plainWorkspace.workspace.title);
+      await preferenceWorkspace.hover();
+      await page.getByRole("button", { name: `New session in ${plainWorkspace.workspace.title}`, exact: true })
+        .or(page.getByRole("button", { name: `在“${plainWorkspace.workspace.title}”中新建会话`, exact: true })).click();
+      // Blank Sessions have no Session hierarchy header. Observe the mounted
+      // conversation identity and selected sidebar row instead.
+      await page.waitForFunction((previousId) => {
+        const content = Array.from(document.querySelectorAll<HTMLElement>("[data-conversation-content]:not([data-sidebar-chat] *)"))
+          .find((element) => element.getClientRects().length > 0);
+        const id = content?.getAttribute("data-conversation-session");
+        return id !== undefined && id !== null && id !== previousId;
+      }, plainSession.sessionId);
+      await page.getByRole("treeitem", { selected: true }).filter({ hasText: /^(?:New Session|新会话)$/iu }).first()
+        .waitFor({ state: "visible", timeout: 10_000 });
       await visibleWorkbenchTabs.getByRole("tab", { name: "短剧", selected: true, exact: true }).waitFor({ state: "visible", timeout: 10_000 });
       if (await visibleWorkbenchTabs.getByRole("tab").count() !== 1) throw new Error("A new Session ignored workspace tab preferences.");
       await settingsButton.click();
@@ -3141,7 +3170,7 @@ async function main(): Promise<void> {
     const apiKey = process.env.DEEPSEEK_API_KEY;
     const redact = (value: string): string => apiKey === undefined ? value : value.replaceAll(apiKey, "[REDACTED]");
     // eslint-disable-next-line preserve-caught-error -- The original cause may contain credentials; retain only redacted diagnostics.
-    throw new Error(`${redact(String(error))}\nMock requests: ${JSON.stringify(mockDeepSeek?.requests ?? [])}\nDSH logs:\n${redact(logs.join("").slice(-16_000))}`);
+    throw new Error(`${redact(error instanceof Error ? error.stack ?? String(error) : String(error))}\nMock requests: ${JSON.stringify(mockDeepSeek?.requests ?? [])}\nDSH logs:\n${redact(logs.join("").slice(-16_000))}`);
   } finally {
     if (firstRunBrowser !== undefined) await firstRunBrowser.close();
     if (child !== undefined) await stopDshProcess(child);

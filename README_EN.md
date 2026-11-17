@@ -40,14 +40,14 @@
 | **Interactive game** | [NovelToGame 0.9.0](https://github.com/zenstory-ai/novel-to-game/releases/tag/v0.9.0) · 5 Skills | `/novel-to-game quick`, `/game-build`, `/game-qa` |
 | **Video recap** | [video-recap-skills 0.7.1](https://github.com/zenstory-ai/video-recap-skills/releases/tag/v0.7.1) · 2 Skills | `/video-recap`, `/video-reference` |
 
-> Latest release: **v0.1.26**, paired by default with DeepSeek Harness `0.2.2-rc.1` (requires Node.js 24.9+) and also compatible with `0.2.1-rc.5`, `0.2.0-rc.2`, and `0.2.2-rc.3`. See [CHANGELOG.md](CHANGELOG.md) and [Releases](https://github.com/zenstory-ai/oh-story-dsh/releases) for full release notes, or jump to [What do I do after upgrading?](#what-do-i-do-after-upgrading) for project migration notes.
+> Latest release: **v0.1.27**, paired by default with DeepSeek Harness `0.2.2-rc.1` (requires Node.js 24.9+) and also compatible with `0.2.1-rc.5`, `0.2.0-rc.2`, and `0.2.2-rc.3`. See [CHANGELOG.md](CHANGELOG.md) and [Releases](https://github.com/zenstory-ai/oh-story-dsh/releases) for full release notes, or jump to [What do I do after upgrading?](#what-do-i-do-after-upgrading) for project migration notes.
 
 ## Installation
 
 Requires **Node.js 24.9+** (the install command supplies `pnpm` ephemerally, so nothing else needs to be preinstalled):
 
 ```bash
-npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.2-rc.1 dsh plugin --profile web add @oh-story/dsh@0.1.26 &&
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.2-rc.1 dsh plugin --profile web add @oh-story/dsh@0.1.27 &&
 npx -y @deepseek-ai/dsh@0.2.2-rc.1 web
 ```
 
@@ -59,7 +59,7 @@ Always use the **same DSH version** for both `plugin add` and `web` (`>=0.2.0-rc
 <summary>Install the prebuilt tarball from GitHub Releases</summary>
 
 ```bash
-npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.2-rc.1 dsh plugin --profile web add https://github.com/zenstory-ai/oh-story-dsh/releases/download/v0.1.26/oh-story-dsh-0.1.26.tgz &&
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.2-rc.1 dsh plugin --profile web add https://github.com/zenstory-ai/oh-story-dsh/releases/download/v0.1.27/oh-story-dsh-0.1.27.tgz &&
 npx -y @deepseek-ai/dsh@0.2.2-rc.1 web
 ```
 
@@ -101,7 +101,7 @@ The video pipeline requires **Python 3.10+** and **ffmpeg / ffprobe** on `PATH` 
 Sessions in the target profile whose selected preset enables the skill tool (such as `Standard` or `PTC`; `Minimal` omits skill loading) discover the bundled creation Skills. To keep your default `web` profile untouched, install into a dedicated `story` profile:
 
 ```bash
-npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.2-rc.1 dsh plugin --profile story add @oh-story/dsh@0.1.26
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.2-rc.1 dsh plugin --profile story add @oh-story/dsh@0.1.27
 ```
 
 Edit `~/.dsh/profiles/story/package.json` so DSH's Web UI bundle loads before the plugin:

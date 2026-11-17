@@ -38,14 +38,14 @@
 | **互动游戏** | [NovelToGame 0.9.0](https://github.com/zenstory-ai/novel-to-game/releases/tag/v0.9.0) · 5 Skills | `/novel-to-game quick`、`/game-build`、`/game-qa` |
 | **视频解说** | [video-recap-skills 0.7.1](https://github.com/zenstory-ai/video-recap-skills/releases/tag/v0.7.1) · 2 Skills | `/video-recap`、`/video-reference` |
 
-> 当前版本 **v0.1.26**，默认配套 DeepSeek Harness `0.2.2-rc.1`（需 Node.js 24.9+），同时兼容 `0.2.1-rc.5`、`0.2.0-rc.2` 与 `0.2.2-rc.3`。完整变更见 [CHANGELOG.md](CHANGELOG.md) 与 [Releases](https://github.com/zenstory-ai/oh-story-dsh/releases)，旧项目升级注意事项见[升级说明](#升级到新版本后要做什么)。
+> 当前版本 **v0.1.27**，默认配套 DeepSeek Harness `0.2.2-rc.1`（需 Node.js 24.9+），同时兼容 `0.2.1-rc.5`、`0.2.0-rc.2` 与 `0.2.2-rc.3`。完整变更见 [CHANGELOG.md](CHANGELOG.md) 与 [Releases](https://github.com/zenstory-ai/oh-story-dsh/releases)，旧项目升级注意事项见[升级说明](#升级到新版本后要做什么)。
 
 ## 安装
 
 默认命令配套 DSH `0.2.2-rc.1`，需要 **Node.js 24.9+**（安装命令已内置临时 `pnpm`，无需提前全局安装）：
 
 ```bash
-npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.2-rc.1 dsh plugin --profile web add @oh-story/dsh@0.1.26 &&
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.2-rc.1 dsh plugin --profile web add @oh-story/dsh@0.1.27 &&
 npx -y @deepseek-ai/dsh@0.2.2-rc.1 web
 ```
 
@@ -57,7 +57,7 @@ npx -y @deepseek-ai/dsh@0.2.2-rc.1 web
 <summary>从 GitHub Release 安装预构建包</summary>
 
 ```bash
-npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.2-rc.1 dsh plugin --profile web add https://github.com/zenstory-ai/oh-story-dsh/releases/download/v0.1.26/oh-story-dsh-0.1.26.tgz &&
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.2-rc.1 dsh plugin --profile web add https://github.com/zenstory-ai/oh-story-dsh/releases/download/v0.1.27/oh-story-dsh-0.1.27.tgz &&
 npx -y @deepseek-ai/dsh@0.2.2-rc.1 web
 ```
 
@@ -99,7 +99,7 @@ npx -y @deepseek-ai/dsh@0.2.2-rc.1 web
 插件安装到哪个 profile，该 profile 下启用了技能工具的会话模式（如 `Standard`、`PTC`；`Minimal` 等精简模式不加载技能工具）就能调用随包创作技能。若希望默认 `web` 环境保持纯净，可将插件装入独立的 `story` profile：
 
 ```bash
-npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.2-rc.1 dsh plugin --profile story add @oh-story/dsh@0.1.26
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.2-rc.1 dsh plugin --profile story add @oh-story/dsh@0.1.27
 ```
 
 随后编辑 `~/.dsh/profiles/story/package.json`，在 `dsh.profile.bundles` 中把 Web 界面包放在插件前面：
