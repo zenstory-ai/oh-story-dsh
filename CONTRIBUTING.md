@@ -54,7 +54,7 @@ pnpm assets:check
 ## CI 分层
 
 - `CI / Quality gate`：Ubuntu 上执行完整确定性门禁 `pnpm verify`。
-- `CI / Portability`：macOS 与 Windows 执行类型、资产、单测与构建，锁定跨平台路径行为。
+- `CI / Portability`：macOS 26 Intel 与 Windows 执行类型、资产、单测与构建，锁定跨平台路径行为。为兼容既有保护规则，macOS 检查标识仍是 `Portability (macos-latest)`；实际 runner 显式使用 `macos-26-intel`，不表示验证了 GitHub 的 Arm64 `macos-latest` 镜像。
 - `CI / Packaged DSH Web integration`：构建 tarball、安装到官方 DSH Web，并用 Chrome 验证能力目录、工作区安全与三栏 UI。
 - `Real Provider`：手动兼容性观察；凭据预检与真实测试是独立 Job。配置 `DEEPSEEK_API_KEY` 时真实测试显示 executed，未配置时真实测试 Job 显示 skipped，汇总区分 `EXECUTED_AND_PASSED`、`EXECUTED_AND_FAILED`、`SKIPPED_NO_CREDENTIAL`、`PREFLIGHT_FAILED` 与 `PROVIDER_JOB_NOT_COMPLETED`。只有 `EXECUTED_AND_PASSED` 会让工作流成功；其余状态都不会产生绿色兼容性结论。
 - `Release`：手动触发只在 `main` 上做不发布的演练；稳定的 `vX.Y.Z` Tag 还必须指向已合入 `main`、且同一提交最新一次完整 CI 成功，才会把一次构建的同一份 `.tgz` 以追加方式发布到 GitHub Release 与 npm。重跑不会覆盖不同字节。
