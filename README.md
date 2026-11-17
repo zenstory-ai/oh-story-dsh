@@ -34,18 +34,18 @@
 | 工作台 | 内置技能包（随插件固定版本打包） | 常用入口 |
 | --- | --- | --- |
 | **小说** | [Oh Story 0.10.5](https://github.com/zenstory-ai/oh-story-claudecode/releases/tag/v0.10.5) · 14 Skills · 7 Roles | `/story`、`/story-long-write`、`/story-review`、`/story-publish` |
-| **短剧** | [Drama Skills 0.12.0](https://github.com/zenstory-ai/drama-skills/releases/tag/v0.12.0) · 12 Skills | `/short-drama`、`/short-drama-write`、`/short-drama-storyboard`、`/short-drama-edit` |
+| **短剧** | [Drama Skills 0.12.1](https://github.com/zenstory-ai/drama-skills/releases/tag/v0.12.1) · 12 Skills | `/short-drama`、`/short-drama-write`、`/short-drama-storyboard`、`/short-drama-edit` |
 | **互动游戏** | [NovelToGame 0.9.0](https://github.com/zenstory-ai/novel-to-game/releases/tag/v0.9.0) · 5 Skills | `/novel-to-game quick`、`/game-build`、`/game-qa` |
 | **视频解说** | [video-recap-skills 0.7.1](https://github.com/zenstory-ai/video-recap-skills/releases/tag/v0.7.1) · 2 Skills | `/video-recap`、`/video-reference` |
 
-> 当前版本 **v0.1.26**，默认配套 DeepSeek Harness `0.2.2-rc.1`（需 Node.js 24.9+），同时兼容 `0.2.1-rc.5`、`0.2.0-rc.2` 与 `0.2.2-rc.3`。完整变更见 [CHANGELOG.md](CHANGELOG.md) 与 [Releases](https://github.com/zenstory-ai/oh-story-dsh/releases)，旧项目升级注意事项见[升级说明](#升级到新版本后要做什么)。
+> 当前版本 **v0.1.27**，默认配套 DeepSeek Harness `0.2.2-rc.1`（需 Node.js 24.9+），同时兼容 `0.2.1-rc.5`、`0.2.0-rc.2` 与 `0.2.2-rc.3`。完整变更见 [CHANGELOG.md](CHANGELOG.md) 与 [Releases](https://github.com/zenstory-ai/oh-story-dsh/releases)，旧项目升级注意事项见[升级说明](#升级到新版本后要做什么)。
 
 ## 安装
 
 默认命令配套 DSH `0.2.2-rc.1`，需要 **Node.js 24.9+**（安装命令已内置临时 `pnpm`，无需提前全局安装）：
 
 ```bash
-npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.2-rc.1 dsh plugin --profile web add @oh-story/dsh@0.1.26 &&
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.2-rc.1 dsh plugin --profile web add @oh-story/dsh@0.1.27 &&
 npx -y @deepseek-ai/dsh@0.2.2-rc.1 web
 ```
 
@@ -57,7 +57,7 @@ npx -y @deepseek-ai/dsh@0.2.2-rc.1 web
 <summary>从 GitHub Release 安装预构建包</summary>
 
 ```bash
-npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.2-rc.1 dsh plugin --profile web add https://github.com/zenstory-ai/oh-story-dsh/releases/download/v0.1.26/oh-story-dsh-0.1.26.tgz &&
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.2-rc.1 dsh plugin --profile web add https://github.com/zenstory-ai/oh-story-dsh/releases/download/v0.1.27/oh-story-dsh-0.1.27.tgz &&
 npx -y @deepseek-ai/dsh@0.2.2-rc.1 web
 ```
 
@@ -99,7 +99,7 @@ npx -y @deepseek-ai/dsh@0.2.2-rc.1 web
 插件安装到哪个 profile，该 profile 下启用了技能工具的会话模式（如 `Standard`、`PTC`；`Minimal` 等精简模式不加载技能工具）就能调用随包创作技能。若希望默认 `web` 环境保持纯净，可将插件装入独立的 `story` profile：
 
 ```bash
-npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.2-rc.1 dsh plugin --profile story add @oh-story/dsh@0.1.26
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.2-rc.1 dsh plugin --profile story add @oh-story/dsh@0.1.27
 ```
 
 随后编辑 `~/.dsh/profiles/story/package.json`，在 `dsh.profile.bundles` 中把 Web 界面包放在插件前面：
@@ -124,6 +124,8 @@ npx -y @deepseek-ai/dsh@0.2.2-rc.1 --profile story --port 3081  # 创作工作�
 ## 四个工作台
 
 四个工作台均运行在官方 DSH Web 会话中，右侧对话、模型切换、Token 统计与权限审批全部是原生 DSH 能力。
+
+只做某一种创作时，可在页卡旁的「工作台设置」里隐藏其他页卡，选择按当前浏览器的工作区记住；随时可「显示全部」。隐藏不删除项目，也不禁用创作技能，至少保留一个页卡。
 
 ### 小说工作台
 
@@ -186,7 +188,7 @@ npx -y @deepseek-ai/dsh@0.2.2-rc.1 --profile story --port 3081  # 创作工作�
 
 ## 看看它的输出
 
-以下片段直接节选自仓库内置的真实演示工程（同步自 [oh-story-claudecode 示例](https://github.com/zenstory-ai/oh-story-claudecode/tree/abe96630d115afbd528f2329e2d8d604d5d5673c/demo/%E9%95%BF%E7%AF%87) 与 [drama-skills 公开样例](https://github.com/zenstory-ai/drama-skills/tree/047ae8625021f038ee7581d6222064f0c169ce59/examples/creator-first/EP001)）。
+以下片段直接节选自仓库内置的真实演示工程（同步自 [oh-story-claudecode 示例](https://github.com/zenstory-ai/oh-story-claudecode/tree/abe96630d115afbd528f2329e2d8d604d5d5673c/demo/%E9%95%BF%E7%AF%87) 与 [drama-skills 公开样例](https://github.com/zenstory-ai/drama-skills/tree/37232f6d22e174c36e321d2e3a1a3ae871e7d602/examples/creator-first/EP001)）。
 
 ### 1. 小说：追踪上下文与细纲硬门禁
 

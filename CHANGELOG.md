@@ -11,6 +11,18 @@
 
 ## [Unreleased]
 
+## [0.1.27] - 2026-11-17
+
+从 0.1.26 升级无需迁移项目。更早版本的短剧字段迁移要求仍见升级说明。
+
+### Added
+
+- 新增「工作台设置」：可隐藏不常用的小说、短剧、游戏或视频页卡，按浏览器工作区记住选择，也可一键显示全部。隐藏不删除项目、不关闭 Skills 或制作任务；至少保留一个页卡，自动定位与文件跟随不再打开隐藏项。
+
+### Changed
+
+- 同步 [Drama Skills 0.12.1](https://github.com/zenstory-ai/drama-skills/releases/tag/v0.12.1)（`37232f6d22e174c36e321d2e3a1a3ae871e7d602`，12 Skills）：短剧拆解新增从真实成片反推《剧本.md》的路线，烧录字幕拼版带编号和时间轴映射，补齐台词与画面校对并修复字幕测量细节。既有项目无需新增迁移。
+
 ### Fixed
 
 - 修复插件启用时在每个空白会话无条件注入欢迎引导屏并误称「Oh Story 已加载」的问题（[#128](https://github.com/zenstory-ai/oh-story-dsh/issues/128)）：欢迎卡可直接点击「关闭欢迎引导」持久关闭，也可在左侧「插件 → `@oh-story/dsh`」开关或 profile 配置 `welcomeGuide: false` 中随时控制；关闭后空白会话不再弹出欢迎屏，含已有作品文件的工作区仍照常打开创作工作台。欢迎文案与文档同步说明真实边界：查看与编辑已有作品不依赖会话模式，新建作品触发 `/story`、`/short-drama`、`/novel-to-game quick`、`/video-recap` 等技能需当前会话所选模式已启用技能工具（如 `Standard`、`PTC`；`Minimal` 等未启用技能工具的模式不会加载本插件技能）。
@@ -496,7 +508,8 @@
 - 提供 13 个 Oh Story 小说 Skills、7 个专业 Roles 与 10 个 Drama Skills。
 - 提供文件树、Markdown/JSONL 编辑预览与官方 DSH Chat 同屏的三栏工作台。
 
-[Unreleased]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.26...HEAD
+[Unreleased]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.27...HEAD
+[0.1.27]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.26...v0.1.27
 [0.1.26]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.25...v0.1.26
 [0.1.25]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.24...v0.1.25
 [0.1.24]: https://github.com/zenstory-ai/oh-story-dsh/compare/v0.1.23...v0.1.24

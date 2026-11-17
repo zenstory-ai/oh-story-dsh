@@ -7,23 +7,25 @@
 | 工作台 | 内置技能包（随包固定版本） | 常用命令 |
 | --- | --- | --- |
 | **小说** | Oh Story `0.10.5`（14 Skills · 7 Roles） | `/story`、`/story-long-write`、`/story-review`、`/story-publish` |
-| **短剧** | Drama Skills `0.12.0`（12 Skills） | `/short-drama`、`/short-drama-write`、`/short-drama-storyboard`、`/short-drama-edit` |
+| **短剧** | Drama Skills `0.12.1`（12 Skills） | `/short-drama`、`/short-drama-write`、`/short-drama-storyboard`、`/short-drama-edit` |
 | **互动游戏** | NovelToGame `0.9.0`（5 Skills） | `/novel-to-game quick`、`/game-build`、`/game-qa` |
 | **视频解说** | video-recap-skills `0.7.1`（2 Skills） | `/video-recap`、`/video-reference` |
 
 ## 安装与启动
 
+工作台页卡旁的「工作台设置」可隐藏不常用的页卡，并按当前浏览器的工作区记住选择；至少保留一个，也可一键「显示全部」。隐藏不删除项目或禁用 Skills。
+
 环境要求 **Node.js 24.9+**（安装命令已内置临时 `pnpm`，无需提前全局安装）：
 
 ```bash
-npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.2-rc.1 dsh plugin --profile web add @oh-story/dsh@0.1.26 &&
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.2-rc.1 dsh plugin --profile web add @oh-story/dsh@0.1.27 &&
 npx -y @deepseek-ai/dsh@0.2.2-rc.1 web
 ```
 
 也可直接安装 GitHub Release 预构建包：
 
 ```bash
-npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.2-rc.1 dsh plugin --profile web add https://github.com/zenstory-ai/oh-story-dsh/releases/download/v0.1.26/oh-story-dsh-0.1.26.tgz &&
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.2-rc.1 dsh plugin --profile web add https://github.com/zenstory-ai/oh-story-dsh/releases/download/v0.1.27/oh-story-dsh-0.1.27.tgz &&
 npx -y @deepseek-ai/dsh@0.2.2-rc.1 web
 ```
 
@@ -67,7 +69,7 @@ npx -y @deepseek-ai/dsh@0.2.2-rc.1 web
 若希望默认 `web` profile 保持纯净，可将插件装入独立 `story` profile：
 
 ```bash
-npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.2-rc.1 dsh plugin --profile story add @oh-story/dsh@0.1.26
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.2-rc.1 dsh plugin --profile story add @oh-story/dsh@0.1.27
 ```
 
 将 `~/.dsh/profiles/story/package.json` 中的 `dsh.profile.bundles` 设为 `["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-web-app", "@oh-story/dsh"]`，随后即可用 `npx -y @deepseek-ai/dsh@0.2.2-rc.1 --profile story --port 3081` 独立启动创作工作台。

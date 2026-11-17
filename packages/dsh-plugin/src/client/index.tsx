@@ -80,11 +80,14 @@ import gameCanvasStyles from "./game-canvas.css?inline";
 import { gamePreviewStatus, previewUrls } from "./game-preview-state.js";
 import { focusChatContext } from "./chat-context.js";
 import { WorkbenchModeTabs } from "./workbench-mode-tabs.js";
+import { createWorkbenchModesStore, resolveVisibleWorkbench } from "./workbench-settings.js";
+import { WorkbenchSettingsButton, WorkbenchSettingsPanel } from "./workbench-settings-panel.js";
 import { endpoint, handleTabKey } from "./workbench-ui.js";
 import styles from "./plugin.css?inline";
 import toolCardStyles from "./tool-card.css?inline";
 
 const workbenchStyles = [styles, gameCanvasStyles, videoStudioStyles].join("\n");
+const workbenchModesStore = createWorkbenchModesStore(workbenchPreferenceStorage());
 
 export const name = "oh-story";
 export const inject = ["slots", "sessions", "conversation"];
@@ -563,7 +566,7 @@ function GamePreview({ project, building, onDiscuss }: { readonly project: GameP
   </div>;
 }
 
-function GameStudio({ workspace, building, gameTab, gameProjectId, hidden, onGameTab, onGameProject, paneId, labelledBy, onWorkbench, onCollapse, editor, canvasByProject, onCanvasChange, chatOpen, onChatOpen, onContinueInChat }: {
+function GameStudio({ workspace, building, gameTab, gameProjectId, hidden, onGameTab, onGameProject, paneId, labelledBy, onWorkbench, workbenchModes, onWorkbenchSettings, onCollapse, editor, canvasByProject, onCanvasChange, chatOpen, onChatOpen, onContinueInChat }: {
   readonly workspace: WorkspacePayload;
   readonly building: boolean;
   readonly gameTab: GameWorkspaceTab;
@@ -574,6 +577,8 @@ function GameStudio({ workspace, building, gameTab, gameProjectId, hidden, onGam
   readonly paneId: string;
   readonly labelledBy: string;
   readonly onWorkbench: (mode: WorkbenchMode) => void;
+  readonly workbenchModes: readonly WorkbenchMode[];
+  readonly onWorkbenchSettings: () => void;
   readonly onCollapse: () => void;
   readonly editor: GameDocumentEditor;
   readonly canvasByProject: Readonly<Record<string, GameCanvasState>>;
@@ -615,7 +620,7 @@ function GameStudio({ workspace, building, gameTab, gameProjectId, hidden, onGam
   const tabs = ["preview", "canvas", "design"] as const;
   return <main ref={studioRef} id={paneId} className="oh-game-studio" role="tabpanel" aria-labelledby={labelledBy} hidden={hidden}>
     <header className="oh-game-toolbar">
-      <div className="oh-workbench-cluster"><WorkbenchModeTabs className="oh-game-mode-tabs" current="game" onSelect={onWorkbench} /><button className="oh-workbench-collapse" type="button" title="收起创作工作台" aria-label="收起创作工作台" onClick={onCollapse}>×</button></div>
+      <div className="oh-workbench-cluster"><WorkbenchModeTabs className="oh-game-mode-tabs" current="game" modes={workbenchModes} onSelect={onWorkbench} /><WorkbenchSettingsButton onClick={onWorkbenchSettings} /><button className="oh-workbench-collapse" type="button" title="收起创作工作台" aria-label="收起创作工作台" onClick={onCollapse}>×</button></div>
       <label className="oh-game-project" title="切换项目将重新载入试玩"><span>游戏项目</span><select aria-label="游戏项目；切换将重新载入试玩" value={project?.id ?? ""} onChange={(event) => { onGameProject(event.target.value); }}><option value="">新建游戏想法</option>{workspace.games.length > 0 && <optgroup label="我的项目">{workspace.games.map((item) => <option value={item.id} key={item.id}>{`我的项目 · ${item.title}`}</option>)}</optgroup>}</select></label>
       <div className="oh-game-tabs" role="tablist" aria-label="游戏工作台">{tabs.map((tab) => <button key={tab} type="button" role="tab" tabIndex={gameTab === tab ? 0 : -1} aria-selected={gameTab === tab} id={`${tabsId}-${tab}-tab`} aria-controls={`${tabsId}-${tab}-panel`} onKeyDown={(event) => { handleTabKey(event, tabs, gameTab, selectTab); }} onClick={() => { selectTab(tab); }}>{tabLabels[tab]}</button>)}</div>
       <div className="oh-game-toolbar-actions"><button type="button" className="oh-game-chat-toggle" aria-label={chatOpen ? "收起原生 Chat" : "展开原生 Chat"} aria-expanded={chatOpen} onClick={() => { onChatOpen(!chatOpen); }}>Chat</button></div>
@@ -647,6 +652,8 @@ function CreativeWorkbench({
   cancelProduction,
   removeQueuedProduction,
   workspace,
+  workbench,
+  workbenchModes,
   error,
   workspaceLoading,
   reload,
@@ -671,6 +678,8 @@ function CreativeWorkbench({
   readonly productionQueue: readonly ProductionQueueEntry[];
   readonly productionIntents: readonly SettledProductionIntent[];
   readonly workspace: WorkspacePayload | undefined;
+  readonly workbench: WorkbenchMode;
+  readonly workbenchModes: readonly WorkbenchMode[];
   readonly error: string | undefined;
   readonly workspaceLoading: boolean;
   readonly reload: () => void;
@@ -698,7 +707,7 @@ function CreativeWorkbench({
     : creativeRelativePath(settledMutation.slice(settledMutation.indexOf("\0") + 1), workspace?.cwd);
   const activity = primaryActivity?.activity;
   const activityPath = primaryActivity?.path;
-  const workbench = useStore((memory) => memory.workbench);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const setWorkbench = actions.setWorkbench;
   const gameTab = useStore((memory) => memory.gameTab);
   const gameChatOpen = useStore((memory) => memory.gameChatOpen);
@@ -917,9 +926,12 @@ function CreativeWorkbench({
   useEffect(() => {
     if (workspace === undefined || initialWorkbenchFor.current === workspace.cwd) return;
     initialWorkbenchFor.current = workspace.cwd;
-    const next = initialWorkbenchMode(workbench, workspace.files, workspace.games, workspace.videos);
-    if (next !== workbench) setWorkbench(next);
-  }, [setWorkbench, workbench, workspace]);
+    const next = initialWorkbenchMode(workbench,
+      workspace.files.filter((file) => workbenchModes.includes(workbenchModeForPath(file.path) ?? "story")),
+      workbenchModes.includes("game") ? workspace.games : [],
+      workbenchModes.includes("video") ? workspace.videos : []);
+    setWorkbench(next);
+  }, [setWorkbench, workbench, workbenchModes, workspace]);
   const gameBuilding = activeGame !== undefined && normalizedActivities.some(({ path }) => path.startsWith(`${activeGame.root}/build/`));
   const videoBuilding = activeVideo !== undefined && normalizedActivities.some(({ path }) => path.startsWith(`${activeVideo.root}/`));
 
@@ -966,8 +978,9 @@ function CreativeWorkbench({
   }, []);
 
   const revealPath = useCallback((path: string): void => {
-    rememberEditorPosition();
     const nextWorkbench = workbenchModeForPath(path) ?? "story";
+    if (!workbenchModes.includes(nextWorkbench)) return;
+    rememberEditorPosition();
     setWorkbench(nextWorkbench);
     if (nextWorkbench === "game") {
       const project = workspace?.games.find((item) => path.startsWith(`${item.root}/`));
@@ -983,7 +996,7 @@ function CreativeWorkbench({
     }
     setSelected(path);
     expandPath(path);
-  }, [expandPath, rememberEditorPosition, setEditorMode, setGameProjectId, setVideoProjectId, setVideoTab, workspace?.games, workspace?.videos]);
+  }, [expandPath, rememberEditorPosition, setEditorMode, setGameProjectId, setVideoProjectId, setVideoTab, workbenchModes, workspace?.games, workspace?.videos]);
 
   useEffect(() => {
     if (workspace === undefined) return;
@@ -994,7 +1007,7 @@ function CreativeWorkbench({
         const documentPath = ["分镜.md", "图片提示词.md", "视觉设定.md", "剧本.md", "视频提示词.md"]
           .map((name) => `${intent.episode}/${name}`)
           .find((path) => workspace.files.some((file) => file.path === path));
-        if (documentPath !== undefined) {
+        if (documentPath !== undefined && workbenchModes.includes("drama")) {
           setWorkbench("drama");
           actions.setDramaEpisode(intent.episode);
           actions.setDramaPane("canvas");
@@ -1052,7 +1065,7 @@ function CreativeWorkbench({
       ...current,
       ...Object.fromEntries(pending.map(({ callId }) => [callId, true]))
     }));
-  }, [actions, expandPath, productionIntentCalls, productionIntents, setEditorMode, setProductionSection, setSelected, setWorkbench, workspace]);
+  }, [actions, expandPath, productionIntentCalls, productionIntents, setEditorMode, setProductionSection, setSelected, setWorkbench, workbenchModes, workspace]);
 
   // Latch first entry into the game workbench: before that the Studio must not mount, or every
   // session downloads and runs a game in a display:none iframe. Once mounted it
@@ -1442,6 +1455,7 @@ function CreativeWorkbench({
   }, [activityPath, workbench, workspace]);
 
   const selectWorkbench = (next: WorkbenchMode): void => {
+    if (!workbenchModes.includes(next)) return;
     const focused = surfaceRef.current?.ownerDocument.activeElement;
     followWorkbenchTabFocus.current = focused?.closest('[role="tablist"][aria-label="创作工作台"]') !== null && focused?.closest('[role="tablist"][aria-label="创作工作台"]') !== undefined;
     setWorkbench(next);
@@ -1454,6 +1468,18 @@ function CreativeWorkbench({
     const target = workspace === undefined ? undefined : preferredWorkbenchFile(workspace.files, next);
     if (target === undefined) setSelected(undefined);
     else revealPath(target);
+  };
+  const changeWorkbenchModes = (modes: readonly WorkbenchMode[]): void => {
+    workbenchModesStore.set(workspace?.cwd, modes);
+    const next = resolveVisibleWorkbench(workbench, modes);
+    if (next !== workbench) selectWorkbench(next);
+  };
+  const closeWorkbenchSettings = (): void => {
+    setSettingsOpen(false);
+    globalThis.requestAnimationFrame(() => {
+      const buttons = surfaceRef.current?.querySelectorAll<HTMLButtonElement>(".oh-workbench-settings-toggle");
+      Array.from(buttons ?? []).find((button) => button.getClientRects().length > 0)?.focus();
+    });
   };
   const selectEditorMode = (next: WorkbenchMemory["editorMode"]): void => {
     if (next === "preview") rememberEditorPosition();
@@ -1616,6 +1642,7 @@ function CreativeWorkbench({
 
   return <div ref={surfaceRef} className="oh-story-split-surface" data-open="true" data-workbench={workbench} data-drama-pane={dramaPane} data-drama-files={dramaFilesOpen ? "open" : "closed"} data-drama-chat={dramaChatOpen ? "open" : "closed"}>
     <style>{workbenchStyles}</style>
+    {settingsOpen && <WorkbenchSettingsPanel modes={workbenchModes} onChange={changeWorkbenchModes} onClose={closeWorkbenchSettings} />}
     {manualChatContext !== undefined && <aside className="oh-story-context-fallback" aria-live="polite" aria-label="带到 Chat 的讨论内容">
       <header><strong>讨论内容已保留</strong><button type="button" aria-label="关闭讨论内容" onClick={() => { setManualChatContext(undefined); }}>×</button></header>
       <p>讨论内容未自动填入 Chat，已有输入保持原样。你可以在这里查看或复制选中内容。</p>
@@ -1648,6 +1675,8 @@ function CreativeWorkbench({
           paneId={compactStudioId}
           labelledBy={`${compactTabsId}-studio-tab`}
           onWorkbench={selectWorkbench}
+          workbenchModes={workbenchModes}
+          onWorkbenchSettings={() => { setSettingsOpen(true); }}
           onCollapse={() => { applyWorkbenchPreference("closed"); }}
           editor={gameEditor}
           canvasByProject={gameCanvasByProject}
@@ -1676,11 +1705,13 @@ function CreativeWorkbench({
           onProject={setVideoProjectId}
           onTab={setVideoTab}
           onWorkbench={selectWorkbench}
+          workbenchModes={workbenchModes}
+          onWorkbenchSettings={() => { setSettingsOpen(true); }}
           onCollapse={() => { applyWorkbenchPreference("closed"); }}
         />}
     {workbench !== "game" && workbench !== "video" && <>
     {workbench === "drama" && <header className="oh-drama-workspace-toolbar">
-      <div className="oh-drama-workspace-brand"><WorkbenchModeTabs className="oh-story-mode-tabs" current={workbench} onSelect={selectWorkbench} /></div>
+      <div className="oh-drama-workspace-brand"><WorkbenchModeTabs className="oh-story-mode-tabs" current={workbench} modes={workbenchModes} onSelect={selectWorkbench} /><WorkbenchSettingsButton onClick={() => { setSettingsOpen(true); }} /></div>
       <label className="oh-drama-episode-picker"><span>剧集</span><select aria-label="选择短剧剧集" value={episodeDirectory ?? ""} onChange={(event) => { actions.setDramaEpisode(event.target.value); actions.setDramaPane("canvas"); setProductionSection("canvas"); }}>{dramaEpisodes.length === 0 ? <option value="">还没有剧集</option> : dramaEpisodes.map((directory) => <option value={directory} key={directory}>{directory.split("/").at(-1)}</option>)}</select></label>
       <div className="oh-drama-workspace-views" role="tablist" aria-label="短剧工作区">{(["canvas", "documents"] as const).map((pane) => <button type="button" role="tab" key={pane} aria-selected={dramaPane === pane} tabIndex={dramaPane === pane ? 0 : -1} onKeyDown={(event) => { handleTabKey(event, ["canvas", "documents"] as const, dramaPane, selectDramaPane); }} onClick={() => { selectDramaPane(pane); }}>{pane === "canvas" ? "制作" : "文稿"}</button>)}</div>
       <div className="oh-drama-workspace-actions"><button type="button" aria-label={dramaFilesOpen ? "收起项目文稿" : "展开项目文稿"} aria-expanded={dramaFilesOpen} onClick={() => { actions.setDramaFilesOpen(!dramaFilesOpen); }}>文稿目录</button><button type="button" aria-label={dramaChatOpen ? "收起原生 Chat" : "展开原生 Chat"} aria-expanded={dramaChatOpen} onClick={() => { actions.setDramaChatOpen(!dramaChatOpen); }}>Chat</button><button type="button" aria-label="刷新项目文件" onClick={reload}>↻</button><button type="button" aria-label="收起创作工作台" onClick={() => { applyWorkbenchPreference("closed"); }}>×</button></div>
@@ -1693,7 +1724,7 @@ function CreativeWorkbench({
           <button type="button" onClick={() => { applyWorkbenchPreference("closed"); }} title="收起创作工作台" aria-label="收起创作工作台">×</button>
         </span>
       </div>
-      {workspace !== undefined && workbench !== "drama" && <WorkbenchModeTabs className="oh-story-mode-tabs" current={workbench} onSelect={selectWorkbench} />}
+      {workspace !== undefined && workbench !== "drama" && <div className="oh-story-workbench-nav"><WorkbenchModeTabs className="oh-story-mode-tabs" current={workbench} modes={workbenchModes} onSelect={selectWorkbench} /><WorkbenchSettingsButton onClick={() => { setSettingsOpen(true); }} /></div>}
       {error !== undefined && <div className="oh-story-error">{error}</div>}
       {workspace?.metadataErrors.map((message) => <div className="oh-story-warning" key={message}>{message}</div>)}
       <nav ref={navRef} aria-label={workbench === "story" ? "小说项目文件" : "短剧项目文件"}>
@@ -1853,7 +1884,7 @@ function SessionWorkbenchBridge({ sessionId, useSession, useSessions, useProject
   const settledMutation = useChat((snapshot) => latestSettledMutation(snapshot));
   const settledMutationTurn = useChat((snapshot) => latestSettledMutationTurn(snapshot));
   const liveTurn = useChat((snapshot) => openTurn(snapshot));
-  const workbench = useStore((memory) => memory.workbench);
+  const selectedWorkbench = useStore((memory) => memory.workbench);
   const gamePane = useStore((memory) => memory.gamePane);
   const gameChatOpen = useStore((memory) => memory.gameChatOpen);
   const videoChatOpen = useStore((memory) => memory.videoChatOpen);
@@ -1870,6 +1901,13 @@ function SessionWorkbenchBridge({ sessionId, useSession, useSessions, useProject
   const chat = useChat((snapshot) => snapshot);
   const productionIntents = useMemo(() => settledProductionIntents(chat), [chat]);
   const { workspace, error, loading: workspaceLoading, reload } = useWorkspace(sessionId, sessionRunning);
+  const subscribeModes = useCallback((notify: () => void) => workbenchModesStore.subscribe(workspace?.cwd, notify), [workspace?.cwd]);
+  const getModes = useCallback(() => workbenchModesStore.get(workspace?.cwd), [workspace?.cwd]);
+  const workbenchModes = useSyncExternalStore(subscribeModes, getModes);
+  const workbench = resolveVisibleWorkbench(selectedWorkbench, workbenchModes);
+  useLayoutEffect(() => {
+    if (selectedWorkbench !== workbench) actions.setWorkbench(workbench);
+  }, [actions, selectedWorkbench, workbench]);
   const chosenPreference = useStore((memory) => memory.workbenchPreference);
   const creativeProject = hasCreativeProject(workspace);
   const welcomeController = activeWelcomeGuideController;
@@ -2046,6 +2084,8 @@ function SessionWorkbenchBridge({ sessionId, useSession, useSessions, useProject
       productionQueue={productionQueue}
       productionIntents={productionIntents}
       workspace={workspace}
+      workbench={workbench}
+      workbenchModes={workbenchModes}
       error={error}
       workspaceLoading={workspaceLoading}
       reload={reload}

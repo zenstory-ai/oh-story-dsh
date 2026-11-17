@@ -3,8 +3,8 @@
 ## Source of truth
 
 Status: Active
-Date: 2026-11-04
-Surface: DSH 插件的短剧工作台（已实施）、游戏工作台（已实施）与视频工作台（已实施）。
+Date: 2026-11-17
+Surface: DSH 插件的短剧、游戏、视频工作台与共用工作台设置。
 
 用户已批准 DSH 浅色无限画布 Demo，要求流程自然、主界面不展示技术细节、保持现有 DSH 风格。固定步骤向导与独立深色应用方向已否决。视觉参考为本次聊天中 `drama-studio-demo/evidence/08-dsh-plugin-canvas.png`；现状证据为原生 DSH 上的 22 个场景截图。设计边界遵循 [架构说明](docs/ARCHITECTURE.md) 与现有 [无限画布决策](.agents/notes/implemented/feature/2026-10-08-infinite-drama-canvas.md)。外部交互研究参考 [即梦生成画布](https://jimeng.jianying.com/ai-tool/home?createTab=canvas)、[FLORA Canvas](https://docs.flora.ai/editor/canvas)、[Krea Nodes](https://www.krea.ai/blog/multiplayer-nodes)；这些资料来自官方公开页面，未登录实测。
 
@@ -26,6 +26,10 @@ Oh Story 作为 DSH 内的工作台出现。复用宿主主题、字体、按钮
 
 短剧拥有集级工作区：工作台标签、剧集选择、制作/文稿切换、可收起的文稿目录和原生 Chat。默认进入制作区，以画布展示已存在的五份创作文档与真实媒体。制作区内的画布、素材、生成记录、成片提供不同观察方式；镜头清单是辅助入口。原文导航始终可达。
 
+四类工作台的导航旁统一提供「工作台设置」。面板以复选框控制小说、短剧、游戏、视频页卡，至少保留一项，并提供「显示全部」。选择即时生效，按当前浏览器的工作区保存；隐藏不删除项目、不禁用 Skills、不清空改稿或运行中的媒体。隐藏当前页卡时切到第一项仍显示的页卡，首次自动定位及 Agent 文件跟随也不重新打开隐藏页卡。收起整个工作台仍用原有 × 与浮动入口，不与页卡设置混用。
+
+设置面板说明配置归属：DSH 管理对话模型与 API；图片、视频和配音使用各制作工具的供应商配置，不暗示 DSH 的对话模型可直接用于媒体生产。本轮不新增供应商配置表单或凭据存储。依据：[#112](https://github.com/zenstory-ai/oh-story-dsh/issues/112)、`workbench-mode-tabs.tsx`、`workbench-presence.ts` 与现有宿主边界。
+
 ## Design principles
 
 - 文档和 workspace 媒体仍是创作底稿，画布直接展示它们的内容。
@@ -45,6 +49,8 @@ Oh Story 作为 DSH 内的工作台出现。复用宿主主题、字体、按钮
 ## Accessibility
 
 工具栏使用标准按钮、选择器与 tabs；焦点可见。节点可用键盘选择、打开原文和方向键移动；画布提供键盘平移和按钮缩放/适应。视频使用浏览器原生控件。避免将仅用于拖拽的区域覆盖到内部按钮与媒体控件。完整无障碍审计不属于本轮交付。
+
+工作台设置使用原生模态 dialog、带标签的复选框与按钮；Escape 关闭，关闭后焦点回到当前可见的设置入口。页卡方向键、Home/End 只遍历显示的项；唯一显示的项禁用取消并说明原因。窄屏面板限制在视口内滚动。
 
 ## Responsive behavior
 

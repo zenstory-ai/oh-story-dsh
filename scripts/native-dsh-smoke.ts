@@ -408,12 +408,24 @@ async function selectFile(page: Page, path: string): Promise<void> {
   await button.click();
 }
 
-async function selectSession(page: Page, workspaceTitle: string, sessionTitle: string): Promise<void> {
-  const open = page.getByRole("button", { name: /^(?:Open sidebar|打开侧边栏)$/u }).first();
-  if (await open.isVisible()) await open.click();
+async function workspaceInSidebar(page: Page, workspaceTitle: string): Promise<Locator> {
   const workspaceRow = page.getByRole("treeitem").filter({ hasText: workspaceTitle }).first();
+  const open = page.getByRole("button", { name: /^(?:Open sidebar|打开侧边栏)$/u }).first();
+  if (!await workspaceRow.isVisible() && await open.isVisible()) {
+    try { await open.click({ timeout: 2_000 }); }
+    catch (error) {
+      // A responsive/sidebar transition can remove the Open button while the
+      // click waits for stability. Accept only the already-open destination.
+      if (!await workspaceRow.isVisible()) throw error;
+    }
+  }
   await workspaceRow.waitFor({ state: "visible", timeout: 10_000 });
   if (await workspaceRow.getAttribute("aria-expanded") !== "true") await workspaceRow.click();
+  return workspaceRow;
+}
+
+async function selectSession(page: Page, workspaceTitle: string, sessionTitle: string): Promise<void> {
+  await workspaceInSidebar(page, workspaceTitle);
   const sessionRow = page.getByRole("treeitem").filter({ hasText: sessionTitle }).first();
   await sessionRow.waitFor({ state: "visible", timeout: 10_000 });
   await sessionRow.click();
@@ -3034,6 +3046,85 @@ async function main(): Promise<void> {
         || compactHeaderControls.save.right > compactHeaderControls.editor.right + 1) {
         throw new Error(`500px dirty editor controls overlapped or escaped the editor: ${JSON.stringify(compactHeaderControls)}`);
       }
+      // #112: hiding tabs is workspace UI preference, not deletion or a global Skill switch.
+      await selectSession(page, plainWorkspace.workspace.title, plainSessionTitle);
+      const settingsButton = page.getByRole("button", { name: "工作台设置", exact: true });
+      const settings = page.getByRole("dialog", { name: "工作台设置", exact: true });
+      const visibleWorkbenchTabs = page.getByRole("tablist", { name: "创作工作台", exact: true });
+      const settingsLauncher = page.getByRole("button", { name: "打开创作工作台", exact: true });
+      await settingsButton.or(settingsLauncher).waitFor({ state: "visible", timeout: 10_000 });
+      if (await settingsLauncher.isVisible()) await settingsLauncher.click();
+      await settingsButton.click();
+      await settings.waitFor({ state: "visible" });
+      for (const label of ["小说", "游戏", "视频"]) await settings.getByRole("checkbox", { name: label, exact: true }).uncheck();
+      if (!await settings.getByRole("checkbox", { name: "短剧", exact: true }).isDisabled()) {
+        throw new Error("Workbench settings allowed hiding the last tab.");
+      }
+      const settingsBox = await settings.boundingBox();
+      if (settingsBox === null || settingsBox.x < 0 || settingsBox.x + settingsBox.width > 500) {
+        throw new Error(`Workbench settings escaped the compact viewport: ${JSON.stringify(settingsBox)}`);
+      }
+      await captureDramaEvidence(page, "workbench-settings-compact");
+      await settings.press("Escape");
+      await settings.waitFor({ state: "detached" });
+      await page.waitForFunction(() => document.activeElement?.getAttribute("aria-label") === "工作台设置");
+      if (JSON.stringify(await visibleWorkbenchTabs.getByRole("tab").allTextContents()) !== JSON.stringify(["短剧"])
+        || await visibleWorkbenchTabs.getByRole("tab", { selected: true }).textContent() !== "短剧") {
+        throw new Error("Hiding the active tab did not switch to the remaining workbench.");
+      }
+      await visibleWorkbenchTabs.getByRole("tab").press("ArrowRight");
+      if (await visibleWorkbenchTabs.getByRole("tab", { selected: true }).textContent() !== "短剧") {
+        throw new Error("Workbench keyboard navigation reopened a hidden tab.");
+      }
+      // Compact modal behavior is covered above. Return to desktop before sidebar
+      // navigation, whose compact sheet closes asynchronously after each selection.
+      await page.setViewportSize({ width: 1_440, height: 900 });
+      await page.waitForFunction(() => document.querySelector("[data-conversation-scroll]")?.getAttribute("data-oh-story-layout") === "wide");
+      const preferenceWorkspace = await workspaceInSidebar(page, plainWorkspace.workspace.title);
+      await preferenceWorkspace.hover();
+      await page.getByRole("button", { name: `New session in ${plainWorkspace.workspace.title}`, exact: true })
+        .or(page.getByRole("button", { name: `在“${plainWorkspace.workspace.title}”中新建会话`, exact: true })).click();
+      // Blank Sessions have no Session hierarchy header. Observe the mounted
+      // conversation identity and selected sidebar row instead.
+      await page.waitForFunction((previousId) => {
+        const content = Array.from(document.querySelectorAll<HTMLElement>("[data-conversation-content]:not([data-sidebar-chat] *)"))
+          .find((element) => element.getClientRects().length > 0);
+        const id = content?.getAttribute("data-conversation-session");
+        return id !== undefined && id !== null && id !== previousId;
+      }, plainSession.sessionId);
+      await page.getByRole("treeitem", { selected: true }).filter({ hasText: /^(?:New Session|新会话)$/iu }).first()
+        .waitFor({ state: "visible", timeout: 10_000 });
+      await visibleWorkbenchTabs.getByRole("tab", { name: "短剧", selected: true, exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+      if (await visibleWorkbenchTabs.getByRole("tab").count() !== 1) throw new Error("A new Session ignored workspace tab preferences.");
+      await settingsButton.click();
+      await settings.getByRole("checkbox", { name: "游戏", exact: true }).check();
+      await settings.getByRole("checkbox", { name: "短剧", exact: true }).uncheck();
+      await settings.press("Escape");
+      await settings.waitFor({ state: "detached" });
+      await selectSession(page, plainWorkspace.workspace.title, plainSessionTitle);
+      await visibleWorkbenchTabs.getByRole("tab", { name: "游戏", selected: true, exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+      if (await visibleWorkbenchTabs.getByRole("tab").count() !== 1) throw new Error("Returning to Session A restored its stale tab preference instead of Session B's workspace choice.");
+      await page.reload({ waitUntil: "networkidle" });
+      await selectSession(page, plainWorkspace.workspace.title, plainSessionTitle);
+      await visibleWorkbenchTabs.getByRole("tab", { name: "游戏", selected: true, exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+      if (await visibleWorkbenchTabs.getByRole("tab").count() !== 1) throw new Error("Hidden workbenches did not survive reload.");
+      await selectSession(page, storyWorkspace.workspace.title, storySessionTitle);
+      await visibleWorkbenchTabs.getByRole("tab", { name: "小说", exact: true }).waitFor({ state: "visible", timeout: 10_000 });
+      if (await visibleWorkbenchTabs.getByRole("tab").count() !== 4) throw new Error("Tab preferences leaked to another workspace.");
+      await selectSession(page, plainWorkspace.workspace.title, plainSessionTitle);
+      await settingsButton.click();
+      await settings.getByRole("button", { name: "显示全部", exact: true }).click();
+      await settings.getByRole("button", { name: "关闭工作台设置", exact: true }).click();
+      await settings.waitFor({ state: "detached" });
+      if (await visibleWorkbenchTabs.getByRole("tab").count() !== 4) throw new Error("Workbench settings did not restore all tabs.");
+      if (await visibleWorkbenchTabs.getByRole("tab", { selected: true }).textContent() !== "游戏") throw new Error("Restoring hidden tabs revived a stale Session selection.");
+      for (const label of ["游戏", "视频", "小说"]) {
+        await visibleWorkbenchTabs.getByRole("tab", { name: label, exact: true }).click();
+        await settingsButton.click();
+        await settings.waitFor({ state: "visible" });
+        await settings.press("Escape");
+        await settings.waitFor({ state: "detached" });
+      }
       if (pageErrors.length > 0) throw new Error(`Browser module raised errors: ${pageErrors.join("; ")}`);
       } finally {
         await browser.close();
@@ -3054,6 +3145,7 @@ async function main(): Promise<void> {
       uiSlots: ["shell.overlay", "plugins.bundle.config", "tool.call.toolview"],
       workbenchGate: "creative-project-only",
       workbenchCollapse: "per-workspace",
+      workbenchTabs: "per-workspace-hide-restore-persist",
       threeColumn: true,
       gameStudio: "preview-left-chat-right",
       videoStudio: "preview-canvas-documents",
@@ -3078,7 +3170,7 @@ async function main(): Promise<void> {
     const apiKey = process.env.DEEPSEEK_API_KEY;
     const redact = (value: string): string => apiKey === undefined ? value : value.replaceAll(apiKey, "[REDACTED]");
     // eslint-disable-next-line preserve-caught-error -- The original cause may contain credentials; retain only redacted diagnostics.
-    throw new Error(`${redact(String(error))}\nMock requests: ${JSON.stringify(mockDeepSeek?.requests ?? [])}\nDSH logs:\n${redact(logs.join("").slice(-16_000))}`);
+    throw new Error(`${redact(error instanceof Error ? error.stack ?? String(error) : String(error))}\nMock requests: ${JSON.stringify(mockDeepSeek?.requests ?? [])}\nDSH logs:\n${redact(logs.join("").slice(-16_000))}`);
   } finally {
     if (firstRunBrowser !== undefined) await firstRunBrowser.close();
     if (child !== undefined) await stopDshProcess(child);
