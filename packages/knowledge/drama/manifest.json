@@ -2,9 +2,9 @@
   "schemaVersion": 1,
   "upstream": {
     "repository": "https://github.com/zenstory-ai/drama-skills.git",
-    "commit": "047ae8625021f038ee7581d6222064f0c169ce59"
+    "commit": "37232f6d22e174c36e321d2e3a1a3ae871e7d602"
   },
-  "generatedAt": "2026-11-15T12:32:36.758Z",
+  "generatedAt": "2026-11-17T16:57:18.356Z",
   "skills": [
     "short-drama",
     "short-drama-assets",
@@ -57,8 +57,8 @@
     },
     {
       "path": "skills/short-drama-breakdown/SKILL.md",
-      "sha256": "8c708865f28a14ef044aed9dbc8a9939b10bd67671ce0594f542808574596268",
-      "bytes": 5092
+      "sha256": "c88a1dd4491c676221ac15d17f4e2f5c9aa2b05d81ff5a7ec858359c2224a6e9",
+      "bytes": 5526
     },
     {
       "path": "skills/short-drama-breakdown/agents/openai.yaml",
@@ -77,28 +77,28 @@
     },
     {
       "path": "skills/short-drama-breakdown/references/measure-and-read.md",
-      "sha256": "317e3f8dcee95a5ef5280cd60ee86cb066fcd4961f1f077efb8d4eb15755499e",
-      "bytes": 4038
+      "sha256": "fa602668a4684819ebb01a2a6f63f1986d945132c87ff9eaca91b702685eb5bf",
+      "bytes": 4248
     },
     {
       "path": "skills/short-drama-breakdown/references/reconstruct.md",
-      "sha256": "ee1befa60f16f18286c638e0592719e6dcdcb3fcddbfb6a75dfc6385588f083c",
-      "bytes": 8233
+      "sha256": "bca558403a5e43d32a397539ef1de4267006296b7177afb617b8b40ceedb88c3",
+      "bytes": 16486
     },
     {
       "path": "skills/short-drama-breakdown/references/stage-contract.md",
-      "sha256": "7c74a96b5db14a63b47304d190f60349ee1fe33d20c7823280493b75e0776e11",
-      "bytes": 3742
+      "sha256": "1c52ac01808172bd117dc1c184aadae8065b35febf86b2d9c2e8c978e48502d6",
+      "bytes": 5965
     },
     {
       "path": "skills/short-drama-breakdown/scripts/breakdown_tool.py",
-      "sha256": "3432226b76f02d16be6f7e5628fb74555e461618790d2426a5967c2c69913f59",
-      "bytes": 87352
+      "sha256": "3f4398bafe76afa873da27a8497803f487797aa65e6a8f9a2fc57f856d77f116",
+      "bytes": 110030
     },
     {
       "path": "skills/short-drama-breakdown/scripts/selftest.py",
-      "sha256": "a53d5cc59591f6434906c194a6e550597fb5cdb46bc19bd31543be182bc9de6e",
-      "bytes": 3466
+      "sha256": "e882ad40ea3acbd632fa0c1225dac8f9fe21ded8b1ea58d0907d70165b43bdc1",
+      "bytes": 4584
     },
     {
       "path": "skills/short-drama-develop/SKILL.md",
@@ -527,8 +527,8 @@
     },
     {
       "path": "skills/short-drama-review/references/rubric-source-analysis.md",
-      "sha256": "7b6f7b582eba01c590f10cdd2df1a5ab5bb804e7d96d909915ef9d2073d07e93",
-      "bytes": 7529
+      "sha256": "12e5310277eef4e1f9453791dcb3c9d2e280a900e2caaeef52f9f8711daede18",
+      "bytes": 8720
     },
     {
       "path": "skills/short-drama-review/references/rubric-story-script.md",
@@ -692,8 +692,8 @@
     },
     {
       "path": "skills/short-drama/SKILL.md",
-      "sha256": "55010d50d8b9d88ca2d11b40aa78226462e081287e038787b6e354cfb0086bef",
-      "bytes": 7742
+      "sha256": "45fa53c7a3e05cec4a18ac20fd348be93391d0e7cda6110ab352b584246ed84c",
+      "bytes": 7800
     },
     {
       "path": "skills/short-drama/agents/openai.yaml",
@@ -747,8 +747,8 @@
     },
     {
       "path": "skills/short-drama/references/knowhow-index.md",
-      "sha256": "fd6ceab719811fb3b56435255455d2b90812c0c10db60ec4e0a0764808716414",
-      "bytes": 1921
+      "sha256": "08dbc2267c6374618892496130b38f050ce7694a2a8529361303521b49e1d01a",
+      "bytes": 1942
     },
     {
       "path": "skills/short-drama/references/pickup-and-alternate.md",

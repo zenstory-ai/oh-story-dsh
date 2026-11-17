@@ -54,6 +54,8 @@ Playable game assets are served from workspace `build/app` directories through a
 
 ## Browser entry
 
+All four workbenches expose a shared settings dialog for tab visibility. The default is all four tabs; the creator can hide any subset while keeping at least one, or restore all. Browser storage scopes this preference to the workspace, independently of the whole-workbench open/closed preference. Hiding the current tab selects the first remaining one; startup discovery, Agent file following and production focus do not reopen hidden tabs. This changes navigation only: files, draft buffers, Skills, tasks and previously mounted media remain intact. The panel explains that DSH conversation models and credentials are distinct from upstream media-production provider configuration; it does not add a credential store or mutate host settings.
+
 The Browser entry uses two official extension slots:
 
 | Slot | Contribution |
@@ -87,7 +89,7 @@ Markdown rendering is implemented as a safe React element tree with tables, task
 
 ## Upstream assets
 
-`packages/knowledge/oh-story/manifest.json` pins Oh Story 0.10.5 (`41a9b6c855d7d29a2bf214b4eefda2b10a0e8afb`), 14 Skills, 7 Roles, agents version 44 and every file hash. `packages/knowledge/drama/manifest.json` pins Drama Skills 0.12.0 (`047ae8625021f038ee7581d6222064f0c169ce59`), 12 Skills and every file hash; all seven Skills that ship scripts carry a selftest. `packages/knowledge/novel-to-game/manifest.json` pins NovelToGame 0.9.0 (`48328cd756cd400e617e97dc3bd5c4b42cda3f72`) and all 5 Skills; upstream's example games are not bundled (0.7.0's interactive-film example alone is about 100 MB, and the Skills never read the examples). `packages/knowledge/video-recap/manifest.json` pins video-recap-skills 0.7.1 (`36df69fe9e702dc2f15ccd05fac878ad623cf346`), its self-contained `video-recap` Skill and the on-demand `video-reference` Skill (both user-invocable), and every bundled file hash.
+`packages/knowledge/oh-story/manifest.json` pins Oh Story 0.10.5 (`41a9b6c855d7d29a2bf214b4eefda2b10a0e8afb`), 14 Skills, 7 Roles, agents version 44 and every file hash. `packages/knowledge/drama/manifest.json` pins Drama Skills 0.12.1 (`37232f6d22e174c36e321d2e3a1a3ae871e7d602`), 12 Skills and every file hash; all seven Skills that ship scripts carry a selftest. `packages/knowledge/novel-to-game/manifest.json` pins NovelToGame 0.9.0 (`48328cd756cd400e617e97dc3bd5c4b42cda3f72`) and all 5 Skills; upstream's example games are not bundled (0.7.0's interactive-film example alone is about 100 MB, and the Skills never read the examples). `packages/knowledge/video-recap/manifest.json` pins video-recap-skills 0.7.1 (`36df69fe9e702dc2f15ccd05fac878ad623cf346`), its self-contained `video-recap` Skill and the on-demand `video-reference` Skill (both user-invocable), and every bundled file hash.
 
 Oh Story 0.10.0 keeps author-memory ownership in `story-long-write` and `story-short-write`; their `scripts/author_memory_commit.py` implementations remain bundled. The common bridge routes explicit memory requests there, while standalone review and deslop do not read or write author memory. Deslop follows upstream’s separate compliance, mechanical-prose and scene-craft references within the author’s requested scope.
 

@@ -36,7 +36,7 @@
 | Workbench | Bundled skill suite (pinned per release) | Main entry points |
 | --- | --- | --- |
 | **Novel** | [Oh Story 0.10.5](https://github.com/zenstory-ai/oh-story-claudecode/releases/tag/v0.10.5) · 14 Skills · 7 Roles | `/story`, `/story-long-write`, `/story-review`, `/story-publish` |
-| **Short drama** | [Drama Skills 0.12.0](https://github.com/zenstory-ai/drama-skills/releases/tag/v0.12.0) · 12 Skills | `/short-drama`, `/short-drama-write`, `/short-drama-storyboard`, `/short-drama-edit` |
+| **Short drama** | [Drama Skills 0.12.1](https://github.com/zenstory-ai/drama-skills/releases/tag/v0.12.1) · 12 Skills | `/short-drama`, `/short-drama-write`, `/short-drama-storyboard`, `/short-drama-edit` |
 | **Interactive game** | [NovelToGame 0.9.0](https://github.com/zenstory-ai/novel-to-game/releases/tag/v0.9.0) · 5 Skills | `/novel-to-game quick`, `/game-build`, `/game-qa` |
 | **Video recap** | [video-recap-skills 0.7.1](https://github.com/zenstory-ai/video-recap-skills/releases/tag/v0.7.1) · 2 Skills | `/video-recap`, `/video-reference` |
 
@@ -127,6 +127,8 @@ npx -y @deepseek-ai/dsh@0.2.2-rc.1 --profile story --port 3081  # creation workb
 
 Every workbench runs inside official DSH Web — the chat stream, model picker, token counter, and tool approvals on the right are all native DSH.
 
+Use **Workbench settings** beside the tabs to hide workbenches you do not use, or restore them with **Show all**. The current browser remembers the choice per workspace. At least one tab stays visible; hiding tabs does not delete projects or disable Skills.
+
 ### Novel workbench
 
 ![Novel workbench](docs/images/story-workbench-demo.gif)
@@ -188,7 +190,7 @@ Copy and adapt any of the starter prompts below:
 
 ## See what it produces
 
-Excerpts below come verbatim from the sample workspaces in this repository (synced from the [oh-story-claudecode demo](https://github.com/zenstory-ai/oh-story-claudecode/tree/abe96630d115afbd528f2329e2d8d604d5d5673c/demo/%E9%95%BF%E7%AF%87) and the [drama-skills sample](https://github.com/zenstory-ai/drama-skills/tree/047ae8625021f038ee7581d6222064f0c169ce59/examples/creator-first/EP001)).
+Excerpts below come verbatim from the sample workspaces in this repository (synced from the [oh-story-claudecode demo](https://github.com/zenstory-ai/oh-story-claudecode/tree/abe96630d115afbd528f2329e2d8d604d5d5673c/demo/%E9%95%BF%E7%AF%87) and the [drama-skills sample](https://github.com/zenstory-ai/drama-skills/tree/37232f6d22e174c36e321d2e3a1a3ae871e7d602/examples/creator-first/EP001)).
 
 ### 1. Novel: continuity tracking and outline gate
 

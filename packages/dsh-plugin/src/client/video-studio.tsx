@@ -8,6 +8,7 @@ import type { GameWorkspaceFile } from "./game-workspace-types.js";
 import { VideoDetails } from "./video-details.js";
 import { VideoDocuments } from "./video-documents.js";
 import { WorkbenchModeTabs } from "./workbench-mode-tabs.js";
+import { WorkbenchSettingsButton } from "./workbench-settings-panel.js";
 import { endpoint, handleTabKey } from "./workbench-ui.js";
 import { videoCanvasModel, videoCreativeDocuments, videoDraftText, videoSourceRange, videoRange, videoTime, type VideoCanvasNode, type VideoProject, type VideoWorkspaceTab } from "./video-workspace-model.js";
 
@@ -40,6 +41,8 @@ interface VideoStudioProps {
   readonly onProject: (id: string) => void;
   readonly onTab: (tab: VideoWorkspaceTab) => void;
   readonly onWorkbench: (mode: WorkbenchMode) => void;
+  readonly workbenchModes?: readonly WorkbenchMode[] | undefined;
+  readonly onWorkbenchSettings?: (() => void) | undefined;
   readonly onCollapse: () => void;
   readonly chatOpen: boolean;
   readonly onChatOpen: (visible: boolean) => void;
@@ -58,7 +61,7 @@ export function VideoStudio(props: VideoStudioProps) {
   const labels = { preview: "预览", canvas: "创作画布", docs: "文稿" };
   return <main id={props.paneId} className="oh-video-studio" role="tabpanel" aria-labelledby={props.labelledBy} hidden={props.hidden} data-chat-open={props.chatOpen}>
     <header className="oh-video-toolbar">
-      <div className="oh-workbench-cluster"><WorkbenchModeTabs className="oh-video-mode-tabs" current="video" onSelect={props.onWorkbench} /><button className="oh-workbench-collapse" type="button" aria-label="收起创作工作台" onClick={props.onCollapse}>×</button></div>
+      <div className="oh-workbench-cluster"><WorkbenchModeTabs className="oh-video-mode-tabs" current="video" modes={props.workbenchModes} onSelect={props.onWorkbench} />{props.onWorkbenchSettings !== undefined && <WorkbenchSettingsButton onClick={props.onWorkbenchSettings} />}<button className="oh-workbench-collapse" type="button" aria-label="收起创作工作台" onClick={props.onCollapse}>×</button></div>
       <label className="oh-video-project"><select aria-label="视频项目" value={project?.id ?? ""} disabled={project === undefined} onChange={(event) => { props.onProject(event.target.value); }}>{props.projects.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}</select></label>
       <div className="oh-video-tabs" role="tablist" aria-label="视频工作台">{tabs.map((item) => <button type="button" role="tab" key={item} id={`${tabsId}-${item}-tab`} aria-controls={`${tabsId}-${item}-panel`} aria-selected={props.tab === item} tabIndex={props.tab === item ? 0 : -1} onKeyDown={(event) => { handleTabKey(event, tabs, props.tab, props.onTab); }} onClick={() => { props.onTab(item); if (item === "canvas") props.onChatOpen(false); }}>{labels[item]}</button>)}</div>
       <div className="oh-video-workspace-actions"><button className="oh-video-chat-toggle" type="button" aria-pressed={props.chatOpen} onClick={() => { props.onChatOpen(!props.chatOpen); }}>Chat</button><button type="button" onClick={() => { setDetails(true); }}>制作详情</button></div>

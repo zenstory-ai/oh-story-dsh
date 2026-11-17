@@ -33,6 +33,21 @@ describe("WorkbenchModeTabs", () => {
     expect(focus).toHaveBeenCalledTimes(2);
     expect(preventDefault).toHaveBeenCalledTimes(2);
   });
+
+  it("renders and traverses only visible modes", () => {
+    const modes = ["drama", "video"] as const;
+    const onSelect = vi.fn();
+    const markup = renderToStaticMarkup(<WorkbenchModeTabs className="x" modes={modes} current="drama" onSelect={onSelect} />);
+    expect(markup).not.toContain(">小说</button>");
+    expect(markup).not.toContain(">游戏</button>");
+    expect(markup.match(/role="tab"/gu)).toHaveLength(2);
+    const tablist = WorkbenchModeTabs({ className: "x", modes, current: "drama", onSelect });
+    const buttons = tablist.props.children as readonly { readonly props: { readonly onKeyDown: (event: unknown) => void } }[];
+    const focus = vi.fn();
+    buttons[0]?.props.onKeyDown({ key: "ArrowLeft", preventDefault: vi.fn(), currentTarget: { parentElement: { querySelectorAll: () => [{ focus }, { focus }] } } });
+    expect(onSelect).toHaveBeenLastCalledWith("video");
+    expect(focus).toHaveBeenCalledOnce();
+  });
 });
 
 describe("narrow Chat entry", () => {
