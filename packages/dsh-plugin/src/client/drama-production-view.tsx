@@ -141,7 +141,7 @@ function ProductionStatus({ sessionId, diagnostics, onNavigate }: {
           {adapter.configured ? <small>已配置</small> : <small>缺 {adapter.missing.map((name) => <code key={name}>{name}</code>)}</small>}
         </li>)}
       </ul>
-      <p>DeepSeek 只负责写提示词，图片、视频、语音、音乐由这些供应商 API 生成。Key 写在启动 DSH 之前的宿主机环境变量里{configured === 0 ? "；现在一个都没配置，生产任务会在调用供应商之前停下" : ""}。详见 README「媒体生成 API」。</p>
+      <p>DeepSeek 只负责写剧本、分镜和提示词，图片、视频、语音与配乐由上方供应商接口生成。请在启动 DSH 前通过宿主机环境变量配置所需 Key{configured === 0 ? "（当前均未配置，调用外部接口前会先停下提醒）" : ""}，变量说明见 README「媒体 API」一节。</p>
       <footer>
         <span>Adapter 配置{preflight.adapterConfig.generated ? "（自动登记）" : "（自定义）"}{preflight.adapterConfig.ok ? "" : " · 写入失败"}</span>
         <code title={preflight.adapterConfig.path}>{adapterFile}</code>

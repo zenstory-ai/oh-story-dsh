@@ -171,7 +171,7 @@ export function WelcomeGuide({
         onClick={onDismiss}
       >关闭欢迎引导</button>}
     </div>
-    <p>插件已在当前 DSH 宿主安装：打开含已有作品文件的工作区时，小说、短剧、游戏、视频工作台会自动展开；从空白会话新建作品（输入 <code>/story</code>、<code>/short-drama</code>、<code>/novel-to-game quick</code>、<code>/video-recap</code> 或直接描述创作需求）需要当前会话所选模式已启用技能加载（如 <code>Standard</code>、<code>PTC</code>；<code>Minimal</code> 等未启用技能工具的模式不会加载本插件技能）。</p>
+    <p>打开已有作品目录时，小说、短剧、游戏、视频工作台会自动展开。要从空白会话新建作品，请确认当前会话模式支持加载技能（如默认的 <code>Standard</code> 或 <code>PTC</code>；<code>Minimal</code> 模式不加载插件技能），再输入 <code>/story</code>、<code>/short-drama</code>、<code>/novel-to-game quick</code>、<code>/video-recap</code> 或直接说说想写什么。</p>
     <ol>
       <li>不选文件夹也能开始：作品会写进 DSH 自动建立的「默认工作区 / Default workspace」。</li>
       <li>想放进自己的作品文件夹：点击左侧「工作区 / Workspaces」旁的「添加工作区 / Add workspace」，在系统弹出的文件夹窗口里选择，再在下方「选择工作区 / Choose workspace」中选中它。</li>
@@ -214,7 +214,7 @@ export function OhStoryPluginConfig({
         <strong>空白会话欢迎引导</strong>
         <span>{lockedByHost
           ? <>当前宿主配置已固定关闭欢迎引导（<code>welcomeGuide: false</code>）。</>
-          : "在尚未包含创作文件的空白会话顶部展示入门提示。关闭后空白会话不再弹出欢迎屏，已有作品工作区仍正常打开创作工作台。"}</span>
+          : "在还没有作品文件的空白会话里显示入门引导。关闭后空白会话不再显示引导卡，已有作品目录仍照常打开创作工作台。"}</span>
       </div>
       <button
         type="button"

@@ -274,7 +274,7 @@ binds the unchanged package to source
 `f207fa92863bd3626b8ee6bd7b5ad30762ef205c`. npm provenance identifies the recovery
 workflow/main invocation, not the original tag-build invocation; the manifest,
 original producer proofs and exact protected-main CI independently bind package
-source. See [the recovery process](RELEASING.md#one-time-0113-npm-recovery).
+source. See [Dry-run and failure outcomes](RELEASING.md#dry-run-and-failure-outcomes).
 
 ## Test architecture
 
@@ -282,79 +282,68 @@ source. See [the recovery process](RELEASING.md#one-time-0113-npm-recovery).
 | --- | --- | --- |
 | Deterministic quality gate | `pnpm verify` | ESLint, TypeScript, pinned asset hashes/catalogs, DSH boundary audit, unit/component tests, Host/Browser build |
 | Cordis Context contracts | `pnpm test:contract` | Real Context/Fiber/provide/inject topology for cross-scope service access; leaf runtimes remain deterministic fakes |
-| Cross-platform gate | `pnpm verify:portable` | Type, asset, unit and build behavior on macOS and Windows |
-| Packaged DSH integration | `pnpm test:dsh` | Deterministic correctness gate for build, npm tarball, profile installation, official DSH Web startup, Session APIs, skill catalog, workspace routes, Role execution and Chrome UI |
-| Real provider | `pnpm test:dsh:real` | Paid provider-compatibility observation for the official DeepSeek model, durable Agent completion, Oh Story Role calls, fiction review, short-drama review, read-only project digest and credential redaction |
-| Release candidate | `pnpm verify:release` | Deterministic gate plus packaged DSH integration before tarball creation |
+| Cross-platform gate | `pnpm verify:portable` | Type, asset, unit, and build checks on macOS and Windows |
+| Packaged DSH integration | `pnpm test:dsh` | Deterministic correctness gate for build, npm tarball, profile installation, official DSH Web startup, Session APIs, skill catalog, workspace routes, Role execution, and Chrome UI |
+| Real provider | `pnpm test:dsh:real` | Paid compatibility check against the official DeepSeek API covering durable Agent turns, Oh Story Role calls, fiction and short-drama review, read-only project digests, and log redaction |
+| Release candidate | `pnpm verify:release` | Full deterministic gate plus packaged DSH Web runs across supported host lines before cutting a tarball |
 
-The deterministic packaged Role path is part of the correctness gate. The paid real-provider layer is intentionally excluded from Pull Request CI because model, provider and network behavior are not deterministic. It is available as a manual GitHub Actions compatibility observation and requires the repository Secret `DEEPSEEK_API_KEY`; a credential-based skip is not a passing provider result.
+The deterministic packaged Role path is part of every release gate. Paid real-provider runs stay outside Pull Request CI because live model and network behavior are non-deterministic; the manual `Real Provider` workflow requires `DEEPSEEK_API_KEY`, and a missing-credential skip never counts as a pass.
 
-`pnpm test:contract` is the focused developer entry point. The same `*.contract.test.ts` files are discovered by `pnpm verify`, so they remain mandatory in the normal Pull Request quality gate.
+`pnpm test:contract` provides a quick local entry point; `pnpm verify` runs the same `*.contract.test.ts` suite automatically on every PR.
 
 ## Automated coverage
 
 | Area | Evidence |
 | --- | --- |
-| Capability catalog | Native DSH Session exposes 13 Oh Story Skills, 11 Drama Skills, 7 NovelToGame Skills and the 3 user-invocable video entries; provider tests retain all 7 upstream video Skills |
-| Upstream integrity | Four knowledge manifests verify pinned commits, catalogs, every bundled file hash, portable-source exclusions, the Drama creator-first contract and its assembly stage, and the absence of every standalone-dashboard file; all 11 bundled Drama selftests run without bytecode writes, the five demo documents verify recorded fixture hashes, NovelToGame parity covers the playable `jin-ping-mei` ADV build and authoring-material exclusions, and video-recap parity requires the complete seven-Skill pipeline plus its orchestrator/inspect entry points |
-| Plugin boundary | Host bundle and source audit keep all DSH imports inside `@oh-story/dsh` |
-| Workspace safety | Unit tests cover Host/Origin/Fetch Metadata trust and creative media allowlists, while the packaged route rejects traversal and exercises session-scoped reads, media byte ranges and atomic writes; generated-game CSP is browser-probed to reject workspace API access outside the preview asset prefix; child-session, absolute-path and symbolic-link negative cases remain follow-up contracts |
-| Editor concurrency | Versioned GET/PUT rejects stale saves; Chrome edits, saves, rereads and restores a real workspace file |
-| File following | Tests cover DSH Step location data, nested running calls, streamed write/edit previews, calls DSH holds between their finished step and dispatch, creative path classification and workbench switching |
-| Markdown rendering | Component tests cover tables, task lists, fenced code, inline formatting, safe links and inert raw HTML |
-| JSONL rendering | Component tests cover typed record summaries, source line numbers, scalar records and per-line parse failures |
-| Three-column layout | Native DSH Chrome smoke checks ordered tree/editor/Chat geometry and minimum usable widths |
-| Conversation ownership | Unit tests cover creative-project detection, the bundled example exclusion, explicit-choice precedence and unusable browser storage; native smoke runs a workspace with no creative project, asserts DSH's own conversation layout survives, watches the first Agent-written creative file hand the layout over, collapses the workbench back to the official layout inside the conversation column, and requires the collapsed choice to hold in a new Session of the same workspace |
-| Composer stability | Browser interaction contracts run `scrollIntoView()` and verify dynamic Composer clearance in wide, medium and 500 px compact layouts |
-| Dual workbench | Native smoke switches 小说/短剧, opens all five creator-first document types, and exercises Markdown preview/source modes |
-| Game Studio | Native smoke verifies Preview-left/Chat-right geometry, real iframe input, explicit new-version loading, state preservation across Preview/project-file, compact Studio/Chat and 小说/游戏 switches, fullscreen focus return, the absence of QA UI, the bundled Jin Ping Mei opening, and a non-clipping 500 px layout even when the host drawer remains open |
-| Video Studio | Unit tests cover project-root validation, high-volume artifact exclusion, optional `production_reference.json` / `reference_measurements.json` / `reference_breakdown.json` discovery without inventing a lifecycle stage, full/cut pause projection, source/edited/final selection and standards-compliant byte ranges; packaged catalog and tarball checks cover all seven Skills |
-| Compact Game Studio | Chrome runs the game-specific surface at 500×900, checks tab/tabpanel relationships and horizontal containment, enters a Composer draft in Chat, returns to the same live game state, and emits screenshot evidence |
-| Short-drama production | Unit tests cover document parsing, episode isolation, prompt authority, cross-episode image-reference filtering, media-typed version selection, DSH Queue/current-Turn classification, dispatched-unknown safety, jobs, versions and sequence logic; packaged Chrome checks two-episode switching, per-episode task/reference/canvas isolation, project-media search/reuse, concurrent submit/remove/cancel semantics, late partial-batch reconciliation, successful composition backfill, version selection, sequence reorder/blockers, creator keyboard canvas movement, Agent semantic focus, native Conversation dispatch, realistic image/MP4 backfill and 500 px containment |
-| Media adapters | Unit tests pin the adapter catalog to the upstream provider script and its references, check the generated adapter config carries argv commands only, verify the produce Skill text names the config path and required variables, and confirm presence reporting never includes values. The generated generic profile deliberately omits `reference_roles`, so audio references fail closed; a creator-owned adapter config must explicitly opt a known model into `reference_audio`. |
-| Agent production operability | The packaged fixture model calls the registered `oh_story_production` tool in a real DSH turn; the durable successful call is rendered by the plugin tool view and focuses the requested EP001 production target without granting cosmetic canvas control. Unit tests reject traversal, duplicate sequence IDs, failed calls and malformed replay payloads. |
-| Roles and hooks | Real Cordis Fiber contracts cover plugin-runtime capture, `Context.get()` fallback and missing-runtime failure; packaged DSH deterministically completes one child-Agent Role invocation; unit contracts cover pinned reference reads, path escape and scoped-shadow rejection |
-| Package contents | Build and pack include all four pinned knowledge sets, the Jin Ping Mei playable build and QA record, package metadata and license while omitting source tests and the standalone Drama and video-recap dashboards |
+| Capability catalog | Native DSH Session exposes 14 Oh Story Skills, 12 Drama Skills, 5 NovelToGame Skills, and the 2 user-invocable video Skills (`video-recap` and `video-reference`), all verified to resolve from `@oh-story/dsh/lib/` |
+| Upstream integrity | Four `manifest.json` checks verify pinned commits, catalogs, per-file SHA-256 hashes, excluded scrapers and standalone dashboards, all 7 scripted-Skill Drama selftests (bytecode-free), the five `EP001` demo documents, NovelToGame's 5-Skill example-free bundle, and `video-recap` + `video-reference` parity |
+| Plugin boundary | Recursive source and bundle checks confirm all `@deepseek-ai/*` imports remain inside `@oh-story/dsh` |
+| Workspace safety | Unit tests cover Host/`Origin`/Fetch Metadata checks, `welcomeGuide` config endpoints, and media allowlists; packaged Chrome verifies traversal rejection, session-scoped reads, HTTP byte ranges, atomic CAS writes, and generated-game CSP script blocking |
+| Editor concurrency | Versioned `GET`/`PUT` rejects stale saves; Chrome edits, saves, re-reads, resolves conflicts, and restores a real workspace file |
+| File following | Tests cover DSH Step location data, nested running calls, streamed write/edit previews, pre-dispatch calls, creative path classification, periodic live workspace refreshes, and workbench switching |
+| Markdown & JSONL | Component tests cover tables, task lists, fenced code, hidden HTML comments outside code, inert raw HTML, safe external links, and line-indexed JSONL summaries with per-line parse isolation |
+| Workbench & tab controls | Unit and Chrome tests cover creative-project detection, blank-Session `WelcomeGuide` dismissal (`cordis.patch.yml` `welcomeGuide: false`) and `Plugins → @oh-story/dsh` re-enablement, collapsing back to stock DSH per workspace, and hiding/restoring individual workbench tabs per workspace across Sessions and reloads |
+| Composer stability | Browser checks run `scrollIntoView()` and verify dynamic Composer clearance across wide, medium, and 500 px compact layouts |
+| Dual workbench | Native smoke switches `小说` / `短剧`, opens all five creator-first document types, and exercises Markdown preview and source editing |
+| Game Studio | Native smoke verifies Preview-left / Chat-right layout, isolated loopback-alias `localStorage` save/load across two workspace games (`smoke-game` and `smoke-game-alt`), explicit `载入新版本`, state preservation across tab/Chat/workbench switches, fullscreen focus return, 500×900 `制作 / 对话` switching, creative canvas editing, and the absence of any parallel QA tab |
+| Video Studio | Unit and smoke tests cover project discovery, high-volume directory exclusions, segmented narration and preserved original-audio projection, validated source-range jumps, source/edited/final switching, explicit new-version loading, CAS narration edits, and host runtime preflight |
+| Short-drama production | Unit and Chrome tests cover five-document parsing, `EP001` ↔ `EP002` episode isolation, infinite-canvas pan/zoom/fit/keyboard movement, cross-episode media reuse, prepare-only `/short-drama-produce` dispatch, Queue removal and active-Turn cancellation, `dispatched_unknown` handling, mixed still/video `/short-drama-edit` composition, and 500 px layout bounds |
+| Media adapters | Unit tests pin the five bundled adapters against upstream `provider_adapters.py` and `builtin-providers.md`, verify `seedance`/`minimax-h3` default `reference_audio` admission versus explicit `reference_roles` on custom configs, and confirm preflight endpoints expose variable presence only |
+| Agent production intents | Packaged smoke executes `oh_story_production` in a live DSH turn, renders its compact tool card, and replays semantic target focus without granting cosmetic canvas control |
+| Roles and hooks | Real Cordis Fiber contract tests and packaged DSH runs verify `oh_story_role` dual-shape child activation, `oh_story_bundled_reference` allowlist reads and shadow rejection, outline pre-write guards, `chapter-extractor` write fencing, and Tracking reminders |
+| Package contents | Build and tarball checks confirm all four knowledge sets, CommonJS checker compatibility, metadata, and license are packed while excluding tests, upstream examples, scrapers, and standalone dashboards |
 
-The gate discovers all `*.test.ts` and `*.contract.test.ts` files. Coverage claims below are tied to executable behavior, not a manually maintained test-count snapshot.
+`pnpm verify` discovers all `*.test.ts`, `*.test.tsx`, and `*.contract.test.ts(x)` files automatically rather than relying on hardcoded test counts.
 
 ## Contract evidence matrix
 
 | Product contract | Deterministic evidence required on every PR | Credentialed observation |
 | --- | --- | --- |
-| `oh_story_role` service scope | Real Cordis Fiber contract tests plus packaged parent Agent → Role child → parent result flow | Official DeepSeek model follows the complete review workflow |
-| Chat anchor clearance | Chrome performs `scrollIntoView({ block: "end" })` in wide, medium and compact layouts and checks the target remains above the Composer | None; provider behavior is irrelevant |
-| Workspace and mutation hooks | Unit tests resolve named Agent services; packaged DSH exercises Session routes and native tool execution | Real projects remain read-only during review |
-| Provider compatibility | Not used as deterministic correctness evidence | The Real Provider workflow must report `EXECUTED_AND_PASSED`; `SKIPPED_NO_CREDENTIAL` is not a pass |
+| `oh_story_role` service scope | Real Cordis Fiber contract tests plus packaged parent Agent → Role child → parent result flow | Official DeepSeek model completes multi-Role review |
+| Chat anchor clearance | Chrome runs `scrollIntoView({ block: "end" })` in wide, medium, and compact layouts and confirms the target stays above the Composer | None; independent of model provider |
+| Workspace and mutation hooks | Unit tests resolve named Agent services; packaged DSH exercises Session routes and native tool hooks | Sample projects remain unchanged during read-only review |
+| Provider compatibility | Not used as a PR gate | Manual `Real Provider` workflow must finish `EXECUTED_AND_PASSED`; `SKIPPED_NO_CREDENTIAL` fails |
 
 ## Native DSH Web audit
 
-`pnpm test:dsh` creates an isolated DSH installation and profile, packs `@oh-story/dsh`, installs the tarball through `dsh plugin --profile web add`, and starts the official Web UI. Its deterministic fixture model answers the Anthropic-compatible Messages API that DSH 0.2.0's DeepSeek provider speaks, and DSH's first-use Documents folder is redirected into the temporary root so a run never writes to the real home. It copies the pinned public demo projects from Oh Story (`让你管账号，你高燃混剪炸全网`) and Drama Skills (`让你管账号`) into temporary workspaces, creates a minimal workspace game, and loads the pinned NovelToGame Jin Ping Mei example. The Chrome pass verifies:
+`pnpm test:dsh` sets up an isolated DSH home and profile, packs `@oh-story/dsh`, installs the tarball via `dsh plugin --profile web add`, and launches official DSH Web against a local Anthropic-Messages-compatible fixture server (redirecting DSH's first-use Documents folder into the temp root so nothing touches the real home directory). It stages the pinned Oh Story (`让你管账号，你高燃混剪炸全网`) and Drama Skills (`让你管账号`) sample workspaces alongside two test workspace games (`smoke-game` and `smoke-game-alt`) and a `smoke-recap` video project. The Chrome suite verifies:
 
-- 13 Oh Story Skills, 11 Drama Skills, 7 NovelToGame Skills and the 3 upstream user-invocable video entries in the Session catalog; provider tests cover all 7 bundled video Skills;
-- Session-scoped workspace reads, a 20-writer atomic CAS race, stale-write rejection and path-traversal rejection;
-- allowlisted media discovery, read-only byte-range preview and media path-traversal rejection through the current Agent FileSystem, using two alternate 941×1672 generated keyframes and a real 704×1280 five-second seekable MP4 rather than one-pixel placeholders;
-- invalid project metadata isolation without taking down the workspace;
-- published Browser module and official UI slot registrations;
-- a real DSH Agent `write` tool call, incremental editor content, the tree following the new file through DSH's pre-dispatch window, authoritative disk reconciliation and official tool-file navigation;
-- a deterministic `oh_story_role` call that starts a packaged `story-explorer` child, returns its result to the parent and completes the parent turn;
-- 小说/短剧 navigation, recursive project directories, creator-first five-document exclusivity and Markdown rendering;
-- 游戏 defaults to real-time Preview, keeps the playable iframe left of the wider official Chat, executes workspace-game input, preserves the same runtime across Preview/project-file switching, switches projects, reaches the Jin Ping Mei opening scene, and restores focus after fullscreen;
-- Game Studio exposes no QA tab, scorecard, badge or QA screenshot; the six-check artifact contract remains covered by parity, Host API assertions and packaged automation;
-- at 500×900 the game-specific `制作 / 对话` switch preserves both iframe state and Composer usability without horizontal clipping;
-- two isolated creator-first episodes, including production projection rebuilds, EP-local tasks, versions, selections, sequence and canvas coordinates when switching EP001 ↔ EP002; background-drag panning that leaves node coordinates untouched, cursor-anchored wheel zoom and fit-to-nodes on the infinite canvas;
-- direct `oh_story_production` execution by the fixture Agent, durable semantic-focus replay and navigation isolation; cosmetic canvas coordinates remain creator-controlled Session state;
-- a searchable project media library and explicit EP001 → EP002 image-reference reuse without duplicating prompt editing inside production cards;
-- running + queued submissions read from the host `inbox` projection, exact Queue removal, current-Turn cancellation with the remaining Queue preserved but not auto-executed, and a late real MP4 that upgrades a completed batch from 0/22 to an explicit 1/22 partial result without a render loop;
-- a complete mixed sequence whose creator explicitly selects `交付/EP001/`'s IMG still for SHOT-EP001-001 ahead of an available video while the other 21 shots use video; it previews the actual still/video sources, dispatches the ordered native assembly request to `/short-drama-edit`, refuses a second composition while the first is unsettled, and completes only after the fixed upstream deliverable `制作成果/成片/成片.mp4` appears in the Agent FileSystem;
-- the short-drama production shot board, two-version selection and restoration, same-episode delivery artifact discovery, explicit IMG selection, accepted SHOT keyframe fallback, mixed-source sequence reorder/blockers, asset board, relationship canvas, keyboard layout movement, native `/short-drama-produce` Conversation dispatch, realistic image/video version backfill and cross-document source navigation;
-- first-launch guidance in the blank default-workspace Session a fresh DSH opens (its first-use Documents folder redirected into the temporary root), its containment at 500 px, its 「先玩内置示例」 entry opening the Jin Ping Mei preview as loaded (not failed) across the loopback-alias isolation, the empty 视频 state's runtime check, no workspace layout remembered after the example visit and the guide's return when it is collapsed, its retirement after that Session's first prompt, and removal when entering a creative Session;
-- blank-session mounting, Session-switch draft recovery after DSH releases the Session's Store, source editing, conflict isolation and saved-state behavior;
-- ordered tree/editor/Chat geometry at desktop and 500 px widths, a Composer that remains fixed during long-message scrolling, and anchor clearance in wide, medium and compact layouts.
+- 14 Oh Story Skills, 12 Drama Skills, 5 NovelToGame Skills, and the 2 user-invocable video Skills (`video-recap` and `video-reference`), all loaded from the installed plugin bundle;
+- Session-scoped workspace reads, a 20-writer atomic CAS race, stale-write rejection, and path-traversal rejection;
+- allowlisted media discovery, read-only byte-range streaming, and media traversal rejection through the active Agent `FileSystem`, using two 941×1672 keyframes and a 5-second 704×1280 seekable MP4;
+- malformed project metadata isolation without breaking workspace loading;
+- Browser module loading and official UI slot registrations (`shell.overlay`, `plugins.bundle.config`, `tool.call.toolview`);
+- streamed `write` tool following in the file tree and editor across DSH's pre-dispatch window, disk reconciliation, human-draft conflict protection, and Chat file-link navigation;
+- end-to-end `oh_story_role` execution (`narrative-writer` child reading a pinned `story-setup` reference via `oh_story_bundled_reference` and returning to the parent Session);
+- first-launch `WelcomeGuide` rendering on blank default-workspace Sessions, 500 px viewport containment, persistent dismissal into `profiles/web/cordis.patch.yml` (`welcomeGuide: false`), re-enabling from `Plugins → @oh-story/dsh`, and automatic retirement once a conversation starts;
+- per-workspace **Workbench settings** tab hiding, last-tab protection, Session A/B/A sharing, reload persistence, workspace isolation, and **Show all** restoration, alongside collapsing and reopening the whole workbench;
+- `小说` / `短剧` switching, recursive directory trees, five-document exclusivity, and safe Markdown preview (including hidden HTML comments outside code);
+- `游戏` live iframe input, CSP inline-script blocking, loopback-alias `localStorage` save/restore, explicit new-build loading, runtime preservation across tab/Chat/workbench switches, 500×900 `制作 / 对话` switching, creative canvas keyboard movement, and no QA tab;
+- `视频` empty-state runtime preflight, source/edited/final switching, segmented narration navigation, and explicit new-version loading;
+- two isolated short-drama episodes (`EP001` ↔ `EP002`), infinite-canvas pan/zoom/fit and node dragging, cross-episode media-library reference picking, prepare-only `/short-drama-produce` dispatch, Queue removal and active-Turn cancellation, late partial-batch backfill, `oh_story_production` focus replay, and mixed still/video `/short-drama-edit` assembly;
+- desktop and 500 px three-column geometry, fixed Composer positioning during long-reply scrolling, and bottom-anchor clearance.
 
-When `OH_STORY_GAME_E2E_DIR` is set, the same pass emits game evidence screenshots. The checked-in evidence is `docs/images/game-studio-jin-ping-mei.png` and the 500×900 `docs/images/game-studio-compact.png`.
-
-The same audited surface generates all four README demos. One pass captures every workbench, so `pnpm demo` renders the complete set and `pnpm demo:story`, `pnpm demo:drama`, `pnpm demo:game` and `pnpm demo:video` only narrow which GIFs get written. Demo commands require `DEEPSEEK_API_KEY` and `ffmpeg`, use the real `deepseek-official` provider, wait for successful assistant turns, collapse the DSH navigation rail, and record the complete workbench/Chat surface. `OH_STORY_DEMO_MOCK=1` re-renders the same surfaces from the deterministic fixtures without a provider key. The API key is process-only and is redacted from captured failure logs.
+Setting `OH_STORY_GAME_E2E_DIR` or `OH_STORY_DRAMA_E2E_DIR` writes fresh browser screenshots during the run. `pnpm demo` (with `pnpm demo:{story,drama,game,video}` filters) records the four README showcase animations from official DSH Web using `DEEPSEEK_API_KEY` and `ffmpeg`, or from local fixtures when `OH_STORY_DEMO_MOCK=1` is set; credentials stay process-only and are redacted from logs.
 
 ## Real DeepSeek observation
 
