@@ -66,7 +66,7 @@ npx -y @deepseek-ai/dsh@0.2.2-rc.1 web
 <details>
 <summary>配置短剧媒体生成 API（生图 / 生视频 / 配音 / 配乐）</summary>
 
-DeepSeek 负责写剧本、分镜和提示词；生成图片、视频、配音与配乐时，`short-drama-produce` 调用对应供应商接口（宿主机需 Python 3.9+，合成成片另需 `ffmpeg`/`ffprobe`）。启动 DSH 前按需导出用到的环境变量即可，不配视频 Key 也能写完五份文档并出关键帧图片：
+DeepSeek 负责写剧本、分镜和提示词；生成图片、视频、配音与配乐时，`short-drama-produce` 调用对应供应商接口（本机需安装 Python 3.9+，合成成片另需 `ffmpeg`/`ffprobe`）。启动 DSH 前按需导出用到的环境变量即可，不配视频 Key 也能写完五份文档并出关键帧图片：
 
 | 能力 | 供应商 | 必需环境变量 | 可选配置 |
 | --- | --- | --- | --- |
@@ -82,21 +82,21 @@ export ARK_API_KEY=... SEEDANCE_MODEL=...
 npx -y @deepseek-ai/dsh@0.2.2-rc.1 web
 ```
 
-短剧「制作详情」会列出各供应商是否就绪、缺哪个环境变量（只检查变量是否存在，不读取或回传密钥值）。内置 `seedance` 与 `minimax-h3` 默认支持角色参考音频 `reference_audio`（仍请确认所选模型本身支持音频输入）；要自定义 adapter、超时或外部 `reference_roles`，把 `OH_STORY_DRAMA_ADAPTER_CONFIG` 指向自定义配置文件即可。参数范围见随包的 `short-drama-produce/references/builtin-providers.md`。
+短剧「制作详情」会列出各供应商是否就绪、缺哪个环境变量（只检查变量是否存在，不读取或回传密钥值）。内置 `seedance` 与 `minimax-h3` 默认支持角色参考音频 `reference_audio`（仍请确认所选模型本身支持音频输入）；要自定义适配器、超时或外部 `reference_roles`，把 `OH_STORY_DRAMA_ADAPTER_CONFIG` 指向自定义配置文件即可。参数范围见内置的 `short-drama-produce/references/builtin-providers.md`。
 
 </details>
 
 <details>
-<summary>配置视频解说宿主机依赖（Python / ffmpeg）</summary>
+<summary>配置视频解说本地依赖（Python / ffmpeg）</summary>
 
-视频解说需要宿主机安装 **Python 3.10+** 与 `PATH` 可见的 **ffmpeg / ffprobe**（如 Ubuntu 下 `sudo apt install ffmpeg`），并在启动终端设置 `MIMO_API_KEY`（用 Fish Audio 配音另配 `FISH_API_KEY`）。`ffmpeg` 带 `libass` 滤镜时默认烧录硬字幕，否则输出外挂 SRT。
+视频解说需要本机安装 **Python 3.10+** 与可在 `PATH` 中调用的 **ffmpeg / ffprobe**（Ubuntu 可执行 `sudo apt install ffmpeg`），并在启动终端设置 `MIMO_API_KEY`；若用 Fish Audio 配音，再补配 `FISH_API_KEY`。`ffmpeg` 带 `libass` 滤镜时默认烧录硬字幕，否则输出外挂 SRT。
 
 </details>
 
 <details>
 <summary>装进独立 profile，与日常编程环境分开</summary>
 
-插件装进哪个 profile，该 profile 下启用技能工具的会话模式（如 `Standard`、`PTC`；`Minimal` 不加载技能）就能调用创作技能。想让默认 `web` 环境保持原样，可装进独立的 `story` profile：
+在装有本插件的 profile 下，只要会话模式启用了技能工具（如 `Standard`、`PTC`；`Minimal` 不加载技能），就能调用内置创作技能。想让默认 `web` 环境保持原样，可装进独立的 `story` profile：
 
 ```bash
 npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.2-rc.1 dsh plugin --profile story add @oh-story/dsh@0.1.27
@@ -123,19 +123,19 @@ npx -y @deepseek-ai/dsh@0.2.2-rc.1 --profile story --port 3081  # 创作工作�
 
 ## 四个工作台
 
-四个工作台都跑在官方 DSH Web 会话里，右侧对话、模型切换、Token 统计与权限审批均为原生 DSH 界面。只用其中一部分时，可在页卡旁的「工作台设置」隐藏其余页卡（按当前浏览器的工作区记忆，至少留一个，随时可「显示全部」；隐藏不会删文件或停用技能）。
+四个工作台都跑在官方 DSH Web 会话里，右侧对话、模型切换、Token 统计与权限审批均为原生 DSH 界面。只用其中一部分时，可在页卡旁的「工作台设置」隐藏其余页卡，随时点「显示全部」恢复；设置按当前工作区保存，隐藏页卡不会删文件或停用技能。
 
 ### 小说工作台
 
 ![小说工作台](docs/images/story-workbench-demo.gif)
 
-文件树、Markdown 编辑器与原生 Chat 同屏联动：Agent 写设定、大纲或正文时编辑器实时跟进，点对话里的文件路径就能打开对应文稿，手动改写中的未保存草稿不会被并发写入冲掉。覆盖选题、扫榜、拆文、长短篇连载、审稿、去 AI 味、番茄建书资料与封面提示词。
+文件树、Markdown 编辑器与右侧对话同屏联动：Agent 写设定、大纲或正文时编辑器实时跟进，点对话里的文件路径就能打开对应文稿，你正在手动改写的未保存草稿也不会被 Agent 覆盖。覆盖选题、扫榜、拆文、长短篇连载、审稿、去 AI 味、番茄建书资料与封面提示词。
 
 ### 短剧工作台
 
 ![短剧无限画布工作台](docs/images/drama-canvas-workbench.png)
 
-每集按需维护最多五份文档：`剧本.md`、`视觉设定.md`、`分镜.md`、`图片提示词.md`、`视频提示词.md`。无限画布把剧本场次、角色与场景参考板、分镜关键帧和视频片段串在同一视图里，可自由缩放、切换采用版本，或点选镜头送进右侧 Chat 接着改。「制作详情」会标出重复 ID 与跨文件断链的具体行号；生图、生视频、配音与配乐一律先在对话里预览参数并经你确认才调付费接口，成片由 `/short-drama-edit` 按 `剪辑单.md` 渲染到 `剧集/<EP>/制作成果/成片/`。
+每集按需维护最多五份文档：`剧本.md`、`视觉设定.md`、`分镜.md`、`图片提示词.md`、`视频提示词.md`。无限画布把剧本场次、角色与场景参考板、分镜关键帧和视频片段串在同一视图里，可自由缩放、切换采用版本，或点选镜头送进右侧对话接着改。「制作详情」会标出重复 ID 与跨文件断链的具体行号；生图、生视频、配音与配乐一律先在对话里预览参数并经你确认才调付费接口，成片由 `/short-drama-edit` 按 `剪辑单.md` 渲染到 `剧集/<EP>/制作成果/成片/`。
 
 ### 互动游戏工作台
 
@@ -155,16 +155,16 @@ npx -y @deepseek-ai/dsh@0.2.2-rc.1 --profile story --port 3081  # 创作工作�
 
 ### 共同原则
 
-- **本地文件即底稿**：界面展示的内容全部直接读自工作区里的 Markdown、JSON 与媒体文件，不另建封闭数据库，改文件就是改作品。
+- **作品全在本地文件里**：界面内容直接读取工作区里的 Markdown、JSON 与媒体文件，不另建封闭数据库，改文件就是改作品。
 - **付费生成先确认**：短剧媒体任务先在对话里列出预检结果与参数，你点确认后才调用外部付费接口。
-- **代码仓库零打扰**：只有目录里存在创作文件时才展开工作台，一键即可收起回原版 DSH（按工作区记忆）；职责边界见 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)。
+- **代码仓库零打扰**：只有目录里存在创作文件时才展开工作台，随时可一键收起回原版 DSH；职责边界见 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)。
 
 ## 开始创作
 
 点击左侧 **Workspaces** 旁的 **添加工作区 / Add workspace**，选定作品目录并新建会话：
 
 - **已有工程目录**：自动识别并展示「小说 / 短剧 / 游戏 / 视频」页卡，不挑会话模式。
-- **全新空目录**：选用支持技能的会话模式（默认的 `Standard` 或 `PTC`），在对话里发 `/story`、`/short-drama`、`/novel-to-game quick` 或 `/video-recap`，写出第一份项目文件后工作台自动展开。空白会话的入门引导可当场关闭，也可在「插件 → `@oh-story/dsh`」或 `cordis.patch.yml` 的 `welcomeGuide: false` 开关。
+- **全新空目录**：选用支持技能的会话模式（默认的 `Standard` 或 `PTC`），在对话里发 `/story`、`/short-drama`、`/novel-to-game quick` 或 `/video-recap`，写出第一份项目文件后工作台自动展开。空白会话的入门引导可当场关闭，也可在「插件 → `@oh-story/dsh`」随时开关（或通过 `cordis.patch.yml` 的 `welcomeGuide: false` 控制）。
 
 可直接复制下面的开局提示词（替换方括号内容）：
 
@@ -180,7 +180,7 @@ npx -y @deepseek-ai/dsh@0.2.2-rc.1 --profile story --port 3081  # 创作工作�
 
 ```text
 用 /short-drama 初始化一部复仇打脸题材短剧，竖屏 9:16，先写第 1 集剧本和视觉设定，暂不生成媒体。
-用 /novel-to-game quick 把当前工作区的小说改编成可玩互动切片，首个试玩构建控制在 15 分钟流程内。
+用 /novel-to-game quick 把当前工作区的小说改编成可玩的互动试玩版，首个版本控制在 15 分钟流程内。
 用 /video-recap 给 /path/to/video.mp4 制作一条 3 分钟中文解说成片，关键台词保留原声，烧录硬字幕。
 ```
 
@@ -188,7 +188,7 @@ npx -y @deepseek-ai/dsh@0.2.2-rc.1 --profile story --port 3081  # 创作工作�
 
 以下片段节选自仓库内置的演示工程（同步自 [oh-story-claudecode 示例](https://github.com/zenstory-ai/oh-story-claudecode/tree/abe96630d115afbd528f2329e2d8d604d5d5673c/demo/%E9%95%BF%E7%AF%87) 与 [drama-skills 样例](https://github.com/zenstory-ai/drama-skills/tree/37232f6d22e174c36e321d2e3a1a3ae871e7d602/examples/creator-first/EP001)）。
 
-### 1. 小说：追踪上下文与细纲门禁
+### 1. 小说：剧情追踪与细纲拦截
 
 动笔写第 21 章前，[`追踪/上下文.md`](scripts/demo-fixtures/story/让你管账号，你高燃混剪炸全网/追踪/上下文.md) 记录了当前剧情位置、未回收伏笔与连贯性风险：
 
@@ -204,7 +204,7 @@ npx -y @deepseek-ai/dsh@0.2.2-rc.1 --profile story --port 3081  # 创作工作�
 - 第21章尚无细纲，不能直接写正文。
 ```
 
-若 Agent 跳过细纲直接写正文，工具前置钩子会当场拦截：
+若 Agent 跳过细纲直接写正文，插件会在写入前当场拦截：
 
 ```text
 Oh Story 阻止写入第 21 章：未找到对应的 大纲/细纲_第021章*.md。先按 story-long-write 单章流程补建细纲再写正文。
@@ -249,7 +249,7 @@ IMG-JIANGCHEN-SHEET 在当前集内重复，后出现的条目会遮蔽前一条
 
 ### 我已经在用 Claude Code 或 Codex，还需要装这个插件吗？
 
-不需要，四套技能本身都是独立的开源仓库（[oh-story-claudecode](https://github.com/zenstory-ai/oh-story-claudecode)、[drama-skills](https://github.com/zenstory-ai/drama-skills)、[novel-to-game](https://github.com/zenstory-ai/novel-to-game)、[video-recap-skills](https://github.com/zenstory-ai/video-recap-skills)），可直接装进常用编程 Agent；偏好免配置的在线小说工作台也可用 [ZenStory](https://app.zenstory.ai)。本插件把这四套技能打包进 DeepSeek Harness，并加上 DSH Web 的四个图形工作台。若本机 `~/.agents/skills` 装过同名 Skill，启动前设 `DSH_AGENTS_HOME=~/.dsh-agents` 即可强制使用插件内置版本。
+不需要，四套技能本身都是独立的开源仓库（[oh-story-claudecode](https://github.com/zenstory-ai/oh-story-claudecode)、[drama-skills](https://github.com/zenstory-ai/drama-skills)、[novel-to-game](https://github.com/zenstory-ai/novel-to-game)、[video-recap-skills](https://github.com/zenstory-ai/video-recap-skills)），可直接装进常用编程 Agent；偏好免配置的在线小说与短剧工作台也可用 [ZenStory](https://app.zenstory.ai)。本插件把这四套技能打包进 DeepSeek Harness，并加上 DSH Web 的四个图形工作台。若本机 `~/.agents/skills` 装过同名 Skill，启动前设 `DSH_AGENTS_HOME=~/.dsh-agents` 即可强制使用插件内置版本。
 
 ### 装上插件后，平时用 DSH 写代码会被影响吗？
 
@@ -265,7 +265,7 @@ IMG-JIANGCHEN-SHEET 在当前集内重复，后出现的条目会遮蔽前一条
 
 ### 支持 Windows、macOS 和 Linux 吗？
 
-支持，每次提交都会在 macOS、Windows 与 Linux CI 上跑完类型、资产与构建检查。本地脚本按流水线需要对应宿主工具：小说拆文与追踪需 Python 3 和 Node.js 18+，短剧生产与成片合成需 Python 3.9+ 和 `ffmpeg`/`ffprobe`（画面文字另需 Node.js），视频解说需 Python 3.10+ 和 `ffmpeg`/`ffprobe`。
+支持，每次提交都会在 macOS、Windows 与 Linux CI 上跑完类型、内置技能校验、单测与构建检查。本地脚本按不同工作流依赖对应的本地工具：小说拆文与追踪需 Python 3 和 Node.js 18+，短剧生产与成片合成需 Python 3.9+ 和 `ffmpeg`/`ffprobe`（渲染画面文字另需 Node.js），视频解说需 Python 3.10+ 和 `ffmpeg`/`ffprobe`。
 
 ### 升级到新版本后要做什么？
 
@@ -280,13 +280,13 @@ IMG-JIANGCHEN-SHEET 在当前集内重复，后出现的条目会遮蔽前一条
 
 本仓库由 [ZenStory AI](https://zenstory.ai/zh)（GitHub：[@zenstory-ai](https://github.com/zenstory-ai)）维护，同系列开源项目：
 
-| 项目 | 说明 |
+| 项目 | 用途 |
 | --- | --- |
-| [oh-story-claudecode](https://github.com/zenstory-ai/oh-story-claudecode) | 网文创作 Skill 包：扫榜、拆文、长短篇写作、审稿、去 AI 味与封面提示词 |
-| [drama-skills](https://github.com/zenstory-ai/drama-skills) | AI 短剧与漫剧制作 Skill 合集：剧本、视觉设定、分镜、提示词与成片剪辑 |
-| [novel-to-game](https://github.com/zenstory-ai/novel-to-game) | 小说改编互动游戏 Skill 合集：原著拆解、玩法设计、构建与盲玩验收 |
-| [video-recap-skills](https://github.com/zenstory-ai/video-recap-skills) | 视频中文解说工具链，支持硬字幕成片与剪映 / CapCut 草稿导出 |
-| [oh-story-dsh](https://github.com/zenstory-ai/oh-story-dsh) | DeepSeek Harness 社区插件，集成上述四套技能与图形创作工作台（本仓库） |
-| [zenstory](https://github.com/zenstory-ai/zenstory) | 在线对话式 AI 小说创作工作台（[app.zenstory.ai](https://app.zenstory.ai)） |
+| [oh-story-claudecode](https://github.com/zenstory-ai/oh-story-claudecode) | 网文写作技能包：扫榜、拆文、大纲细纲、长短篇写作、伏笔追踪、去 AI 味与封面生成 |
+| [drama-skills](https://github.com/zenstory-ai/drama-skills) | AI 短剧与漫剧制作技能包：原著与对标拆解、剧本、视觉设定、分镜、生图/生视频提示词、确认后生产与剪辑成片 |
+| [novel-to-game](https://github.com/zenstory-ai/novel-to-game) | 小说改游戏技能包：通读拆书、玩法与美术设计、代码构建与盲玩验收，支持网页、互动影游与微信/抖音/TapTap 小游戏 |
+| [video-recap-skills](https://github.com/zenstory-ai/video-recap-skills) | AI 视频解说技能包：自动切镜、看画面写解说词、配音混音合成硬字幕成片，并可导出剪映 / CapCut 草稿 |
+| [oh-story-dsh](https://github.com/zenstory-ai/oh-story-dsh) | DeepSeek Harness 社区插件：集成网文写作、短剧漫剧、小说改游戏与视频解说四个可视化工作台（本仓库） |
+| [zenstory](https://github.com/zenstory-ai/zenstory) | 对话即创作的 AI 小说与短剧网页工作台（[app.zenstory.ai](https://app.zenstory.ai)） |
 
 <sub>本项目为独立开源社区插件，与 DeepSeek 官方无隶属、合作或背书关系；DeepSeek Harness 名称与相关品牌标识归其权利人所有。</sub>

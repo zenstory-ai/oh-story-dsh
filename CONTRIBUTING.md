@@ -38,7 +38,7 @@ DEEPSEEK_API_KEY_FILE=/path/to/key pnpm test:dsh:real
 - NovelToGame：`packages/knowledge/novel-to-game`
 - video-recap-skills：`packages/knowledge/video-recap`
 
-从相邻 checkout 同步到本地：
+从本地相邻目录同步：
 
 ```bash
 OH_STORY_UPSTREAM_DIR=/path/to/oh-story-claudecode pnpm assets:sync:story
@@ -56,7 +56,7 @@ pnpm assets:check
 - `CI / Quality gate`：在 Ubuntu 上运行完整的固定门禁 `pnpm verify`。
 - `CI / Portability`：在 macOS 26 Intel 与 Windows 上运行类型检查、资产校验、单测与构建，验证跨平台路径处理。为保持分支保护规则名称不变，macOS 检查项仍叫 `Portability (macos-latest)`，实际 runner 指定为 `macos-26-intel`（并非 GitHub 的 Arm64 `macos-latest` 镜像）。
 - `CI / Packaged DSH Web integration`：打出 tarball 装入官方 DSH Web，并用 Chrome 验证能力目录、工作区安全边界与工作台界面。
-- `Real Provider`：手动触发的官方接口兼容性检查，凭据预检与实测分属两个独立 Job。配置 `DEEPSEEK_API_KEY` 时实测 Job 执行（executed），未配置时跳过（skipped）；汇总区分 `EXECUTED_AND_PASSED`、`EXECUTED_AND_FAILED`、`SKIPPED_NO_CREDENTIAL`、`PREFLIGHT_FAILED` 与 `PROVIDER_JOB_NOT_COMPLETED` 五种状态，只有 `EXECUTED_AND_PASSED` 会让工作流通过，其余状态一律判为失败。
+- `Real Provider`：手动触发的官方接口兼容性检查，凭据预检与实测分属两个独立 Job。配置 `DEEPSEEK_API_KEY` 时实测 Job 执行，未配置时跳过；汇总区分 `EXECUTED_AND_PASSED`、`EXECUTED_AND_FAILED`、`SKIPPED_NO_CREDENTIAL`、`PREFLIGHT_FAILED` 与 `PROVIDER_JOB_NOT_COMPLETED` 五种状态，只有 `EXECUTED_AND_PASSED` 会让工作流通过，其余状态一律判为失败。
 - `Release`：手动触发时仅在 `main` 上执行打包演练，不对外发布；推送正式 `vX.Y.Z` Tag 时，该提交必须已合入 `main` 且最新一轮完整 CI 四个 Job 全部通过，工作流才会把单次构建出的同一份 `.tgz` 同步发往 GitHub Release 与 npm。重跑工作流时，字节一致的已有产物会自动跳过，字节不一致则报错终止，绝不覆盖已发布内容。
 
 ## 发布检查
