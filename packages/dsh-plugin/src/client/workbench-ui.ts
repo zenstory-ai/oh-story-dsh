@@ -22,10 +22,48 @@ export function handleTabKey<T extends string>(
   event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>("[role='tab']")[index]?.focus();
 }
 
+/**
+ * Resolve an `api/oh-story/*` endpoint relative to `document.baseURI` when running on HTTP(S)
+ * so DSH `connection.fetch.register` routes work across mount-prefix proxies, Electron IPC,
+ * and Web Workers, falling back cleanly to `/api/oh-story/*` in non-HTTP / jsdom environments.
+ */
+export function ohStoryEndpointUrl(path: string): string {
+  const relative = `api/oh-story/${path.replace(/^\/+/u, "")}`;
+  const baseUri = typeof document === "object" && document !== null && typeof document.baseURI === "string"
+    ? document.baseURI
+    : undefined;
+  if (baseUri !== undefined) {
+    try {
+      const parsedBase = new URL(baseUri);
+      if (parsedBase.protocol === "http:" || parsedBase.protocol === "https:") {
+        return new URL(relative, parsedBase).toString();
+      }
+    } catch {
+      // Fall back below when document.baseURI is unavailable or non-HTTP.
+    }
+  }
+  const origin = typeof globalThis.location === "object" && globalThis.location !== null && typeof globalThis.location.origin === "string"
+    ? globalThis.location.origin
+    : undefined;
+  if (origin !== undefined && origin !== "null") {
+    try {
+      const parsedOrigin = new URL(origin);
+      if (parsedOrigin.protocol === "http:" || parsedOrigin.protocol === "https:") {
+        return new URL(`/${relative}`, parsedOrigin).toString();
+      }
+    } catch {
+      // Fall back to root-relative path string below.
+    }
+  }
+  return `/${relative}`;
+}
+
 export function endpoint(path: string, sessionId: string, file?: string, version?: string): string {
-  const url = new URL(`/oh-story/${path}`, globalThis.location.origin);
-  url.searchParams.set("sessionId", sessionId);
-  if (file !== undefined) url.searchParams.set("path", file);
-  if (version !== undefined && version !== "") url.searchParams.set("version", version);
-  return url.toString();
+  const base = ohStoryEndpointUrl(path);
+  const params = new URLSearchParams();
+  params.set("sessionId", sessionId);
+  if (file !== undefined) params.set("path", file);
+  if (version !== undefined && version !== "") params.set("version", version);
+  const query = params.toString();
+  return query === "" ? base : `${base}${base.includes("?") ? "&" : "?"}${query}`;
 }

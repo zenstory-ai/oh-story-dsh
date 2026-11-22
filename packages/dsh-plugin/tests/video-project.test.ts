@@ -148,6 +148,7 @@ describe("video recap project projection", () => {
       },
       qualityCheck: {
         schema_version: 1,
+        media: `${root}/work/out/custom_cut.mp4`,
         ok: true,
         checks: {
           container_valid: { status: "pass", detail: "mp4" },
@@ -173,12 +174,62 @@ describe("video recap project projection", () => {
     expect(summary.qualityCheck).toMatchObject({
       ok: true,
       status: "warn",
+      media: `${root}/work/out/custom_cut.mp4`,
+      mediaRole: "final",
       path: `${root}/work/check.json`
     });
     expect(summary.qualityCheck?.reviewHints).toEqual([
       expect.objectContaining({ code: "black_span", label: "黑屏片段", severity: "warn", timestamp: 2.5, endTimestamp: 3.2 }),
       expect.objectContaining({ code: "edge_speech_truncation", label: "切点人声截断", severity: "warn", timestamp: 10 })
     ]);
+  });
+
+  it("excludes timeline.overlays alpha assets from source/final previews, maps check.json.media to edited role, and falls back title to BRIEF.md / EDIT_PLAN.md", () => {
+    const root = "video-recaps/overlay-case";
+    const files = [
+      file(`${root}/sources/bgm.wav`, "media", "audio/wav"),
+      file(`${root}/sources/ep1.mp4`, "media", "video/mp4"),
+      file(`${root}/work/out/title_card.mov`, "media", "video/quicktime"),
+      file(`${root}/work/out/preview.mp4`, "media", "video/mp4"),
+      file(`${root}/work/timeline.json`),
+      file(`${root}/work/check.json`),
+      file(`${root}/work/BRIEF.md`)
+    ];
+    const summary = summarizeVideoProject(root, files, {
+      brief: "# 雨夜追凶解说需求\n\n竖屏 9:16",
+      timeline: {
+        schema_version: 3,
+        sources: {
+          ov1: "out/title_card.mov",
+          bgm: "../sources/bgm.wav",
+          main: "../sources/ep1.mp4"
+        },
+        video: [{ id: "v1", source: "main", in: 0, out: 12 }],
+        overlays: [{ id: "o1", source: "ov1", at: 0, duration: 2 }]
+      },
+      qualityCheck: {
+        schema_version: 1,
+        media: "work/out/preview.mp4",
+        ok: true,
+        checks: { container_valid: { status: "pass", detail: "mp4" } },
+        review_hints: []
+      }
+    });
+    expect(summary.title).toBe("雨夜追凶解说需求");
+    // Must pick timeline.video[0].source (`ep1.mp4`), NOT overlay `title_card.mov` or `bgm.wav`.
+    expect(summary.previews.find((item) => item.role === "source")?.path).toBe(`${root}/sources/ep1.mp4`);
+    // Overlay `title_card.mov` must NOT be misclassified as `final`.
+    expect(summary.previews.find((item) => item.role === "final")).toBeUndefined();
+    expect(summary.previews.find((item) => item.role === "edited")?.path).toBe(`${root}/work/out/preview.mp4`);
+    expect(summary.qualityCheck?.media).toBe(`${root}/work/out/preview.mp4`);
+    expect(summary.qualityCheck?.mediaRole).toBe("edited");
+
+    // Falls back to EDIT_PLAN.md heading when BRIEF.md has no heading.
+    const editPlanTitle = summarizeVideoProject(root, files, {
+      brief: "纯文本无标题",
+      editPlan: "# 剪辑方案：雪夜突围\n"
+    });
+    expect(editPlanTitle.title).toBe("剪辑方案：雪夜突围");
   });
 
   it("does not choose an ambiguous narration file for editing", () => {

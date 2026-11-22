@@ -1,8 +1,10 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { createReadStream } from "node:fs";
-import { realpath as nodeRealpath, stat as nodeStat } from "node:fs/promises";
+import { readFile, realpath as nodeRealpath, stat as nodeStat } from "node:fs/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { extname, isAbsolute, relative } from "node:path";
+import { dirname, extname, isAbsolute, relative, resolve } from "node:path";
+import { Readable } from "node:stream";
+import { fileURLToPath } from "node:url";
 import type { Context } from "@deepseek-ai/cordis";
 import type { Agent } from "@deepseek-ai/dsh-agent";
 import { FsError, type FileSystem, type FsInfo, type FsTarget, type FsVersion } from "@deepseek-ai/dsh-fs";
@@ -17,6 +19,7 @@ import {
   GAME_DIRECTORY,
   isCreativeRootPath,
   isPublishRootFile,
+  MAX_BOOK_PREFIX_DEPTH,
   pathExtension,
   ROOT_FILES,
   safeRelativePath,
@@ -29,7 +32,12 @@ import { dramaAdapterStatuses, ensureDramaAdapterConfig, type DramaAdapterStatus
 import { commandOutput, DRAMA_PYTHON, hostPython, VIDEO_PYTHON, type PythonProbe } from "./host-python.js";
 import { defaultDramaSkillRoot } from "./skill-provider.js";
 import { skipVideoDirectory, summarizeVideoProject, videoProjectRoot, visibleVideoPath, type VideoProjectSummary } from "./video-project.js";
-import { isTrustedPreviewAssetRequest, isTrustedWorkspaceRequest } from "./workspace-request-trust.js";
+import {
+  isBoundPreviewAssetRequest,
+  isTrustedPreviewAssetRequest,
+  isTrustedWorkspaceRequest,
+  normalizePreviewAuthority
+} from "./workspace-request-trust.js";
 
 const MEDIA_TYPES: ReadonlyMap<string, string> = new Map([
   [".png", "image/png"], [".jpg", "image/jpeg"], [".jpeg", "image/jpeg"], [".webp", "image/webp"], [".gif", "image/gif"],
@@ -40,8 +48,23 @@ const MEDIA_MAX_BYTES = 256 * 1_024 * 1_024;
 const FILE_LIMIT = 1_000;
 const MAX_WALK_DEPTH = 20;
 const PREVIEW_FILE_LIMIT = 32 * 1024 * 1024;
-const PREVIEW_TOKEN_TTL_SECONDS = 3_600;
-const PREVIEW_TOKEN_BUCKET_SECONDS = 1_800;
+const PREVIEW_TOKEN_TTL_SECONDS = 24 * 3_600;
+const PREVIEW_TOKEN_BUCKET_SECONDS = 12 * 3_600;
+
+/** Canonical DSH 0.2.2-rc.5 `connection.fetch.register` path for the combined workbench CSS asset. */
+export const WORKBENCH_CSS_API_PATH = "/api/oh-story/workbench.css";
+/** Fallback `webServer.register` path for the combined workbench CSS asset. */
+export const WORKBENCH_CSS_FALLBACK_PATH = "/oh-story/workbench.css";
+
+export interface WorkbenchStylesheetAsset {
+  readonly css: string;
+  readonly bytes: Buffer;
+  readonly version: string;
+  readonly etag: string;
+}
+
+let cachedWorkbenchStylesheet: WorkbenchStylesheetAsset | undefined;
+let workbenchStylesheetInFlight: Promise<WorkbenchStylesheetAsset> | undefined;
 
 let videoPreflightCache: { readonly expires: number; readonly value: VideoPreflightStatus } | undefined;
 let videoPreflightInFlight: Promise<VideoPreflightStatus> | undefined;
@@ -56,11 +79,22 @@ export interface WorkspaceRouteOptions {
   readonly previewTokenSecret?: Uint8Array;
 }
 
+/** Structural contract for DSH 0.2.2-rc.5 `@deepseek-ai/dsh-client-connection` exact Fetch routes. */
+interface ConnectionFetchRouteSpec {
+  readonly path: string;
+  readonly methods: readonly ("GET" | "HEAD" | "POST" | "PUT")[];
+  readonly requestBody: "buffered" | "streaming";
+  readonly fetch: (request: Request) => Promise<Response>;
+}
+
 /** Structural contract for DSH's `@deepseek-ai/dsh-client-connection` service. */
 interface ConnectionAdmissionService {
-  admit(request: { readonly headers: IncomingMessage["headers"] }):
+  admit(request: { readonly headers: IncomingMessage["headers"] | Headers }):
     | { readonly peer: unknown }
     | { readonly rejection: 401 | 403 };
+  readonly fetch?: {
+    register(route: ConnectionFetchRouteSpec): () => Promise<void> | void;
+  } | undefined;
 }
 
 /** Host-process capability probe for Video Recap 0.8.0 (local-first; zero MiMo dependencies). */
@@ -71,8 +105,14 @@ export interface VideoPreflightStatus {
   readonly tts: {
     readonly local: { readonly ok: boolean; readonly engine?: "say" | "espeak-ng" | "espeak" | undefined };
     readonly fish: boolean;
+    /** Matches upstream `tts.py --engine auto`: true when both `OPENAI_API_KEY` and `TTS_API_URL` are set. */
     readonly openai: boolean;
+    /** True when `OPENAI_API_KEY` is set (usable via explicit `--engine openai`). */
+    readonly openaiApiKey?: boolean | undefined;
+    /** Matches upstream `tts.py`: true when `INDEX_TTS_ENDPOINT` is a valid `http(s)` URL without `@`. */
     readonly indexTts: boolean;
+    /** True when `INDEX_TTS_VOICE` is also configured in host env (optional when passed via `--voice`). */
+    readonly indexTtsVoice?: boolean | undefined;
   };
   readonly asr: {
     readonly localWhisper: { readonly ok: boolean; readonly cli?: "whisper" | "faster-whisper" | "mlx_whisper" | "whisper-cli" | undefined };
@@ -121,6 +161,8 @@ export interface WorkspacePayload {
 export interface PreviewTokenPayload {
   readonly sessionId: string;
   readonly root: string;
+  /** Normalized minting Host authority (`host[:port]`) bound into the HMAC payload. */
+  readonly host?: string | undefined;
   /** Expiry unix timestamp in seconds. */
   readonly exp: number;
 }
@@ -169,13 +211,58 @@ export function createPreviewTokenSecret(): Buffer {
 }
 
 /**
- * Mint a short-lived HMAC-SHA256 signed capability token bound to `{ sessionId, root, exp }`.
- * By default `exp` is quantized to 30-minute buckets (yielding 30–60 min validity) so periodic
- * `/oh-story/workspace` polls keep a stable `previewUrl` and never reload an active game iframe.
+ * Load and cache the combined workbench stylesheet (`lib/workbench.css` in built packages,
+ * falling back to concatenating `src/client/*.css` during direct source/test runs).
+ */
+export async function loadWorkbenchStylesheet(): Promise<WorkbenchStylesheetAsset> {
+  if (cachedWorkbenchStylesheet !== undefined) return cachedWorkbenchStylesheet;
+  workbenchStylesheetInFlight ??= (async () => {
+    try {
+      const here = dirname(fileURLToPath(import.meta.url));
+      const candidates = [
+        resolve(here, "workbench.css"),
+        resolve(here, "../lib/workbench.css")
+      ];
+      let css: string | undefined;
+      for (const candidate of candidates) {
+        css = await readFile(candidate, "utf8").catch(() => undefined);
+        if (css !== undefined && css.trim() !== "") break;
+      }
+      if (css === undefined || css.trim() === "") {
+        const sourceFiles = [
+          resolve(here, "client/plugin.css"),
+          resolve(here, "client/game-canvas.css"),
+          resolve(here, "client/video-studio.css"),
+          resolve(here, "client/tool-card.css")
+        ];
+        const parts = await Promise.all(sourceFiles.map((file) => readFile(file, "utf8").catch(() => "")));
+        css = parts.filter((part) => part !== "").join("\n");
+      }
+      const bytes = Buffer.from(css, "utf8");
+      const version = createHash("sha256").update(bytes).digest("hex").slice(0, 16);
+      const asset: WorkbenchStylesheetAsset = { css, bytes, version, etag: `"sha256-${version}"` };
+      cachedWorkbenchStylesheet = asset;
+      return asset;
+    } finally {
+      workbenchStylesheetInFlight = undefined;
+    }
+  })();
+  return workbenchStylesheetInFlight;
+}
+
+/**
+ * Mint an HMAC-SHA256 signed capability token bound to `{ sessionId, root, host?, exp }`.
+ * By default `exp` is quantized to 12-hour buckets (yielding 12–24 hour validity) so periodic
+ * workspace polls keep a stable `previewUrl` and active game iframes never rotate or 401 mid-play.
  */
 export function mintPreviewToken(
   secret: Uint8Array,
-  input: { readonly sessionId: string; readonly root: string; readonly exp?: number | undefined },
+  input: {
+    readonly sessionId: string;
+    readonly root: string;
+    readonly host?: string | undefined;
+    readonly exp?: number | undefined;
+  },
   nowMs = Date.now()
 ): string {
   if (input.sessionId === "" || !gameRoot(input.root)) {
@@ -183,7 +270,14 @@ export function mintPreviewToken(
   }
   const nowSec = Math.floor(nowMs / 1_000);
   const exp = input.exp ?? (Math.floor(nowSec / PREVIEW_TOKEN_BUCKET_SECONDS) + 2) * PREVIEW_TOKEN_BUCKET_SECONDS;
-  const payload = Buffer.from(JSON.stringify({ s: input.sessionId, r: input.root, exp }), "utf8").toString("base64url");
+  const boundHost = normalizePreviewAuthority(input.host);
+  const claims: Record<string, unknown> = {
+    s: input.sessionId,
+    r: input.root,
+    ...(boundHost === undefined ? {} : { h: boundHost }),
+    exp
+  };
+  const payload = Buffer.from(JSON.stringify(claims), "utf8").toString("base64url");
   const signature = createHmac("sha256", secret).update(payload).digest().toString("base64url");
   return `${payload}.${signature}`;
 }
@@ -217,10 +311,12 @@ export function verifyPreviewToken(tokenValue: string, secret: Uint8Array, nowMs
   const record = parsed as Record<string, unknown>;
   const sessionId = record.s;
   const root = record.r;
+  const host = record.h;
   const exp = record.exp;
   if (
     typeof sessionId !== "string" || sessionId === ""
     || typeof root !== "string" || !gameRoot(root)
+    || (host !== undefined && (typeof host !== "string" || normalizePreviewAuthority(host) === undefined))
     || typeof exp !== "number" || !Number.isSafeInteger(exp)
   ) {
     throw new WorkspaceHttpError(403, "游戏预览令牌内容无效。");
@@ -228,10 +324,10 @@ export function verifyPreviewToken(tokenValue: string, secret: Uint8Array, nowMs
   if (exp * 1_000 <= nowMs) {
     throw new WorkspaceHttpError(401, "游戏预览令牌已过期，请刷新工作区。");
   }
-  if (exp - Math.floor(nowMs / 1_000) > PREVIEW_TOKEN_TTL_SECONDS * 24) {
+  if (exp - Math.floor(nowMs / 1_000) > PREVIEW_TOKEN_TTL_SECONDS * 2) {
     throw new WorkspaceHttpError(403, "游戏预览令牌有效期异常。");
   }
-  return { sessionId, root, exp };
+  return { sessionId, root, ...(host === undefined ? {} : { host }), exp };
 }
 
 async function dramaPreflight(): Promise<DramaPreflightSummary> {
@@ -260,6 +356,28 @@ async function commandExistsOnPath(
   return output !== undefined && output.trim() !== "";
 }
 
+/** Mirror vendored `tts.py:213-214`: IndexTTS endpoint must be an `http(s)` URL with a hostname and no `@` in netloc. */
+function isValidIndexTtsEndpoint(raw: string | undefined): boolean {
+  const value = (raw ?? "").trim();
+  if (value === "") return false;
+  const schemeEnd = value.indexOf("://");
+  if (schemeEnd < 0) return false;
+  const rest = value.slice(schemeEnd + 3);
+  const authorityEnd = rest.search(/[/?#]/u);
+  const netloc = authorityEnd < 0 ? rest : rest.slice(0, authorityEnd);
+  if (netloc.includes("@")) return false;
+  try {
+    const parsed = new URL(value);
+    return (parsed.protocol === "http:" || parsed.protocol === "https:") && parsed.hostname !== "";
+  } catch {
+    return false;
+  }
+}
+
+async function isRegularFile(path: string): Promise<boolean> {
+  return nodeStat(path).then((info) => info.isFile(), () => false);
+}
+
 /**
  * Pure, testable Video Recap 0.8.0 host capability probe.
  * Probes local必需 tools (Python 3.10+, ffmpeg+libass, ffprobe) plus optional
@@ -269,11 +387,14 @@ export async function probeVideoPreflight(options: {
   readonly env?: NodeJS.ProcessEnv;
   readonly platform?: NodeJS.Platform;
   readonly probeCommand?: (command: string, args: readonly string[]) => Promise<string | undefined>;
+  readonly isFile?: (path: string) => Promise<boolean>;
 } = {}): Promise<VideoPreflightStatus> {
   const env = options.env ?? process.env;
   const platform = options.platform ?? process.platform;
   const probeCommand = options.probeCommand ?? commandOutput;
+  const checkFile = options.isFile ?? isRegularFile;
   const has = (name: string): Promise<boolean> => commandExistsOnPath(name, probeCommand, platform);
+  const whisperModelPath = (env.WHISPER_MODEL_PATH ?? "").trim();
 
   const [
     pythonResult,
@@ -286,9 +407,10 @@ export async function probeVideoPreflight(options: {
     hasWhisper,
     hasFasterWhisper,
     hasMlxWhisper,
-    hasWhisperCli
+    hasWhisperCli,
+    whisperModelExists
   ] = await Promise.all([
-    hostPython(VIDEO_PYTHON, probeCommand),
+    hostPython(VIDEO_PYTHON, probeCommand, platform),
     probeCommand("ffmpeg", ["-version"]),
     probeCommand("ffmpeg", ["-hide_banner", "-filters"]),
     probeCommand("ffprobe", ["-version"]),
@@ -298,19 +420,22 @@ export async function probeVideoPreflight(options: {
     has("whisper"),
     has("faster-whisper"),
     has("mlx_whisper"),
-    has("whisper-cli")
+    has("whisper-cli"),
+    whisperModelPath !== "" ? checkFile(whisperModelPath) : Promise.resolve(false)
   ]);
 
   const localTtsEngine: "say" | "espeak-ng" | "espeak" | undefined = hasSay ? "say"
     : hasEspeakNg ? "espeak-ng"
       : hasEspeak ? "espeak"
         : undefined;
-  const whisperCliReady = hasWhisperCli && configured(env, "WHISPER_MODEL_PATH");
+  const whisperCliReady = hasWhisperCli && whisperModelExists;
   const localWhisperCli: "whisper" | "faster-whisper" | "mlx_whisper" | "whisper-cli" | undefined = hasWhisper ? "whisper"
     : hasFasterWhisper ? "faster-whisper"
       : hasMlxWhisper ? "mlx_whisper"
         : whisperCliReady ? "whisper-cli"
           : undefined;
+  const openaiApiKey = configured(env, "OPENAI_API_KEY");
+  const openaiAuto = openaiApiKey && configured(env, "TTS_API_URL");
 
   return {
     python: pythonResult.probe,
@@ -319,8 +444,10 @@ export async function probeVideoPreflight(options: {
     tts: {
       local: { ok: localTtsEngine !== undefined, engine: localTtsEngine },
       fish: configured(env, "FISH_API_KEY", "FISH_AUDIO_API_KEY"),
-      openai: configured(env, "OPENAI_API_KEY"),
-      indexTts: configured(env, "INDEX_TTS_ENDPOINT") && configured(env, "INDEX_TTS_VOICE")
+      openai: openaiAuto,
+      openaiApiKey,
+      indexTts: isValidIndexTtsEndpoint(env.INDEX_TTS_ENDPOINT),
+      indexTtsVoice: configured(env, "INDEX_TTS_VOICE")
     },
     asr: {
       localWhisper: { ok: localWhisperCli !== undefined, cli: localWhisperCli },
@@ -393,24 +520,46 @@ function mediaHeaders(
   };
 }
 
-function sendMediaBytes(
-  request: IncomingMessage,
-  response: ServerResponse,
+function stringifyHeaders(headers: Readonly<Record<string, string | number>>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(headers)) out[key] = String(value);
+  return out;
+}
+
+function jsonResponse(status: number, value: unknown): Response {
+  const body = `${JSON.stringify(value)}\n`;
+  return new Response(body, {
+    status,
+    headers: {
+      "content-type": "application/json; charset=utf-8",
+      "content-length": String(Buffer.byteLength(body)),
+      "cache-control": "no-store",
+      "x-content-type-options": "nosniff"
+    }
+  });
+}
+
+function mediaBytesResponse(
+  method: string,
+  rangeHeader: string | undefined,
   bytes: Uint8Array,
   mimeType: string,
   extraHeaders: Readonly<Record<string, string | number>> = {}
-): void {
-  const range = parseByteRange(typeof request.headers.range === "string" ? request.headers.range : undefined, bytes.byteLength);
+): Response {
+  const range = parseByteRange(rangeHeader, bytes.byteLength);
   if (range === null) {
-    response.writeHead(416, { "content-range": `bytes */${String(bytes.byteLength)}`, "cache-control": "no-store", ...extraHeaders });
-    response.end();
-    return;
+    return new Response(null, {
+      status: 416,
+      headers: stringifyHeaders({ "content-range": `bytes */${String(bytes.byteLength)}`, "cache-control": "no-store", ...extraHeaders })
+    });
   }
   const start = range?.start ?? 0;
   const end = range?.end ?? bytes.byteLength - 1;
   const body = bytes.subarray(start, end + 1);
-  response.writeHead(range === undefined ? 200 : 206, mediaHeaders(mimeType, bytes.byteLength, range, extraHeaders));
-  response.end(request.method === "HEAD" ? undefined : Buffer.from(body));
+  return new Response(method === "HEAD" ? null : new Uint8Array(body), {
+    status: range === undefined ? 200 : 206,
+    headers: stringifyHeaders(mediaHeaders(mimeType, bytes.byteLength, range, extraHeaders))
+  });
 }
 
 /**
@@ -430,9 +579,9 @@ async function hostWorkspaceFile(realm: WorkspaceRealm, target: FsTarget, expect
   return local.isFile() && local.size === expectedSize ? path : undefined;
 }
 
-async function sendWorkspaceMedia(
-  request: IncomingMessage,
-  response: ServerResponse,
+async function workspaceMediaResponse(
+  method: string,
+  rangeHeader: string | undefined,
   realm: WorkspaceRealm,
   target: FsTarget,
   info: FsInfo,
@@ -440,53 +589,85 @@ async function sendWorkspaceMedia(
   signal: AbortSignal,
   extraHeaders: Readonly<Record<string, string | number>> = {},
   maxBytes = MEDIA_MAX_BYTES
-): Promise<void> {
+): Promise<Response> {
   const expectedSize = info.size;
   if (expectedSize !== undefined) {
-    const range = parseByteRange(typeof request.headers.range === "string" ? request.headers.range : undefined, expectedSize);
+    const range = parseByteRange(rangeHeader, expectedSize);
     if (range === null) {
-      response.writeHead(416, { "content-range": `bytes */${String(expectedSize)}`, "cache-control": "no-store", ...extraHeaders });
-      response.end();
-      return;
+      return new Response(null, {
+        status: 416,
+        headers: stringifyHeaders({ "content-range": `bytes */${String(expectedSize)}`, "cache-control": "no-store", ...extraHeaders })
+      });
     }
     // A remote filesystem may expose a process path this web host cannot read; stream locally when
     // host-visible, otherwise fall back to DSH's bounded byte-range / binary API.
     const processPath = await hostWorkspaceFile(realm, target, expectedSize).catch(() => undefined);
     if (processPath !== undefined) {
-      response.writeHead(range === undefined ? 200 : 206, mediaHeaders(mimeType, expectedSize, range, extraHeaders));
-      if (request.method === "HEAD") { response.end(); return; }
+      const headers = stringifyHeaders(mediaHeaders(mimeType, expectedSize, range, extraHeaders));
+      if (method === "HEAD") {
+        return new Response(null, { status: range === undefined ? 200 : 206, headers });
+      }
       const stream = createReadStream(processPath, range === undefined ? undefined : { start: range.start, end: range.end });
-      response.once("close", () => { if (!response.writableEnded) stream.destroy(); });
-      stream.on("error", () => { if (!response.headersSent) response.destroy(); else response.end(); });
-      stream.pipe(response);
-      return;
+      const onAbort = (): void => { stream.destroy(); };
+      if (signal.aborted) onAbort();
+      else signal.addEventListener("abort", onAbort, { once: true });
+      stream.once("close", () => { signal.removeEventListener("abort", onAbort); });
+      return new Response(Readable.toWeb(stream) as ReadableStream<Uint8Array>, {
+        status: range === undefined ? 200 : 206,
+        headers
+      });
     }
-    if (request.method === "HEAD") {
-      response.writeHead(range === undefined ? 200 : 206, mediaHeaders(mimeType, expectedSize, range, extraHeaders));
-      response.end();
-      return;
+    if (method === "HEAD") {
+      return new Response(null, {
+        status: range === undefined ? 200 : 206,
+        headers: stringifyHeaders(mediaHeaders(mimeType, expectedSize, range, extraHeaders))
+      });
     }
     if (range !== undefined && typeof realm.fs.readByteRange === "function") {
       const length = range.end - range.start + 1;
       if (length > maxBytes) throw new WorkspaceHttpError(413, "远程媒体分段超过工作台预览大小限制。");
-      const chunk = await realm.fs.readByteRange(target, { offset: range.start, length }, signal);
-      response.writeHead(206, mediaHeaders(mimeType, expectedSize, range, extraHeaders));
-      response.end(Buffer.from(chunk));
-      return;
+      const rawChunk = await realm.fs.readByteRange(target, { offset: range.start, length }, signal);
+      const chunk = rawChunk.byteLength > length ? rawChunk.subarray(0, length) : rawChunk;
+      if (chunk.byteLength === 0) {
+        return new Response(null, {
+          status: 416,
+          headers: stringifyHeaders({ "content-range": "bytes */*", "cache-control": "no-store", ...extraHeaders })
+        });
+      }
+      const actualRange: ByteRange = { start: range.start, end: range.start + chunk.byteLength - 1 };
+      const totalSize = chunk.byteLength < length ? actualRange.end + 1 : expectedSize;
+      return new Response(new Uint8Array(chunk), {
+        status: 206,
+        headers: stringifyHeaders(mediaHeaders(mimeType, totalSize, actualRange, extraHeaders))
+      });
     }
     if (expectedSize > maxBytes) throw new WorkspaceHttpError(413, "远程媒体超过工作台回退预览大小限制。");
   }
-  sendMediaBytes(request, response, await realm.fs.readBytes(target, signal, maxBytes), mimeType, extraHeaders);
+  return mediaBytesResponse(method, rangeHeader, await realm.fs.readBytes(target, signal, maxBytes), mimeType, extraHeaders);
 }
 
-async function jsonBody(request: IncomingMessage, maxBytes: number): Promise<Record<string, unknown>> {
+async function fetchJsonBody(request: Request, maxBytes: number): Promise<Record<string, unknown>> {
+  const declared = request.headers.get("content-length");
+  if (declared !== null && Number(declared) > maxBytes) {
+    throw new WorkspaceHttpError(413, "请求内容过大。");
+  }
   const chunks: Buffer[] = [];
   let size = 0;
-  for await (const chunk of request as AsyncIterable<Uint8Array>) {
-    const value = Buffer.from(chunk);
-    size += value.byteLength;
-    if (size > maxBytes) throw new WorkspaceHttpError(413, "请求内容过大。");
-    chunks.push(value);
+  if (request.body !== null) {
+    const reader = request.body.getReader();
+    try {
+      for (let item = await reader.read(); !item.done; item = await reader.read()) {
+        const value = Buffer.from(item.value);
+        size += value.byteLength;
+        if (size > maxBytes) {
+          await reader.cancel().catch(() => undefined);
+          throw new WorkspaceHttpError(413, "请求内容过大。");
+        }
+        chunks.push(value);
+      }
+    } finally {
+      reader.releaseLock();
+    }
   }
   try {
     const value = JSON.parse(Buffer.concat(chunks).toString("utf8")) as unknown;
@@ -495,6 +676,46 @@ async function jsonBody(request: IncomingMessage, maxBytes: number): Promise<Rec
   } catch {
     throw new WorkspaceHttpError(400, "请求必须是 JSON 对象。");
   }
+}
+
+async function writeFetchResponseToNode(
+  request: IncomingMessage,
+  response: ServerResponse,
+  fetchResponse: Response,
+  signal: AbortSignal
+): Promise<void> {
+  const headers: Record<string, string> = {};
+  fetchResponse.headers.forEach((value, key) => { headers[key] = value; });
+  response.writeHead(fetchResponse.status, headers);
+  if (request.method === "HEAD" || fetchResponse.body === null) {
+    await fetchResponse.body?.cancel().catch(() => undefined);
+    response.end();
+    return;
+  }
+  const reader = fetchResponse.body.getReader();
+  const cancel = (): void => { void reader.cancel().catch(() => undefined); };
+  if (signal.aborted) cancel();
+  else signal.addEventListener("abort", cancel, { once: true });
+  try {
+    for (let item = await reader.read(); !item.done; item = await reader.read()) {
+      if (signal.aborted || response.destroyed) break;
+      if (!response.write(Buffer.from(item.value)) && !response.destroyed && !signal.aborted) {
+        await new Promise<void>((accept) => {
+          const done = (): void => {
+            response.off("drain", done);
+            response.off("close", done);
+            accept();
+          };
+          response.once("drain", done);
+          response.once("close", done);
+        });
+      }
+    }
+  } finally {
+    signal.removeEventListener("abort", cancel);
+    reader.releaseLock();
+  }
+  if (!response.writableEnded && !response.destroyed) response.end();
 }
 
 export function assertCreativePath(path: string, kind: "text" | "media"): void {
@@ -658,15 +879,22 @@ async function listFiles(realm: WorkspaceRealm, signal?: AbortSignal): Promise<{
     if (info?.type === "directory") await walk(directory, target, 1);
   }
 
-  // Discover multi-book novel subdirectories (2nd-level `{书名}/正文/` etc., plus `.active-book`).
+  // Discover multi-book novel subdirectories (2nd-level `{书名}/正文/` etc., plus `.active-book` up to depth 4).
   const bookRoots = new Set<string>();
+  const creativeDirSet = new Set<string>(CREATIVE_DIRECTORIES);
   const activeBookRaw = await workspaceText(realm, ".active-book", 4_096, signal).catch(() => undefined);
-  const activeBook = activeBookRaw?.trim().replaceAll("\\", "/").replace(/\/+$/u, "");
-  if (activeBook !== undefined && activeBook !== "" && !activeBook.includes("/") && safeRelativePath(activeBook) && !SKIPPED_SCAN_DIRECTORIES.has(activeBook)) {
-    bookRoots.add(activeBook);
+  const activeBookLine = activeBookRaw?.split(/\r?\n/u).map((line) => line.trim()).find((line) => line !== "");
+  const activeBook = activeBookLine?.replaceAll("\\", "/").replace(/^(?:\.\/)+/u, "").replace(/\/+$/u, "");
+  if (activeBook !== undefined && activeBook !== "" && safeRelativePath(activeBook)) {
+    const parts = activeBook.split("/");
+    if (
+      parts.length <= MAX_BOOK_PREFIX_DEPTH
+      && !parts.some((segment) => SKIPPED_SCAN_DIRECTORIES.has(segment) || creativeDirSet.has(segment))
+    ) {
+      bookRoots.add(activeBook);
+    }
   }
   const rootEntries = await realm.fs.listDir(realm.root, signal).catch(() => []);
-  const creativeDirSet = new Set<string>(CREATIVE_DIRECTORIES);
   for (const entry of rootEntries) {
     if (truncated) break;
     if (entry.name.startsWith(".") || SKIPPED_SCAN_DIRECTORIES.has(entry.name) || !realm.fs.contains(realm.root, entry.target)) continue;
@@ -790,6 +1018,7 @@ async function workspaceGameProjects(
   files: readonly WorkspaceFile[],
   maxBytes: number,
   previewSecret: Uint8Array,
+  requestHost: string | undefined,
   signal?: AbortSignal
 ): Promise<GameProjectSummary[]> {
   const roots = [...new Set(files.flatMap((file) => {
@@ -810,7 +1039,7 @@ async function workspaceGameProjects(
       title: gameProjectTitle(brief, id),
       previewReady: preview.ready,
       previewUrl: preview.ready
-        ? `/oh-story/game-preview/${mintPreviewToken(previewSecret, { sessionId: realm.sessionId, root })}/index.html`
+        ? `/oh-story/game-preview/${mintPreviewToken(previewSecret, { sessionId: realm.sessionId, root, host: requestHost })}/index.html`
         : undefined,
       previewVersion: preview.version
     };
@@ -849,7 +1078,9 @@ async function workspaceVideoProjects(realm: WorkspaceRealm, files: readonly Wor
       timeline,
       qualityCheck,
       storyboard,
-      script
+      script,
+      brief,
+      editPlan
     ] = await Promise.all([
       readJson("project.json"),
       readJson("recap_run_manifest.json"),
@@ -861,7 +1092,9 @@ async function workspaceVideoProjects(realm: WorkspaceRealm, files: readonly Wor
       readJson("timeline.json"),
       readJson("check.json"),
       readTextFile("STORYBOARD.md"),
-      readTextFile("SCRIPT.md")
+      readTextFile("SCRIPT.md"),
+      readTextFile("BRIEF.md"),
+      readTextFile("EDIT_PLAN.md")
     ]);
     return summarizeVideoProject(root, files, {
       project,
@@ -874,7 +1107,9 @@ async function workspaceVideoProjects(realm: WorkspaceRealm, files: readonly Wor
       timeline,
       qualityCheck,
       storyboard,
-      script
+      script,
+      brief,
+      editPlan
     });
   }));
 }
@@ -922,15 +1157,16 @@ export function previewContentType(path: string): string {
 const GAME_PREVIEW_ERROR_BRIDGE = `<script>(function(){if(window.__ohStoryErrorBridge)return;window.__ohStoryErrorBridge=true;var post=function(m,f,l,c){try{if(window.parent&&window.parent!==window){window.parent.postMessage({type:"oh-story:game-preview-error",message:String(m||"Unknown error").slice(0,500),filename:typeof f==="string"?f.slice(0,300):undefined,lineno:typeof l==="number"&&isFinite(l)?l:undefined,colno:typeof c==="number"&&isFinite(c)?c:undefined},"*");}}catch(_){}};window.addEventListener("error",function(e){if(!e)return;var t=e.target;if(t&&t!==window&&(t.src||t.href)){post("Resource failed to load: "+(t.src||t.href),t.src||t.href);return;}post(e.message||(e.error&&e.error.message)||"Script error",e.filename,e.lineno,e.colno);},true);window.addEventListener("unhandledrejection",function(e){var r=e&&e.reason;post(r&&typeof r==="object"&&"message"in r?r.message:String(r||"Unhandled promise rejection"));});})();</script>`;
 
 /**
- * Inject a tiny read-only runtime error bridge into preview HTML documents so the parent
- * Game Studio can surface uncaught JS errors and subresource load failures without blocking
- * game execution or exposing secrets.
+ * Inject a tiny read-only runtime error bridge immediately after the opening `<head>`
+ * tag (falling back to after `<!doctype ...>` or start of HTML) so even synchronous
+ * `<head>` module script and stylesheet failures are captured by the parent Game Studio.
  */
 export function injectGamePreviewErrorBridge(html: string): string {
   if (html.includes("__ohStoryErrorBridge")) return html;
-  const closeHead = /<\/head>/iu.exec(html);
-  if (closeHead !== null) {
-    return `${html.slice(0, closeHead.index)}${GAME_PREVIEW_ERROR_BRIDGE}${html.slice(closeHead.index)}`;
+  const openHead = /<head(?:\s[^>]*)?>/iu.exec(html);
+  if (openHead !== null) {
+    const at = openHead.index + openHead[0].length;
+    return `${html.slice(0, at)}${GAME_PREVIEW_ERROR_BRIDGE}${html.slice(at)}`;
   }
   const doctype = /^<!doctype[^>]*>\s*/iu.exec(html);
   if (doctype !== null) {
@@ -991,12 +1227,12 @@ interface ResolvedPreviewAsset {
   readonly mimeType: string;
 }
 
-async function resolvePreviewAsset(
-  context: Context,
-  pathname: string,
-  previewSecret: Uint8Array,
-  signal: AbortSignal
-): Promise<ResolvedPreviewAsset> {
+interface ParsedPreviewTarget {
+  readonly verified: PreviewTokenPayload;
+  readonly path: string;
+}
+
+function parsePreviewTarget(pathname: string, previewSecret: Uint8Array): ParsedPreviewTarget {
   let segments: string[];
   try {
     segments = pathname.split("/").slice(3).map((segment) => decodeURIComponent(segment));
@@ -1009,6 +1245,15 @@ async function resolvePreviewAsset(
     throw new WorkspaceHttpError(400, "游戏预览地址无效。");
   }
   const verified = verifyPreviewToken(signedToken, previewSecret);
+  return { verified, path };
+}
+
+async function resolvePreviewAsset(
+  context: Context,
+  parsed: ParsedPreviewTarget,
+  signal: AbortSignal
+): Promise<ResolvedPreviewAsset> {
+  const { verified, path } = parsed;
   const realm = await workspaceRealmForSession(context, verified.sessionId, signal);
   const root = verified.root;
   const fullRelative = `${root}/build/app/${path}`;
@@ -1034,11 +1279,31 @@ async function sendPreviewAsset(
 ): Promise<void> {
   const security = previewSecurityHeaders(request);
   if (asset.mimeType.startsWith("audio/") || asset.mimeType.startsWith("video/")) {
-    await sendWorkspaceMedia(request, response, asset.realm, asset.target, asset.info, asset.mimeType, signal, security, PREVIEW_FILE_LIMIT);
+    const fetchResponse = await workspaceMediaResponse(
+      request.method ?? "GET",
+      typeof request.headers.range === "string" ? request.headers.range : undefined,
+      asset.realm,
+      asset.target,
+      asset.info,
+      asset.mimeType,
+      signal,
+      security,
+      PREVIEW_FILE_LIMIT
+    );
+    await writeFetchResponseToNode(request, response, fetchResponse, signal);
     return;
   }
   if (asset.info.size !== undefined && asset.info.size > PREVIEW_FILE_LIMIT) {
     throw new WorkspaceHttpError(413, "预览资源过大。");
+  }
+  if (request.method === "HEAD" && !asset.mimeType.startsWith("text/html") && asset.info.size !== undefined) {
+    response.writeHead(200, {
+      "content-type": asset.mimeType,
+      "content-length": asset.info.size,
+      ...security
+    });
+    response.end();
+    return;
   }
   const rawBytes = await asset.realm.fs.readBytes(asset.target, signal, PREVIEW_FILE_LIMIT);
   let body: Uint8Array = rawBytes;
@@ -1074,13 +1339,18 @@ function mapFsError(error: unknown): WorkspaceHttpError | undefined {
   }
 }
 
+function errorToFetchResponse(context: Context, error: unknown): Response {
+  const mapped = error instanceof WorkspaceHttpError ? error : mapFsError(error);
+  if (mapped === undefined) context.logger("oh-story").error("workspace route failed", error);
+  return jsonResponse(mapped?.status ?? 500, { error: mapped?.message ?? "Oh Story workspace operation failed." });
+}
+
 function assertAdmittedWorkspaceRequest(context: Context, request: IncomingMessage, options: WorkspaceRouteOptions): void {
-  const webServer = context.get("webServer") as { readonly host?: string; readonly protocol?: "http:" | "https:" } | undefined;
-  if (!isTrustedWorkspaceRequest(request, options.trustedHosts ?? [], webServer?.host, webServer?.protocol ?? "http:")) {
-    throw new WorkspaceHttpError(403, "请求来源不受信任。");
-  }
   const connection = context.get("connection") as ConnectionAdmissionService | undefined;
   if (connection !== undefined) {
+    // When DSH's official client-connection service is mounted, delegate Host/Origin/auth
+    // to `connection.admit(request)` so DSH's `client-connection.trustedHosts` works without
+    // requiring users to duplicate remote authorities into `oh-story.trustedHosts`.
     const admission = connection.admit(request);
     if ("rejection" in admission) {
       throw new WorkspaceHttpError(
@@ -1088,7 +1358,155 @@ function assertAdmittedWorkspaceRequest(context: Context, request: IncomingMessa
         admission.rejection === 401 ? "需要通过 DSH 登录验证。" : "请求来源不受信任。"
       );
     }
+    return;
   }
+  const webServer = context.get("webServer") as { readonly host?: string; readonly protocol?: "http:" | "https:" } | undefined;
+  if (!isTrustedWorkspaceRequest(request, options.trustedHosts ?? [], webServer?.host, webServer?.protocol ?? "http:")) {
+    throw new WorkspaceHttpError(403, "请求来源不受信任。");
+  }
+}
+
+async function handleStylesheetFetch(request: Request): Promise<Response> {
+  const asset = await loadWorkbenchStylesheet();
+  const url = new URL(request.url);
+  const versionMatched = url.searchParams.get("v") === asset.version;
+  const cacheControl = versionMatched ? "private, max-age=31536000, immutable" : "private, max-age=3600";
+  const baseHeaders: Record<string, string> = {
+    "content-type": "text/css; charset=utf-8",
+    "cache-control": cacheControl,
+    etag: asset.etag,
+    "x-content-type-options": "nosniff"
+  };
+  const ifNoneMatch = request.headers.get("if-none-match");
+  if (ifNoneMatch !== null && ifNoneMatch.split(",").map((item) => item.trim()).includes(asset.etag)) {
+    return new Response(null, { status: 304, headers: baseHeaders });
+  }
+  return new Response(request.method === "HEAD" ? null : new Uint8Array(asset.bytes), {
+    status: 200,
+    headers: {
+      ...baseHeaders,
+      "content-length": String(asset.bytes.byteLength)
+    }
+  });
+}
+
+async function handleApiFetch(
+  context: Context,
+  routeName: string,
+  request: Request,
+  options: WorkspaceRouteOptions,
+  previewSecret: Uint8Array
+): Promise<Response> {
+  const signal = request.signal;
+  const url = new URL(request.url);
+  try {
+    if (routeName === "workbench.css" && (request.method === "GET" || request.method === "HEAD")) {
+      return await handleStylesheetFetch(request);
+    }
+    if (routeName === "config" && request.method === "GET") {
+      return jsonResponse(200, { welcomeGuide: options.welcomeGuide?.() ?? true });
+    }
+    if (routeName === "workspace" && request.method === "GET") {
+      const realm = await workspaceRealm(context, url, signal);
+      const { files, truncated } = await listFiles(realm, signal);
+      const trackingPaths = files
+        .map((file) => file.path)
+        .filter((path) => path === "追踪/_tracking-state.json" || path.endsWith("/追踪/_tracking-state.json"));
+      const requestHost = request.headers.get("host") ?? undefined;
+      const [trackingErrors, dramaError, games, videos] = await Promise.all([
+        Promise.all(trackingPaths.map((path) => metadataError(realm, files, path, options.maxBytes, signal))),
+        metadataError(realm, files, "short-drama.json", options.maxBytes, signal),
+        workspaceGameProjects(realm, files, options.maxBytes, previewSecret, requestHost, signal),
+        workspaceVideoProjects(realm, files, options.maxBytes, signal)
+      ]);
+      const metadataErrors = [...trackingErrors, dramaError].filter((value): value is string => value !== undefined);
+      const payload: WorkspacePayload = {
+        cwd: realm.cwd,
+        files,
+        truncated,
+        games,
+        videos,
+        metadataErrors,
+        welcomeGuide: options.welcomeGuide?.() ?? true
+      };
+      return jsonResponse(200, payload);
+    }
+    if (routeName === "video-preflight" && request.method === "GET") {
+      return jsonResponse(200, await videoPreflight());
+    }
+    if (routeName === "drama-preflight" && request.method === "GET") {
+      return jsonResponse(200, await dramaPreflight());
+    }
+    if (routeName === "file" && request.method === "GET") {
+      const realm = await workspaceRealm(context, url, signal);
+      const path = url.searchParams.get("path");
+      if (path === null) throw new WorkspaceHttpError(400, "缺少文件路径。");
+      const file = await readVersionedFile(realm.fs, await creativeTarget(realm, path, "text", signal), options.maxBytes, signal);
+      return jsonResponse(200, { path, ...file });
+    }
+    if (routeName === "media" && (request.method === "GET" || request.method === "HEAD")) {
+      const realm = await workspaceRealm(context, url, signal);
+      const path = url.searchParams.get("path");
+      if (path === null) throw new WorkspaceHttpError(400, "缺少媒体文件路径。");
+      const target = await creativeTarget(realm, path, "media", signal);
+      const info = requireRegularFile(await realm.fs.stat(target, signal));
+      return await workspaceMediaResponse(
+        request.method,
+        request.headers.get("range") ?? undefined,
+        realm,
+        target,
+        info,
+        mediaMimeTypeForPath(path)!,
+        signal
+      );
+    }
+    if (routeName === "file" && (request.method === "PUT" || request.method === "POST")) {
+      const realm = await workspaceRealm(context, url, signal);
+      const path = url.searchParams.get("path");
+      if (path === null) throw new WorkspaceHttpError(400, "缺少文件路径。");
+      const input = await fetchJsonBody(request, options.maxBytes * 6 + 1_024);
+      if (typeof input.content !== "string") throw new WorkspaceHttpError(400, "content 必须是字符串。");
+      if (typeof input.baseVersion !== "string" || input.baseVersion === "") throw new WorkspaceHttpError(400, "baseVersion 必须是有效版本。");
+      if (Buffer.byteLength(input.content) > options.maxBytes) throw new WorkspaceHttpError(413, "文件超过工作台大小限制。");
+      const outcome = await realm.fs.writeText(
+        await creativeTarget(realm, path, "text", signal),
+        input.content,
+        { kind: "replaceIfVersion", version: input.baseVersion as FsVersion },
+        signal,
+        realm.sandboxPolicy.resolve({ session: realm.agent.session })
+      );
+      return jsonResponse(200, { path, content: outcome.after, bytes: Buffer.byteLength(outcome.after), version: outcome.version });
+    }
+    return jsonResponse(404, { error: "Oh Story route not found." });
+  } catch (error) {
+    return errorToFetchResponse(context, error);
+  }
+}
+
+async function nodeRequestToFetch(request: IncomingMessage, url: URL, signal: AbortSignal, maxBytes: number): Promise<Request> {
+  const method = request.method ?? "GET";
+  const headers = new Headers();
+  for (const [key, value] of Object.entries(request.headers)) {
+    if (typeof value === "string") headers.append(key, value);
+    else if (Array.isArray(value)) for (const item of value) headers.append(key, item);
+  }
+  if (method === "GET" || method === "HEAD") {
+    return new Request(url, { method, headers, signal });
+  }
+  const chunks: Buffer[] = [];
+  let size = 0;
+  for await (const chunk of request as AsyncIterable<Uint8Array>) {
+    const value = Buffer.from(chunk);
+    size += value.byteLength;
+    if (size > maxBytes) throw new WorkspaceHttpError(413, "请求内容过大。");
+    chunks.push(value);
+  }
+  return new Request(url, {
+    method,
+    headers,
+    body: Buffer.concat(chunks),
+    signal
+  });
 }
 
 async function handle(
@@ -1105,91 +1523,35 @@ async function handle(
     const url = new URL(request.url ?? "/", "http://127.0.0.1");
     const gamePreview = url.pathname.startsWith("/oh-story/game-preview/");
     if (gamePreview) {
-      const webServer = context.get("webServer") as { readonly host?: string; readonly protocol?: "http:" | "https:" } | undefined;
-      if (!isTrustedPreviewAssetRequest(request, options.trustedHosts ?? [], webServer?.host, webServer?.protocol ?? "http:")) {
-        throw new WorkspaceHttpError(403, "请求来源不受信任。");
-      }
       if (request.method !== "GET" && request.method !== "HEAD") {
         send(response, 405, { error: "Method not allowed." });
         return;
       }
-      const asset = await resolvePreviewAsset(context, url.pathname, previewSecret, signal);
+      const parsed = parsePreviewTarget(url.pathname, previewSecret);
+      const webServer = context.get("webServer") as { readonly host?: string; readonly protocol?: "http:" | "https:" } | undefined;
+      const protocol = webServer?.protocol ?? "http:";
+      const trusted = parsed.verified.host !== undefined
+        ? isBoundPreviewAssetRequest(request, parsed.verified.host, protocol)
+        : isTrustedPreviewAssetRequest(request, options.trustedHosts ?? [], webServer?.host, protocol);
+      if (!trusted) {
+        throw new WorkspaceHttpError(403, "请求来源不受信任。");
+      }
+      const asset = await resolvePreviewAsset(context, parsed, signal);
       await sendPreviewAsset(request, response, asset, signal);
       return;
     }
 
     assertAdmittedWorkspaceRequest(context, request, options);
 
-    if (url.pathname === "/oh-story/config" && request.method === "GET") {
-      send(response, 200, { welcomeGuide: options.welcomeGuide?.() ?? true });
+    const prefix = "/oh-story/";
+    if (!url.pathname.startsWith(prefix)) {
+      send(response, 404, { error: "Oh Story route not found." });
       return;
     }
-    if (url.pathname === "/oh-story/workspace" && request.method === "GET") {
-      const realm = await workspaceRealm(context, url, signal);
-      const { files, truncated } = await listFiles(realm, signal);
-      const [trackingError, dramaError, games, videos] = await Promise.all([
-        metadataError(realm, files, "追踪/_tracking-state.json", options.maxBytes, signal),
-        metadataError(realm, files, "short-drama.json", options.maxBytes, signal),
-        workspaceGameProjects(realm, files, options.maxBytes, previewSecret, signal),
-        workspaceVideoProjects(realm, files, options.maxBytes, signal)
-      ]);
-      const metadataErrors = [trackingError, dramaError].filter((value): value is string => value !== undefined);
-      const payload: WorkspacePayload = {
-        cwd: realm.cwd,
-        files,
-        truncated,
-        games,
-        videos,
-        metadataErrors,
-        welcomeGuide: options.welcomeGuide?.() ?? true
-      };
-      send(response, 200, payload);
-      return;
-    }
-    if (url.pathname === "/oh-story/video-preflight" && request.method === "GET") {
-      send(response, 200, await videoPreflight());
-      return;
-    }
-    if (url.pathname === "/oh-story/drama-preflight" && request.method === "GET") {
-      send(response, 200, await dramaPreflight());
-      return;
-    }
-    if (url.pathname === "/oh-story/file" && request.method === "GET") {
-      const realm = await workspaceRealm(context, url, signal);
-      const path = url.searchParams.get("path");
-      if (path === null) throw new WorkspaceHttpError(400, "缺少文件路径。");
-      const file = await readVersionedFile(realm.fs, await creativeTarget(realm, path, "text", signal), options.maxBytes, signal);
-      send(response, 200, { path, ...file });
-      return;
-    }
-    if (url.pathname === "/oh-story/media" && (request.method === "GET" || request.method === "HEAD")) {
-      const realm = await workspaceRealm(context, url, signal);
-      const path = url.searchParams.get("path");
-      if (path === null) throw new WorkspaceHttpError(400, "缺少媒体文件路径。");
-      const target = await creativeTarget(realm, path, "media", signal);
-      const info = requireRegularFile(await realm.fs.stat(target, signal));
-      await sendWorkspaceMedia(request, response, realm, target, info, mediaMimeTypeForPath(path)!, signal);
-      return;
-    }
-    if (url.pathname === "/oh-story/file" && request.method === "PUT") {
-      const realm = await workspaceRealm(context, url, signal);
-      const path = url.searchParams.get("path");
-      if (path === null) throw new WorkspaceHttpError(400, "缺少文件路径。");
-      const input = await jsonBody(request, options.maxBytes * 6 + 1_024);
-      if (typeof input.content !== "string") throw new WorkspaceHttpError(400, "content 必须是字符串。");
-      if (typeof input.baseVersion !== "string" || input.baseVersion === "") throw new WorkspaceHttpError(400, "baseVersion 必须是有效版本。");
-      if (Buffer.byteLength(input.content) > options.maxBytes) throw new WorkspaceHttpError(413, "文件超过工作台大小限制。");
-      const outcome = await realm.fs.writeText(
-        await creativeTarget(realm, path, "text", signal),
-        input.content,
-        { kind: "replaceIfVersion", version: input.baseVersion as FsVersion },
-        signal,
-        realm.sandboxPolicy.resolve({ session: realm.agent.session })
-      );
-      send(response, 200, { path, content: outcome.after, bytes: Buffer.byteLength(outcome.after), version: outcome.version });
-      return;
-    }
-    send(response, 404, { error: "Oh Story route not found." });
+    const routeName = url.pathname.slice(prefix.length);
+    const fetchRequest = await nodeRequestToFetch(request, url, signal, options.maxBytes * 6 + 1_024);
+    const fetchResponse = await handleApiFetch(context, routeName, fetchRequest, options, previewSecret);
+    await writeFetchResponseToNode(request, response, fetchResponse, signal);
   } catch (error) {
     if (response.writableEnded || response.destroyed) return;
     const mapped = error instanceof WorkspaceHttpError ? error : mapFsError(error);
@@ -1198,17 +1560,122 @@ async function handle(
   }
 }
 
-/** Mount the narrow editor API on DSH's official web-server extension seam. */
+function buildConnectionFetchRoutes(
+  context: Context,
+  options: WorkspaceRouteOptions,
+  previewSecret: Uint8Array
+): readonly ConnectionFetchRouteSpec[] {
+  return [
+    {
+      path: "/api/oh-story/config",
+      methods: ["GET"],
+      requestBody: "buffered",
+      fetch: (request) => handleApiFetch(context, "config", request, options, previewSecret)
+    },
+    {
+      path: "/api/oh-story/workspace",
+      methods: ["GET"],
+      requestBody: "buffered",
+      fetch: (request) => handleApiFetch(context, "workspace", request, options, previewSecret)
+    },
+    {
+      path: "/api/oh-story/file",
+      methods: ["GET", "POST", "PUT"],
+      requestBody: "buffered",
+      fetch: (request) => handleApiFetch(context, "file", request, options, previewSecret)
+    },
+    {
+      path: "/api/oh-story/media",
+      methods: ["GET", "HEAD"],
+      requestBody: "buffered",
+      fetch: (request) => handleApiFetch(context, "media", request, options, previewSecret)
+    },
+    {
+      path: "/api/oh-story/drama-preflight",
+      methods: ["GET"],
+      requestBody: "buffered",
+      fetch: (request) => handleApiFetch(context, "drama-preflight", request, options, previewSecret)
+    },
+    {
+      path: "/api/oh-story/video-preflight",
+      methods: ["GET"],
+      requestBody: "buffered",
+      fetch: (request) => handleApiFetch(context, "video-preflight", request, options, previewSecret)
+    },
+    {
+      path: WORKBENCH_CSS_API_PATH,
+      methods: ["GET", "HEAD"],
+      requestBody: "buffered",
+      fetch: (request) => handleApiFetch(context, "workbench.css", request, options, previewSecret)
+    }
+  ];
+}
+
+/**
+ * Mount the Oh Story editor API:
+ * - Non-game JSON/media/CSS endpoints register on DSH 0.2.2-rc.5 `connection.fetch.register`
+ *   under `/api/oh-story/*` when `connection` is present (so prefix-stripping proxies,
+ *   Electron IPC, Web Workers, and DSH's official `client-connection.trustedHosts` work natively).
+ * - `/oh-story/game-preview/<token>/<path>` and `/oh-story/*` fallback routes stay on
+ *   `webServer.register` (opaque-origin sandboxed game iframes cannot send auth cookies, and
+ *   isolated unit tests / older callers without `connection` remain fully supported).
+ */
 export function registerWorkspaceRoute(context: Context, options: WorkspaceRouteOptions): void {
   const previewSecret = options.previewTokenSecret ?? createPreviewTokenSecret();
+  const fetchRoutes = buildConnectionFetchRoutes(context, options, previewSecret);
+  let mountedOnConnection = false;
+
+  // Pre-warm the static CSS hash so `webserver/index-inject` emits a versioned `<link>` immediately.
+  void loadWorkbenchStylesheet().catch(() => undefined);
+
+  const registerFetchRoutesOn = (conn: ConnectionAdmissionService): (() => Promise<void>) | undefined => {
+    const fetchService = conn.fetch;
+    if (fetchService === undefined || typeof fetchService.register !== "function") return undefined;
+    const disposers = fetchRoutes.map((route) => fetchService.register(route));
+    mountedOnConnection = true;
+    return async () => {
+      mountedOnConnection = false;
+      await Promise.all(disposers.map((dispose) => Promise.resolve(dispose()).catch(() => undefined)));
+    };
+  };
+
+  if (typeof (context as { inject?: unknown }).inject === "function") {
+    void context.inject(["connection"] as never, (connCtx: Context) => {
+      const conn = connCtx.get("connection") as ConnectionAdmissionService | undefined;
+      if (conn?.fetch?.register === undefined) return;
+      connCtx.effect(() => registerFetchRoutesOn(conn) ?? (() => {}), "oh-story: DSH connection.fetch API");
+    });
+  }
+
+  if (typeof (context as { on?: unknown }).on === "function") {
+    context.on("webserver/index-inject", (table) => {
+      const hasConnFetch = mountedOnConnection
+        || typeof (context.get("connection") as ConnectionAdmissionService | undefined)?.fetch?.register === "function";
+      const baseHref = hasConnFetch ? "api/oh-story/workbench.css" : "oh-story/workbench.css";
+      const href = cachedWorkbenchStylesheet !== undefined
+        ? `${baseHref}?v=${cachedWorkbenchStylesheet.version}`
+        : baseHref;
+      table.push({
+        kind: "html",
+        placement: "head",
+        html: `<link id="oh-story-workbench-css" rel="stylesheet" href="${href}">`
+      });
+    });
+  }
+
   context.effect(() => {
-    const dispose = context.webServer.register({
+    const disposeWeb = context.webServer.register({
       kind: "prefix",
       path: "/oh-story",
       handler: (request, response) => handle(context, request, response, options, previewSecret)
     });
-    return () => {
-      dispose();
+    const directConn = typeof (context as { inject?: unknown }).inject === "function"
+      ? undefined
+      : context.get("connection") as ConnectionAdmissionService | undefined;
+    const disposeConn = directConn !== undefined ? registerFetchRoutesOn(directConn) : undefined;
+    return async () => {
+      disposeWeb();
+      await disposeConn?.();
       resetPreflightCaches();
     };
   }, "oh-story: DSH-session workspace API");

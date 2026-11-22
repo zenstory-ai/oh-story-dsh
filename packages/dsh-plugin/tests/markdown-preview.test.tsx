@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
-import { MarkdownPreview, parseMarkdownBlocks } from "../src/client/markdown-preview.js";
+import { describe, expect, it, vi } from "vitest";
+import { isSafeImageSrc, MarkdownPreview, parseMarkdownBlocks } from "../src/client/markdown-preview.js";
 
 describe("MarkdownPreview", () => {
   it("renders tables, task lists, fenced code, and inline formatting", () => {
@@ -131,5 +131,59 @@ describe("MarkdownPreview", () => {
     expect(html).toContain("&lt;script&gt;alert(1)&lt;/script&gt;");
     expect(html).toContain('href="https://example.com"');
     expect(html).not.toContain('href="javascript:');
+  });
+
+  it("does not misparse pipe text followed by --- as a table and requires matching column counts", () => {
+    const content = "选项A | 选项B\n---\n下一段";
+    expect(parseMarkdownBlocks(content).map((block) => block.kind)).toEqual(["paragraph", "rule", "paragraph"]);
+    const html = renderToStaticMarkup(<MarkdownPreview content={content} label="分隔线.md" />);
+    expect(html).not.toContain("<table>");
+    expect(html).toContain("<hr/>");
+
+    const mismatched = "| 列1 | 列2 |\n| --- | --- | --- |\n| a | b |";
+    expect(parseMarkdownBlocks(mismatched).every((block) => block.kind !== "table")).toBe(true);
+  });
+
+  it("parses fenced code info strings with symbols like c++ and c# without swallowing subsequent text", () => {
+    const content = [
+      "```c++",
+      "int x = 1;",
+      "```",
+      "",
+      "```c#",
+      "var y = 2;",
+      "```",
+      "",
+      "后续正文。"
+    ].join("\n");
+    const blocks = parseMarkdownBlocks(content);
+    expect(blocks.map((block) => block.kind)).toEqual(["code", "code", "paragraph"]);
+    const html = renderToStaticMarkup(<MarkdownPreview content={content} label="代码.md" />);
+    expect(html).toContain('data-language="c++"');
+    expect(html).toContain('data-language="c#"');
+    expect(html).toContain("后续正文。");
+  });
+
+  it("rejects ASCII control characters in URLs, supports optional titles, and resolves workspace-relative images", () => {
+    expect(isSafeImageSrc("\u0001javascript:alert(1)")).toBe(false);
+    expect(isSafeImageSrc("\u0001data:image/svg+xml,<svg/>")).toBe(false);
+    expect(isSafeImageSrc("java\tscript:alert(1)")).toBe(false);
+    expect(isSafeImageSrc("封面/封面_v1.png")).toBe(true);
+
+    const resolveImageSrc = vi.fn((src: string) => (
+      /^https?:\/\//iu.test(src) ? undefined : `/oh-story/media?sessionId=s1&path=${encodeURIComponent(src)}`
+    ));
+    const content = [
+      '[示例](https://example.com "示例标题") [控制符](\u0001https://example.com)',
+      "",
+      '![封面](封面/封面_v1.png "封面图") ![外链](https://example.com/a.png) ![恶意](\u0001javascript:alert(1))'
+    ].join("\n");
+    const html = renderToStaticMarkup(<MarkdownPreview content={content} label="图片.md" resolveImageSrc={resolveImageSrc} />);
+    expect(html).toContain('<a href="https://example.com" title="示例标题" target="_blank" rel="noreferrer">示例</a>');
+    expect(html).not.toContain('href="\u0001');
+    expect(html).toContain('src="/oh-story/media?sessionId=s1&amp;path=%E5%B0%81%E9%9D%A2%2F%E5%B0%81%E9%9D%A2_v1.png" alt="封面" title="封面图"');
+    expect(html).toContain('src="https://example.com/a.png" alt="外链"');
+    expect(html).not.toContain("javascript:alert(1)\"");
+    expect(resolveImageSrc).toHaveBeenCalledTimes(2);
   });
 });

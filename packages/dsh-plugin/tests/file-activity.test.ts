@@ -388,4 +388,31 @@ describe("v0.8.0 video, v0.11.0 story and v0.13.0 drama activity recognition", (
     expect(fileActivityLabel("剧集/EP001/制作成果/MUSIC-EP001-01/bgm.mp3")).toBe("配乐素材");
     expect(fileActivityLabel("剧集/EP001/制作成果/VOICE-01/line.wav")).toBe("音频素材");
   });
+
+  it("labels every known creative directory and document without returning undefined", () => {
+    for (const [path, label] of [
+      ["剧集/EP001/剪辑单.md", "剪辑单"],
+      ["项目开发/creative-brief.md", "项目开发"],
+      ["设定集/人物总表.md", "设定集"],
+      ["审查/EP001-审稿.md", "审查记录"],
+      ["输入/原著节选.md", "输入资料"],
+      ["创作者决策/视觉方向.md", "创作者决策"],
+      ["交付/EP001/成片.mp4", "交付成果"],
+      ["对标/竞品拆解.md", "对标资料"],
+      ["参考资料/时代考据.md", "参考资料"],
+      ["霜雪录/对标/热书分析.md", "对标资料"],
+      ["霜雪录/参考资料/典故.md", "参考资料"],
+      ["game-adaptations/ledger/PRODUCT_BRIEF.md", "游戏立项书"],
+      ["game-adaptations/ledger/design/GAME_DESIGN.md", "游戏设计稿"],
+      ["game-adaptations/ledger/qa/verification.json", "游戏验证报告"],
+      ["game-adaptations/ledger/build/app/index.html", "游戏构建文件"],
+      ["game-adaptations/ledger/PLAYTEST_NOTES.md", "游戏项目"],
+      ["video-recaps/ep1/work/recap_story_plan.json", "故事规划"],
+      ["video-recaps/ep1/work/other.txt", "视频项目"]
+    ] as const) {
+      expect(fileActivityLabel(path), path).toBe(label);
+    }
+    expect(fileActivityLabel("笔记.md")).toBeUndefined();
+    expect(fileActivityLabel(undefined)).toBeUndefined();
+  });
 });

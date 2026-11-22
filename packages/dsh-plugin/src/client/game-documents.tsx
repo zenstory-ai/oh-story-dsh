@@ -19,13 +19,14 @@ export interface GameDocumentEditor {
   readonly onRetry: () => void;
 }
 
-export function GameDocuments({ project, files, editor, onChat, fileReadError, onRetryRead }: {
+export function GameDocuments({ project, files, editor, onChat, fileReadError, onRetryRead, resolveImageSrc }: {
   readonly project: GameProject;
   readonly files: readonly GameWorkspaceFile[];
   readonly editor: GameDocumentEditor;
   readonly onChat: (prompt: string) => void;
   readonly fileReadError?: string | null | undefined;
   readonly onRetryRead?: (() => void) | undefined;
+  readonly resolveImageSrc?: ((src: string) => string | undefined) | undefined;
 }) {
   const available = files.filter((file) => file.kind === "text" && file.path.startsWith(`${project.root}/`));
   const creative = KNOWN_CREATIVE_DOCUMENTS.flatMap(({ relativePath, title }) => {
@@ -58,7 +59,7 @@ export function GameDocuments({ project, files, editor, onChat, fileReadError, o
             {buffer.conflict !== undefined && <div className="oh-story-conflict" role="alert"><p>{buffer.conflict.message}</p>{buffer.conflict.theirs !== undefined && <><button type="button" onClick={() => { editor.onConflict(false); }}>载入磁盘版本</button><button type="button" onClick={() => { editor.onConflict(true); }}>保留本地草稿</button></>}</div>}
             {buffer.missing === true ? <div className="oh-game-design-empty"><p>文稿已从项目移除，你的草稿仍保留在当前会话中。</p><textarea aria-label={`${selected} 本地草稿`} value={buffer.content} readOnly /><button type="button" onClick={() => { editor.onDiscard(selected); }}>放弃本地草稿</button></div>
               : source ? <textarea ref={editor.textareaRef} aria-label={selected} value={buffer.content} spellCheck={selected.endsWith(".md")} onChange={(event) => { editor.onEdit(selected, event.target.value); }} onBlur={editor.onRememberPosition} onScroll={editor.onRememberPosition} onSelect={editor.onRememberPosition} />
-                : selected.toLocaleLowerCase().endsWith(".md") ? <MarkdownPreview content={buffer.content} label={selected} /> : <pre className="oh-game-source" aria-label={`${selected} 源码`}>{buffer.content}</pre>}
+                : selected.toLocaleLowerCase().endsWith(".md") ? <MarkdownPreview content={buffer.content} label={selected} resolveImageSrc={resolveImageSrc} /> : <pre className="oh-game-source" aria-label={`${selected} 源码`}>{buffer.content}</pre>}
             <details className="oh-game-document-source"><summary>文稿来源</summary><code>{selected}</code></details>
           </>}
     </section>

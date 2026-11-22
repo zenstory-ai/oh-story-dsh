@@ -7,16 +7,21 @@ describe("DSH workspace media boundary", () => {
       "正文.md",
       "设定.md",
       "小节大纲.md",
+      "发布资料.md",
       "发布资料-番茄.md",
       "拆文库/样本书/拆文报告.md",
       "扫榜/20261122/选题决策.md",
       "封面/cover.prompt.txt",
       "雪夜渡/正文/第001章.md",
+      "雪夜渡/发布资料.md",
       "雪夜渡/发布资料-起点.md",
-      "短篇集/正文.md"
+      "短篇集/正文.md",
+      "系列/第一部/正文/第001章.md",
+      "a/b/c/d/正文/第001章.md"
     ]) {
       expect(() => { assertCreativePath(name, "text"); }, name).not.toThrow();
     }
+    expect(() => { assertCreativePath("a/b/c/d/e/正文/第001章.md", "text"); }).toThrow();
     expect(() => { assertCreativePath("封面/cover.png", "media"); }).not.toThrow();
     expect(() => { assertCreativePath("雪夜渡/封面/cover.png", "media"); }).not.toThrow();
     expect(() => { assertCreativePath("笔记.md", "text"); }).toThrow();

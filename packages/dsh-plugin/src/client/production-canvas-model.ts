@@ -14,8 +14,12 @@ export interface ProductionCanvasNode {
   readonly videoPrompt?: string | undefined;
   /** True for VISUAL-* entries that do not yet have a corresponding IMG-* entry in 图片提示词.md. */
   readonly needsImagePrompt?: boolean | undefined;
+  /** Single-shot MOTION-* id when this shot has a video prompt entry. */
+  readonly motionId?: string | undefined;
   /** Multi-shot GROUP-* id when this shot belongs to a video group. */
   readonly groupId?: string | undefined;
+  /** Canonical video production source_entry (`GROUP-*` preferred over `MOTION-*`). */
+  readonly videoTargetId?: string | undefined;
   readonly initial: CanvasPoint;
   readonly width: number;
   readonly height: number;
@@ -30,11 +34,11 @@ export interface ProductionCanvasEdge {
 }
 
 const STORY_SIZE = { width: 260, height: 210 } as const;
-const ASSET_SIZE = { width: 248, height: 282 } as const;
-const SHOT_SIZE = { width: 292, height: 310 } as const;
+const ASSET_SIZE = { width: 248, height: 344 } as const;
+const SHOT_SIZE = { width: 292, height: 384 } as const;
 const ORIGIN = { x: 80, y: 80 } as const;
 const COLUMN_GAP = 36;
-const ROW_GAP = 56;
+const ROW_GAP = 72;
 const GROUP_GAP = 180;
 
 const ASSET_LABEL = {
@@ -99,8 +103,14 @@ export function productionCanvasNodes(production: DramaEpisodeProduction, docume
     eyebrow: `${String(index + 1).padStart(2, "0")} · 镜头${shot.durationSeconds === undefined ? "" : ` · ${String(shot.durationSeconds)}s`}`,
     description: shot.purpose ?? shot.shotSpec ?? shot.start,
     prompt: shot.keyframePrompt,
-    videoPrompt: shot.motion?.prompt ?? shot.group?.prompt,
+    videoPrompt: shot.group?.prompt ?? shot.motion?.prompt,
+    motionId: shot.motion?.id,
     groupId: shot.group?.id,
+    videoTargetId: shot.group?.prompt !== undefined
+      ? shot.group.id
+      : shot.motion?.prompt !== undefined
+        ? shot.motion.id
+        : shot.group?.id ?? shot.motion?.id,
     target: production.targets.get(shot.id)
   }));
 

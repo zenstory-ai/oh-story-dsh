@@ -137,9 +137,18 @@ export function mediaVersionMatchesJob(version: ProductionMediaVersion, jobId: s
 }
 
 export function outputsForJob(job: ProductionJob, versions: readonly ProductionMediaVersion[]): ProductionMediaVersion[] {
-  if (job.outputPath === undefined) return versions.filter((version) => mediaVersionMatchesJob(version, job.id));
-  const superseded = new Set(job.supersededOutputIds ?? []);
-  return versions.filter((version) => version.path === job.outputPath && !superseded.has(version.id));
+  const matched = job.outputPath === undefined
+    ? versions.filter((version) => mediaVersionMatchesJob(version, job.id))
+    : (() => {
+        const superseded = new Set(job.supersededOutputIds ?? []);
+        return versions.filter((version) => version.path === job.outputPath && !superseded.has(version.id));
+      })();
+  const seen = new Set<string>();
+  return matched.filter((version) => {
+    if (seen.has(version.id)) return false;
+    seen.add(version.id);
+    return true;
+  });
 }
 
 /**
@@ -173,19 +182,39 @@ export function settleSupersededCompositions(jobs: readonly ProductionJob[], nex
 
 export function referencesForTarget(
   targetId: string,
-  production: { readonly shots: readonly { readonly id: string; readonly references: readonly string[] }[] },
+  production: {
+    readonly shots: readonly {
+      readonly id: string;
+      readonly references: readonly string[];
+      readonly motion?: { readonly id: string } | undefined;
+      readonly group?: { readonly id: string } | undefined;
+    }[];
+    readonly motions?: readonly { readonly id: string; readonly shotId?: string | undefined }[] | undefined;
+    readonly groups?: readonly { readonly id: string; readonly memberShotIds: readonly string[] }[] | undefined;
+  },
   versions: readonly ProductionMediaVersion[],
   selections: Readonly<Record<string, string>>,
   libraryVersions: readonly ProductionMediaVersion[] = versions,
   manualReferences: Readonly<Record<string, readonly string[]>> = {}
 ): ProductionMediaVersion[] {
-  const shot = production.shots.find((item) => item.id === targetId);
-  if (shot === undefined) return [];
-  const declared = shot.references.flatMap((id) => {
+  const directShot = production.shots.find((item) => item.id === targetId);
+  const group = production.groups?.find((item) => item.id === targetId);
+  const motion = production.motions?.find((item) => item.id === targetId);
+  const shots = directShot !== undefined
+    ? [directShot]
+    : group !== undefined
+      ? production.shots.filter((item) => group.memberShotIds.includes(item.id) || item.group?.id === targetId)
+      : motion?.shotId !== undefined
+        ? production.shots.filter((item) => item.id === motion.shotId)
+        : production.shots.filter((item) => item.group?.id === targetId || item.motion?.id === targetId);
+  if (shots.length === 0) return [];
+  const declaredIds = new Set(shots.flatMap((shot) => shot.references));
+  const declared = [...declaredIds].flatMap((id) => {
     const version = selectedVersionForTarget(id, versions, selections, "image");
     return version === undefined ? [] : [version];
   });
-  const manual = (manualReferences[targetId] ?? []).flatMap((id) => {
+  const manualKeys = new Set<string>([targetId, ...shots.map((shot) => shot.id)]);
+  const manual = [...manualKeys].flatMap((key) => manualReferences[key] ?? []).flatMap((id) => {
     const version = libraryVersions.find((item) => item.id === id && item.kind === "image");
     return version === undefined ? [] : [version];
   });

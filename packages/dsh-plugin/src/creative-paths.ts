@@ -26,7 +26,8 @@ const CREATIVE_DIRECTORY_SET: ReadonlySet<string> = new Set<string>(CREATIVE_DIR
 const EDITABLE_EXTENSIONS = new Set([".md", ".txt", ".json", ".jsonl"]);
 const GAME_EDITABLE_EXTENSIONS = new Set([...EDITABLE_EXTENSIONS, ".html", ".css", ".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx"]);
 const VIDEO_EDITABLE_EXTENSIONS = new Set([...EDITABLE_EXTENSIONS, ".srt", ".ass"]);
-const PUBLISH_ROOT_FILE_PATTERN = /^发布资料-[^/]+\.md$/u;
+const PUBLISH_ROOT_FILE_PATTERN = /^发布资料(?:-[^/]+)?\.md$/u;
+export const MAX_BOOK_PREFIX_DEPTH = 4;
 
 export function pathExtension(path: string): string {
   const slash = path.lastIndexOf("/");
@@ -47,17 +48,34 @@ export function safeRelativePath(path: string): boolean {
     && !path.split("/").some((segment) => segment === "" || segment.startsWith("."));
 }
 
-/** Multi-book novel layouts keep books in `{书名}/{正文|大纲|设定|追踪|...}/` or `{书名}/正文.md`. */
-export function isMultiBookStoryPath(path: string): boolean {
+/**
+ * Match a multi-book novel layout `{bookPrefix}/{正文|大纲|设定|追踪|...}/...` or
+ * `{bookPrefix}/{正文.md|设定.md|小节大纲.md|发布资料*.md}`, allowing nested book roots
+ * up to depth 4 (matching Oh Story v0.11.0 `.active-book` discovery).
+ */
+function multiBookCreativeRoot(path: string): string | undefined {
   const parts = path.split("/");
-  if (parts.length < 2) return false;
-  const book = parts[0];
-  const child = parts[1];
-  if (book === undefined || child === undefined || SKIPPED_SCAN_DIRECTORIES.has(book) || CREATIVE_DIRECTORY_SET.has(book)) {
-    return false;
+  if (parts.length < 2) return undefined;
+  const maxPrefix = Math.min(MAX_BOOK_PREFIX_DEPTH, parts.length - 1);
+  for (let bookDepth = 1; bookDepth <= maxPrefix; bookDepth += 1) {
+    const prefix = parts.slice(0, bookDepth);
+    if (prefix.some((segment) => segment === "" || SKIPPED_SCAN_DIRECTORIES.has(segment) || CREATIVE_DIRECTORY_SET.has(segment))) {
+      return undefined;
+    }
+    const child = parts[bookDepth]!;
+    if (parts.length >= bookDepth + 2 && STORY_DIRECTORY_SET.has(child)) {
+      return `${prefix.join("/")}/${child}`;
+    }
+    if (parts.length === bookDepth + 1 && (SHORT_STORY_FILE_SET.has(child) || isPublishRootFile(child))) {
+      return prefix.join("/");
+    }
   }
-  if (parts.length >= 3 && STORY_DIRECTORY_SET.has(child)) return true;
-  return parts.length === 2 && (SHORT_STORY_FILE_SET.has(child) || isPublishRootFile(child));
+  return undefined;
+}
+
+/** Multi-book novel layouts keep books in `{书名}/{正文|大纲|设定|追踪|...}/` or `{书名}/正文.md` (up to depth 4). */
+export function isMultiBookStoryPath(path: string): boolean {
+  return multiBookCreativeRoot(path) !== undefined;
 }
 
 export function isCreativeRootPath(path: string): boolean {
@@ -71,7 +89,7 @@ export function isCreativeRootPath(path: string): boolean {
 /**
  * The authoritative creative root directory that must contain `path` after resolution.
  * Returns `""` for workspace-root creative files (such as `正文.md`, `short-drama.json`,
- * or `发布资料-*.md`), which are confined to the workspace root itself.
+ * or `发布资料*.md`), which are confined to the workspace root itself.
  */
 export function creativeRootDirectory(path: string): string | undefined {
   if (!safeRelativePath(path)) return undefined;
@@ -79,11 +97,7 @@ export function creativeRootDirectory(path: string): string | undefined {
   const parts = path.split("/");
   const first = parts[0];
   if (first !== undefined && CREATIVE_DIRECTORY_SET.has(first)) return first;
-  if (isMultiBookStoryPath(path)) {
-    const second = parts[1]!;
-    return parts.length >= 3 && STORY_DIRECTORY_SET.has(second) ? `${first!}/${second}` : first!;
-  }
-  return undefined;
+  return multiBookCreativeRoot(path);
 }
 
 export function editableCreativePath(path: string): boolean {

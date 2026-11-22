@@ -48,17 +48,28 @@ function normalizedRelativePath(path: string): string | undefined {
 }
 
 /**
- * Split a workspace-relative path into the book that owns its 正文/ directory
- * and the file name. The book is "" when the workspace root is the book (the
- * DSH single-book layout); upstream imports and multi-book workspaces put it
- * in a subdirectory such as `{书名}/正文/`.
+ * Split a workspace-relative path into the book that owns its prose file and the
+ * file name:
+ * - Long-form: `正文/第N章*.md` or `{书名}/正文/第N章*.md` (`kind: "long"`)
+ * - Short-story: `正文.md` or `{书名}/正文.md` (`kind: "short"`)
+ * The book is "" when the workspace root is the book (the DSH single-book layout).
  */
-function proseLocation(path: string): { readonly book: string; readonly name: string } | undefined {
+interface ProseLocation {
+  readonly book: string;
+  readonly name: string;
+  readonly kind: "long" | "short";
+}
+
+function proseLocation(path: string): ProseLocation | undefined {
   const segments = path.split("/");
+  const name = segments.at(-1) ?? "";
+  if (name === "正文.md") {
+    return { book: segments.slice(0, -1).join("/"), name, kind: "short" };
+  }
   if (segments.length < 2) return undefined;
   const index = segments.lastIndexOf("正文", segments.length - 2);
   if (index < 0) return undefined;
-  return { book: segments.slice(0, index).join("/"), name: segments.at(-1) ?? "" };
+  return { book: segments.slice(0, index).join("/"), name, kind: "long" };
 }
 
 function inBook(book: string, path: string): string {
@@ -72,6 +83,7 @@ function lastSegment(path: string): string {
 interface ResolvedStoryMutation {
   readonly mutation: StoryMutation;
   readonly book: string;
+  readonly kind: "long" | "short";
 }
 
 function storyMutationAt(root: string, relativePath: string): ResolvedStoryMutation | undefined {
@@ -79,10 +91,11 @@ function storyMutationAt(root: string, relativePath: string): ResolvedStoryMutat
   if (normalized === undefined) return undefined;
   const location = proseLocation(normalized);
   if (location === undefined) return undefined;
-  const chapterText = /^第0*(\d+)章/u.exec(location.name)?.[1];
+  const chapterText = location.kind === "long" ? /^第0*(\d+)章/u.exec(location.name)?.[1] : undefined;
   return {
     mutation: { root, path: normalized, ...(chapterText === undefined ? {} : { chapter: Number(chapterText) }) },
-    book: location.book
+    book: location.book,
+    kind: location.kind
   };
 }
 
@@ -124,7 +137,7 @@ async function storyMutation(exec: ToolExecution, fs: StoryFileSystem): Promise<
   }
   const fallback = detectStoryMutation(exec.name, exec.arguments, cwd);
   const location = fallback === undefined ? undefined : proseLocation(fallback.path);
-  return fallback === undefined || location === undefined ? undefined : { mutation: fallback, book: location.book };
+  return fallback === undefined || location === undefined ? undefined : { mutation: fallback, book: location.book, kind: location.kind };
 }
 
 async function target(fs: StoryFileSystem, root: string, path: string, signal?: AbortSignal): Promise<FsTarget> {
@@ -137,9 +150,31 @@ async function exists(fs: StoryFileSystem, root: string, path: string, signal?: 
     .then((info) => info !== undefined, () => false);
 }
 
+async function existsDirectory(fs: StoryFileSystem, root: string, path: string, signal?: AbortSignal): Promise<boolean> {
+  return target(fs, root, path, signal)
+    .then((value) => fs.stat(value, signal))
+    .then((info) => info?.type === "directory", () => false);
+}
+
 /** A long-form book has 大纲/ or 追踪/; plain workspaces that merely contain 正文/ stay unguarded. */
 async function isLongFormBook(fs: StoryFileSystem, root: string, book: string, signal?: AbortSignal): Promise<boolean> {
   return await exists(fs, root, inBook(book, "大纲"), signal) || await exists(fs, root, inBook(book, "追踪"), signal);
+}
+
+/** Post-write hard-defect checks also cover books with only 设定/ (or 设定.md), matching upstream isProsePath. */
+async function isPostWriteProseBook(
+  fs: StoryFileSystem,
+  root: string,
+  book: string,
+  kind: "long" | "short",
+  signal?: AbortSignal
+): Promise<boolean> {
+  if (kind === "short") {
+    return exists(fs, root, inBook(book, "设定.md"), signal);
+  }
+  return await isLongFormBook(fs, root, book, signal)
+    || await existsDirectory(fs, root, inBook(book, "设定"), signal)
+    || await exists(fs, root, inBook(book, "设定.md"), signal);
 }
 
 /** Upstream story_hook_core.js `OUTLINE_MIN_CHARS` (Oh Story 0.8.1). */
@@ -172,6 +207,7 @@ async function chapterOutlines(fs: StoryFileSystem, root: string, book: string, 
 }
 
 const TRACKING_STATE = "追踪/_tracking-state.json";
+const TRACKING_STATE_READ_LIMIT = 2 * 1024 * 1024;
 
 /**
  * DSH's explicit import-window marker, relative to the book directory (the
@@ -183,6 +219,46 @@ export const IMPORT_MARKER = ".story/work/导入中.md";
 
 async function hasTrackingState(fs: StoryFileSystem, root: string, book: string, signal?: AbortSignal): Promise<boolean> {
   return exists(fs, root, inBook(book, TRACKING_STATE), signal);
+}
+
+/**
+ * Mirror Oh Story v0.11.0 `inspectTrackingCheckpoint` hard gate when
+ * `追踪/_tracking-state.json` (or `{书名}/追踪/_tracking-state.json`) exists:
+ * rejects corrupt JSON, non-v4 schema, or missing integer `state_revision` /
+ * `last_committed_chapter`. Returns `undefined` when the state file is absent
+ * (fresh books initialize Tracking before first commit).
+ */
+async function trackingCheckpointHardIssue(
+  fs: StoryFileSystem,
+  root: string,
+  book: string,
+  signal?: AbortSignal
+): Promise<string | undefined> {
+  const statePath = inBook(book, TRACKING_STATE);
+  if (!(await exists(fs, root, statePath, signal))) return undefined;
+  if (fs.readBytes === undefined) return undefined;
+  let parsed: unknown;
+  try {
+    const file = await target(fs, root, statePath, signal);
+    const bytes = await fs.readBytes(file, signal, TRACKING_STATE_READ_LIMIT);
+    parsed = JSON.parse(new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes)) as unknown;
+  } catch {
+    return `${statePath} 无法解析；停止写正文并重新 /story-import，不能猜测或手补状态`;
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    return `${statePath} 不是当前 schema_version=4；停止写正文并重新 /story-import，不保留旧结构兼容路径`;
+  }
+  const document = parsed as Record<string, unknown>;
+  if (document.schema_version !== 4) {
+    return `${statePath} 不是当前 schema_version=4；停止写正文并重新 /story-import，不保留旧结构兼容路径`;
+  }
+  if (!Number.isInteger(document.state_revision)) {
+    return `${statePath} 缺少整数 state_revision；停止写正文并重新 /story-import`;
+  }
+  if (!Number.isInteger(document.last_committed_chapter)) {
+    return `${statePath} 缺少整数 last_committed_chapter；停止写正文并重新 /story-import`;
+  }
+  return undefined;
 }
 
 /**
@@ -223,23 +299,56 @@ export async function validateStoryMutation(
   signal?: AbortSignal
 ): Promise<string | undefined> {
   const location = proseLocation(mutation.path);
-  if (mutation.chapter === undefined || location === undefined) return undefined;
-  const { book } = location;
-  if (!(await isLongFormBook(fs, mutation.root, book, signal))) return undefined;
-  if (await exists(fs, mutation.root, mutation.path, signal)) return undefined;
-  if (!(await hasTrackingState(fs, mutation.root, book, signal)) && await hasImportSignal(fs, mutation.root, book, signal)) {
+  if (location === undefined) return undefined;
+  const { book, kind } = location;
+
+  // Short-story hard gate (`story_hook_core.js:790-799`): creating `正文.md`
+  // (root or `{书名}/正文.md`) when `设定.md` exists requires同目录 `小节大纲.md`.
+  if (kind === "short") {
+    if (await exists(fs, mutation.root, mutation.path, signal)) return undefined;
+    if (await hasImportSignal(fs, mutation.root, book, signal)) return undefined;
+    if (!(await exists(fs, mutation.root, inBook(book, "设定.md"), signal))) return undefined;
+    if (!(await exists(fs, mutation.root, inBook(book, "小节大纲.md"), signal))) {
+      return `Oh Story 阻止写入短篇正文 ${mutation.path}：缺少同目录 ${inBook(book, "小节大纲.md")}。先按 story-short-write 完成「小节大纲.md」再写正文。`;
+    }
     return undefined;
   }
-  const outlines = await chapterOutlines(fs, mutation.root, book, mutation.chapter, signal);
-  const [first] = outlines;
-  if (first !== undefined) {
-    for (const outline of outlines) if (!(await outlineIsEmpty(fs, outline.target, signal))) return undefined;
-    return `Oh Story 阻止写入第 ${String(mutation.chapter)} 章：细纲 ${inBook(book, "大纲")}/${first.name} 是空的（不计 # 号和空白不到 ${String(OUTLINE_MIN_CHARS)} 字）。`
-      + "先按 story-long-write 单章流程把细纲写完整（这章发生什么、主角做什么选择），再写正文。";
+
+  if (mutation.chapter === undefined) return undefined;
+  if (!(await isLongFormBook(fs, mutation.root, book, signal))) return undefined;
+  const trackingPresent = await hasTrackingState(fs, mutation.root, book, signal);
+  if (!trackingPresent && await hasImportSignal(fs, mutation.root, book, signal)) {
+    return undefined;
   }
-  const padded = String(mutation.chapter).padStart(3, "0");
-  return `Oh Story 阻止写入第 ${String(mutation.chapter)} 章：未找到对应的 ${inBook(book, "大纲")}/细纲_第${padded}章*.md。`
-    + "先按 story-long-write 单章流程补建细纲再写正文。";
+  const existingChapter = await exists(fs, mutation.root, mutation.path, signal);
+  if (!existingChapter) {
+    const outlines = await chapterOutlines(fs, mutation.root, book, mutation.chapter, signal);
+    const [first] = outlines;
+    if (first !== undefined) {
+      let hasContent = false;
+      for (const outline of outlines) {
+        if (!(await outlineIsEmpty(fs, outline.target, signal))) {
+          hasContent = true;
+          break;
+        }
+      }
+      if (!hasContent) {
+        return `Oh Story 阻止写入第 ${String(mutation.chapter)} 章：细纲 ${inBook(book, "大纲")}/${first.name} 是空的（不计 # 号和空白不到 ${String(OUTLINE_MIN_CHARS)} 字）。`
+          + "先按 story-long-write 单章流程把细纲写完整（这章发生什么、主角做什么选择），再写正文。";
+      }
+    } else {
+      const padded = String(mutation.chapter).padStart(3, "0");
+      return `Oh Story 阻止写入第 ${String(mutation.chapter)} 章：未找到对应的 ${inBook(book, "大纲")}/细纲_第${padded}章*.md。`
+        + "先按 story-long-write 单章流程补建细纲再写正文。";
+    }
+  }
+  if (trackingPresent) {
+    const checkpointIssue = await trackingCheckpointHardIssue(fs, mutation.root, book, signal);
+    if (checkpointIssue !== undefined) {
+      return `Oh Story 阻止写入第 ${String(mutation.chapter)} 章：${checkpointIssue}。`;
+    }
+  }
+  return undefined;
 }
 
 export async function decideStoryMutation(
@@ -337,19 +446,32 @@ export async function decideChapterExtractorWrite(
 }
 
 const PROSE_INSPECT_LIMIT = 128 * 1024;
-const QUOTED_DIALOGUE = /「[^」]*」|『[^』]*』|【[^】]*】|“[^”]*”|"[^"]*"/gu;
+const PROSE_SHORT_WRITE_BYTES = 200;
+const QUOTED_DIALOGUE_LINE = /「[^」]*」|『[^』]*』|【[^】]*】|“[^”]*”|"[^"]*"/gu;
+const TERMINAL_PUNCTUATION = new Set(Array.from("。！？…”』」）)!?.~—】\""));
+const END_SIGNOFF_LINE = /^[-—~～＜<【[（(《\s]*(?:全文完|正文完|全书完|本卷完|完结|完|END|End|end|THE\s+END|The\s+End|the\s+end)[-—~～＞>】\]）)》.。！!\s]*$/u;
+
+function isSkippableProseLine(line: string): boolean {
+  return line === "" || line.startsWith("#") || line === "---" || /^[-—=*·•\s]+$/u.test(line) || END_SIGNOFF_LINE.test(line);
+}
+
 const HARD_DEFECT_PATTERNS: readonly { readonly pattern: RegExp; readonly label: string; readonly stripDialogue?: boolean }[] = [
   { pattern: /\uFFFD/u, label: "出现乱码替换字符（）" },
-  { pattern: /^(?:Sure|Certainly|Here'?s|As an AI|I (?:cannot|can't|am unable|apologize))\b/mu, label: "出现英文 AI 元信息前缀" },
-  { pattern: /[（(](?:此处|以下|这里|下文|后续)?\s*(?:省略|略)(?:去|过)?[^）)]{0,10}[）)]/u, label: "出现括号省略占位符" },
-  { pattern: /(?:未完待续|TODO|占位符|placeholder)/u, label: "出现未完成占位词" },
+  { pattern: /^(?:Sure|Certainly|Here'?s|As an AI|I (?:cannot|can't|am unable|apologize))\b/u, label: "出现英文 AI 元信息前缀", stripDialogue: true },
+  {
+    pattern: /我(?:无法|不能)(?:继续(?:写|创作|生成|下去|输出)?|生成(?:内容|文本|正文)?|创作|续写|写作|完成(?:这个|本)?(?:章|篇|创作|请求)?)/u,
+    label: "叙述中出现生成拒绝语",
+    stripDialogue: true
+  },
+  { pattern: /[（(](?:此处|以下|这里|下文|后续)?[^）)]{0,10}(?:省略|略去|略过|略)[^）)]{0,10}[）)]/u, label: "出现括号省略占位符" },
+  { pattern: /(?:未完待续|TODO|占位符|placeholder|待补充|此处待填|此处待补)/u, label: "出现未完成占位词" },
   {
     pattern: /作为(?:一个)?(?:AI|人工智能|大?语言模型|智能助手|聊天助手)(?:语言模型|大?模型|助手|机器人)?(?=[，,。、；;：:！!？?\s）)」』"】]|我|无法|不能|没法|$)/u,
     label: "叙述中出现 AI 自指元信息",
     stripDialogue: true
   },
   {
-    pattern: /细纲|(?<!剧)情节点|卷纲|功能标签|目标情绪|字数目标|字数口径|章首钩子|章尾钩子|这章不能说破|本章禁止提前释放|排纲笔记|排纲底稿/u,
+    pattern: /细纲|(?<!剧)情节点|卷纲|功能标签|目标情绪|字数目标|字数口径|章首钩子|章尾钩子|这章不能说破|本章禁止提前释放|排纲笔记|排纲底稿|任务描述/u,
     label: "叙述中泄漏写作工程词",
     stripDialogue: true
   }
@@ -357,29 +479,91 @@ const HARD_DEFECT_PATTERNS: readonly { readonly pattern: RegExp; readonly label:
 
 /**
  * Deterministic, high-precision post-write hard-defect scan mirroring Oh Story
- * v0.11.0's non-blocking `proseAfterWrite` findings. Returns plain Chinese
- * warnings to attach via DSH `PostToolDecision.additionalContexts`.
+ * v0.11.0's non-blocking `proseDegenerationFindings`. Masks quoted dialogue
+ * per line so one unclosed quote never suppresses checks on later paragraphs.
  */
 export function detectProseHardDefects(content: string): string[] {
-  const withoutDialogue = content.replace(QUOTED_DIALOGUE, "");
-  const warnings: string[] = [];
-  for (const rule of HARD_DEFECT_PATTERNS) {
-    const sample = rule.stripDialogue === true ? withoutDialogue : content;
-    if (rule.pattern.test(sample)) warnings.push(rule.label);
+  const warnings = new Set<string>();
+  const proseLines: string[] = [];
+  for (const raw of content.split(/\r?\n/u)) {
+    const line = raw.trim();
+    if (isSkippableProseLine(line)) continue;
+    proseLines.push(line);
+    const outsideQuotes = line.replace(QUOTED_DIALOGUE_LINE, "");
+    for (const rule of HARD_DEFECT_PATTERNS) {
+      const sample = rule.stripDialogue === true ? outsideQuotes : line;
+      if (rule.pattern.test(sample)) warnings.add(rule.label);
+    }
   }
-  return warnings;
+  for (let index = 1; index < proseLines.length; index += 1) {
+    const current = proseLines[index]!;
+    if (current === proseLines[index - 1] && Array.from(current).length >= 8) {
+      warnings.add("出现紧邻行重复");
+      break;
+    }
+  }
+  if (proseLines.length > 0) {
+    const last = proseLines[proseLines.length - 1]!;
+    const lastChar = Array.from(last).at(-1);
+    if (lastChar !== undefined && !TERMINAL_PUNCTUATION.has(lastChar)) {
+      warnings.add("结尾疑似截断（未以标点收束）");
+    }
+  }
+  return [...warnings];
 }
 
-async function inspectWrittenProse(fs: StoryFileSystem, root: string, path: string, signal?: AbortSignal): Promise<string[]> {
-  if (fs.readBytes === undefined) return [];
-  try {
-    const file = await target(fs, root, path, signal);
-    const bytes = await fs.readBytes(file, signal, PROSE_INSPECT_LIMIT);
-    const content = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes);
-    return detectProseHardDefects(content);
-  } catch {
-    return [];
+async function duplicateChapterTitleDefects(
+  fs: StoryFileSystem,
+  root: string,
+  book: string,
+  signal?: AbortSignal
+): Promise<string[]> {
+  const entries = await target(fs, root, inBook(book, "正文"), signal)
+    .then((directory) => fs.listDir(directory, signal))
+    .catch(() => []);
+  const titles = new Map<string, string[]>();
+  for (const entry of entries) {
+    if (entry.type !== "file" || !entry.name.endsWith(".md")) continue;
+    const match = /^第0*\d+章[_\- \u3000]+(.+)$/u.exec(entry.name.slice(0, -3));
+    const title = match?.[1]?.trim();
+    if (title === undefined || title === "") continue;
+    titles.set(title, [...titles.get(title) ?? [], entry.name]);
   }
+  const findings: string[] = [];
+  for (const [title, files] of titles.entries()) {
+    if (files.length > 1) {
+      findings.push(`章节标题重复「${title}」（${files.sort().join("、").slice(0, 60)}）`);
+    }
+  }
+  return findings;
+}
+
+async function inspectWrittenProse(
+  fs: StoryFileSystem,
+  root: string,
+  book: string,
+  path: string,
+  kind: "long" | "short",
+  signal?: AbortSignal
+): Promise<string[]> {
+  const findings: string[] = [];
+  if (fs.readBytes !== undefined) {
+    try {
+      const file = await target(fs, root, path, signal);
+      const bytes = await fs.readBytes(file, signal, PROSE_INSPECT_LIMIT);
+      if (bytes.byteLength < PROSE_SHORT_WRITE_BYTES) {
+        findings.push(`正文仅 ${String(bytes.byteLength)} 字节，疑似未写完或落盘不完整`);
+      }
+      const content = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes);
+      findings.push(...detectProseHardDefects(content));
+    } catch {
+      // Unreadable or non-UTF-8 prose stays non-blocking.
+    }
+  }
+  if (kind === "long") {
+    findings.push(...await duplicateChapterTitleDefects(fs, root, book, signal));
+  }
+  return findings;
 }
 
 export interface PostWriteReminderOptions {
@@ -387,9 +571,20 @@ export interface PostWriteReminderOptions {
   readonly trackingUninitialized?: boolean;
   /** Deterministic hard-defect findings from the just-written prose file. */
   readonly hardDefects?: readonly string[];
+  /** Omit long-form Tracking commit instructions (short stories or setup-only books). */
+  readonly hardDefectsOnly?: boolean;
 }
 
 export function postWriteReminderText(path: string, options: PostWriteReminderOptions = {}): string {
+  if (options.hardDefectsOnly === true) {
+    return [
+      `<oh-story-post-write>正文 ${path} 已变更。`,
+      ...(options.hardDefects !== undefined && options.hardDefects.length > 0
+        ? [`检测到疑似硬伤（${options.hardDefects.join("；")}），请在收尾或继续前核查并修正正文，勿将占位词或工程词留到成稿。`]
+        : []),
+      "</oh-story-post-write>"
+    ].join("");
+  }
   return [
     `<oh-story-post-write>正文 ${path} 已变更。`,
     ...(options.hardDefects !== undefined && options.hardDefects.length > 0
@@ -427,22 +622,31 @@ export function registerOhStoryHooks(context: Context): void {
     const fs = exec.agent?.ctx.get("fs");
     const resolved = fs === undefined ? undefined : await storyMutation(exec, fs);
     if (fs === undefined || resolved === undefined) return downstream;
-    const { mutation, book } = resolved;
+    const { mutation, book, kind } = resolved;
     const { root } = mutation;
-    if (!(await isLongFormBook(fs, root, book, exec.signal))) return downstream;
+    if (!(await isPostWriteProseBook(fs, root, book, kind, exec.signal))) return downstream;
+    const longFormTrackingBook = kind === "long" && await isLongFormBook(fs, root, book, exec.signal);
     const [trackingPresent, importing, hardDefects] = await Promise.all([
-      hasTrackingState(fs, root, book, exec.signal),
-      hasImportSignal(fs, root, book, exec.signal),
-      inspectWrittenProse(fs, root, mutation.path, exec.signal)
+      longFormTrackingBook ? hasTrackingState(fs, root, book, exec.signal) : Promise.resolve(false),
+      longFormTrackingBook ? hasImportSignal(fs, root, book, exec.signal) : Promise.resolve(false),
+      inspectWrittenProse(fs, root, book, mutation.path, kind, exec.signal)
     ]);
-    const trackingUninitialized = !trackingPresent && !importing;
+    if (!longFormTrackingBook && hardDefects.length === 0) return downstream;
+    const trackingUninitialized = longFormTrackingBook && !trackingPresent && !importing;
     const reminder = createUserMessage({
       source: {
         kind: "oh-story-post-write",
         form: "notice",
         summary: boundContextSummary(hardDefects.length > 0 ? `正文 ${mutation.path} 已变更（含硬伤提醒）` : `正文 ${mutation.path} 已变更`)
       },
-      content: [{ type: "text", text: postWriteReminderText(mutation.path, { trackingUninitialized, hardDefects }) }]
+      content: [{
+        type: "text",
+        text: postWriteReminderText(mutation.path, {
+          trackingUninitialized,
+          hardDefects,
+          hardDefectsOnly: !longFormTrackingBook
+        })
+      }]
     });
     return {
       ...downstream,

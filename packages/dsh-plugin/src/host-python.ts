@@ -38,13 +38,24 @@ export function pythonVersion(value: string | undefined, floor: PythonFloor): Py
  */
 export async function hostPython(
   floor: PythonFloor,
-  probe: (command: string, args: readonly string[]) => Promise<string | undefined> = commandOutput
+  probe: (command: string, args: readonly string[]) => Promise<string | undefined> = commandOutput,
+  platform: NodeJS.Platform = process.platform
 ): Promise<{ readonly command: string; readonly probe: PythonProbe }> {
+  const candidates: readonly { readonly command: string; readonly args: readonly string[] }[] = platform === "win32"
+    ? [
+        { command: "python3", args: [] },
+        { command: "python", args: [] },
+        { command: "py", args: ["-3"] }
+      ]
+    : [
+        { command: "python3", args: [] },
+        { command: "python", args: [] }
+      ];
   let fallback: { readonly command: string; readonly probe: PythonProbe } | undefined;
-  for (const command of ["python3", "python"]) {
-    const parsed = pythonVersion(await probe(command, ["--version"]), floor);
-    if (parsed.ok) return { command, probe: parsed };
-    if (parsed.version !== undefined) fallback ??= { command, probe: parsed };
+  for (const candidate of candidates) {
+    const parsed = pythonVersion(await probe(candidate.command, [...candidate.args, "--version"]), floor);
+    if (parsed.ok) return { command: candidate.command, probe: parsed };
+    if (parsed.version !== undefined) fallback ??= { command: candidate.command, probe: parsed };
   }
   return fallback ?? { command: "python3", probe: { ok: false, minimum: pythonVersion(undefined, floor).minimum } };
 }

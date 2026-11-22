@@ -49,6 +49,24 @@ describe("game preview status", () => {
     expect(gamePreviewStatus({ ...settled, runtimeError: "boom", pending: true })).toEqual({ tone: "loading", label: "新版本已就绪 · 由你决定何时载入" });
     expect(normalizeRuntimeError("  ")).toBeNull();
     expect(normalizeRuntimeError(null)).toBeNull();
+    expect(normalizeRuntimeError({
+      type: "oh-story:game-preview-error",
+      message: "ReferenceError: player is not defined",
+      filename: "http://localhost:3180/app/main.js",
+      lineno: 42,
+      colno: 13
+    })).toBe("ReferenceError: player is not defined (http://localhost:3180/app/main.js:42:13)");
+    expect(normalizeRuntimeError({
+      type: "oh-story:game-preview-error",
+      message: "Resource failed to load: http://localhost:3180/app/missing.png",
+      filename: "http://localhost:3180/app/missing.png"
+    })).toBe("Resource failed to load: http://localhost:3180/app/missing.png");
+    expect(normalizeRuntimeError({
+      type: "oh-story:game-preview-error",
+      message: "Unhandled promise rejection"
+    })).toBe("Unhandled promise rejection");
+    expect(normalizeRuntimeError({ type: "oh-story:game-preview-error", message: "   " })).toBeNull();
+    expect(normalizeRuntimeError(["not an error"])).toBeNull();
     expect(formatRuntimeErrorPrompt("雪夜渡", "TypeError: x")).toContain("雪夜渡");
     expect(formatRuntimeErrorPrompt("雪夜渡", "TypeError: x")).toContain("TypeError: x");
   });

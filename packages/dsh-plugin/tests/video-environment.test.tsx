@@ -42,14 +42,46 @@ describe("video runtime check (v0.8.0)", () => {
     expect(html).toContain("ffprobe 未找到");
     expect(html).toContain("本地离线 TTS 未找到（say / espeak-ng）");
     expect(html).toContain("Fish Audio（FISH_API_KEY / FISH_AUDIO_API_KEY）未配置（可选）");
-    expect(html).toContain("OpenAI TTS（OPENAI_API_KEY）未配置（可选）");
-    expect(html).toContain("IndexTTS（INDEX_TTS_ENDPOINT / INDEX_TTS_VOICE）未配置（可选）");
+    expect(html).toContain("OpenAI TTS（OPENAI_API_KEY + TTS_API_URL）未配置（可选）");
+    expect(html).toContain("IndexTTS（INDEX_TTS_ENDPOINT）未配置（可选，INDEX_TTS_VOICE 为可选默认音色）");
     expect(html).toContain("本地 Whisper 未找到");
     expect(html).toContain("远程 ASR（ASR_API_URL / ASR_API_KEY）未配置（可选）");
     expect(html).not.toContain("MiMo");
     expect(html).not.toContain("TTS_PROVIDER");
     expect(html).not.toContain("data-ready");
     expect(html).toContain("重启 DSH 后生效");
+  });
+
+  it("distinguishes OPENAI_API_KEY-only vs auto-ready OpenAI TTS and marks IndexTTS ready on endpoint alone", () => {
+    const html = renderToStaticMarkup(<VideoEnvironmentReport preflight={{
+      ...missing,
+      tts: {
+        local: { ok: false },
+        fish: false,
+        openai: false,
+        openaiApiKey: true,
+        indexTts: true,
+        indexTtsVoice: false
+      }
+    }} />);
+    expect(html).toContain("已配置 OPENAI_API_KEY（需配 TTS_API_URL 自动启用，或显式 --engine openai）");
+    expect(html).toContain("IndexTTS（INDEX_TTS_ENDPOINT）已配置（INDEX_TTS_VOICE 可选，亦可通过 --voice 指定）");
+    expect(html.match(/data-ready="true"/gu)).toHaveLength(1);
+
+    const autoHtml = renderToStaticMarkup(<VideoEnvironmentReport preflight={{
+      ...missing,
+      tts: {
+        local: { ok: false },
+        fish: false,
+        openai: true,
+        openaiApiKey: true,
+        indexTts: true,
+        indexTtsVoice: true
+      }
+    }} />);
+    expect(autoHtml).toContain("OpenAI TTS（OPENAI_API_KEY + TTS_API_URL）已配置（自动选择）");
+    expect(autoHtml).toContain("IndexTTS（INDEX_TTS_ENDPOINT）已配置（含默认音色 INDEX_TTS_VOICE）");
+    expect(autoHtml.match(/data-ready="true"/gu)).toHaveLength(2);
   });
 
   it("marks local-first ready host and flags unconfigured cloud backends as optional once a local engine is available", () => {

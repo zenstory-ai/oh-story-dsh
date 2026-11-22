@@ -20,10 +20,42 @@ export interface GamePreviewStatus {
   readonly label: string;
 }
 
+export interface GamePreviewErrorPayload {
+  readonly type?: unknown;
+  readonly message?: unknown;
+  readonly filename?: unknown;
+  readonly lineno?: unknown;
+  readonly colno?: unknown;
+}
+
+function positiveInteger(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.trunc(value) : undefined;
+}
+
 export function normalizeRuntimeError(value: unknown): string | null {
-  if (typeof value !== "string") return null;
-  const trimmed = value.trim();
-  return trimmed === "" ? null : trimmed.slice(0, 400);
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed === "" ? null : trimmed.slice(0, 400);
+  }
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
+  const payload = value as GamePreviewErrorPayload;
+  const message = typeof payload.message === "string" ? payload.message.trim() : "";
+  if (message === "") return null;
+  const filename = typeof payload.filename === "string" ? payload.filename.trim() : "";
+  const lineno = positiveInteger(payload.lineno);
+  const colno = positiveInteger(payload.colno);
+  let location = "";
+  if (filename !== "") {
+    if (lineno !== undefined) {
+      location = `${filename}:${String(lineno)}${colno === undefined ? "" : `:${String(colno)}`}`;
+    } else if (!message.includes(filename)) {
+      location = filename;
+    }
+  } else if (lineno !== undefined) {
+    location = `line ${String(lineno)}${colno === undefined ? "" : `:${String(colno)}`}`;
+  }
+  const formatted = location === "" ? message : `${message} (${location})`;
+  return formatted.slice(0, 400);
 }
 
 export function clearRuntimeError(): null {

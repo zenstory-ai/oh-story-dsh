@@ -73,7 +73,7 @@ interface ClipRange extends VideoTimeRange {
   readonly outputEnd: number;
 }
 
-const MAX_SEGMENTS = 200;
+const MAX_SEGMENTS = 1_000;
 const MAX_SOURCE_RANGES = 32;
 const MAX_SECONDS = 24 * 60 * 60;
 const MAX_TEXT = 20_000;
@@ -349,21 +349,42 @@ function projectTimelineV3(
   let narrationInvalid = rawNarration !== undefined && rawNarration.length > MAX_SEGMENTS;
 
   if (rawNarration !== undefined && rawNarration.length > 0) {
-    for (const [index, candidate] of rawNarration.slice(0, MAX_SEGMENTS).entries()) {
+    const slicedNarration = rawNarration.slice(0, MAX_SEGMENTS);
+    for (const [index, candidate] of slicedNarration.entries()) {
       const item = record(candidate);
       const at = item === undefined ? undefined : finiteTime(item.at);
       const duration = item === undefined ? undefined : finiteTime(item.duration);
       const endExplicit = item === undefined ? undefined : finiteTime(item.end);
+      const slotS = item === undefined ? undefined : finiteTime(item.slot_s);
       const text = item === undefined ? undefined : shortText(item.text) ?? shortText(item.spoken_text);
       let end: number | undefined;
       if (at !== undefined && duration !== undefined && duration > EPSILON) {
         end = roundTime(at + duration);
       } else if (at !== undefined && endExplicit !== undefined && endExplicit - at > EPSILON) {
         end = endExplicit;
+      } else if (at !== undefined && slotS !== undefined && slotS > EPSILON) {
+        end = roundTime(at + slotS);
       } else if (at !== undefined) {
         const matched = parsedSubtitles.find((sub) => Math.abs(sub.start - at) <= 0.05)
           ?? (text === undefined ? undefined : parsedSubtitles.find((sub) => sub.text === text && sub.start >= at - 0.1));
-        if (matched !== undefined && matched.end - at > EPSILON) end = matched.end;
+        if (matched !== undefined && matched.end - at > EPSILON) {
+          end = matched.end;
+        } else if (text !== undefined && item?.duration === undefined && item?.end === undefined) {
+          // Pre-TTS draft timeline.json entries (before `tts.py --update-timeline`) have `at` + `text`
+          // without `duration`. Derive a bounded provisional span from spoken text length, the next
+          // narration `at`, and the timeline cursor so the Studio still surfaces and maps draft lines.
+          const estimatedEnd = roundTime(at + Math.max(1, Math.min(12, Math.round((text.length / 4.5) * 10) / 10)));
+          const nextItem = record(slicedNarration[index + 1]);
+          const nextAt = nextItem === undefined ? undefined : finiteTime(nextItem.at);
+          if (nextAt !== undefined && nextAt - at > EPSILON) {
+            const slotEnd = nextAt - at > 0.2 ? roundTime(nextAt - 0.1) : nextAt;
+            end = Math.min(slotEnd, estimatedEnd);
+          } else if (cursor - at > EPSILON) {
+            end = Math.min(roundTime(cursor), estimatedEnd);
+          } else {
+            end = estimatedEnd;
+          }
+        }
       }
       if (at === undefined || end === undefined || end - at <= EPSILON || text === undefined) {
         narrationInvalid = true;

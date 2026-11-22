@@ -8,9 +8,11 @@ import type { FileSystem, FsDirEntry, FsInfo, FsPathInfo, FsTarget, FsVersion } 
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createPreviewTokenSecret,
+  loadWorkbenchStylesheet,
   mintPreviewToken,
   probeVideoPreflight,
   registerWorkspaceRoute,
+  WORKBENCH_CSS_API_PATH,
   type WorkspacePayload
 } from "../src/workspace-route.js";
 
@@ -73,17 +75,41 @@ function makeLocalFs(rootDir: string, options: { readonly remote?: boolean; read
   } as unknown as FileSystem;
 }
 
+interface RegisteredFetchRoute {
+  readonly path: string;
+  readonly methods: readonly string[];
+  readonly requestBody: "buffered" | "streaming";
+  readonly fetch: (request: Request) => Promise<Response>;
+}
+
 function createHarness(
   cwd: string,
   fs: FileSystem,
   options: {
     readonly admit?: (request: { readonly headers: IncomingMessage["headers"] }) => { readonly peer: unknown } | { readonly rejection: 401 | 403 };
     readonly previewSecret?: Uint8Array;
+    readonly withConnectionFetch?: boolean;
   } = {}
 ) {
   let handler!: (request: IncomingMessage, response: ServerResponse) => Promise<void>;
   const disposeSpy = vi.fn();
-  const connection = options.admit === undefined ? undefined : { admit: vi.fn(options.admit) };
+  const fetchRoutes = new Map<string, RegisteredFetchRoute>();
+  const indexInjectListeners: Array<(table: unknown[]) => void> = [];
+  const connection = options.admit === undefined && options.withConnectionFetch !== true
+    ? undefined
+    : {
+        admit: vi.fn(options.admit ?? (() => ({ peer: {} }))),
+        ...(options.withConnectionFetch === true
+          ? {
+              fetch: {
+                register: vi.fn((route: RegisteredFetchRoute) => {
+                  fetchRoutes.set(route.path, route);
+                  return async () => { fetchRoutes.delete(route.path); };
+                })
+              }
+            }
+          : {})
+      };
   const agent = {
     session: { header: { cwd } },
     ctx: {
@@ -91,9 +117,13 @@ function createHarness(
     }
   };
   const context = {
-    effect: (fn: () => () => void) => {
+    effect: (fn: () => (() => void | Promise<void>) | void) => {
       const cleanup = fn();
-      disposeSpy.mockImplementation(cleanup);
+      if (cleanup !== undefined) disposeSpy.mockImplementation(cleanup);
+    },
+    on: (event: string, listener: (table: unknown[]) => void) => {
+      if (event === "webserver/index-inject") indexInjectListeners.push(listener);
+      return () => {};
     },
     get: (key: string) => key === "connection" ? connection : undefined,
     logger: () => ({ error: vi.fn() }),
@@ -150,7 +180,7 @@ function createHarness(
     return { status, headers: responseHeaders, body: Buffer.concat(chunks) };
   }
 
-  return { invoke, previewSecret, connection, dispose: disposeSpy };
+  return { invoke, previewSecret, connection, fetchRoutes, indexInjectListeners, dispose: disposeSpy };
 }
 
 describe("workspace route security, media, scanning, and preflight", () => {
@@ -321,6 +351,8 @@ describe("workspace route security, media, scanning, and preflight", () => {
       env: {
         FISH_AUDIO_API_KEY: "fish-key",
         OPENAI_API_KEY: "sk-openai",
+        TTS_API_URL: "https://api.openai.com/v1/audio/speech",
+        INDEX_TTS_ENDPOINT: "http://127.0.0.1:9880/tts",
         ASR_API_URL: "https://asr.example/v1/audio/transcriptions",
         ASR_API_KEY: "asr-key"
       },
@@ -342,7 +374,9 @@ describe("workspace route security, media, scanning, and preflight", () => {
         local: { ok: true, engine: "say" },
         fish: true,
         openai: true,
-        indexTts: false
+        openaiApiKey: true,
+        indexTts: true,
+        indexTtsVoice: false
       },
       asr: {
         localWhisper: { ok: true, cli: "faster-whisper" },
@@ -351,10 +385,17 @@ describe("workspace route security, media, scanning, and preflight", () => {
     });
     expect("credentials" in status).toBe(false);
 
-    // Linux espeak-ng + whisper-cli requires WHISPER_MODEL_PATH + FISH_API_KEY
+    // OpenAI auto-select requires both OPENAI_API_KEY and TTS_API_URL; IndexTTS rejects userinfo `@` and non-http(s);
+    // whisper-cli requires WHISPER_MODEL_PATH to be an existing regular file.
     const linuxStatus = await probeVideoPreflight({
       platform: "linux",
-      env: { FISH_API_KEY: "fish-primary", WHISPER_MODEL_PATH: "/models/ggml-base.bin" },
+      env: {
+        FISH_API_KEY: "fish-primary",
+        OPENAI_API_KEY: "sk-only-key",
+        INDEX_TTS_ENDPOINT: "http://user@127.0.0.1:9880/tts",
+        WHISPER_MODEL_PATH: "/models/ggml-base.bin"
+      },
+      isFile: async (path) => path === "/models/ggml-base.bin",
       probeCommand: async (command, args) => {
         if (command === "which" && args[0] === "espeak-ng") return "/usr/bin/espeak-ng";
         if (command === "which" && args[0] === "whisper-cli") return "/usr/local/bin/whisper-cli";
@@ -365,12 +406,151 @@ describe("workspace route security, media, scanning, and preflight", () => {
       local: { ok: true, engine: "espeak-ng" },
       fish: true,
       openai: false,
-      indexTts: false
+      openaiApiKey: true,
+      indexTts: false,
+      indexTtsVoice: false
     });
     expect(linuxStatus.asr).toEqual({
       localWhisper: { ok: true, cli: "whisper-cli" },
       remote: false
     });
+
+    // Missing WHISPER_MODEL_PATH file on disk reports localWhisper unavailable; Windows probes `py -3`.
+    const winStatus = await probeVideoPreflight({
+      platform: "win32",
+      env: { WHISPER_MODEL_PATH: "/nonexistent/ggml-base.bin" },
+      isFile: async () => false,
+      probeCommand: async (command, args) => {
+        if (command === "py" && args[0] === "-3" && args[1] === "--version") return "Python 3.11.8";
+        if (command === "where" && args[0] === "whisper-cli") return "C:\\bin\\whisper-cli.exe";
+        return undefined;
+      }
+    });
+    expect(winStatus.python).toEqual({ ok: true, version: "3.11.8", minimum: "3.10" });
+    expect(winStatus.asr.localWhisper).toEqual({ ok: false, cli: undefined });
+  });
+
+  it("mounts non-game endpoints on DSH 0.2.2-rc.5 connection.fetch.register, serves static CSS, and avoids duplicate trustedHosts fence", async () => {
+    const root = await mkdtemp(join(tmpdir(), "oh-story-conn-fetch-"));
+    tempDirs.push(root);
+    const appDir = join(root, "game-adaptations", "demo", "build", "app");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(join(appDir, "index.html"), "<!doctype html><html><head><script type=\"module\" src=\"./m.js\"></script></head><body>ok</body></html>");
+    await writeFile(join(appDir, "sprite.png"), Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a]));
+    await mkdir(join(root, "系列", "第一部", "追踪"), { recursive: true });
+    await writeFile(join(root, ".active-book"), "系列/第一部\n");
+    await writeFile(join(root, "系列", "第一部", "追踪", "_tracking-state.json"), "{broken json");
+    await writeFile(join(root, "发布资料.md"), "# 平台发布资料\n");
+
+    const fs = makeLocalFs(root);
+    const harness = createHarness(root, fs, {
+      withConnectionFetch: true,
+      // Simulate DSH's client-connection.trustedHosts admitting remote host `studio.example.com`.
+      admit: (req) => {
+        const host = req.headers.host;
+        return host === "studio.example.com" || host === "127.0.0.1:3080" ? { peer: {} } : { rejection: 403 };
+      }
+    });
+
+    // All 7 non-game endpoints register on connection.fetch under /api/oh-story/*
+    expect([...harness.fetchRoutes.keys()].sort()).toEqual([
+      "/api/oh-story/config",
+      "/api/oh-story/drama-preflight",
+      "/api/oh-story/file",
+      "/api/oh-story/media",
+      "/api/oh-story/video-preflight",
+      WORKBENCH_CSS_API_PATH,
+      "/api/oh-story/workspace"
+    ].sort());
+
+    // Static CSS route returns minified CSS with ETag, 304, and immutable cache when versioned.
+    const cssAsset = await loadWorkbenchStylesheet();
+    expect(cssAsset.bytes.byteLength).toBeGreaterThan(1_000);
+    const cssRoute = harness.fetchRoutes.get(WORKBENCH_CSS_API_PATH)!;
+    const cssRes = await cssRoute.fetch(new Request(`http://dsh.internal${WORKBENCH_CSS_API_PATH}?v=${cssAsset.version}`));
+    expect(cssRes.status).toBe(200);
+    expect(cssRes.headers.get("content-type")).toBe("text/css; charset=utf-8");
+    expect(cssRes.headers.get("cache-control")).toContain("immutable");
+    expect(cssRes.headers.get("etag")).toBe(cssAsset.etag);
+    const css304 = await cssRoute.fetch(new Request(`http://dsh.internal${WORKBENCH_CSS_API_PATH}`, {
+      headers: { "if-none-match": cssAsset.etag }
+    }));
+    expect(css304.status).toBe(304);
+
+    // Index injection emits a document-relative <link id="oh-story-workbench-css"> to api/oh-story/workbench.css
+    const injected: unknown[] = [];
+    for (const listener of harness.indexInjectListeners) listener(injected);
+    expect(injected).toContainEqual(expect.objectContaining({
+      kind: "html",
+      placement: "head",
+      html: expect.stringContaining(`id="oh-story-workbench-css" rel="stylesheet" href="api/oh-story/workbench.css`)
+    }));
+
+    // Remote host admitted by connection.admit succeeds WITHOUT oh-story.trustedHosts duplication,
+    // discovers depth-2 .active-book, bare 发布资料.md, and flags multi-book broken _tracking-state.json!
+    const wsRoute = harness.fetchRoutes.get("/api/oh-story/workspace")!;
+    const remoteWs = await wsRoute.fetch(new Request("http://dsh.internal/api/oh-story/workspace?sessionId=sess-1", {
+      headers: { host: "studio.example.com" }
+    }));
+    expect(remoteWs.status).toBe(200);
+    const wsPayload = await remoteWs.json() as WorkspacePayload;
+    expect(wsPayload.files.map((f) => f.path)).toEqual(expect.arrayContaining([
+      "发布资料.md",
+      "系列/第一部/追踪/_tracking-state.json"
+    ]));
+    expect(wsPayload.metadataErrors).toContain("系列/第一部/追踪/_tracking-state.json 不是有效的 JSON。");
+
+    // Game preview token minted for `studio.example.com` works on that host without oh-story.trustedHosts,
+    // and rejects DNS rebinding to `evil.example` and third-party Origins!
+    const previewUrl = wsPayload.games[0]?.previewUrl;
+    expect(previewUrl).toBeDefined();
+    const okPreview = await harness.invoke("GET", previewUrl!, { host: "studio.example.com", origin: "null" });
+    expect(okPreview.status).toBe(200);
+    const rebindPreview = await harness.invoke("GET", previewUrl!, { host: "evil.example", origin: "null" });
+    expect(rebindPreview.status).toBe(403);
+    const evilOriginPreview = await harness.invoke("GET", previewUrl!, { host: "studio.example.com", origin: "https://evil.example" });
+    expect(evilOriginPreview.status).toBe(403);
+
+    // Non-HTML HEAD in sendPreviewAsset answers from stat info.size without calling readBytes.
+    (fs.readBytes as ReturnType<typeof vi.fn>).mockClear();
+    const basePrefix = previewUrl!.slice(0, -"/index.html".length);
+    const headPng = await harness.invoke("HEAD", `${basePrefix}/sprite.png`, { host: "studio.example.com", origin: "null" });
+    expect(headPng.status).toBe(200);
+    expect(headPng.headers["content-length"]).toBe(6);
+    expect(headPng.body.byteLength).toBe(0);
+    expect(fs.readBytes).not.toHaveBeenCalled();
+  });
+
+  it("derives Content-Length and Content-Range from actual readByteRange length on short reads and returns 416 on 0 bytes", async () => {
+    const root = await mkdtemp(join(tmpdir(), "oh-story-short-range-"));
+    tempDirs.push(root);
+    await mkdir(join(root, "剧集", "EP001"), { recursive: true });
+    await writeFile(join(root, "剧集", "EP001", "clip.mp4"), Buffer.from("0123456789abcdef"));
+
+    // Simulate file shrinking after stat (16B reported by stat, only 3 bytes left at offset 10).
+    const shortReadSpy = vi.fn(async () => Buffer.from("abc"));
+    const fsShort = makeLocalFs(root, { remote: true, readByteRangeSpy: shortReadSpy });
+    const harnessShort = createHarness(root, fsShort, { admit: () => ({ peer: {} }) });
+    const shortRes = await harnessShort.invoke(
+      "GET",
+      `/oh-story/media?sessionId=sess-1&path=${encodeURIComponent("剧集/EP001/clip.mp4")}`,
+      { range: "bytes=10-15" }
+    );
+    expect(shortRes.status).toBe(206);
+    expect(shortRes.body.toString("utf8")).toBe("abc");
+    expect(String(shortRes.headers["content-length"])).toBe("3");
+    expect(shortRes.headers["content-range"]).toBe("bytes 10-12/13");
+
+    // Simulate 0-byte readByteRange return -> 416 Range Not Satisfiable.
+    const emptyReadSpy = vi.fn(async () => new Uint8Array(0));
+    const fsEmpty = makeLocalFs(root, { remote: true, readByteRangeSpy: emptyReadSpy });
+    const harnessEmpty = createHarness(root, fsEmpty, { admit: () => ({ peer: {} }) });
+    const emptyRes = await harnessEmpty.invoke(
+      "GET",
+      `/oh-story/media?sessionId=sess-1&path=${encodeURIComponent("剧集/EP001/clip.mp4")}`,
+      { range: "bytes=10-15" }
+    );
+    expect(emptyRes.status).toBe(416);
   });
 
   it("sets truncated: true in WorkspacePayload when creative files exceed FILE_LIMIT", async () => {

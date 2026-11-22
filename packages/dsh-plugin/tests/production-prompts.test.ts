@@ -228,4 +228,57 @@ describe("DSH-native production prompts", () => {
       "SHOT-EP001-001": [image.id, video.id]
     })).toEqual([image]);
   });
+
+  it("passes canonical GROUP-* / MOTION-* source_entry for video production while keeping shot context", () => {
+    const groupedProduction = parseEpisodeProduction({
+      [`${episodeDirectory}/分镜.md`]: [
+        "## SHOT-EP001-001 · 抬头",
+        "- 时长：4s",
+        "## SHOT-EP001-002 · 转身",
+        "- 时长：4s",
+        "## SHOT-EP001-003 · 推门",
+        "- 时长：3s"
+      ].join("\n"),
+      [`${episodeDirectory}/视频提示词.md`]: [
+        "## MOTION-EP001-001 · 抬头",
+        "- 分镜：SHOT-EP001-001",
+        "### 可复制提示词",
+        "> Look up.",
+        "## MOTION-EP001-002 · 转身",
+        "- 分镜：SHOT-EP001-002",
+        "### 可复制提示词",
+        "> Turn around.",
+        "## MOTION-EP001-003 · 推门",
+        "- 分镜：SHOT-EP001-003",
+        "### 可复制提示词",
+        "> Push the door.",
+        "## GROUP-EP001-01 · 抬头接转身",
+        "- 成员：MOTION-EP001-001、MOTION-EP001-002",
+        "### 可复制提示词",
+        "> Continuous look-up into turn."
+      ].join("\n")
+    }, episodeDirectory);
+
+    const groupJob = createPendingJob({ id: "vid-group-1", targetId: "GROUP-EP001-01", kind: "video", prompt: "Continuous look-up into turn." });
+    const groupPrompt = nativeProductionPrompt(groupedProduction, groupJob, []);
+    expect(groupPrompt).toContain("投产对象（source_entry）：GROUP-EP001-01（对应分镜：SHOT-EP001-001、SHOT-EP001-002）");
+    expect(groupPrompt).toContain(`${episodeDirectory}/制作成果/GROUP-EP001-01`);
+
+    // Even if a bare SHOT-* id reaches nativeProductionPrompt for a video job, it resolves to GROUP-* / MOTION-*.
+    const shotVideoJob = createPendingJob({ id: "vid-shot-3", targetId: "SHOT-EP001-003", kind: "video", prompt: "Push the door." });
+    const motionPrompt = nativeProductionPrompt(groupedProduction, shotVideoJob, []);
+    expect(motionPrompt).toContain("投产对象（source_entry）：MOTION-EP001-003（对应分镜：SHOT-EP001-003）");
+    expect(motionPrompt).toContain(`${episodeDirectory}/制作成果/MOTION-EP001-003`);
+
+    const batchJob = createPendingJob({ id: "vid-batch-1", targetId: "BATCH-VIDEOS", kind: "video", prompt: "batch", expectedOutputs: 2 });
+    const batchPrompt = nativeBatchPrompt(groupedProduction, batchJob, [
+      { id: "SHOT-EP001-001", prompt: "Continuous look-up into turn." },
+      { id: "SHOT-EP001-002", prompt: "Continuous look-up into turn." },
+      { id: "MOTION-EP001-003", prompt: "Push the door." }
+    ]);
+    expect(batchPrompt).toContain("投产对象（source_entry）：GROUP-EP001-01、MOTION-EP001-003");
+    expect(batchPrompt).toContain("## GROUP-EP001-01（对应分镜：SHOT-EP001-001、SHOT-EP001-002）");
+    expect(batchPrompt).toContain("## MOTION-EP001-003（对应分镜：SHOT-EP001-003）");
+    expect(batchPrompt.match(/## GROUP-EP001-01/gu)).toHaveLength(1);
+  });
 });

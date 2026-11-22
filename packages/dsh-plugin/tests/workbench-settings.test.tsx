@@ -9,7 +9,7 @@ import {
   workbenchModesKey,
   writeWorkbenchModes
 } from "../src/client/workbench-settings.js";
-import { WorkbenchSettingsForm } from "../src/client/workbench-settings-panel.js";
+import { isDialogBackdropClick, WorkbenchSettingsForm, WorkbenchSettingsPanel } from "../src/client/workbench-settings-panel.js";
 
 describe("workbench visibility preferences", () => {
   it("defaults to all modes and recovers malformed or empty preferences", () => {
@@ -98,5 +98,22 @@ describe("workbench settings form", () => {
     expect(markup).toContain("不删除项目");
     expect(markup).toContain("DSH");
     expect(markup).not.toContain('type="password"');
+  });
+
+  it("wraps dialog children in .oh-workbench-settings-body and ignores clicks inside the dialog rect", () => {
+    const markup = renderToStaticMarkup(<WorkbenchSettingsPanel modes={["story", "drama"]} onChange={vi.fn()} onClose={vi.fn()} />);
+    expect(markup).toContain('<div class="oh-workbench-settings-body">');
+
+    const dialog = {
+      getBoundingClientRect: () => ({ left: 100, top: 80, right: 500, bottom: 420, width: 400, height: 340 } as DOMRect)
+    };
+    // Clicking inner 20px padding or gaps lands inside the dialog bounding rect -> must NOT close.
+    expect(isDialogBackdropClick(dialog, { target: dialog, detail: 1, clientX: 105, clientY: 85 })).toBe(false);
+    // Clicking an inner child element -> must NOT close.
+    expect(isDialogBackdropClick(dialog, { target: {}, detail: 1, clientX: 10, clientY: 10 })).toBe(false);
+    // Keyboard-triggered click -> must NOT close.
+    expect(isDialogBackdropClick(dialog, { target: dialog, detail: 0, clientX: 0, clientY: 0 })).toBe(false);
+    // Clicking outside the dialog rect (true ::backdrop click) -> closes.
+    expect(isDialogBackdropClick(dialog, { target: dialog, detail: 1, clientX: 40, clientY: 200 })).toBe(true);
   });
 });

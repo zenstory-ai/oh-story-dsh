@@ -110,4 +110,37 @@ describe("VideoDocuments", () => {
     expect(html).not.toContain("使用磁盘版本");
     expect(html).not.toContain("保留我的草稿");
   });
+
+  it("forwards resolveImageSrc to MarkdownPreview for markdown artifacts", () => {
+    const path = "video-recaps/ep1/work/EDIT_PLAN.md";
+    const html = renderToStaticMarkup(<VideoDocuments
+      project={project}
+      editor={makeEditor({
+        selected: path,
+        buffers: {
+          [path]: {
+            content: "# 分镜\n\n![封面](frames/cover.png)",
+            saved: "# 分镜\n\n![封面](frames/cover.png)",
+            version: "1",
+            source: "disk"
+          }
+        }
+      })}
+      resolveImageSrc={(src) => `api/oh-story/media?path=${encodeURIComponent(src)}`}
+      onChat={vi.fn()}
+    />);
+    expect(html).toContain('src="api/oh-story/media?path=frames%2Fcover.png"');
+  });
+
+  it("does not leak an unrelated fileReadError when editor.selected points to another project file", () => {
+    const html = renderToStaticMarkup(<VideoDocuments
+      project={project}
+      editor={makeEditor({ selected: "video-recaps/other-project/work/BRIEF.md" })}
+      fileReadError="读取其他项目失败"
+      onRetryRead={vi.fn()}
+      onChat={vi.fn()}
+    />);
+    expect(html).toContain("正在读取文稿…");
+    expect(html).not.toContain("读取其他项目失败");
+  });
 });

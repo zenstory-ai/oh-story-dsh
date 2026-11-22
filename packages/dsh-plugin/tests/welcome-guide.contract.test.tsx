@@ -10,6 +10,7 @@ import {
   WelcomeGuideController,
   type WelcomeConfigForm
 } from "../src/client/welcome-guide.js";
+import { endpoint, ohStoryEndpointUrl } from "../src/client/workbench-ui.js";
 import type { WorkbenchPreferenceStorage } from "../src/client/workbench-presence.js";
 import { registerWorkspaceRoute } from "../src/workspace-route.js";
 
@@ -134,13 +135,14 @@ describe("WelcomeGuide and OhStoryPluginConfig UI contract", () => {
 
     expect(markup).toContain("Oh Story 创作工作台");
     expect(markup).not.toContain("Oh Story 已加载");
+    expect(markup).not.toContain("<style>");
     expect(markup).toContain("Minimal");
     expect(markup).toContain("Standard");
     expect(markup).toContain("关闭欢迎引导");
     expect(markup).toContain("welcomeGuide");
 
     const element = WelcomeGuide({ onDismiss });
-    const header = (element.props.children as readonly { readonly props?: { readonly children?: unknown } }[])[1];
+    const header = (element.props.children as readonly { readonly props?: { readonly children?: unknown } }[])[0];
     const children = header?.props?.children as readonly { readonly props?: { readonly onClick?: () => void } }[];
     children[1]?.props?.onClick?.();
     expect(onDismiss).toHaveBeenCalledTimes(1);
@@ -202,5 +204,25 @@ describe("WelcomeGuide and OhStoryPluginConfig UI contract", () => {
     reloaded.ensureFallbackHostConfig(() => Promise.resolve(true));
     await Promise.resolve();
     expect(renderToStaticMarkup(<OhStoryPluginConfig controller={reloaded} />)).toContain('aria-checked="false"');
+    expect(renderToStaticMarkup(<OhStoryPluginConfig controller={reloaded} />)).not.toContain("<style>");
+  });
+
+  it("resolves api/oh-story URLs document-relatively under HTTP mount prefixes and falls back cleanly in non-HTTP environments", () => {
+    try {
+      vi.stubGlobal("document", { baseURI: "https://proxy.example/dsh/mount/" });
+      vi.stubGlobal("location", { origin: "https://proxy.example" });
+      expect(ohStoryEndpointUrl("config")).toBe("https://proxy.example/dsh/mount/api/oh-story/config");
+      expect(endpoint("workspace", "s1")).toBe("https://proxy.example/dsh/mount/api/oh-story/workspace?sessionId=s1");
+      expect(endpoint("media", "s1", "封面/a.png", "v2")).toBe(
+        "https://proxy.example/dsh/mount/api/oh-story/media?sessionId=s1&path=%E5%B0%81%E9%9D%A2%2Fa.png&version=v2"
+      );
+
+      vi.stubGlobal("document", { baseURI: "about:blank" });
+      vi.stubGlobal("location", { origin: "null" });
+      expect(ohStoryEndpointUrl("config")).toBe("/api/oh-story/config");
+      expect(endpoint("workspace", "s1")).toBe("/api/oh-story/workspace?sessionId=s1");
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

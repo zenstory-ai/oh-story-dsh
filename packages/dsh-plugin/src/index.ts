@@ -20,12 +20,16 @@ export { createOhStoryProductionTool, registerOhStoryProductionTool } from "./pr
 export { OH_STORY_PRODUCTION_TOOL_NAME, validateProductionIntent, type ProductionIntentArgs, type ValidatedProductionIntent } from "./production-intent.js";
 export { bundledReferenceGuard, createOhStoryReferenceTool, OH_STORY_REFERENCE_TOOL_NAME } from "./reference-tool.js";
 export {
+  loadWorkbenchStylesheet,
   registerWorkspaceRoute,
+  WORKBENCH_CSS_API_PATH,
+  WORKBENCH_CSS_FALLBACK_PATH,
   type DramaPreflightSummary,
   type GamePreviewErrorMessage,
   type GameProjectSummary,
   type PreviewTokenPayload,
   type VideoPreflightStatus,
+  type WorkbenchStylesheetAsset,
   type WorkspaceFile,
   type WorkspacePayload
 } from "./workspace-route.js";

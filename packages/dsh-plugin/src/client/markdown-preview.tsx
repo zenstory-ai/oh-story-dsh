@@ -2,15 +2,25 @@ import type { ReactNode } from "react";
 
 const MAX_INLINE_DEPTH = 8;
 
+function hasAsciiControlChar(value: string): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    if (code <= 0x1f || code === 0x7f) return true;
+  }
+  return false;
+}
+
 function isWordCharacter(character: string | undefined): boolean {
   return character !== undefined && /[\p{L}\p{N}]/u.test(character);
 }
 
 function isSafeWebUrl(url: string): boolean {
+  if (hasAsciiControlChar(url)) return false;
   return /^https?:\/\/[^)\s]+$/iu.test(url.trim());
 }
 
 export function isSafeImageSrc(src: string): boolean {
+  if (hasAsciiControlChar(src)) return false;
   const trimmed = src.trim();
   if (trimmed === "" || trimmed.startsWith("//")) return false;
   if (/^https?:\/\//iu.test(trimmed)) return true;
@@ -58,8 +68,13 @@ function findClosingDelimiter(source: string, from: number, marker: "**" | "~~" 
   return -1;
 }
 
-/** Find matching `](url)` after `[` at `openBracket`, skipping inline `code` spans. */
-function parseBracketTarget(source: string, openBracket: number): { readonly label: string; readonly target: string; readonly end: number } | undefined {
+/** Find matching `](url)` or `](url "title")` after `[` at `openBracket`, skipping inline `code` spans. */
+function parseBracketTarget(source: string, openBracket: number): {
+  readonly label: string;
+  readonly target: string;
+  readonly title?: string | undefined;
+  readonly end: number;
+} | undefined {
   let depth = 0;
   let closeBracket = -1;
   for (let index = openBracket; index < source.length; index += 1) {
@@ -82,29 +97,71 @@ function parseBracketTarget(source: string, openBracket: number): { readonly lab
     }
   }
   if (closeBracket < 0 || source[closeBracket + 1] !== "(") return undefined;
+  let index = closeBracket + 2;
+  while (index < source.length && source[index] === " ") index += 1;
+  const targetStart = index;
   let parenDepth = 0;
-  let closeParen = -1;
-  for (let index = closeBracket + 1; index < source.length; index += 1) {
+  while (index < source.length) {
     const ch = source[index];
-    if (ch === "\n" || /\s/u.test(ch ?? "")) return undefined;
-    if (ch === "(") parenDepth += 1;
-    else if (ch === ")") {
+    if (ch === "\n") return undefined;
+    if (ch === "(") {
+      parenDepth += 1;
+      index += 1;
+      continue;
+    }
+    if (ch === ")") {
+      if (parenDepth === 0) break;
       parenDepth -= 1;
-      if (parenDepth === 0) {
-        closeParen = index;
+      index += 1;
+      continue;
+    }
+    if (/\s/u.test(ch ?? "")) {
+      if (parenDepth > 0) return undefined;
+      break;
+    }
+    index += 1;
+  }
+  const target = source.slice(targetStart, index);
+  if (target === "") return undefined;
+  while (index < source.length && source[index] === " ") index += 1;
+  let title: string | undefined;
+  if (source[index] === '"' || source[index] === "'") {
+    const quote = source[index]!;
+    index += 1;
+    let parsedTitle = "";
+    let closedTitle = false;
+    while (index < source.length) {
+      const ch = source[index];
+      if (ch === "\n") return undefined;
+      if (ch === "\\" && (source[index + 1] === quote || source[index + 1] === "\\")) {
+        parsedTitle += source[index + 1] ?? "";
+        index += 2;
+        continue;
+      }
+      if (ch === quote) {
+        closedTitle = true;
+        index += 1;
         break;
       }
+      parsedTitle += ch ?? "";
+      index += 1;
     }
+    if (!closedTitle) return undefined;
+    title = parsedTitle;
+    while (index < source.length && source[index] === " ") index += 1;
   }
-  if (closeParen < 0) return undefined;
+  if (source[index] !== ")") return undefined;
   return {
     label: source.slice(openBracket + 1, closeBracket),
-    target: source.slice(closeBracket + 2, closeParen),
-    end: closeParen + 1
+    target,
+    ...(title === undefined ? {} : { title }),
+    end: index + 1
   };
 }
 
-function inline(source: string, key: string, depth = 0): ReactNode[] {
+type ImageSrcResolver = (src: string) => string | undefined;
+
+function inline(source: string, key: string, depth = 0, resolveImageSrc?: ImageSrcResolver): ReactNode[] {
   if (depth >= MAX_INLINE_DEPTH || source === "") return source === "" ? [] : [source];
   const nodes: ReactNode[] = [];
   let text = "";
@@ -129,13 +186,16 @@ function inline(source: string, key: string, depth = 0): ReactNode[] {
       }
     }
 
-    // 2. Images: ![alt](src) with strict URL scheme guard.
+    // 2. Images: ![alt](src) with strict URL scheme guard and optional workspace resolver.
     if (ch === "!" && source[index + 1] === "[") {
       const parsed = parseBracketTarget(source, index + 1);
       if (parsed !== undefined) {
         if (isSafeImageSrc(parsed.target)) {
+          const rawSrc = parsed.target.trim();
+          const resolved = resolveImageSrc?.(rawSrc);
+          const safeSrc = resolved !== undefined && isSafeImageSrc(resolved) ? resolved.trim() : rawSrc;
           flush();
-          nodes.push(<img key={`${key}-${String(index)}`} className="oh-story-markdown-image" src={parsed.target.trim()} alt={parsed.label} loading="lazy" />);
+          nodes.push(<img key={`${key}-${String(index)}`} className="oh-story-markdown-image" src={safeSrc} alt={parsed.label} title={parsed.title} loading="lazy" />);
         } else {
           text += source.slice(index, parsed.end);
         }
@@ -151,8 +211,8 @@ function inline(source: string, key: string, depth = 0): ReactNode[] {
         if (isSafeWebUrl(parsed.target)) {
           flush();
           nodes.push(
-            <a key={`${key}-${String(index)}`} href={parsed.target.trim()} target="_blank" rel="noreferrer">
-              {inline(parsed.label, `${key}-a-${String(index)}`, depth + 1)}
+            <a key={`${key}-${String(index)}`} href={parsed.target.trim()} title={parsed.title} target="_blank" rel="noreferrer">
+              {inline(parsed.label, `${key}-a-${String(index)}`, depth + 1, resolveImageSrc)}
             </a>
           );
         } else {
@@ -168,7 +228,7 @@ function inline(source: string, key: string, depth = 0): ReactNode[] {
       const close = findClosingDelimiter(source, index + 2, "**");
       if (close > index + 2) {
         flush();
-        nodes.push(<strong key={`${key}-${String(index)}`}>{inline(source.slice(index + 2, close), `${key}-b-${String(index)}`, depth + 1)}</strong>);
+        nodes.push(<strong key={`${key}-${String(index)}`}>{inline(source.slice(index + 2, close), `${key}-b-${String(index)}`, depth + 1, resolveImageSrc)}</strong>);
         index = close + 2;
         continue;
       }
@@ -179,7 +239,7 @@ function inline(source: string, key: string, depth = 0): ReactNode[] {
       const close = findClosingDelimiter(source, index + 2, "~~");
       if (close > index + 2) {
         flush();
-        nodes.push(<del key={`${key}-${String(index)}`}>{inline(source.slice(index + 2, close), `${key}-d-${String(index)}`, depth + 1)}</del>);
+        nodes.push(<del key={`${key}-${String(index)}`}>{inline(source.slice(index + 2, close), `${key}-d-${String(index)}`, depth + 1, resolveImageSrc)}</del>);
         index = close + 2;
         continue;
       }
@@ -190,7 +250,7 @@ function inline(source: string, key: string, depth = 0): ReactNode[] {
       const close = findClosingDelimiter(source, index + 1, "*");
       if (close > index + 1) {
         flush();
-        nodes.push(<em key={`${key}-${String(index)}`}>{inline(source.slice(index + 1, close), `${key}-e-${String(index)}`, depth + 1)}</em>);
+        nodes.push(<em key={`${key}-${String(index)}`}>{inline(source.slice(index + 1, close), `${key}-e-${String(index)}`, depth + 1, resolveImageSrc)}</em>);
         index = close + 1;
         continue;
       }
@@ -201,7 +261,7 @@ function inline(source: string, key: string, depth = 0): ReactNode[] {
       const close = findClosingDelimiter(source, index + 1, "_");
       if (close > index + 1) {
         flush();
-        nodes.push(<em key={`${key}-${String(index)}`}>{inline(source.slice(index + 1, close), `${key}-u-${String(index)}`, depth + 1)}</em>);
+        nodes.push(<em key={`${key}-${String(index)}`}>{inline(source.slice(index + 1, close), `${key}-u-${String(index)}`, depth + 1, resolveImageSrc)}</em>);
         index = close + 1;
         continue;
       }
@@ -269,6 +329,7 @@ function splitTableRow(line: string): string[] {
 }
 
 function tableAlignments(line: string): Alignment[] | undefined {
+  if (!line.includes("|")) return undefined;
   const cells = splitTableRow(line);
   if (cells.length === 0 || !cells.every((cell) => /^:?-{3,}:?$/u.test(cell))) return undefined;
   return cells.map((cell) => {
@@ -277,6 +338,15 @@ function tableAlignments(line: string): Alignment[] | undefined {
     if (cell.startsWith(":")) return "left";
     return undefined;
   });
+}
+
+function parseTableHeader(headerLine: string, delimiterLine: string | undefined): { readonly headers: string[]; readonly alignments: Alignment[] } | undefined {
+  if (!headerLine.includes("|") || delimiterLine === undefined) return undefined;
+  const alignments = tableAlignments(delimiterLine);
+  if (alignments === undefined) return undefined;
+  const headers = splitTableRow(headerLine);
+  if (headers.length === 0 || alignments.length !== headers.length) return undefined;
+  return { headers, alignments };
 }
 
 interface ParsedListLine {
@@ -349,17 +419,17 @@ function parseListBlock(lines: readonly string[], startIndex: number): { readonl
   };
 }
 
+const FENCE = /^(`{3,}|~{3,})\s*([^\s`~]*)(?:\s+[^\n]*)?$/u;
+
 function beginsBlock(lines: readonly string[], index: number): boolean {
   const line = lines[index] ?? "";
-  return /^(`{3,}|~{3,})\s*[^\n]*$/u.test(line)
+  return FENCE.test(line)
     || /^#{1,6}\s+/u.test(line)
     || /^(?:-{3,}|\*{3,}|_{3,})\s*$/u.test(line)
     || /^>\s?/u.test(line)
     || matchListLine(line) !== undefined
-    || (line.includes("|") && tableAlignments(lines[index + 1] ?? "") !== undefined);
+    || parseTableHeader(line, lines[index + 1]) !== undefined;
 }
-
-const FENCE = /^(`{3,}|~{3,})\s*([\w-]*)(?:\s+[^\n]*)?$/u;
 
 /** Check whether an opening `<!--` has a matching `-->` in the current remainder or any later line. */
 function hasClosingHtmlComment(lines: readonly string[], lineIndex: number, afterOpen: string): boolean {
@@ -452,9 +522,9 @@ export function parseMarkdownBlocks(markdown: string): MarkdownBlock[] {
     }
     if (/^(?:-{3,}|\*{3,}|_{3,})\s*$/u.test(line)) { result.push({ kind: "rule" }); index += 1; continue; }
 
-    const alignments = line.includes("|") ? tableAlignments(lines[index + 1] ?? "") : undefined;
-    if (alignments !== undefined) {
-      const headers = splitTableRow(line);
+    const tableHeader = parseTableHeader(line, lines[index + 1]);
+    if (tableHeader !== undefined) {
+      const { headers, alignments } = tableHeader;
       const rows: string[][] = [];
       index += 2;
       while (index < lines.length && (lines[index] ?? "").includes("|") && (lines[index] ?? "").trim() !== "") {
@@ -495,8 +565,12 @@ export function parseMarkdownBlocks(markdown: string): MarkdownBlock[] {
   return result;
 }
 
-function Heading({ block, blockKey }: { readonly block: Extract<MarkdownBlock, { readonly kind: "heading" }>; readonly blockKey: string }) {
-  const children = inline(block.text, blockKey);
+function Heading({ block, blockKey, resolveImageSrc }: {
+  readonly block: Extract<MarkdownBlock, { readonly kind: "heading" }>;
+  readonly blockKey: string;
+  readonly resolveImageSrc?: ImageSrcResolver | undefined;
+}) {
+  const children = inline(block.text, blockKey, 0, resolveImageSrc);
   switch (block.level) {
     case 1: return <h1>{children}</h1>;
     case 2: return <h2>{children}</h2>;
@@ -507,18 +581,22 @@ function Heading({ block, blockKey }: { readonly block: Extract<MarkdownBlock, {
   }
 }
 
-function renderList(block: MarkdownListBlock, key: string): ReactNode {
+function renderList(block: MarkdownListBlock, key: string, resolveImageSrc?: ImageSrcResolver): ReactNode {
   const items = block.items.map((item, itemIndex) => (
     <li key={`${key}-${String(itemIndex)}`} className={item.checked === undefined ? undefined : "oh-story-task-item"}>
       {item.checked === undefined ? null : <input type="checkbox" checked={item.checked} readOnly disabled aria-label={item.checked ? "已完成" : "未完成"} />}
-      {inline(item.text, `${key}-${String(itemIndex)}`)}
-      {item.children?.map((child, childIndex) => renderList(child, `${key}-${String(itemIndex)}-sub-${String(childIndex)}`))}
+      {inline(item.text, `${key}-${String(itemIndex)}`, 0, resolveImageSrc)}
+      {item.children?.map((child, childIndex) => renderList(child, `${key}-${String(itemIndex)}-sub-${String(childIndex)}`, resolveImageSrc))}
     </li>
   ));
   return block.kind === "ul" ? <ul key={key}>{items}</ul> : <ol key={key} start={block.start}>{items}</ol>;
 }
 
-export function MarkdownPreview({ content, label }: { readonly content: string; readonly label: string }) {
+export function MarkdownPreview({ content, label, resolveImageSrc }: {
+  readonly content: string;
+  readonly label: string;
+  readonly resolveImageSrc?: ImageSrcResolver | undefined;
+}) {
   const parsed = parseMarkdownBlocks(content);
   if (parsed.length === 0) return <div className="oh-story-markdown-empty">这个 Markdown 文件还是空的。</div>;
   return <article className="oh-story-markdown" aria-label={`${label} 渲染预览`}>
@@ -526,16 +604,16 @@ export function MarkdownPreview({ content, label }: { readonly content: string; 
       const key = `block-${String(index)}`;
       if (block.kind === "code") return <pre key={key}><code data-language={block.language}>{block.lines.join("\n")}</code></pre>;
       if (block.kind === "rule") return <hr key={key} />;
-      if (block.kind === "quote") return <blockquote key={key}>{block.lines.map((line, lineIndex) => <p key={`${key}-${String(lineIndex)}`}>{inline(line, `${key}-${String(lineIndex)}`)}</p>)}</blockquote>;
-      if (block.kind === "ul" || block.kind === "ol") return renderList(block, key);
+      if (block.kind === "quote") return <blockquote key={key}>{block.lines.map((line, lineIndex) => <p key={`${key}-${String(lineIndex)}`}>{inline(line, `${key}-${String(lineIndex)}`, 0, resolveImageSrc)}</p>)}</blockquote>;
+      if (block.kind === "ul" || block.kind === "ol") return renderList(block, key, resolveImageSrc);
       if (block.kind === "table") return <div className="oh-story-markdown-table" key={key}>
         <table>
-          <thead><tr>{block.headers.map((cell, cellIndex) => <th key={`${key}-h-${String(cellIndex)}`} style={{ textAlign: block.alignments[cellIndex] }}>{inline(cell, `${key}-h-${String(cellIndex)}`)}</th>)}</tr></thead>
-          <tbody>{block.rows.map((row, rowIndex) => <tr key={`${key}-r-${String(rowIndex)}`}>{block.headers.map((_, cellIndex) => <td key={`${key}-r-${String(rowIndex)}-${String(cellIndex)}`} style={{ textAlign: block.alignments[cellIndex] }}>{inline(row[cellIndex] ?? "", `${key}-r-${String(rowIndex)}-${String(cellIndex)}`)}</td>)}</tr>)}</tbody>
+          <thead><tr>{block.headers.map((cell, cellIndex) => <th key={`${key}-h-${String(cellIndex)}`} style={{ textAlign: block.alignments[cellIndex] }}>{inline(cell, `${key}-h-${String(cellIndex)}`, 0, resolveImageSrc)}</th>)}</tr></thead>
+          <tbody>{block.rows.map((row, rowIndex) => <tr key={`${key}-r-${String(rowIndex)}`}>{block.headers.map((_, cellIndex) => <td key={`${key}-r-${String(rowIndex)}-${String(cellIndex)}`} style={{ textAlign: block.alignments[cellIndex] }}>{inline(row[cellIndex] ?? "", `${key}-r-${String(rowIndex)}-${String(cellIndex)}`, 0, resolveImageSrc)}</td>)}</tr>)}</tbody>
         </table>
       </div>;
-      if (block.kind === "heading") return <Heading key={key} block={block} blockKey={key} />;
-      if (block.kind === "paragraph") return <p key={key}>{block.lines.map((line, lineIndex) => <span key={`${key}-${String(lineIndex)}`}>{lineIndex === 0 ? null : <br />}{inline(line, `${key}-${String(lineIndex)}`)}</span>)}</p>;
+      if (block.kind === "heading") return <Heading key={key} block={block} blockKey={key} resolveImageSrc={resolveImageSrc} />;
+      if (block.kind === "paragraph") return <p key={key}>{block.lines.map((line, lineIndex) => <span key={`${key}-${String(lineIndex)}`}>{lineIndex === 0 ? null : <br />}{inline(line, `${key}-${String(lineIndex)}`, 0, resolveImageSrc)}</span>)}</p>;
       return null;
     })}
   </article>;

@@ -619,7 +619,7 @@ async function main(): Promise<void> {
     const entries = new Set(archive.stdout.split(/\r?\n/u).filter((entry) => entry !== ""));
     for (const required of [
       "package/LICENSE", "package/README.md", "package/cordis.patch.yml", "package/package.json",
-      "package/lib/index.js", "package/lib/client.js", "package/lib/oh-story/manifest.json", "package/lib/drama/manifest.json",
+      "package/lib/index.js", "package/lib/client.js", "package/lib/workbench.css", "package/lib/oh-story/manifest.json", "package/lib/drama/manifest.json",
       "package/lib/novel-to-game/manifest.json",
       "package/lib/video-recap/manifest.json",
       "package/lib/oh-story/skills/story-setup/references/agent-references/writing-craft.md",
@@ -698,6 +698,14 @@ async function main(): Promise<void> {
     await firstRunPage.getByRole("dialog").waitFor({ state: "detached", timeout: 10_000 });
     const welcome = firstRunPage.getByRole("region", { name: "Oh Story 使用引导" });
     await welcome.waitFor({ state: "visible", timeout: 20_000 });
+    const workbenchStylesheetHref = await firstRunPage.locator("link#oh-story-workbench-css").getAttribute("href");
+    if (workbenchStylesheetHref === null || !workbenchStylesheetHref.includes("api/oh-story/workbench.css")) {
+      throw new Error(`Expected static workbench stylesheet link in head, found: ${String(workbenchStylesheetHref)}`);
+    }
+    const stylesheetResponse = await dshFetch(`${origin}/api/oh-story/workbench.css`);
+    if (!stylesheetResponse.ok || !(stylesheetResponse.headers.get("content-type") ?? "").includes("text/css")) {
+      throw new Error(`Expected /api/oh-story/workbench.css to return text/css, got ${String(stylesheetResponse.status)} (${String(stylesheetResponse.headers.get("content-type"))}).`);
+    }
     const welcomeText = await welcome.innerText();
     if (!welcomeText.includes("Oh Story 创作工作台") || !welcomeText.includes("Minimal") || welcomeText.includes("Oh Story 已加载")) {
       throw new Error(`First launch did not state the workbench and skill-preset boundary honestly: ${welcomeText}`);
@@ -1527,9 +1535,10 @@ async function main(): Promise<void> {
       const editedChapter = `${chapter.content}\n<!-- native DSH editor smoke -->\n`;
       await restoredDraft.fill(editedChapter);
       const saveButton = page.getByRole("button", { name: "保存", exact: true });
+      const apiChapterUrl = `${origin}/api/oh-story/file?sessionId=${encodeURIComponent(storySession.sessionId)}&path=${encodeURIComponent(chapterPath)}`;
       const saveRequest = page.waitForResponse((response) => (
-        response.request().method() === "PUT"
-        && response.url() === chapterUrl
+        response.request().method() === "POST"
+        && response.url() === apiChapterUrl
       ));
       await saveButton.click();
       const browserSaveResponse = await saveRequest;
@@ -2661,11 +2670,11 @@ async function main(): Promise<void> {
       if (transformAfterPan === transformBeforePan || Number.parseFloat(await firstCanvasNode.evaluate((element) => getComputedStyle(element).left)) !== leftAfterKeyboardMove) {
         throw new Error(`Dragging the canvas background did not pan the view independently of node layout: ${transformBeforePan} -> ${transformAfterPan}`);
       }
-      const zoomLabel = page.locator(".oh-story-canvas-controls span");
+      const zoomLabel = page.locator(".oh-story-canvas-controls .oh-canvas-zoom-readout");
       const zoomBeforeWheel = await zoomLabel.textContent();
       await page.mouse.move(canvasBox.x + canvasBox.width / 2, canvasBox.y + canvasBox.height / 2);
       await page.mouse.wheel(0, -240);
-      await page.waitForFunction((before) => document.querySelector(".oh-story-canvas-controls span")?.textContent !== before, zoomBeforeWheel, { timeout: 5_000 });
+      await page.waitForFunction((before) => document.querySelector(".oh-story-canvas-controls .oh-canvas-zoom-readout")?.textContent !== before, zoomBeforeWheel, { timeout: 5_000 });
       await page.getByRole("button", { name: "适应", exact: true }).click();
       const framedNodes = await page.locator(".oh-story-canvas article").evaluateAll((elements, box) => elements.every((element) => {
         const rect = element.getBoundingClientRect();
@@ -3147,7 +3156,7 @@ async function main(): Promise<void> {
       userInvocableVideoSkills: videoSkills.length,
       provider: useRealDeepSeek ? "deepseek-official" : "local-fixture",
       fixtures: [storyProjectName, dramaProjectName, generatedGameId, altGameId],
-      uiSlots: ["shell.overlay", "plugins.bundle.config", "tool.call.toolview"],
+      uiSlots: ["conversation.hero.frame", "shell.overlay", "plugins.bundle.config", "tool.call.toolview"],
       workbenchGate: "creative-project-only",
       workbenchCollapse: "per-workspace",
       workbenchTabs: "per-workspace-hide-restore-persist",

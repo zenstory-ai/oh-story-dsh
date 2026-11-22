@@ -121,14 +121,14 @@ describe("short-drama production projection", () => {
   it("reports malformed, duplicate and unresolved protocol relationships instead of silently dropping them", () => {
     const production = parseEpisodeProduction({
       [`${episode}/剧本.md`]: "## EP001-SC001 内 · 门外 · 夜",
-      [`${episode}/视觉设定.md`]: "## 人物 · 江辰\n- 识别锚点：左眉尾旧疤。",
+      [`${episode}/视觉设定.md`]: "## 人物 · 江辰\n- ID：BAD_ID\n- 识别锚点：左眉尾旧疤。",
       [`${episode}/分镜.md`]: `## SHOT EP001 001 · 错误标题\n\n## SHOT-EP001-001 · A\n- 来源：EP001-SC404\n- 参考：IMG-MISSING\n\n## SHOT-EP001-001 · B`,
       [`${episode}/图片提示词.md`]: "",
       [`${episode}/视频提示词.md`]: `## MOTION-EP001-001 · A\n- 分镜：SHOT-EP001-404\n\n## MOTION-EP001-002 · B`
     }, episode);
     expect(new Set(production.diagnostics.map((item) => item.code))).toEqual(new Set([
       "duplicate_id",
-      "generated_visual_id",
+      "invalid_visual_id",
       "malformed_heading",
       "motion_without_shot",
       "unknown_motion_shot",
@@ -136,6 +136,38 @@ describe("short-drama production projection", () => {
       "unknown_source"
     ]));
     expect(production.diagnostics.every((item) => item.line > 0)).toBe(true);
+  });
+
+  it("aligns with upstream v0.13.0 输入参考图, bare category dividers, and zero false generated_visual_id warnings", () => {
+    const production = parseEpisodeProduction({
+      [`${episode}/剧本.md`]: "## EP001-SC001 内 · 门外 · 夜\n许棠停步。",
+      [`${episode}/视觉设定.md`]: [
+        "## 人物",
+        "人物总览说明。",
+        "",
+        "## 人物 · 许棠",
+        "- 外观特征：窄长眼、左眉尾旧疤。",
+        "",
+        "## 地点",
+        "",
+        "## 地点 · 旧走廊",
+        "- 外观特征：冷青色日光灯。"
+      ].join("\n"),
+      [`${episode}/图片提示词.md`]: "## IMG-XUTANG · 许棠\n- 用途：外貌\n### 可复制提示词\n> 窄长眼。",
+      [`${episode}/分镜.md`]: [
+        "## SHOT-EP001-001 · 门外停步",
+        "- 来源：EP001-SC001",
+        "- 时长：4s",
+        "- 输入参考图：PLAN-LOOK（顺序：1）· IMG-XUTANG《许棠》（用途：外貌；控制：面部）；REF-01（顺序：2）· 输入/door.png《旧门》（用途：空间布局）",
+        "### 首帧提示词",
+        "> 许棠站在旧门外。"
+      ].join("\n")
+    }, episode);
+
+    expect(production.visualAssets.map((item) => item.title)).toEqual(["许棠", "旧走廊"]);
+    expect(production.diagnostics).toEqual([]);
+    expect(production.shots[0]?.references).toEqual(["IMG-XUTANG", "REF-01"]);
+    expect(productionCompleteness(production.shots[0]!).references).toBe(true);
   });
 });
 

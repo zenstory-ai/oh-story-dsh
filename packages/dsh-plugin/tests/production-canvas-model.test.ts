@@ -59,4 +59,55 @@ describe("production canvas projection", () => {
     expect(visualNode).toMatchObject({ kind: "asset", needsImagePrompt: true, prompt: undefined });
     expect(canvasNodeStatus(visualNode!, undefined)).toBe("待写图片提示词");
   });
+
+  it("prefers GROUP-* over MOTION-* for shot video prompts, wires 输入参考图 edges, and leaves safe row spacing", () => {
+    const v13Docs = {
+      [`${episode}/剧本.md`]: "## EP001-SC001 内 · 门外 · 夜\n许棠抬头。",
+      [`${episode}/图片提示词.md`]: "## IMG-XUTANG · 许棠\n### 可复制提示词\n> 窄长眼。",
+      [`${episode}/分镜.md`]: [
+        "## SHOT-EP001-001 · 抬头",
+        "- 来源：EP001-SC001",
+        "- 输入参考图：PLAN-LOOK（顺序：1）· IMG-XUTANG《许棠》（用途：外貌）",
+        "- 时长：4s",
+        "## SHOT-EP001-002 · 转身",
+        "- 来源：EP001-SC001",
+        "- 时长：4s",
+        "## SHOT-EP001-003 · 推门",
+        "- 来源：EP001-SC001",
+        "- 时长：3s",
+        "## SHOT-EP001-004 · 进屋",
+        "- 来源：EP001-SC001",
+        "- 时长：3s"
+      ].join("\n"),
+      [`${episode}/视频提示词.md`]: [
+        "## MOTION-EP001-001 · 抬头",
+        "- 分镜：SHOT-EP001-001",
+        "### 可复制提示词",
+        "> Single motion prompt.",
+        "## MOTION-EP001-002 · 转身",
+        "- 分镜：SHOT-EP001-002",
+        "### 可复制提示词",
+        "> Second motion prompt.",
+        "## GROUP-EP001-01 · 抬头接转身",
+        "- 成员：MOTION-EP001-001、MOTION-EP001-002",
+        "### 可复制提示词",
+        "> Grouped continuous prompt."
+      ].join("\n")
+    };
+    const production = parseEpisodeProduction(v13Docs, episode);
+    const nodes = productionCanvasNodes(production, v13Docs);
+    const shot1 = nodes.find((node) => node.id === "SHOT-EP001-001")!;
+    const shot4 = nodes.find((node) => node.id === "SHOT-EP001-004")!;
+    expect(shot1).toMatchObject({
+      groupId: "GROUP-EP001-01",
+      motionId: "MOTION-EP001-001",
+      videoTargetId: "GROUP-EP001-01",
+      videoPrompt: "Grouped continuous prompt."
+    });
+    expect(shot1.height).toBeGreaterThanOrEqual(380);
+    expect(shot4.initial.y - shot1.initial.y).toBeGreaterThanOrEqual(shot1.height + 64);
+
+    const edges = productionCanvasEdges(production, new Set(nodes.map((node) => node.id)));
+    expect(edges).toContainEqual({ from: "IMG-XUTANG", to: "SHOT-EP001-001", kind: "reference", label: "画面参考" });
+  });
 });

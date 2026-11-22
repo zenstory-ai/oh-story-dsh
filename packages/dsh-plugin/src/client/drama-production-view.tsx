@@ -82,8 +82,21 @@ function effectiveMediaKind(version: DramaMediaVersion): "image" | "video" | "au
   return version.kind === "image" ? "image" : "video";
 }
 
-function versionsForShot(shot: DramaShot, versions: readonly DramaMediaVersion[]): DramaMediaVersion[] {
-  return versions.filter((version) => version.targetId === shot.id || (shot.group !== undefined && version.targetId === shot.group.id));
+function deduplicateVersions<T extends { readonly id: string }>(versions: readonly T[]): T[] {
+  const seen = new Set<string>();
+  return versions.filter((version) => {
+    if (seen.has(version.id)) return false;
+    seen.add(version.id);
+    return true;
+  });
+}
+
+export function versionsForShot(shot: DramaShot, versions: readonly DramaMediaVersion[]): DramaMediaVersion[] {
+  return deduplicateVersions(versions.filter((version) => (
+    version.targetId === shot.id
+    || (shot.group !== undefined && version.targetId === shot.group.id)
+    || (shot.motion !== undefined && version.targetId === shot.motion.id)
+  )));
 }
 
 function selectShotVersion(
@@ -93,11 +106,13 @@ function selectShotVersion(
   kind: "image" | "video"
 ): ProductionMediaVersion | undefined {
   const candidates = versionsForShot(shot, versions).filter((version): version is ProductionMediaVersion => isVisualMediaVersion(version) && version.kind === kind);
-  const explicit = selections[shot.id] ?? (shot.group === undefined ? undefined : selections[shot.group.id]);
+  const explicit = selections[shot.id]
+    ?? (shot.group === undefined ? undefined : selections[shot.group.id])
+    ?? (shot.motion === undefined ? undefined : selections[shot.motion.id]);
   return candidates.find((version) => version.id === explicit) ?? candidates.at(-1);
 }
 
-/** Expand GROUP-* video versions onto their member shots so sequence reconciliation and composition recognise multi-shot outputs. */
+/** Expand GROUP-* and MOTION-* video versions onto their member shots so sequence reconciliation and composition recognise multi-shot outputs. */
 function expandVisualVersionsForShots(
   production: DramaEpisodeProduction,
   versions: readonly DramaMediaVersion[]
@@ -106,10 +121,21 @@ function expandVisualVersionsForShots(
   const groupMembers = new Map<string, readonly string[]>(
     production.groups.map((group) => [group.id, group.memberShotIds] as const)
   );
+  const motionShots = new Map<string, string>(
+    production.motions.flatMap((motion) => motion.shotId === undefined ? [] : [[motion.id, motion.shotId] as const])
+  );
   const seen = new Set(visuals.map((version) => `${version.id}::${version.targetId}`));
   const expanded: ProductionMediaVersion[] = [...visuals];
   for (const version of visuals) {
     if (version.kind !== "video") continue;
+    const motionShot = motionShots.get(version.targetId);
+    if (motionShot !== undefined) {
+      const key = `${version.id}::${motionShot}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        expanded.push({ ...version, targetId: motionShot });
+      }
+    }
     const members = groupMembers.get(version.targetId);
     if (members === undefined) continue;
     for (const shotId of members) {
@@ -130,16 +156,17 @@ export function findAssembledCut(
   if (episodeDirectory === undefined) return undefined;
   const exactPath = `${episodeDirectory}/${ASSEMBLED_CUT_PATH}`;
   const editDirPrefix = `${episodeDirectory}/制作成果/成片/`;
-  const normalizedPrefix = `${episodeDirectory}/制作成果/成片/规格统一/`;
   const all = [...(libraryVersions ?? []), ...versions].filter((version) => !isAudioMediaVersion(version) && version.kind === "video");
   const exact = all.findLast((version) => version.path === exactPath);
   if (exact !== undefined) return exact;
-  return all.findLast((version) => (
-    version.path !== undefined
-    && mediaBelongsToEpisode(version.path, episodeDirectory)
-    && ((version.path.startsWith(editDirPrefix) && !version.path.startsWith(normalizedPrefix))
-      || /(?:^|\/)成片-[^/]+\.mp4$/iu.test(version.path))
-  ));
+  return all.findLast((version) => {
+    if (version.path === undefined || !mediaBelongsToEpisode(version.path, episodeDirectory)) return false;
+    if (version.path.startsWith(editDirPrefix)) {
+      const remainder = version.path.slice(editDirPrefix.length);
+      return !remainder.includes("/") && /\.mp4$/iu.test(remainder);
+    }
+    return /(?:^|\/)成片-[^/]+\.mp4$/iu.test(version.path);
+  });
 }
 
 export function compositionSources(
@@ -260,7 +287,11 @@ export function ProductionStatus({ sessionId, diagnostics, onNavigate, initialPr
     : 0;
   const anyConfigured = typeof preflight === "object" ? preflight.adapters.some((adapter) => adapter.configured) : false;
   const total = typeof preflight === "object" ? preflight.adapters.length : 0;
-  const environmentTone = typeof preflight !== "object" ? "neutral" : !preflight.python.ok || !preflight.adapterConfig.ok ? "error" : configured === total ? "ready" : anyConfigured ? "partial" : "idle";
+  const environmentTone = typeof preflight !== "object"
+    ? "neutral"
+    : !preflight.python.ok || !preflight.adapterConfig.ok
+      ? "error"
+      : total > 0 && configured === total ? "ready" : anyConfigured ? "partial" : "idle";
   const protocolErrors = diagnostics.filter((item) => item.severity === "error").length;
   const adapterFile = typeof preflight === "object" ? preflight.adapterConfig.path.split(/[\\/]/u).at(-1) : undefined;
   const detailTone = protocolErrors > 0 ? "error" : diagnostics.length > 0 ? "warning" : environmentTone;
@@ -269,7 +300,8 @@ export function ProductionStatus({ sessionId, diagnostics, onNavigate, initialPr
       : diagnostics.length > 0 ? `${String(diagnostics.length)} 项提醒`
         : typeof preflight !== "object" ? "检查中…"
           : !preflight.python.ok || !preflight.adapterConfig.ok ? "需要配置"
-            : configured === total ? "制作就绪" : "部分能力可用";
+            : total > 0 && configured === total ? "制作就绪"
+              : anyConfigured ? "部分能力可用" : "未配置媒体 API";
   return <div ref={statusRef} className="oh-story-production-status">
     <div className="oh-story-status-pills">
       <button ref={triggerRef} type="button" className="oh-story-status-pill" data-tone={detailTone} aria-expanded={open} aria-controls="oh-story-production-details" onClick={() => { setOpen((current) => !current); }}>
@@ -318,6 +350,28 @@ export function ProductionStatus({ sessionId, diagnostics, onNavigate, initialPr
       </section>}
     </div>}
   </div>;
+}
+
+export function batchProductionCandidates(
+  production: DramaEpisodeProduction,
+  kind: "image" | "video"
+): Array<{ readonly id: string; readonly prompt: string }> {
+  if (kind === "image") {
+    return production.shots.flatMap((shot) => shot.keyframePrompt === undefined ? [] : [{ id: shot.id, prompt: shot.keyframePrompt }]);
+  }
+  const seen = new Set<string>();
+  const items: Array<{ readonly id: string; readonly prompt: string }> = [];
+  for (const shot of production.shots) {
+    const candidate = shot.group?.prompt !== undefined
+      ? { id: shot.group.id, prompt: shot.group.prompt }
+      : shot.motion?.prompt !== undefined
+        ? { id: shot.motion.id, prompt: shot.motion.prompt }
+        : undefined;
+    if (candidate === undefined || seen.has(candidate.id)) continue;
+    seen.add(candidate.id);
+    items.push(candidate);
+  }
+  return items;
 }
 
 export function DramaProductionView(props: Props) {
@@ -384,7 +438,7 @@ export function DramaProductionView(props: Props) {
   };
 
   const createBatch = async (kind: "image" | "video") => {
-    const candidates = props.production.shots.flatMap((shot) => { const prompt = kind === "image" ? shot.keyframePrompt : shot.motion?.prompt; return prompt === undefined ? [] : [{ id: shot.id, prompt }]; });
+    const candidates = batchProductionCandidates(props.production, kind);
     if (candidates.length === 0) { setNotice(kind === "image" ? "没有可投产的关键帧提示词。" : "没有可投产的视频提示词。"); return; }
     const job = createPendingJob({ id: crypto.randomUUID(), targetId: kind === "image" ? "BATCH-KEYFRAMES" : "BATCH-VIDEOS", kind, prompt: candidates.map((item) => `${item.id}\n${item.prompt}`).join("\n\n"), expectedOutputs: candidates.length });
     commitJobs([...jobsRef.current, { ...job, status: "awaiting_confirmation" }]); props.onSectionChange("tasks");
@@ -434,22 +488,26 @@ export function DramaProductionView(props: Props) {
     {props.section === "tasks" && <TaskBoard production={props.production} jobs={props.jobs} queue={props.queue} sessionRunning={props.sessionRunning} onCancel={cancelJob} onRemoveQueued={removeQueuedJob} />}
     {props.section === "sequence" && <SequenceBoard {...props} versions={visualVersions} production={props.production} episodeDirectory={props.production.episodeDirectory} onCompose={composeSequence} />}
     {props.section === "canvas" && (canvasAvailable
-      ? <ProductionCanvas production={props.production} documents={props.documents} selectedId={props.selectedId} canvas={props.canvas} viewport={props.viewport} versions={props.versions} jobs={props.jobs} selections={props.selections} onSelectionsChange={props.onSelectionsChange} onPrepare={createJob} onWriteImagePrompts={(node) => writeImagePromptsForVisual({ id: node.id, title: node.title, path: node.target?.path })} onOpenMedia={props.onOpenMedia} onContinueInChat={props.onContinueInChat} onSelect={props.onSelect} onNavigate={props.onNavigate} onCanvasChange={props.onCanvasChange} onViewportChange={props.onViewportChange} />
-      : <section className="oh-story-canvas-shell" aria-label="短剧素材与镜头关系画布"><MissingDocument document={`${props.production.episodeDirectory}/分镜.md`} documentPaths={props.production.documentPaths} what="关系" skill="/short-drama-storyboard" onNavigate={props.onNavigate} /></section>)}
+      ? <ProductionCanvas key={props.production.episodeDirectory} production={props.production} documents={props.documents} selectedId={props.selectedId} canvas={props.canvas} viewport={props.viewport} versions={props.versions} jobs={props.jobs} selections={props.selections} onSelectionsChange={props.onSelectionsChange} onPrepare={createJob} onWriteImagePrompts={(node) => writeImagePromptsForVisual({ id: node.id, title: node.title, path: node.target?.path })} onOpenMedia={props.onOpenMedia} onContinueInChat={props.onContinueInChat} onSelect={props.onSelect} onNavigate={props.onNavigate} onCanvasChange={props.onCanvasChange} onViewportChange={props.onViewportChange} />
+      : <section className="oh-story-canvas-shell" aria-label="短剧素材与镜头关系画布"><MissingDocument document={`${props.production.episodeDirectory}/分镜.md`} documentPaths={props.production.documentPaths} what="关系" skill="/short-drama-storyboard" onNavigate={props.onNavigate} onDiscuss={props.onContinueInChat === undefined ? undefined : () => { props.onContinueInChat?.(props.production.episodeDirectory); }} /></section>)}
   </div>;
 }
 
 function ShotBoard(props: Props & { readonly onCreateJob: (targetId: string, kind: "image" | "video", prompt: string) => Promise<void>; readonly onBatch: (kind: "image" | "video") => Promise<void> }) {
   const selectedRef = useScrollIntoView(props.selectedId);
-  if (props.production.shots.length === 0) return <section className="oh-story-shot-board"><MissingDocument document={`${props.production.episodeDirectory}/分镜.md`} documentPaths={props.production.documentPaths} what="镜头" skill="/short-drama-storyboard" onNavigate={props.onNavigate} /></section>;
+  if (props.production.shots.length === 0) return <section className="oh-story-shot-board"><MissingDocument document={`${props.production.episodeDirectory}/分镜.md`} documentPaths={props.production.documentPaths} what="镜头" skill="/short-drama-storyboard" onNavigate={props.onNavigate} onDiscuss={props.onContinueInChat === undefined ? undefined : () => { props.onContinueInChat?.(props.production.episodeDirectory); }} /></section>;
   return <section className="oh-story-shot-board"><div className="oh-story-production-actions"><button type="button" onClick={() => { void props.onBatch("image"); }}>准备批量关键帧</button><button type="button" onClick={() => { void props.onBatch("video"); }}>准备批量视频</button></div><div className="oh-story-shot-grid">{props.production.shots.map((shot) => {
     const completeness = productionCompleteness(shot);
     const versions = versionsForShot(shot, props.versions);
     const selectedImage = selectShotVersion(shot, props.versions, props.selections, "image");
     const selectedVideo = selectShotVersion(shot, props.versions, props.selections, "video");
     const selected = selectedVideo ?? selectedImage;
-    const videoPrompt = shot.motion?.prompt ?? shot.group?.prompt;
-    const videoTargetId = shot.motion?.prompt !== undefined ? shot.id : shot.group?.id ?? shot.id;
+    const videoPrompt = shot.group?.prompt ?? shot.motion?.prompt;
+    const videoTargetId = shot.group?.prompt !== undefined
+      ? shot.group.id
+      : shot.motion?.prompt !== undefined
+        ? shot.motion.id
+        : shot.group?.id ?? shot.motion?.id ?? shot.id;
     return <article
       className="oh-story-shot-card"
       role="group"
@@ -497,7 +555,7 @@ function AssetBoard(props: Props & {
     const mutable = Object.fromEntries(Object.entries(props.manualReferences).map(([target, ids]) => [target, [...ids]]));
     props.onManualReferencesChange({ ...mutable, [referenceTarget]: next });
   };
-  if (assets.length === 0 && musicItems.length === 0 && props.libraryVersions.length === 0) return <section className="oh-story-assets"><MissingDocument document={`${props.production.episodeDirectory}/图片提示词.md`} documentPaths={props.production.documentPaths} what="素材" skill="/short-drama-image-prompts" onNavigate={props.onNavigate} /></section>;
+  if (assets.length === 0 && musicItems.length === 0 && props.libraryVersions.length === 0) return <section className="oh-story-assets"><MissingDocument document={`${props.production.episodeDirectory}/图片提示词.md`} documentPaths={props.production.documentPaths} what="素材" skill="/short-drama-image-prompts" onNavigate={props.onNavigate} onDiscuss={props.onContinueInChat === undefined ? undefined : () => { props.onContinueInChat?.(props.production.episodeDirectory); }} /></section>;
   return <section className="oh-story-assets">
     <div className="oh-story-asset-grid">{assets.map((asset) => {
       const unresolvedVisual = "stableId" in asset;
@@ -506,9 +564,28 @@ function AssetBoard(props: Props & {
       const versions = props.versions.filter((version) => version.targetId === asset.id);
       const visualAssetVersions = versions.filter(isVisualMediaVersion);
       const selected = selectedVersionForTarget(asset.id, visualAssetVersions, props.selections, "image");
-      return <article className="oh-story-asset-card" ref={props.selectedId === asset.id ? selectedRef : undefined} data-selected={props.selectedId === asset.id || undefined} key={asset.id}>
+      return <article
+        className="oh-story-asset-card"
+        role="group"
+        tabIndex={0}
+        aria-label={`素材 ${asset.title}`}
+        ref={props.selectedId === asset.id ? selectedRef : undefined}
+        data-selected={props.selectedId === asset.id || undefined}
+        key={asset.id}
+        onKeyDown={(event) => {
+          if (event.target !== event.currentTarget) return;
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            props.onSelect(asset.id);
+          }
+        }}
+        onClick={(event) => {
+          if (event.target instanceof Element && event.target.closest(INTERACTIVE_CARD_DESCENDANTS) !== null) return;
+          props.onSelect(asset.id);
+        }}
+      >
         <div className="oh-story-asset-media" data-kind={asset.kind}>{selected === undefined ? <div className="oh-story-asset-placeholder" aria-hidden="true">{asset.kind === "character" ? "人" : asset.kind === "scene" ? "景" : asset.kind === "prop" ? "物" : "设"}</div> : <MediaPreview version={selected} />}<small>{ASSET_KIND_LABEL[asset.kind]}</small></div>
-        <div className="oh-story-asset-head"><h3>{asset.title}</h3><span>{selected !== undefined ? "已生成" : unresolvedVisual ? "待写提示词" : "待生成"}</span></div>
+        <div className="oh-story-asset-head"><h3>{asset.title}</h3><span className="oh-story-status-chip" data-status={selected !== undefined ? "ready" : unresolvedVisual ? "warning" : "idle"}><i aria-hidden />{selected !== undefined ? "已生成" : unresolvedVisual ? "待写提示词" : "待生成"}</span></div>
         <p className="oh-story-asset-description">{description ?? `${ASSET_KIND_LABEL[asset.kind]}参考素材`}</p>
         <div className="oh-story-card-actions">{unresolvedVisual
           ? <button type="button" onClick={() => { void props.onWriteImagePrompts(asset); }}>去写图片提示词</button>
@@ -519,9 +596,28 @@ function AssetBoard(props: Props & {
     })}{musicItems.map((music) => {
       const versions = props.versions.filter((version) => version.targetId === music.id);
       const selected = versions.find((version) => version.id === props.selections[music.id]) ?? versions.at(-1);
-      return <article className="oh-story-asset-card oh-story-music-card" ref={props.selectedId === music.id ? selectedRef : undefined} data-selected={props.selectedId === music.id || undefined} key={music.id}>
+      return <article
+        className="oh-story-asset-card oh-story-music-card"
+        role="group"
+        tabIndex={0}
+        aria-label={`配乐 ${music.title}`}
+        ref={props.selectedId === music.id ? selectedRef : undefined}
+        data-selected={props.selectedId === music.id || undefined}
+        key={music.id}
+        onKeyDown={(event) => {
+          if (event.target !== event.currentTarget) return;
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            props.onSelect(music.id);
+          }
+        }}
+        onClick={(event) => {
+          if (event.target instanceof Element && event.target.closest(INTERACTIVE_CARD_DESCENDANTS) !== null) return;
+          props.onSelect(music.id);
+        }}
+      >
         <div className="oh-story-asset-media" data-kind="music">{selected === undefined ? <div className="oh-story-asset-placeholder" aria-hidden="true">乐</div> : <MediaPreview version={selected} />}<small>配乐</small></div>
-        <div className="oh-story-asset-head"><h3>{music.title}</h3><span>{selected === undefined ? "待生成" : "已生成"}</span></div>
+        <div className="oh-story-asset-head"><h3>{music.title}</h3><span className="oh-story-status-chip" data-status={selected === undefined ? "idle" : "ready"}><i aria-hidden />{selected === undefined ? "待生成" : "已生成"}</span></div>
         <p className="oh-story-asset-description">{music.purpose ?? music.mood ?? music.range ?? "成片配乐素材"}</p>
         <div className="oh-story-card-actions">{music.prompt !== undefined && <button type="button" onClick={() => { void props.onPrepareMusic(music); }}>准备素材</button>}</div>
         {versions.length > 1 && <VersionStrip targetId={music.id} versions={versions} selections={props.selections} onSelectionsChange={props.onSelectionsChange} />}
@@ -595,20 +691,23 @@ function MediaStatusBadge({ label, ready }: { readonly label: string; readonly r
   return <span data-ready={ready} aria-label={`${label}${ready ? "已生成" : "待生成"}`}><i aria-hidden="true">{ready ? "✓" : "—"}</i>{label}{ready ? "已生成" : "待生成"}</span>;
 }
 
-function MissingDocument({ document, documentPaths, what, skill, onNavigate }: {
+function MissingDocument({ document, documentPaths, what, skill, onNavigate, onDiscuss }: {
   readonly document: string;
   readonly documentPaths: readonly string[];
   readonly what: string;
   readonly skill: string;
   readonly onNavigate: (target: DramaDocumentTarget) => void;
+  readonly onDiscuss?: (() => void) | undefined;
 }) {
   const present = documentPaths.includes(document);
   return <div className="oh-story-production-empty">
-    <strong>还没有可展示的{what}。</strong>
+    <strong>还没有可展示的{what}</strong>
     <p>{present
-      ? `${document} 已存在，但没有解析出条目。请检查二级标题是否为稳定的 ID 形式。`
-      : `本集还没有 ${document}。在右侧 Chat 用 ${skill} 写好这份文档后，这里会自动出现。`}</p>
-    {present && <button type="button" onClick={() => { onNavigate({ path: document, offset: 0, id: document }); }}>打开 {document.split("/").at(-1)}</button>}
+      ? `${document.split("/").at(-1) ?? document} 已存在，但还没有整理出可展示条目。可以先打开文稿核对标题格式。`
+      : `本集还没有「${document.split("/").at(-1) ?? document}」。在 Chat 里使用 ${skill} 整理好后，这里会自动出现。`}</p>
+    {present
+      ? <button type="button" onClick={() => { onNavigate({ path: document, offset: 0, id: document }); }}>打开 {document.split("/").at(-1)}</button>
+      : onDiscuss !== undefined && <button type="button" onClick={onDiscuss}>去 Chat 整理{what}</button>}
   </div>;
 }
 

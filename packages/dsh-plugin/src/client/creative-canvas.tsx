@@ -75,11 +75,11 @@ export function CreativeCanvas<Node extends CreativeCanvasNode>(props: CreativeC
     <div className="oh-game-canvas-toolbar">
       <div className="oh-game-canvas-help" id={helpId}>{props.helpText}</div>
       <div className="oh-game-canvas-controls">
-        <button type="button" aria-label="缩小画布" onClick={canvas.zoomOut}>−</button>
-        <span aria-live="polite">{Math.round(canvas.viewport.zoom * 100)}%</span>
-        <button type="button" aria-label="放大画布" onClick={canvas.zoomIn}>＋</button>
-        <button type="button" onClick={canvas.fitAll}>适应</button>
-        <button type="button" onClick={canvas.resetLayout}>复位</button>
+        <button type="button" aria-label="缩小画布" title="缩小 (-)" onClick={canvas.zoomOut}>−</button>
+        <button type="button" className="oh-canvas-zoom-readout" aria-label="重置缩放到 100%" title="点击重置缩放到 100%" aria-live="polite" onClick={canvas.resetZoom}>{Math.round(canvas.viewport.zoom * 100)}%</button>
+        <button type="button" aria-label="放大画布" title="放大 (+)" onClick={canvas.zoomIn}>＋</button>
+        <button type="button" title="适应全部 (0)" onClick={canvas.fitAll}>适应</button>
+        <button type="button" title="重置所有节点位置" onClick={canvas.resetLayout}>复位</button>
       </div>
     </div>
     <div

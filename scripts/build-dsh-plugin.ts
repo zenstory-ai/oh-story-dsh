@@ -44,6 +44,26 @@ const inlineCss: Plugin = {
 await rm(outputRoot, { recursive: true, force: true });
 await mkdir(outputRoot, { recursive: true });
 
+// Emit a single minified external stylesheet for the workbench + tool cards so Wave 2b
+// can serve it via `/api/oh-story/workbench.css` (and `/oh-story/workbench.css`) instead of
+// inlining ~135 KB of CSS into `lib/client.js`.
+const workbenchCssFiles = [
+  resolve(packageRoot, "src/client/plugin.css"),
+  resolve(packageRoot, "src/client/game-canvas.css"),
+  resolve(packageRoot, "src/client/video-studio.css"),
+  resolve(packageRoot, "src/client/tool-card.css")
+];
+const rawWorkbenchCss = (await Promise.all(workbenchCssFiles.map((file) => readFile(file, "utf8")))).join("\n");
+const minifiedWorkbenchCss = await transform(rawWorkbenchCss, {
+  loader: "css",
+  minify: true,
+  target: ["chrome120", "safari17"]
+});
+if (minifiedWorkbenchCss.code.trim() === "") {
+  throw new Error("Minified workbench.css asset is unexpectedly empty.");
+}
+await writeFile(resolve(outputRoot, "workbench.css"), minifiedWorkbenchCss.code, "utf8");
+
 await build({
   entryPoints: [resolve(packageRoot, "src/index.ts")],
   outfile: resolve(outputRoot, "index.js"),

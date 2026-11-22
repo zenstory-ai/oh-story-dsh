@@ -352,15 +352,27 @@ const VIDEO_ACTIVITY_LABELS: Readonly<Record<string, string>> = {
   "transcript.json": "原声转写",
   "measure.json": "配音实测",
   "narration.json": "解说稿",
+  "recap_story_plan.json": "故事规划",
+  "assembly_manifest.json": "装配清单",
   "preview.mp4": "粗剪预览",
   "edited_source.mp4": "剪后画面",
   "final.mp4": "最终成片"
 };
 
+const GAME_ACTIVITY_LABELS: Readonly<Record<string, string>> = {
+  "PRODUCT_BRIEF.md": "游戏立项书",
+  "SOURCE_BIBLE.md": "原著与故事依据",
+  "CONCEPT.md": "游戏核心构想",
+  "GAME_DESIGN.md": "游戏设计稿",
+  "ART_DIRECTION.md": "游戏美术方向",
+  "BUILD_BRIEF.md": "试玩构建说明",
+  "verification.json": "游戏验证报告"
+};
+
 const AUDIO_EXTENSIONS = new Set([".mp3", ".wav", ".m4a", ".aac", ".flac"]);
 const VIDEO_EXTENSIONS = new Set([".mp4", ".mov", ".mkv", ".webm"]);
 
-/** Human-facing Chinese label for a creative workspace file activity (Video v0.8.0 / Story v0.11.0 / Drama v0.13.0). */
+/** Human-facing Chinese label for a creative workspace file activity (Video v0.8.0 / Story v0.11.0 / Drama v0.13.0 / Game v0.9.0). */
 export function fileActivityLabel(path: string | undefined): string | undefined {
   if (path === undefined || path === "") return undefined;
   const normalized = path.replaceAll("\\", "/");
@@ -378,7 +390,14 @@ export function fileActivityLabel(path: string | undefined): string | undefined 
       return "成片输出";
     }
     if (VIDEO_EXTENSIONS.has(ext) && parts.includes("sources")) return "原片素材";
-    return undefined;
+    return "视频项目";
+  }
+
+  if (mode === "game") {
+    const exact = GAME_ACTIVITY_LABELS[name];
+    if (exact !== undefined) return exact;
+    if (parts.includes("build")) return "游戏构建文件";
+    return "游戏项目";
   }
 
   if (mode === "story") {
@@ -388,6 +407,8 @@ export function fileActivityLabel(path: string | undefined): string | undefined 
       case "拆文库": return "拆文分析";
       case "扫榜": return "榜单分析";
       case "封面": return "封面设计";
+      case "对标": return "对标资料";
+      case "参考资料": return "参考资料";
       case "正文":
       case "正文.md": return "小说正文";
       case "大纲":
@@ -395,7 +416,7 @@ export function fileActivityLabel(path: string | undefined): string | undefined 
       case "设定":
       case "设定.md": return "小说设定";
       case "追踪": return "状态追踪";
-      default: return undefined;
+      default: return "小说文件";
     }
   }
 
@@ -409,7 +430,20 @@ export function fileActivityLabel(path: string | undefined): string | undefined 
     if (name === "视觉设定.md") return "视觉设定";
     if (name === "图片提示词.md") return "图片提示词";
     if (name === "视频提示词.md") return "视频提示词";
-    return undefined;
+    if (name === "剪辑单.md") return "剪辑单";
+    switch (parts[0]) {
+      case "项目开发": return "项目开发";
+      case "设定集": return "设定集";
+      case "审查": return "审查记录";
+      case "输入": return "输入资料";
+      case "创作者决策": return "创作者决策";
+      case "交付": return "交付成果";
+      case "剧集":
+        if (parts.includes("成片")) return "成片输出";
+        if (parts.includes("制作成果")) return "制作素材";
+        return "剧集文档";
+      default: return "短剧文件";
+    }
   }
 
   return undefined;

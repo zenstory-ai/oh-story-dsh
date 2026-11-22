@@ -26,10 +26,18 @@ export function VideoEnvironmentReport({ preflight }: { readonly preflight: Vide
       Fish Audio（FISH_API_KEY / FISH_AUDIO_API_KEY）{preflight.tts.fish ? "已配置" : "未配置（可选）"}
     </span>
     <span data-ready={preflight.tts.openai || undefined} data-optional={!preflight.tts.openai && anyTts ? "true" : undefined}>
-      OpenAI TTS（OPENAI_API_KEY）{preflight.tts.openai ? "已配置" : "未配置（可选）"}
+      OpenAI TTS（OPENAI_API_KEY + TTS_API_URL）{preflight.tts.openai
+        ? "已配置（自动选择）"
+        : preflight.tts.openaiApiKey === true
+          ? "已配置 OPENAI_API_KEY（需配 TTS_API_URL 自动启用，或显式 --engine openai）"
+          : "未配置（可选）"}
     </span>
     <span data-ready={preflight.tts.indexTts || undefined} data-optional={!preflight.tts.indexTts && anyTts ? "true" : undefined}>
-      IndexTTS（INDEX_TTS_ENDPOINT / INDEX_TTS_VOICE）{preflight.tts.indexTts ? "已配置" : "未配置（可选）"}
+      IndexTTS（INDEX_TTS_ENDPOINT）{preflight.tts.indexTts
+        ? preflight.tts.indexTtsVoice === true
+          ? "已配置（含默认音色 INDEX_TTS_VOICE）"
+          : "已配置（INDEX_TTS_VOICE 可选，亦可通过 --voice 指定）"
+        : "未配置（可选，INDEX_TTS_VOICE 为可选默认音色）"}
     </span>
     <strong className="oh-video-env-group">语音转写（ASR）</strong>
     <span data-ready={preflight.asr.localWhisper.ok || undefined} data-optional={!preflight.asr.localWhisper.ok && anyAsr ? "true" : undefined}>

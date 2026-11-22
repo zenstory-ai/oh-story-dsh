@@ -40,13 +40,15 @@ export function VideoDocuments({
   editor,
   onChat,
   fileReadError,
-  onRetryRead
+  onRetryRead,
+  resolveImageSrc
 }: {
   readonly project: VideoProject;
   readonly editor: GameDocumentEditor;
   readonly onChat: (prompt: string) => void;
   readonly fileReadError?: string | null | undefined;
   readonly onRetryRead?: (() => void) | undefined;
+  readonly resolveImageSrc?: ((src: string) => string | undefined) | undefined;
 }) {
   const creative: VideoArtifactSummary[] = [...videoCreativeDocuments(project)];
   const records: VideoArtifactSummary[] = [...videoProductionRecords(project)];
@@ -62,7 +64,7 @@ export function VideoDocuments({
   useEffect(() => { if (path !== undefined && path !== editor.selected) editor.onSelect(path); }, [path, editor.selected, editor.onSelect]);
   const buffer = path === undefined ? undefined : editor.buffers[path];
   const readError = (path === undefined ? undefined : editor.errors[path])
-    ?? (fileReadError !== null && fileReadError !== undefined && fileReadError !== "" ? fileReadError : undefined);
+    ?? (fileReadError !== null && fileReadError !== undefined && fileReadError !== "" && (editor.selected === undefined || editor.selected === path) ? fileReadError : undefined);
   const retryRead = onRetryRead ?? editor.onRetry;
   const dirty = buffer !== undefined && buffer.content !== buffer.saved;
   const source = editor.mode === "source";
@@ -118,7 +120,7 @@ export function VideoDocuments({
             {buffer.missing === true ? <div className="oh-game-design-empty"><p>文稿已移除，你的草稿仍保留在当前会话。</p><textarea aria-label={`${path} 本地草稿`} value={buffer.content} readOnly /><button type="button" onClick={() => { editor.onDiscard(path); }}>放弃本地草稿</button></div>
               : narration && rows.length > 0 ? <div className="oh-video-script-document">{rows.map((row) => <section key={row.index}><header><strong>第 {row.index + 1} 段</strong><span>{project.narrative?.authoredClock === "output" ? "输出时间" : project.narrative?.authoredClock === "source" ? "原片时间" : "未确认时间"} {videoRange(row)}</span></header>{source ? <textarea aria-label={`第 ${String(row.index + 1)} 段解说`} value={row.narration} onChange={(event) => { const updated = editVideoNarration(buffer.content, row.index, event.target.value); if (updated !== undefined) editor.onEdit(path, updated); }} /> : <p>{row.narration}</p>}</section>)}</div>
                 : source ? <textarea ref={editor.textareaRef} aria-label={path} value={buffer.content} onChange={(event) => { editor.onEdit(path, event.target.value); }} onBlur={editor.onRememberPosition} onSelect={editor.onRememberPosition} onScroll={editor.onRememberPosition} />
-                  : path.endsWith(".md") ? <MarkdownPreview content={buffer.content} label={path} />
+                  : path.endsWith(".md") ? <MarkdownPreview content={buffer.content} label={path} resolveImageSrc={resolveImageSrc} />
                     : structured.length > 0 ? <div className="oh-video-readable-plan">{structured.map((item, index) => <section key={index}><h3>{item.label}</h3><p>{item.text}</p></section>)}</div>
                       : isCodeArtifact && buffer.content.trim() !== "" ? <pre className="oh-game-source" aria-label={`${path} 源码`}>{buffer.content}</pre>
                         : <div className="oh-game-design-empty"><p>这份文稿尚没有可整理的创作段落，可以查看原文或带到 Chat 讨论。</p><button type="button" onClick={() => { editor.onMode("source"); }}>查看原文</button></div>}

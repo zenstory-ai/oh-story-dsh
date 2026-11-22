@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { VideoCheckItemStatus, VideoQualityReviewHint } from "../video-project.js";
 import { endpoint } from "./workbench-ui.js";
+import { isDialogBackdropClick } from "./workbench-settings-panel.js";
 import { VideoEnvironment } from "./video-environment.js";
 import { videoDocumentTitle, videoRange, videoTime, type VideoProject } from "./video-workspace-model.js";
 
@@ -26,11 +27,36 @@ export function resolveVideoDetailsArtifact(
   return artifacts.find((item) => item.path === selected) ?? artifacts[0];
 }
 
+/**
+ * Resolve the artifact read error for `VideoDetails`.
+ * Never lets an unrelated main-editor `fileReadError` hide `VideoDetails`'s own loaded content
+ * or leak onto an artifact whose path differs from `fileReadErrorPath`.
+ */
+export function resolveVideoDetailsError(input: {
+  readonly fetchError: string | undefined;
+  readonly content: string | undefined;
+  readonly artifactPath: string | undefined;
+  readonly fileReadError?: string | null | undefined;
+  readonly fileReadErrorPath?: string | undefined;
+}): string | undefined {
+  if (input.fetchError !== undefined) return input.fetchError;
+  if (input.content !== undefined) return undefined;
+  const external = input.fileReadError !== null && input.fileReadError !== undefined && input.fileReadError !== ""
+    ? input.fileReadError
+    : undefined;
+  if (external === undefined) return undefined;
+  if (input.fileReadErrorPath !== undefined && input.artifactPath !== input.fileReadErrorPath) {
+    return undefined;
+  }
+  return external;
+}
+
 export interface VideoDetailsProps {
   readonly project?: VideoProject | undefined;
   readonly sessionId: string;
   readonly onClose: () => void;
   readonly fileReadError?: string | null | undefined;
+  readonly fileReadErrorPath?: string | undefined;
   readonly onRetryRead?: (() => void) | undefined;
   readonly onSeekHint?: ((hint: VideoQualityReviewHint) => void) | undefined;
   readonly onDiscussHint?: ((hint: VideoQualityReviewHint) => void) | undefined;
@@ -41,6 +67,7 @@ export function VideoDetails({
   sessionId,
   onClose,
   fileReadError,
+  fileReadErrorPath,
   onRetryRead,
   onSeekHint,
   onDiscussHint
@@ -102,10 +129,16 @@ export function VideoDetails({
     notifyClose();
   };
 
-  const displayError = error ?? (fileReadError !== null && fileReadError !== undefined && fileReadError !== "" ? fileReadError : undefined);
+  const displayError = resolveVideoDetailsError({
+    fetchError: error,
+    content,
+    artifactPath: artifact?.path,
+    fileReadError,
+    fileReadErrorPath
+  });
   const retryFetch = (): void => {
     if (error !== undefined) setAttempt((value) => value + 1);
-    onRetryRead?.();
+    else onRetryRead?.();
   };
   const qualityCheck = project?.qualityCheck;
 
@@ -115,9 +148,10 @@ export function VideoDetails({
     aria-label="视频制作详情"
     onClose={notifyClose}
     onClick={(event) => {
-      if (event.target === dialog.current) closeDialog();
+      if (dialog.current !== null && isDialogBackdropClick(dialog.current, event)) closeDialog();
     }}
   >
+    <div className="oh-video-details-body">
     <header>
       <div>
         <h2>制作详情</h2>
@@ -166,5 +200,6 @@ export function VideoDetails({
           : <pre>{content ?? "正在读取制作记录…"}</pre>}
       </>}
     </>}
+    </div>
   </dialog>;
 }

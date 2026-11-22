@@ -196,6 +196,10 @@ export function useInfiniteCanvas<Node extends InfiniteCanvasNode>(options: UseI
 
   const zoomIn = () => { commitViewport(zoomAt(viewport, BUTTON_ZOOM_STEP, { x: size.width / 2, y: size.height / 2 })); };
   const zoomOut = () => { commitViewport(zoomAt(viewport, 1 / BUTTON_ZOOM_STEP, { x: size.width / 2, y: size.height / 2 })); };
+  const resetZoom = () => {
+    if (viewport.zoom === 1) return;
+    commitViewport(zoomAt(viewport, 1 / viewport.zoom, { x: size.width / 2, y: size.height / 2 }));
+  };
   const fitAll = () => { commitViewport(fitRects(rects, size)); };
   const resetLayout = () => {
     clearTimeout(wheelCommit.current);
@@ -366,6 +370,7 @@ export function useInfiniteCanvas<Node extends InfiniteCanvasNode>(options: UseI
     draggingId: liveNode?.id,
     zoomIn,
     zoomOut,
+    resetZoom,
     fitAll,
     resetLayout,
     startPan,

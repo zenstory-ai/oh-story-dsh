@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   assertTrustedWorkspaceAuthority,
+  isBoundPreviewAssetRequest,
   isTrustedPreviewAssetRequest,
   isTrustedPreviewNavigation,
-  isTrustedWorkspaceRequest
+  isTrustedWorkspaceRequest,
+  normalizePreviewAuthority
 } from "../src/workspace-request-trust.js";
 
 function request(headers: Record<string, string | undefined>) {
@@ -100,5 +102,35 @@ describe("workspace browser trust", () => {
       origin: "null",
       "sec-fetch-site": "cross-site"
     }), [])).toBe(false);
+  });
+
+  it("authorizes Host-bound preview tokens for remote authorities and loopback aliases while rejecting rebinding and third-party origins", () => {
+    expect(normalizePreviewAuthority("Studio.Example.COM:8443")).toBe("studio.example.com:8443");
+    expect(normalizePreviewAuthority("127.0.0.1:3080")).toBe("127.0.0.1:3080");
+    expect(isBoundPreviewAssetRequest(request({
+      host: "studio.example.com",
+      origin: "https://studio.example.com"
+    }), "studio.example.com")).toBe(true);
+    expect(isBoundPreviewAssetRequest(request({
+      host: "studio.example.com",
+      origin: "null",
+      "sec-fetch-site": "cross-site"
+    }), "studio.example.com")).toBe(true);
+    // Loopback alias swap (127.0.0.1 ↔ localhost ↔ [::1]) on the same port stays allowed.
+    expect(isBoundPreviewAssetRequest(request({
+      host: "localhost:3080",
+      origin: "null"
+    }), "127.0.0.1:3080")).toBe(true);
+    expect(isBoundPreviewAssetRequest(request({
+      host: "[::1]:3080",
+      origin: "http://127.0.0.1:3080"
+    }), "127.0.0.1:3080")).toBe(true);
+    // Port mismatch, DNS rebinding, and third-party origins are rejected.
+    expect(isBoundPreviewAssetRequest(request({ host: "localhost:9999" }), "127.0.0.1:3080")).toBe(false);
+    expect(isBoundPreviewAssetRequest(request({ host: "evil.example", origin: "null" }), "studio.example.com")).toBe(false);
+    expect(isBoundPreviewAssetRequest(request({
+      host: "studio.example.com",
+      origin: "https://evil.example"
+    }), "studio.example.com")).toBe(false);
   });
 });

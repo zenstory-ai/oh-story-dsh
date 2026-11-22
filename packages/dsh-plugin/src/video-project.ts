@@ -63,6 +63,8 @@ export interface VideoQualityCheckSummary {
   readonly summary: string;
   readonly checks: readonly VideoQualityCheckItem[];
   readonly reviewHints: readonly VideoQualityReviewHint[];
+  readonly media?: string | undefined;
+  readonly mediaRole?: "final" | "edited" | undefined;
   readonly path?: string | undefined;
   readonly version?: string | undefined;
 }
@@ -333,6 +335,7 @@ export function parseVideoQualityCheck(
     readonly clips?: readonly VideoTimelineClip[] | undefined;
     readonly path?: string | undefined;
     readonly version?: string | undefined;
+    readonly resolveMedia?: ((raw: string) => { readonly path?: string | undefined; readonly role?: "final" | "edited" | undefined } | undefined) | undefined;
   } = {}
 ): VideoQualityCheckSummary | undefined {
   const doc = record(value);
@@ -393,12 +396,19 @@ export function parseVideoQualityCheck(
       ? `物理体检通过，${String(reviewHints.length > 0 ? reviewHints.length : checks.filter((item) => item.status === "warn").length)} 条待复核`
       : `${String(checks.filter((item) => item.status === "pass").length)} 项体检通过`;
 
+  const rawMedia = text(doc.media);
+  const resolvedMedia = rawMedia === undefined ? undefined : options.resolveMedia?.(rawMedia);
+  const media = resolvedMedia?.path ?? rawMedia;
+  const mediaRole = resolvedMedia?.role;
+
   return {
     ok,
     status,
     summary,
     checks,
     reviewHints,
+    ...(media === undefined ? {} : { media }),
+    ...(mediaRole === undefined ? {} : { mediaRole }),
     path: options.path,
     version: options.version
   };
@@ -419,6 +429,8 @@ export function summarizeVideoProject(
     readonly qualityCheck?: unknown;
     readonly storyboard?: string | undefined;
     readonly script?: string | undefined;
+    readonly brief?: string | undefined;
+    readonly editPlan?: string | undefined;
   } = {}
 ): VideoProjectSummary {
   const id = root.slice(`${VIDEO_DIRECTORY}/`.length);
@@ -430,22 +442,55 @@ export function summarizeVideoProject(
   const timeline = record(metadata.timeline);
   const timelineMeta = record(timeline?.meta);
   const timelineSources = record(timeline?.sources);
+  const timelineVideo = Array.isArray(timeline?.video) ? timeline.video : undefined;
+  const timelineOverlays = Array.isArray(timeline?.overlays) ? timeline.overlays : undefined;
 
-  const timelineFirstSource = timelineSources === undefined
-    ? undefined
-    : Object.values(timelineSources).map((raw) => referencedMedia(projectFiles, raw)).find((item) => item !== undefined);
-  const source = referencedMedia(projectFiles, manifest?.source_video)
+  const isVideoMedia = (file: VideoWorkspaceFile | undefined): file is VideoWorkspaceFile =>
+    file !== undefined && file.kind === "media" && file.mimeType?.startsWith("video/") === true;
+
+  // Exclude packaging overlays (e.g. transparent .mov/.webm rendered by Remotion) from both
+  // source discovery and finalCandidates so overlays are never misclassified as source or final.
+  const overlayPaths = new Set<string>();
+  if (timelineOverlays !== undefined) {
+    for (const candidate of timelineOverlays) {
+      const overlay = record(candidate);
+      if (overlay === undefined) continue;
+      for (const field of [overlay.source, overlay.file, overlay.path]) {
+        const key = text(field);
+        if (key === undefined) continue;
+        const mapped = timelineSources !== undefined && key in timelineSources ? timelineSources[key] : key;
+        const resolved = referencedMedia(projectFiles, mapped) ?? referencedMedia(projectFiles, key);
+        if (resolved !== undefined) overlayPaths.add(resolved.path);
+      }
+    }
+  }
+
+  // Only resolve the timeline source from `timeline.video[0].source` (requiring video/* MIME),
+  // never scanning arbitrary `timeline.sources` values (which may contain overlay .mov/.webm or audio).
+  let timelineFirstSource: VideoWorkspaceFile | undefined;
+  if (timelineSources !== undefined && timelineVideo !== undefined && timelineVideo.length > 0) {
+    const firstClip = record(timelineVideo[0]);
+    const firstKey = text(firstClip?.source);
+    if (firstKey !== undefined) {
+      const candidate = referencedMedia(projectFiles, timelineSources[firstKey]);
+      if (isVideoMedia(candidate) && !overlayPaths.has(candidate.path)) {
+        timelineFirstSource = candidate;
+      }
+    }
+  }
+  const manifestSource = referencedMedia(projectFiles, manifest?.source_video);
+  const source = (isVideoMedia(manifestSource) && !overlayPaths.has(manifestSource.path) ? manifestSource : undefined)
     ?? timelineFirstSource
-    ?? projectFiles.find((file) => file.kind === "media" && file.path.startsWith(`${root}/sources/`) && file.mimeType?.startsWith("video/") === true);
+    ?? projectFiles.find((file) => isVideoMedia(file) && file.path.startsWith(`${root}/sources/`) && !overlayPaths.has(file.path));
 
-  const previewFile = projectFiles.find((file) => file.kind === "media" && file.path.split("/").at(-1) === "preview.mp4");
-  const legacyEditedFile = projectFiles.find((file) => file.kind === "media" && file.path.split("/").at(-1) === "edited_source.mp4");
+  const previewFile = projectFiles.find((file) => isVideoMedia(file) && file.path.split("/").at(-1) === "preview.mp4");
+  const legacyEditedFile = projectFiles.find((file) => isVideoMedia(file) && file.path.split("/").at(-1) === "edited_source.mp4");
   const edited = previewFile ?? legacyEditedFile;
   const editedKind: "preview" | "edited" | undefined = previewFile !== undefined ? "preview" : legacyEditedFile !== undefined ? "edited" : undefined;
 
   const finalCandidates = projectFiles.filter((file) => {
     const name = file.path.split("/").at(-1) ?? "";
-    if (file.kind !== "media" || file.mimeType?.startsWith("video/") !== true) return false;
+    if (!isVideoMedia(file) || overlayPaths.has(file.path)) return false;
     if (name === "preview.mp4" || name === "edited_source.mp4") return false;
     return file.path.startsWith(`${root}/outputs/`)
       || file.path.startsWith(`${root}/work/out/`)
@@ -453,7 +498,8 @@ export function summarizeVideoProject(
       || name === "final.mp4"
       || /^recap_.+\.(?:mp4|mov|webm)$/iu.test(name);
   });
-  const final = referencedMedia(projectFiles, assembly?.final_output)
+  const assemblyFinal = referencedMedia(projectFiles, assembly?.final_output);
+  const final = (isVideoMedia(assemblyFinal) && !overlayPaths.has(assemblyFinal.path) ? assemblyFinal : undefined)
     ?? finalCandidates.find((file) => file.path.split("/").at(-1) === "final.mp4")
     ?? finalCandidates.at(-1);
 
@@ -532,13 +578,28 @@ export function summarizeVideoProject(
   const qualityCheck = parseVideoQualityCheck(metadata.qualityCheck, {
     clips: narrative?.clips,
     path: checkFile?.path,
-    version: checkFile?.version
+    version: checkFile?.version,
+    resolveMedia: (raw) => {
+      const matched = referencedMedia(projectFiles, raw);
+      if (matched !== undefined) {
+        if (final !== undefined && matched.path === final.path) return { path: matched.path, role: "final" };
+        if (edited !== undefined && matched.path === edited.path) return { path: matched.path, role: "edited" };
+        return { path: matched.path };
+      }
+      const normalized = raw.replaceAll("\\", "/");
+      const name = normalized.split("/").at(-1);
+      if (name === "preview.mp4" || name === "edited_source.mp4") return { path: raw, role: "edited" };
+      if (name === "final.mp4") return { path: raw, role: "final" };
+      return { path: raw };
+    }
   });
 
   const title = text(project?.title)
     ?? markdownHeading(metadata.storyboard)
     ?? markdownHeading(metadata.script)
     ?? text(timelineMeta?.title)
+    ?? markdownHeading(metadata.brief)
+    ?? markdownHeading(metadata.editPlan)
     ?? id;
 
   return {

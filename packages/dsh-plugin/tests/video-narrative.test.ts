@@ -205,4 +205,47 @@ describe("video narrative projection", () => {
       outputExtent: { start: 0, end: 11 }
     });
   });
+
+  it("supports >200-cut timeline.json v3 recaps and preserves pre-TTS draft narration entries without duration", () => {
+    const video = Array.from({ length: 260 }, (_, idx) => ({
+      id: `v${String(idx + 1)}`,
+      source: "s1",
+      in: idx * 2,
+      out: idx * 2 + 1.5
+    }));
+    const projection = projectVideoNarrative({
+      timeline: {
+        schema_version: 3,
+        sources: { s1: "sources/ep1.mp4" },
+        video,
+        audio: {
+          narration: [
+            { id: "n1", at: 0.5, text: "第一段尚未配音的草稿旁白" },
+            { id: "n2", at: 4.0, text: "第二段草稿旁白" }
+          ]
+        }
+      }
+    });
+    expect(projection.warnings).toEqual([]);
+    expect(projection.clips).toHaveLength(260);
+    expect(projection.clips?.[259]).toMatchObject({
+      id: "v260",
+      output: { start: 388.5, end: 390 }
+    });
+    expect(projection.facts.narrationCount).toBe(2);
+    expect(projection.segments).toEqual([
+      expect.objectContaining({
+        id: "n1",
+        text: "第一段尚未配音的草稿旁白",
+        output: { start: 0.5, end: 3.2 },
+        sourceMapping: "timeline-v3"
+      }),
+      expect.objectContaining({
+        id: "n2",
+        text: "第二段草稿旁白",
+        output: { start: 4.0, end: 5.6 },
+        sourceMapping: "timeline-v3"
+      })
+    ]);
+  });
 });

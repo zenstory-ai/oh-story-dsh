@@ -138,14 +138,57 @@ export function editVideoNarration(content: string, index: number, text: string)
 export function videoDraftText(segment: VideoNarrativeSegment, content: string | undefined): string | undefined {
   if (segment.kind !== "narration" || segment.index === undefined || content === undefined) return segment.text;
   try {
-    const rows: unknown = JSON.parse(content);
-    const row: unknown = Array.isArray(rows) ? rows[segment.index] : undefined;
-    if (typeof row === "object" && row !== null && "start" in row && "end" in row && row.start === segment.output.start && row.end === segment.output.end && "narration" in row && typeof row.narration === "string") return row.narration;
+    const parsed: unknown = JSON.parse(content);
+    if (Array.isArray(parsed)) {
+      const row: unknown = parsed[segment.index];
+      if (typeof row === "object" && row !== null && "start" in row && "end" in row && row.start === segment.output.start && row.end === segment.output.end && "narration" in row && typeof row.narration === "string") {
+        return row.narration;
+      }
+      return segment.text;
+    }
+    if (typeof parsed === "object" && parsed !== null) {
+      const doc = parsed as Record<string, unknown>;
+      const audio = typeof doc.audio === "object" && doc.audio !== null && !Array.isArray(doc.audio)
+        ? doc.audio as Record<string, unknown>
+        : undefined;
+      const items = Array.isArray(audio?.narration) ? audio.narration : undefined;
+      const candidate: unknown = items?.[segment.index];
+      if (typeof candidate === "object" && candidate !== null && !Array.isArray(candidate)) {
+        const item = candidate as Record<string, unknown>;
+        const at = typeof item.at === "number" && Number.isFinite(item.at) ? item.at : undefined;
+        const duration = typeof item.duration === "number" && Number.isFinite(item.duration) ? item.duration : undefined;
+        const explicitEnd = typeof item.end === "number" && Number.isFinite(item.end) ? item.end : undefined;
+        const slotS = typeof item.slot_s === "number" && Number.isFinite(item.slot_s) ? item.slot_s : undefined;
+        const itemId = typeof item.id === "string" && item.id.trim() !== "" ? item.id.trim() : undefined;
+        const idMatches = itemId === undefined || itemId === segment.id;
+        const startMatches = at !== undefined && Math.abs(at - segment.output.start) <= 0.001;
+        const derivedEnd = at !== undefined && duration !== undefined && duration > 0.001
+          ? Math.round((at + duration) * 10_000) / 10_000
+          : at !== undefined && explicitEnd !== undefined && explicitEnd - at > 0.001
+            ? explicitEnd
+            : at !== undefined && slotS !== undefined && slotS > 0.001
+              ? Math.round((at + slotS) * 10_000) / 10_000
+              : undefined;
+        const endMatches = derivedEnd === undefined || Math.abs(derivedEnd - segment.output.end) <= 0.001;
+        const updatedText = typeof item.text === "string"
+          ? item.text
+          : typeof item.spoken_text === "string"
+            ? item.spoken_text
+            : undefined;
+        if (idMatches && startMatches && endMatches && updatedText !== undefined) {
+          return updatedText;
+        }
+      }
+    }
   } catch { /* Keep the loaded wording while a source edit is incomplete. */ }
   return segment.text;
 }
 
-export function videoSourceRange(project: VideoProject, segment: VideoNarrativeSegment, files: readonly GameWorkspaceFile[]): VideoTimeRange | undefined {
+export function videoSourceRange(
+  project: Pick<VideoProject, "root" | "previews" | "narrative">,
+  segment: VideoNarrativeSegment,
+  files: readonly GameWorkspaceFile[]
+): VideoTimeRange | undefined {
   const source = project.previews.find((asset) => asset.role === "source");
   const span = segment.sourceRanges[0];
   if (project.narrative?.authoredClock === "unknown" || source === undefined || span === undefined || segment.sourceRanges.length !== 1) return undefined;

@@ -33,6 +33,21 @@ export function WorkbenchSettingsForm({ modes, onChange }: SettingsProps) {
   </>;
 }
 
+export function isDialogBackdropClick(
+  dialog: Pick<HTMLDialogElement, "getBoundingClientRect">,
+  event: { readonly target: unknown; readonly detail?: number; readonly clientX: number; readonly clientY: number }
+): boolean {
+  if (event.target !== dialog) return false;
+  if (event.detail === 0 && event.clientX === 0 && event.clientY === 0) return false;
+  const rect = dialog.getBoundingClientRect();
+  const inside = rect.width > 0 && rect.height > 0
+    && event.clientX >= rect.left
+    && event.clientX <= rect.right
+    && event.clientY >= rect.top
+    && event.clientY <= rect.bottom;
+  return !inside;
+}
+
 export function WorkbenchSettingsPanel({ modes, onChange, onClose }: SettingsProps & { readonly onClose: () => void }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const titleId = useId();
@@ -46,10 +61,12 @@ export function WorkbenchSettingsPanel({ modes, onChange, onClose }: SettingsPro
     aria-labelledby={titleId}
     onClose={onClose}
     onClick={(event) => {
-      if (event.target === dialog.current) dialog.current?.close();
+      if (dialog.current !== null && isDialogBackdropClick(dialog.current, event)) dialog.current.close();
     }}
   >
-    <header><h2 id={titleId}>工作台设置</h2><button type="button" aria-label="关闭工作台设置" onClick={() => { dialog.current?.close(); }}>×</button></header>
-    <WorkbenchSettingsForm modes={modes} onChange={onChange} />
+    <div className="oh-workbench-settings-body">
+      <header><h2 id={titleId}>工作台设置</h2><button type="button" aria-label="关闭工作台设置" onClick={() => { dialog.current?.close(); }}>×</button></header>
+      <WorkbenchSettingsForm modes={modes} onChange={onChange} />
+    </div>
   </dialog>;
 }

@@ -121,6 +121,63 @@ export function isTrustedPreviewNavigation(
     && ["document", "iframe"].includes(header(request.headers, "sec-fetch-dest") ?? "");
 }
 
+/** Normalize a bare `host[:port]` authority for signing into a game preview token. */
+export function normalizePreviewAuthority(
+  authority: string | undefined,
+  protocol: "http:" | "https:" = "http:"
+): string | undefined {
+  if (authority === undefined) return undefined;
+  const trimmed = authority.trim();
+  if (trimmed === "") return undefined;
+  const parsed = parseAuthority(trimmed, protocol);
+  return parsed === undefined ? undefined : canonicalAuthority(trimmed, parsed);
+}
+
+function matchesBoundPreviewAuthority(
+  incomingAuthority: string,
+  boundAuthority: string,
+  protocol: "http:" | "https:" = "http:"
+): boolean {
+  const incoming = parseAuthority(incomingAuthority, protocol);
+  const bound = parseAuthority(boundAuthority, protocol);
+  if (incoming === undefined || bound === undefined) return false;
+  if (incoming.host === bound.host) return true;
+  return isLoopbackHostname(incoming.hostname)
+    && isLoopbackHostname(bound.hostname)
+    && incoming.port === bound.port;
+}
+
+/**
+ * Authorize a `/oh-story/game-preview/<signed-token>/<path...>` request whose
+ * verified HMAC token binds the minting request's normalized `Host` (`boundHost`).
+ * Accepts the exact bound authority or a loopback alias on the same port
+ * (`127.0.0.1` ↔ `localhost` ↔ `[::1]`) while rejecting third-party origins and
+ * DNS-rebound hosts without duplicating DSH's `client-connection.trustedHosts`.
+ */
+export function isBoundPreviewAssetRequest(
+  request: WorkspaceTrustRequest,
+  boundHost: string,
+  protocol: "http:" | "https:" = "http:"
+): boolean {
+  const authority = header(request.headers, "host");
+  if (authority === undefined) return false;
+  if (!matchesBoundPreviewAuthority(authority, boundHost, protocol)) return false;
+  const origin = header(request.headers, "origin");
+  if (origin === undefined || origin === "null") return true;
+  if (isSameAuthorityOrigin(origin, authority)) return true;
+  try {
+    const originUrl = new URL(origin);
+    if (originUrl.protocol !== "http:" && originUrl.protocol !== "https:") return false;
+    const hostUrl = parseAuthority(authority, originUrl.protocol);
+    return hostUrl !== undefined
+      && isLoopbackHostname(hostUrl.hostname)
+      && isLoopbackHostname(originUrl.hostname)
+      && originUrl.port === hostUrl.port;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Host & Origin fence for `/oh-story/game-preview/<signed-token>/<path...>` GET/HEAD
  * requests. Requires a trusted Host (blocking DNS rebinding) and permits:

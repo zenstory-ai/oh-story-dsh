@@ -10,9 +10,24 @@ export type DramaMediaVersion = Omit<ProductionMediaVersion, "kind"> & {
 };
 
 const AUDIO_FILE_PATTERN = /\.(?:mp3|wav|m4a|aac|ogg|flac|opus)$/iu;
+const INTERACTIVE_NODE_DESCENDANTS = "button, a, video, audio, input, select, textarea";
 
 export function isAudioMediaVersion(version: DramaMediaVersion): boolean {
   return version.kind === "audio" || (version.path !== undefined && AUDIO_FILE_PATTERN.test(version.path));
+}
+
+function versionsForNode(node: ProductionCanvasNode, versions: readonly DramaMediaVersion[]): DramaMediaVersion[] {
+  const seen = new Set<string>();
+  const result: DramaMediaVersion[] = [];
+  for (const version of versions) {
+    const matches = version.targetId === node.id
+      || (node.groupId !== undefined && version.targetId === node.groupId)
+      || (node.motionId !== undefined && version.targetId === node.motionId);
+    if (!matches || seen.has(version.id)) continue;
+    seen.add(version.id);
+    result.push(version);
+  }
+  return result;
 }
 
 function selectCanvasVersion(
@@ -20,7 +35,9 @@ function selectCanvasVersion(
   versions: readonly DramaMediaVersion[],
   selections: Readonly<Record<string, string>>
 ): DramaMediaVersion | undefined {
-  const explicit = selections[node.id] ?? (node.groupId === undefined ? undefined : selections[node.groupId]);
+  const explicit = selections[node.id]
+    ?? (node.groupId === undefined ? undefined : selections[node.groupId])
+    ?? (node.motionId === undefined ? undefined : selections[node.motionId]);
   return versions.find((version) => version.id === explicit) ?? versions.at(-1);
 }
 
@@ -80,11 +97,11 @@ export function ProductionCanvas(props: ProductionCanvasProps) {
     <div className="oh-story-canvas-toolbar">
       <div className="oh-story-canvas-help" id="oh-story-canvas-help">拖动空白处平移 · 滚轮缩放 · 方向键移动卡片 · 双击打开原文</div>
       <div className="oh-story-canvas-controls">
-        <button type="button" aria-label="缩小画布" onClick={canvas.zoomOut}>−</button>
-        <span aria-live="polite">{Math.round(canvas.viewport.zoom * 100)}%</span>
-        <button type="button" aria-label="放大画布" onClick={canvas.zoomIn}>＋</button>
-        <button type="button" onClick={canvas.fitAll}>适应</button>
-        <button type="button" onClick={canvas.resetLayout}>复位</button>
+        <button type="button" aria-label="缩小画布" title="缩小 (-)" onClick={canvas.zoomOut}>−</button>
+        <button type="button" className="oh-canvas-zoom-readout" aria-label="重置缩放到 100%" title="点击重置缩放到 100%" aria-live="polite" onClick={canvas.resetZoom}>{Math.round(canvas.viewport.zoom * 100)}%</button>
+        <button type="button" aria-label="放大画布" title="放大 (+)" onClick={canvas.zoomIn}>＋</button>
+        <button type="button" title="适应全部 (0)" onClick={canvas.fitAll}>适应</button>
+        <button type="button" title="重置所有节点位置" onClick={canvas.resetLayout}>复位</button>
       </div>
     </div>
     <div
@@ -125,12 +142,16 @@ export function ProductionCanvas(props: ProductionCanvasProps) {
           selected={node.id === props.selectedId}
           dragging={canvas.draggingId === node.id}
           relations={edges.filter((edge) => edge.from === node.id || edge.to === node.id).length}
-          versions={versions.filter((version) => version.targetId === node.id || (node.groupId !== undefined && version.targetId === node.groupId))}
-          job={props.jobs?.findLast((job) => job.targetId === node.id || (node.groupId !== undefined && job.targetId === node.groupId))}
+          versions={versionsForNode(node, versions)}
+          job={props.jobs?.findLast((job) => (
+            job.targetId === node.id
+            || (node.groupId !== undefined && job.targetId === node.groupId)
+            || (node.motionId !== undefined && job.targetId === node.motionId)
+          ))}
           selections={selections}
           onSelectionsChange={props.onSelectionsChange}
           onPrepare={props.onPrepare === undefined ? undefined : (targetId, kind, prompt) => {
-            props.onSelect(targetId);
+            props.onSelect(node.id);
             return props.onPrepare?.(targetId, kind, prompt);
           }}
           onWriteImagePrompts={props.onWriteImagePrompts === undefined ? undefined : (target) => {
@@ -188,7 +209,10 @@ function CanvasNodeCard(props: {
       props.onKeyDown(event, props.node);
     }}
     onPointerDown={(event) => { props.onPointerDown(event, props.node.id); }}
-    onDoubleClick={() => { props.onNavigate(props.node); }}
+    onDoubleClick={(event) => {
+      if (event.target instanceof Element && event.target.closest(INTERACTIVE_NODE_DESCENDANTS) !== null) return;
+      props.onNavigate(props.node);
+    }}
   >
     <header className="oh-story-canvas-node-head"><div><small>{props.node.eyebrow}</small><strong>{props.node.title}</strong></div><span>{props.relations} 条关系</span></header>
     {props.node.kind !== "story" && <div className="oh-story-canvas-node-media">
@@ -197,7 +221,7 @@ function CanvasNodeCard(props: {
         : <MediaPreview version={selectedVersion} interactive />}
     </div>}
     <div className="oh-story-canvas-node-copy">{props.node.description !== undefined && <p>{props.node.description}</p>}</div>
-    <div className="oh-story-canvas-node-meta"><span>{canvasNodeStatus(props.node, selectedVersion, props.job)}</span>{props.versions.length > 0 && <span>{props.versions.length} 个版本</span>}</div>
+    <div className="oh-story-canvas-node-meta"><span className="oh-story-status-chip" data-status={canvasNodeStatusTone(props.node, selectedVersion, props.job)}><i aria-hidden />{canvasNodeStatus(props.node, selectedVersion, props.job)}</span>{props.versions.length > 0 && <span>{props.versions.length} 个版本</span>}</div>
     {props.versions.length > 1 && <div className="oh-story-canvas-node-versions" aria-label={`${props.node.title} 成果版本`}>{props.versions.map((version, index) => <button
       type="button"
       key={version.id}
@@ -215,7 +239,7 @@ function CanvasNodeCard(props: {
             else props.onContinueInChat?.(props.node.id);
           }}>去写图片提示词</button>
         : props.node.prompt !== undefined && props.onPrepare !== undefined && <button type="button" onPointerDown={stopPointer} onClick={(event) => { event.stopPropagation(); void props.onPrepare?.(props.node.id, "image", props.node.prompt!); }}>{props.node.kind === "shot" ? "准备关键帧" : "准备素材"}</button>}
-      {props.node.videoPrompt !== undefined && props.onPrepare !== undefined && <button type="button" onPointerDown={stopPointer} onClick={(event) => { event.stopPropagation(); void props.onPrepare?.(props.node.id, "video", props.node.videoPrompt!); }}>准备视频</button>}
+      {props.node.videoPrompt !== undefined && props.onPrepare !== undefined && <button type="button" onPointerDown={stopPointer} onClick={(event) => { event.stopPropagation(); void props.onPrepare?.(props.node.videoTargetId ?? props.node.groupId ?? props.node.motionId ?? props.node.id, "video", props.node.videoPrompt!); }}>准备视频</button>}
       {selectedVersion?.path !== undefined && props.onOpenMedia !== undefined && <button type="button" onPointerDown={stopPointer} onClick={(event) => { event.stopPropagation(); props.onOpenMedia?.(selectedVersion.path!); }}>打开文件</button>}
     </footer>
   </article>;
@@ -237,6 +261,21 @@ function MediaPreview({ version, interactive = false }: { readonly version: Dram
   return version.kind === "image"
     ? <img className="oh-story-media-preview" src={version.url} alt={version.targetId} loading="lazy" draggable={false} />
     : <video className="oh-story-media-preview" src={version.url} controls={interactive} muted={!interactive} preload="metadata" onPointerDown={interactive ? stopPointer : undefined} onClick={interactive ? stopClick : undefined} />;
+}
+
+export function canvasNodeStatusTone(
+  node: ProductionCanvasNode,
+  version: DramaMediaVersion | undefined,
+  job?: ProductionJob
+): "ready" | "working" | "warning" | "error" | "idle" {
+  if (job !== undefined) {
+    if (job.status === "failed") return "error";
+    if (job.status === "dispatched_unknown" || job.status === "canceled") return "warning";
+    if (job.status === "awaiting_confirmation" || job.status === "pending" || job.status === "running") return "working";
+  }
+  if (version !== undefined) return "ready";
+  if (node.needsImagePrompt === true) return "warning";
+  return "idle";
 }
 
 export function canvasNodeStatus(node: ProductionCanvasNode, version: DramaMediaVersion | undefined, job?: ProductionJob): string {

@@ -20,28 +20,46 @@ function referenceParagraph(kind: ProductionJob["kind"]): string {
   return kind === "image" ? `${referenceRules}${shotStartFrameNote}` : referenceRules;
 }
 
+function resolveSourceEntry(production: DramaEpisodeProduction, targetId: string, kind: ProductionJob["kind"]): string {
+  if (kind !== "video") return targetId;
+  if (targetId.startsWith("GROUP-") || targetId.startsWith("MOTION-")) return targetId;
+  const shot = production.shots.find((item) => item.id === targetId);
+  return shot?.group?.id ?? shot?.motion?.id ?? targetId;
+}
+
+function resolveShotContext(production: DramaEpisodeProduction, sourceEntry: string, originalTargetId: string): string | undefined {
+  const group = production.groups.find((item) => item.id === sourceEntry);
+  if (group !== undefined && group.memberShotIds.length > 0) return group.memberShotIds.join("、");
+  const motion = production.motions.find((item) => item.id === sourceEntry);
+  if (motion?.shotId !== undefined) return motion.shotId;
+  if (originalTargetId !== sourceEntry && originalTargetId.startsWith("SHOT-")) return originalTargetId;
+  return undefined;
+}
+
 export function nativeProductionPrompt(
   production: DramaEpisodeProduction,
   job: ProductionJob,
   references: readonly ProductionMediaVersion[]
 ): string {
+  const sourceEntry = resolveSourceEntry(production, job.targetId, job.kind);
+  const shotContext = resolveShotContext(production, sourceEntry, job.targetId);
   const referenceText = references.length === 0
     ? "无"
     : references.map((item) => `${item.targetId}: ${item.path ?? item.url}`).join("\n");
   return `/short-drama-produce
 
-请为「${targetDisplayName(production, job.targetId)}」准备一份${job.kind === "image" ? "画面" : "视频"}生成预览，先让我核对内容和成本，再决定是否开始生成。
+请为「${targetDisplayName(production, sourceEntry)}」准备一份${job.kind === "image" ? "画面" : "视频"}生成预览，先让我核对内容和成本，再决定是否开始生成。
 
 只准备当前单项生产任务，不运行 Provider。
 - 任务 ID：${job.id}
 - 任务类型：${job.kind === "image" ? "图片/关键帧" : "镜头视频"}
 - 建议 adapter 契约：${job.kind === "image" ? "openai-image" : "seedance"}（实际配置与模型以当前 DSH 运行环境为准）
-- 投产对象：${job.targetId}
+- 投产对象（source_entry）：${sourceEntry}${shotContext === undefined ? "" : `（对应分镜：${shotContext}）`}
 - 创作文档目录：${production.episodeDirectory}
 - 工作台列出的补充参考（不是生产输入快照）：
 ${referenceText}
-- 输出目录：${production.episodeDirectory}/制作成果/${job.targetId}
-- 输出文件名必须同时包含投产对象 ID 与任务 ID ${job.id}，以便 DSH 工作台关联版本。
+- 输出目录：${production.episodeDirectory}/制作成果/${sourceEntry}
+- 输出文件名必须同时包含投产对象 ID（${sourceEntry}）与任务 ID ${job.id}，以便 DSH 工作台关联版本。
 
 待预检提示词：
 ${job.prompt}
@@ -56,19 +74,32 @@ export function nativeBatchPrompt(
   job: ProductionJob,
   candidates: readonly { readonly id: string; readonly prompt: string }[]
 ): string {
+  const seen = new Set<string>();
+  const resolved: Array<{ readonly id: string; readonly prompt: string; readonly shotContext?: string | undefined }> = [];
+  for (const item of candidates) {
+    const sourceEntry = resolveSourceEntry(production, item.id, job.kind);
+    if (seen.has(sourceEntry)) continue;
+    seen.add(sourceEntry);
+    resolved.push({
+      id: sourceEntry,
+      prompt: item.prompt,
+      shotContext: resolveShotContext(production, sourceEntry, item.id)
+    });
+  }
   return `/short-drama-produce
 
-请为这 ${String(candidates.length)} 个镜头准备一份${job.kind === "image" ? "关键帧" : "视频"}生成预览，先让我核对内容和成本，再决定是否开始生成。
+请为这 ${String(resolved.length)} 个镜头准备一份${job.kind === "image" ? "关键帧" : "视频"}生成预览，先让我核对内容和成本，再决定是否开始生成。
 
 只准备当前批量生产任务，不运行 Provider。
 - 批次任务 ID：${job.id}
 - 任务类型：${job.kind === "image" ? "批量关键帧" : "批量镜头视频"}
 - 建议 adapter 契约：${job.kind === "image" ? "openai-image" : "seedance"}（实际配置与模型以当前 DSH 运行环境为准）
+- 投产对象（source_entry）：${resolved.map((item) => item.id).join("、")}
 - 创作文档目录：${production.episodeDirectory}
 - 输出根目录：${production.episodeDirectory}/制作成果
-- 每个输出文件名必须包含对应镜头 ID 与批次任务 ID ${job.id}。
+- 每个输出文件名必须包含对应${job.kind === "image" ? "镜头" : "投产对象（source_entry）"} ID 与批次任务 ID ${job.id}。
 
-${candidates.map((item) => `## ${item.id}\n${item.prompt}`).join("\n\n")}
+${resolved.map((item) => `## ${item.id}${item.shotContext === undefined ? "" : `（对应分镜：${item.shotContext}）`}\n${item.prompt}`).join("\n\n")}
 
 ${referenceParagraph(job.kind)}
 

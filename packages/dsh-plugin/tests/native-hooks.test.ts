@@ -23,6 +23,8 @@ const roots: string[] = [];
 type StoryFileSystem = Pick<FileSystem, "resolve" | "contains" | "stat" | "listDir" | "readBytes">;
 // Upstream (Oh Story 0.8.1) blocks prose under a 细纲 with fewer than 30 characters besides # and whitespace.
 const OUTLINE = "# 第一章\n\n江晨接下账号任务，决定当晚就发出第一条混剪，赌上自己在团里的去留。\n";
+const VALID_TRACKING_STATE = `${JSON.stringify({ schema_version: 4, state_revision: 1, last_committed_chapter: 1 })}\n`;
+const CLEAN_CHAPTER = `# 第一章\n\n${"林深推开铁门，夜风卷着细雨扑在脸上，巷口路灯忽明忽暗，他收紧衣领继续往前走。".repeat(4)}\n`;
 
 function localDshFs(): StoryFileSystem {
   const resolveTarget = async (path: string, options?: { readonly cwd?: string }): Promise<FsTarget> => {
@@ -155,7 +157,7 @@ describe("native DSH prose guards", () => {
     await mkdir(join(root, "拆文库", basename(root)), { recursive: true });
     await expect(validateStoryMutation(localDshFs(), mutation)).resolves.toBeUndefined();
     await mkdir(join(root, "追踪"));
-    await writeFile(join(root, "追踪", "_tracking-state.json"), "{}\n");
+    await writeFile(join(root, "追踪", "_tracking-state.json"), VALID_TRACKING_STATE);
     await expect(validateStoryMutation(localDshFs(), mutation)).resolves.toContain("细纲_第002章");
   });
 
@@ -171,7 +173,7 @@ describe("native DSH prose guards", () => {
     await expect(validateStoryMutation(localDshFs(), mutation)).resolves.toBe(outlineDenial(7, "大纲"));
     await importMarker(root);
     await expect(validateStoryMutation(localDshFs(), mutation)).resolves.toBeUndefined();
-    await writeFile(join(root, "追踪", "_tracking-state.json"), "{}\n");
+    await writeFile(join(root, "追踪", "_tracking-state.json"), VALID_TRACKING_STATE);
     await expect(validateStoryMutation(localDshFs(), mutation)).resolves.toBe(outlineDenial(7, "大纲"));
   });
 
@@ -187,14 +189,14 @@ describe("native DSH prose guards", () => {
 
   it("requires the matching chapter outline", async () => {
     const root = await project();
-    await writeFile(join(root, "追踪", "_tracking-state.json"), "{}\n");
+    await writeFile(join(root, "追踪", "_tracking-state.json"), VALID_TRACKING_STATE);
     await expect(validateStoryMutation(localDshFs(), { root, path: "正文/第002章.md", chapter: 2 }))
       .resolves.toContain("细纲");
   });
 
   it("allows a mutation when Tracking and the matching outline exist", async () => {
     const root = await project();
-    await writeFile(join(root, "追踪", "_tracking-state.json"), "{}\n");
+    await writeFile(join(root, "追踪", "_tracking-state.json"), VALID_TRACKING_STATE);
     await writeFile(join(root, "大纲", "细纲_第002章_回声.md"), OUTLINE);
     await expect(validateStoryMutation(localDshFs(), { root, path: "正文/第002章.md", chapter: 2 }))
       .resolves.toBeUndefined();
@@ -202,7 +204,7 @@ describe("native DSH prose guards", () => {
 
   it("blocks a chapter whose every outline is empty, like upstream's outlineIsEmpty", async () => {
     const root = await project();
-    await writeFile(join(root, "追踪", "_tracking-state.json"), "{}\n");
+    await writeFile(join(root, "追踪", "_tracking-state.json"), VALID_TRACKING_STATE);
     const mutation = { root, path: "正文/第002章.md", chapter: 2 };
     // BOM, heading marks and whitespace (full-width space included) do not count toward the 30 characters.
     await writeFile(join(root, "大纲", "细纲_第002章.md"), "\uFEFF# 第二章\n\n##　情节点\n- 待定\n");
@@ -214,14 +216,14 @@ describe("native DSH prose guards", () => {
 
   it("treats an outline that is not UTF-8 as written, as upstream does", async () => {
     const root = await project();
-    await writeFile(join(root, "追踪", "_tracking-state.json"), "{}\n");
+    await writeFile(join(root, "追踪", "_tracking-state.json"), VALID_TRACKING_STATE);
     await writeFile(join(root, "大纲", "细纲_第002章.md"), Buffer.from([0xff, 0xfe, 0x00]));
     await expect(validateStoryMutation(localDshFs(), { root, path: "正文/第002章.md", chapter: 2 })).resolves.toBeUndefined();
   });
 
   it("does not gate rewriting an existing chapter on its outline", async () => {
     const root = await project();
-    await writeFile(join(root, "追踪", "_tracking-state.json"), "{}\n");
+    await writeFile(join(root, "追踪", "_tracking-state.json"), VALID_TRACKING_STATE);
     await mkdir(join(root, "正文"));
     await writeFile(join(root, "正文", "第002章.md"), "# 第二章\n");
     await expect(validateStoryMutation(localDshFs(), { root, path: "正文/第002章.md", chapter: 2 }))
@@ -288,7 +290,7 @@ describe("native DSH prose guards", () => {
       }]),
       readBytes: vi.fn(async (target: FsTarget): Promise<Uint8Array> => {
         calls.push(target.displayPath);
-        return new TextEncoder().encode(OUTLINE);
+        return new TextEncoder().encode(target.displayPath.endsWith("_tracking-state.json") ? VALID_TRACKING_STATE : OUTLINE);
       })
     } as StoryFileSystem;
     const agent = agentOn("/virtual-story", fs);
@@ -539,9 +541,9 @@ describe("registered native hooks", () => {
     const accept = async (): Promise<PostToolDecision> => ({ kind: "accept" } as PostToolDecision);
 
     const book = await project();
-    await writeFile(join(book, "追踪", "_tracking-state.json"), "{}\n");
+    await writeFile(join(book, "追踪", "_tracking-state.json"), VALID_TRACKING_STATE);
     await mkdir(join(book, "正文"));
-    await writeFile(join(book, "正文", "第001章.md"), "# 第一章\n");
+    await writeFile(join(book, "正文", "第001章.md"), CLEAN_CHAPTER);
     const bookWrite = execution("write", { file_path: "正文/第001章.md", content: "x" }, agentOn(book, localDshFs()));
     const decision = await postExecute(bookWrite, { isError: false }, accept) as PostToolDecision & { readonly additionalContexts?: readonly unknown[] };
     expect(decision.additionalContexts).toHaveLength(1);
@@ -572,7 +574,7 @@ describe("registered native hooks", () => {
     await mkdir(join(book, "大纲"));
     await writeFile(join(book, "大纲", "细纲_第001章.md"), OUTLINE);
     await mkdir(join(book, "正文"));
-    await writeFile(join(book, "正文", "第001章.md"), "# 第一章\n");
+    await writeFile(join(book, "正文", "第001章.md"), CLEAN_CHAPTER);
     const fresh = await reminderFor(book);
     expect(fresh).toContain(escaped(postWriteReminderText("正文/第001章.md", { trackingUninitialized: true })));
     for (const step of [
@@ -589,7 +591,7 @@ describe("registered native hooks", () => {
     expect(await reminderFor(book)).toContain(escaped(postWriteReminderText("正文/第001章.md")));
     await rm(join(book, ".story"), { recursive: true });
     await mkdir(join(book, "追踪"));
-    await writeFile(join(book, "追踪", "_tracking-state.json"), "{}\n");
+    await writeFile(join(book, "追踪", "_tracking-state.json"), VALID_TRACKING_STATE);
     const committed = await reminderFor(book);
     expect(committed).toContain(escaped(postWriteReminderText("正文/第001章.md")));
     expect(committed).not.toContain("tracking-initialization.md");
@@ -600,7 +602,7 @@ describe("registered native hooks", () => {
     const postExecute = handlers.get("tools/post-execute")![0]!;
     const book = await project();
     await mkdir(join(book, "正文"));
-    await writeFile(join(book, "正文", "第001章.md"), "# 第一章\n");
+    await writeFile(join(book, "正文", "第001章.md"), CLEAN_CHAPTER);
     const write = { file_path: "正文/第001章.md", content: "x" };
     for (const label of ["oh-story:narrative-writer", "oh-story:story-architect"]) {
       const child = agentOn(book, localDshFs(), roleSession(book, label));
@@ -659,5 +661,90 @@ describe("registered native hooks", () => {
     expect(contexts).toHaveLength(1);
     expect(contexts?.[0]?.content[0]?.text).toContain("检测到疑似硬伤");
     expect(contexts?.[0]?.content[0]?.text).toContain("叙述中泄漏写作工程词");
+  });
+
+  it("enforces v0.11.0 short-story 正文.md gate, _tracking-state.json v4 validation, per-line quote masking, and full hard-defect checks", async () => {
+    // 1. Short-story pre-write gate (root and multi-book)
+    const shortRoot = await workspace("oh-story-short-gate-");
+    await writeFile(join(shortRoot, "设定.md"), "# 设定\n");
+    await expect(validateStoryMutation(localDshFs(), { root: shortRoot, path: "正文.md" }))
+      .resolves.toContain("缺少同目录 小节大纲.md");
+    await writeFile(join(shortRoot, "小节大纲.md"), "# 小节大纲\n");
+    await expect(validateStoryMutation(localDshFs(), { root: shortRoot, path: "正文.md" }))
+      .resolves.toBeUndefined();
+
+    await mkdir(join(shortRoot, "短篇二"));
+    await writeFile(join(shortRoot, "短篇二", "设定.md"), "# 设定\n");
+    await expect(validateStoryMutation(localDshFs(), { root: shortRoot, path: "短篇二/正文.md" }))
+      .resolves.toContain("短篇二/小节大纲.md");
+
+    // 2. _tracking-state.json corruption / schema v4 / missing integer fields gate (root and multi-book)
+    const trackRoot = await workspace("oh-story-track-gate-");
+    await mkdir(join(trackRoot, "书甲", "大纲"), { recursive: true });
+    await mkdir(join(trackRoot, "书甲", "追踪"), { recursive: true });
+    await writeFile(join(trackRoot, "书甲", "大纲", "细纲_第002章.md"), OUTLINE);
+    const trackMutation = { root: trackRoot, path: "书甲/正文/第002章.md", chapter: 2 };
+
+    await writeFile(join(trackRoot, "书甲", "追踪", "_tracking-state.json"), "{corrupt");
+    await expect(validateStoryMutation(localDshFs(), trackMutation)).resolves.toContain("无法解析");
+
+    await writeFile(join(trackRoot, "书甲", "追踪", "_tracking-state.json"), JSON.stringify({ schema_version: 3, state_revision: 1, last_committed_chapter: 1 }));
+    await expect(validateStoryMutation(localDshFs(), trackMutation)).resolves.toContain("schema_version=4");
+
+    await writeFile(join(trackRoot, "书甲", "追踪", "_tracking-state.json"), JSON.stringify({ schema_version: 4, last_committed_chapter: 1 }));
+    await expect(validateStoryMutation(localDshFs(), trackMutation)).resolves.toContain("state_revision");
+
+    await writeFile(join(trackRoot, "书甲", "追踪", "_tracking-state.json"), JSON.stringify({ schema_version: 4, state_revision: 1 }));
+    await expect(validateStoryMutation(localDshFs(), trackMutation)).resolves.toContain("last_committed_chapter");
+
+    await writeFile(join(trackRoot, "书甲", "追踪", "_tracking-state.json"), VALID_TRACKING_STATE);
+    await expect(validateStoryMutation(localDshFs(), trackMutation)).resolves.toBeUndefined();
+
+    // 3. Per-line quote masking: unclosed quote on line 1 must NOT hide defects on line 2!
+    const multiLine = [
+      "「他说到一半停了下来。",
+      "作为AI助手，我无法继续创作这段任务描述，此处待填。",
+      "夜风把铁门吹得吱呀作响，街灯忽明忽暗。",
+      "夜风把铁门吹得吱呀作响，街灯忽明忽暗。",
+      "最后一句在这里突然断掉"
+    ].join("\n");
+    expect(detectProseHardDefects(multiLine)).toEqual(expect.arrayContaining([
+      "叙述中出现 AI 自指元信息",
+      "叙述中出现生成拒绝语",
+      "叙述中泄漏写作工程词",
+      "出现未完成占位词",
+      "出现紧邻行重复",
+      "结尾疑似截断（未以标点收束）"
+    ]));
+
+    // 4. Post-write checks cover short stories (`正文.md`), books with only `设定/`, <200B short write, and duplicate chapter titles
+    const handlers = registered();
+    const postExecute = handlers.get("tools/post-execute")![0]!;
+    const accept = async (): Promise<PostToolDecision> => ({ kind: "accept" } as PostToolDecision);
+
+    await writeFile(join(shortRoot, "正文.md"), "# 短篇\n\n太短且待补充");
+    const shortDecision = await postExecute(
+      execution("write", { file_path: "正文.md", content: "..." }, agentOn(shortRoot, localDshFs())),
+      { isError: false },
+      accept
+    ) as PostToolDecision & { readonly additionalContexts?: readonly { readonly content: readonly { readonly text?: string }[] }[] };
+    expect(shortDecision.additionalContexts).toHaveLength(1);
+    const shortText = shortDecision.additionalContexts?.[0]?.content[0]?.text ?? "";
+    expect(shortText).toContain("疑似未写完或落盘不完整");
+    expect(shortText).toContain("出现未完成占位词");
+    expect(shortText).not.toContain("tracking_commit.js");
+
+    const settingOnlyBook = await workspace("oh-story-setting-only-");
+    await mkdir(join(settingOnlyBook, "设定"));
+    await mkdir(join(settingOnlyBook, "正文"));
+    await writeFile(join(settingOnlyBook, "正文", "第001章_雪夜.md"), CLEAN_CHAPTER);
+    await writeFile(join(settingOnlyBook, "正文", "第002章_雪夜.md"), CLEAN_CHAPTER);
+    const dupDecision = await postExecute(
+      execution("write", { file_path: "正文/第002章_雪夜.md", content: "..." }, agentOn(settingOnlyBook, localDshFs())),
+      { isError: false },
+      accept
+    ) as PostToolDecision & { readonly additionalContexts?: readonly { readonly content: readonly { readonly text?: string }[] }[] };
+    expect(dupDecision.additionalContexts).toHaveLength(1);
+    expect(dupDecision.additionalContexts?.[0]?.content[0]?.text).toContain("章节标题重复「雪夜」");
   });
 });

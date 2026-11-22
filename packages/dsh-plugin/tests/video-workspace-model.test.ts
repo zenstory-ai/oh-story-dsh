@@ -43,6 +43,61 @@ describe("video workspace facts and edits", () => {
     expect(videoDraftText(segment, "{unfinished")).toBe("原配音");
   });
 
+  it("overlays live timeline.json v3 audio.narration wording only when timing and id still match", () => {
+    const narrative = projectVideoNarrative({
+      timeline: {
+        schema_version: 3,
+        sources: { s1: "sources/a.mp4" },
+        video: [{ id: "v1", source: "s1", in: 0, out: 12 }],
+        audio: {
+          narration: [
+            { id: "n1", at: 1, duration: 2.5, text: "初版解说" },
+            { id: "n2", at: 5, text: "未配音草稿" }
+          ]
+        }
+      },
+      resolveSourcePath: (raw) => `video-recaps/a/${raw}`
+    });
+    const timed = narrative.segments[0]!;
+    const draft = narrative.segments[1]!;
+
+    const editedSameTiming = JSON.stringify({
+      schema_version: 3,
+      audio: {
+        narration: [
+          { id: "n1", at: 1, duration: 2.5, text: "改稿后的解说" },
+          { id: "n2", at: 5, spoken_text: "草稿新文案" }
+        ]
+      }
+    });
+    expect(videoDraftText(timed, editedSameTiming)).toBe("改稿后的解说");
+    expect(videoDraftText(draft, editedSameTiming)).toBe("草稿新文案");
+
+    const editedShiftedTiming = JSON.stringify({
+      schema_version: 3,
+      audio: {
+        narration: [
+          { id: "n1", at: 1.5, duration: 2.5, text: "时间改了" },
+          { id: "n2", at: 5, text: "草稿新文案" }
+        ]
+      }
+    });
+    expect(videoDraftText(timed, editedShiftedTiming)).toBe("初版解说");
+
+    const editedDifferentDuration = JSON.stringify({
+      schema_version: 3,
+      audio: { narration: [{ id: "n1", at: 1, duration: 4, text: "时长变了" }] }
+    });
+    expect(videoDraftText(timed, editedDifferentDuration)).toBe("初版解说");
+
+    const editedDifferentId = JSON.stringify({
+      schema_version: 3,
+      audio: { narration: [{ id: "n99", at: 1, duration: 2.5, text: "换了段" }] }
+    });
+    expect(videoDraftText(timed, editedDifferentId)).toBe("初版解说");
+    expect(videoDraftText(timed, "{broken")).toBe("初版解说");
+  });
+
   it("does not invent creative cards, originals or a playable final for a source-only project", () => {
     expect(videoCanvasModel(project, undefined)).toEqual({ nodes: [], edges: [] });
     const source = { role: "source" as const, label: "原片", path: "video-recaps/a/sources/a.mp4", version: "v1", bytes: 1, mimeType: "video/mp4" };

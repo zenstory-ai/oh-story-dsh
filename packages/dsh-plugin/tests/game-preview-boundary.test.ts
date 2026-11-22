@@ -43,13 +43,24 @@ describe("game preview security boundary", () => {
     expect(previewContentType("fonts/title.otf")).toBe("font/otf");
   });
 
-  it("injects a read-only runtime error bridge into preview HTML without duplicating it", () => {
-    const html = "<!doctype html><html><head><meta charset=\"utf-8\"></head><body><h1>Play</h1></body></html>";
+  it("injects a read-only runtime error bridge immediately after opening <head> without duplicating it", () => {
+    const html = "<!doctype html><html><head data-app=\"v1\"><script type=\"module\" src=\"./main.js\"></script><link rel=\"stylesheet\" href=\"./app.css\"></head><body><h1>Play</h1></body></html>";
     const injected = injectGamePreviewErrorBridge(html);
     expect(injected).toContain("oh-story:game-preview-error");
     expect(injected).toContain("unhandledrejection");
-    expect(injected.indexOf("oh-story:game-preview-error")).toBeLessThan(injected.indexOf("</head>"));
+    const openHeadEnd = injected.indexOf("<head data-app=\"v1\">") + "<head data-app=\"v1\">".length;
+    const bridgePos = injected.indexOf("oh-story:game-preview-error");
+    const moduleScriptPos = injected.indexOf("<script type=\"module\"");
+    expect(bridgePos).toBeGreaterThan(openHeadEnd);
+    expect(bridgePos).toBeLessThan(moduleScriptPos);
+    expect(bridgePos).toBeLessThan(injected.indexOf("</head>"));
     expect(injectGamePreviewErrorBridge(injected)).toBe(injected);
+
+    // Fallback when <head> is omitted: right after <!doctype ...> or start of HTML.
+    const noHead = "<!doctype html><body><script src=\"./a.js\"></script></body>";
+    const injectedNoHead = injectGamePreviewErrorBridge(noHead);
+    expect(injectedNoHead.indexOf("oh-story:game-preview-error")).toBeGreaterThan(injectedNoHead.indexOf("<!doctype html>"));
+    expect(injectedNoHead.indexOf("oh-story:game-preview-error")).toBeLessThan(injectedNoHead.indexOf("<body>"));
   });
 });
 
@@ -80,15 +91,17 @@ describe("signed game preview capability token", () => {
     const secret = createPreviewTokenSecret();
     const otherSecret = createPreviewTokenSecret();
     const now = 1_700_000_000_000;
-    const tokenA = mintPreviewToken(secret, { sessionId: "session-1", root: "game-adaptations/金瓶梅 · 风月总账" }, now);
-    const tokenB = mintPreviewToken(secret, { sessionId: "session-1", root: "game-adaptations/金瓶梅 · 风月总账" }, now + 4_000);
-    // Stable across periodic 4s workspace polls so active game iframes do not reload.
+    const tokenA = mintPreviewToken(secret, { sessionId: "session-1", root: "game-adaptations/金瓶梅 · 风月总账", host: "Studio.Example.COM:8443" }, now);
+    const tokenB = mintPreviewToken(secret, { sessionId: "session-1", root: "game-adaptations/金瓶梅 · 风月总账", host: "studio.example.com:8443" }, now + 4_000);
+    // Stable across periodic 4s workspace polls and long play sessions (12h bucket, 12–24h TTL).
     expect(tokenA).toBe(tokenB);
 
     const verified = verifyPreviewToken(tokenA, secret, now);
     expect(verified.sessionId).toBe("session-1");
     expect(verified.root).toBe("game-adaptations/金瓶梅 · 风月总账");
-    expect(verified.exp * 1_000).toBeGreaterThan(now);
+    expect(verified.host).toBe("studio.example.com:8443");
+    expect(verified.exp - Math.floor(now / 1_000)).toBeGreaterThanOrEqual(12 * 3_600);
+    expect(verified.exp - Math.floor(now / 1_000)).toBeLessThanOrEqual(24 * 3_600);
 
     expect(() => verifyPreviewToken(tokenA, otherSecret, now)).toThrow();
     expect(() => verifyPreviewToken(`${tokenA}x`, secret, now)).toThrow();

@@ -213,6 +213,12 @@ export function parseStoryboard(path: string, content: string): DramaShot[] {
     const fields = bulletFields(section.body);
     const id = match[1].toLocaleUpperCase();
     const source = firstField(fields, "来源", "场次");
+    const referenceText = [
+      fields.get("图片提示词项"),
+      fields.get("输入参考图"),
+      fields.get("参考"),
+      fields.get("关联资产")
+    ].filter((value): value is string => value !== undefined && value !== "").join("；");
     return [{
       id,
       title: match[2]?.trim() || id,
@@ -225,7 +231,7 @@ export function parseStoryboard(path: string, content: string): DramaShot[] {
       shotSpec: firstField(fields, "景别/机位", "景别", "镜头规格"),
       start: firstField(fields, "起点", "起始"),
       end: firstField(fields, "终点", "结束"),
-      references: splitReferences(firstField(fields, "图片提示词项", "参考", "关联资产")),
+      references: splitReferences(referenceText),
       keyframePrompt: quoteUnderHeading(section.body, "首帧提示词") ?? quoteUnderHeading(section.body, "冻结关键帧提示词")
     }];
   });
@@ -317,10 +323,11 @@ export function parseMusicPrompts(path: string, content: string): DramaMusicProm
 
 export function parseVisualAssets(path: string, content: string): DramaVisualAsset[] {
   return levelTwoSections(content).flatMap((section) => {
-    const match = /^(人物|角色|造型|地点|场景|道具|状态)\s*(?:[·｜|:]\s*)?(.*)$/u.exec(section.heading.trim());
-    if (match === null || match[1] === undefined) return [];
+    const match = /^(人物|角色|造型|地点|场景|道具|状态)\s*[·｜|:：]\s*(.+)$/u.exec(section.heading.trim());
+    if (match === null || match[1] === undefined || match[2] === undefined) return [];
+    const title = match[2].trim();
+    if (title === "") return [];
     const fields = bulletFields(section.body);
-    const title = match[2]?.trim() || section.heading.trim();
     const declaredId = firstField(fields, "ID", "资产 ID", "资产ID")?.trim().toLocaleUpperCase();
     const stableId = declaredId !== undefined && /^VISUAL-[A-Z0-9-]+$/u.test(declaredId);
     const id = stableId ? declaredId : `VISUAL-${slug(`${match[1]}-${title}`)}`;
@@ -374,16 +381,22 @@ function validateProductionProtocol(input: {
   }
 
   for (const visual of input.visualAssets) {
-    if (visual.stableId) continue;
-    add(visual.declaredId === undefined
-      ? { severity: "warning", code: "generated_visual_id", path: visual.path, offset: visual.offset, targetId: visual.id, message: `${visual.title} 缺少稳定的 “- ID：VISUAL-*”；修改标题会改变画布节点身份。` }
-      : { severity: "warning", code: "invalid_visual_id", path: visual.path, offset: visual.offset, targetId: visual.id, message: `${visual.title} 的 “- ID：${visual.declaredId}” 格式无效，已回退为按标题生成的 ID；请写成 VISUAL- 加大写字母、数字或连字符。` });
+    if (visual.stableId || visual.declaredId === undefined) continue;
+    add({
+      severity: "warning",
+      code: "invalid_visual_id",
+      path: visual.path,
+      offset: visual.offset,
+      targetId: visual.id,
+      message: `${visual.title} 的 “- ID：${visual.declaredId}” 格式无效，已回退为按标题生成的 ID；请写成 VISUAL- 加大写字母、数字或连字符。`
+    });
   }
 
   const knownReferences = new Set([...input.assets, ...input.visualAssets, ...input.shots, ...input.motions, ...input.groups, ...input.music].map((item) => item.id));
   const screenplayPath = `${input.episodeDirectory}/剧本.md`;
   for (const shot of input.shots) {
     for (const reference of shot.references) {
+      if (reference.startsWith("REF-")) continue;
       if (!knownReferences.has(reference)) add({ severity: "warning", code: "unknown_reference", path: shot.path, offset: shot.offset, targetId: shot.id, message: `${shot.id} 引用了未解析的 ${reference}。` });
     }
     for (const id of sourceKeys(shot)) {
@@ -491,9 +504,20 @@ function seconds(value: string | undefined): number | undefined {
 }
 
 function splitReferences(value: string | undefined): string[] {
-  if (value === undefined) return [];
-  const ids = value.match(/(?:IMG|SHOT|MOTION|GROUP|MUSIC)-[A-Z0-9-]+/giu) ?? [];
-  return [...new Set(ids.map((id) => id.toLocaleUpperCase()))];
+  if (value === undefined || value.trim() === "") return [];
+  const ids: string[] = [];
+  for (const segment of value.split(/[;；]/u)) {
+    const known = segment.match(/(?:IMG|SHOT|MOTION|GROUP|MUSIC)-[A-Z0-9-]+/giu);
+    if (known !== null && known.length > 0) {
+      ids.push(...known.map((id) => id.toLocaleUpperCase()));
+      continue;
+    }
+    const refs = segment.match(/REF-[A-Z0-9-]+/giu);
+    if (refs !== null && refs.length > 0) {
+      ids.push(...refs.map((id) => id.toLocaleUpperCase()));
+    }
+  }
+  return [...new Set(ids)];
 }
 
 function inferAssetKind(value: string): DramaAssetKind {
