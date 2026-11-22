@@ -1,0 +1,30 @@
+version: 2
+updates:
+  # pnpm 11 enforces a 1440-minute (1-day) minimumReleaseAge by default.
+  # A 3-day cooldown ensures version updates and their transitive graph clear
+  # pnpm's supply-chain maturity gate before Dependabot opens or rebases PRs.
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 3
+    open-pull-requests-limit: 5
+    ignore:
+      # DSH host/runtime packages are pinned in lockstep via pnpm-workspace.yaml
+      # overrides and tracked by .github/workflows/upstream-updates.yml.
+      - dependency-name: "@deepseek-ai/*"
+    commit-message:
+      prefix: "chore"
+      prefix-development: "chore"
+      include: "scope"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "ci"
