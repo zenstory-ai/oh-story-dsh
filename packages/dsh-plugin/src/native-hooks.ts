@@ -202,20 +202,20 @@ async function hasImportSignal(fs: StoryFileSystem, root: string, book: string, 
 }
 
 /**
- * Mirrors the outline gate of upstream Oh Story's prose guard
- * (`proseBlockReason`) for books with 大纲/ or 追踪/: creating a new
- * `正文/第N章*.md` requires a `大纲/细纲_第N章*.md` that is not empty, whether or not Tracking
- * exists yet. The one bypass is an import window — an import signal while the
- * book has no `追踪/_tracking-state.json`. Rewriting an existing chapter is not
- * gated on its outline.
+ * Mirrors Oh Story v0.11.0's sole prose hard gate (`proseBlockReason`) for books
+ * with 大纲/ or 追踪/: creating a new `正文/第N章*.md` requires a non-empty
+ * `大纲/细纲_第N章*.md` (at least {@link OUTLINE_MIN_CHARS} non-whitespace/non-#
+ * characters), whether or not Tracking exists yet. The one bypass is an import
+ * window — an import signal while the book has no `追踪/_tracking-state.json`.
+ * Rewriting an existing chapter is not gated on its outline.
  *
- * It leaves out the rest of proseBlockReason: the Tracking checkpoint (state
- * present and at schema_version 4, 上下文.md at the same state revision, the
- * previous chapter committed), the previous chapter's toxic-phrase debt, the
- * short-story gate that wants 小节大纲.md before 正文.md, and shell-write
- * targets (redirection, cp, tee, scripts), which DSH hooks do not see as file
- * mutations — the story-long-write overlay asks for write/edit instead. It also
- * leaves a workspace with 正文/ but neither 大纲/ nor 追踪/ unguarded.
+ * Per Oh Story v0.11.0's soft-gate model, prior-chapter quality/style/length
+ * checks are NOT hard write blocks: they run at commit time via
+ * `storyctl.js chapter commit` (supporting `review_required` + `--ack`), while
+ * deterministic post-write hard-defect notices ride DSH's `tools/post-execute`
+ * `additionalContexts`. Shell-write targets (redirection, cp, tee, scripts) are
+ * outside DSH file-tool hooks (the story-long-write overlay asks for write/edit),
+ * and workspaces with 正文/ but neither 大纲/ nor 追踪/ stay unguarded.
  */
 export async function validateStoryMutation(
   fs: StoryFileSystem,
@@ -336,14 +336,65 @@ export async function decideChapterExtractorWrite(
   return reason === undefined ? next() : { kind: "deny", reason };
 }
 
+const PROSE_INSPECT_LIMIT = 128 * 1024;
+const QUOTED_DIALOGUE = /「[^」]*」|『[^』]*』|【[^】]*】|“[^”]*”|"[^"]*"/gu;
+const HARD_DEFECT_PATTERNS: readonly { readonly pattern: RegExp; readonly label: string; readonly stripDialogue?: boolean }[] = [
+  { pattern: /\uFFFD/u, label: "出现乱码替换字符（）" },
+  { pattern: /^(?:Sure|Certainly|Here'?s|As an AI|I (?:cannot|can't|am unable|apologize))\b/mu, label: "出现英文 AI 元信息前缀" },
+  { pattern: /[（(](?:此处|以下|这里|下文|后续)?\s*(?:省略|略)(?:去|过)?[^）)]{0,10}[）)]/u, label: "出现括号省略占位符" },
+  { pattern: /(?:未完待续|TODO|占位符|placeholder)/u, label: "出现未完成占位词" },
+  {
+    pattern: /作为(?:一个)?(?:AI|人工智能|大?语言模型|智能助手|聊天助手)(?:语言模型|大?模型|助手|机器人)?(?=[，,。、；;：:！!？?\s）)」』"】]|我|无法|不能|没法|$)/u,
+    label: "叙述中出现 AI 自指元信息",
+    stripDialogue: true
+  },
+  {
+    pattern: /细纲|(?<!剧)情节点|卷纲|功能标签|目标情绪|字数目标|字数口径|章首钩子|章尾钩子|这章不能说破|本章禁止提前释放|排纲笔记|排纲底稿/u,
+    label: "叙述中泄漏写作工程词",
+    stripDialogue: true
+  }
+];
+
+/**
+ * Deterministic, high-precision post-write hard-defect scan mirroring Oh Story
+ * v0.11.0's non-blocking `proseAfterWrite` findings. Returns plain Chinese
+ * warnings to attach via DSH `PostToolDecision.additionalContexts`.
+ */
+export function detectProseHardDefects(content: string): string[] {
+  const withoutDialogue = content.replace(QUOTED_DIALOGUE, "");
+  const warnings: string[] = [];
+  for (const rule of HARD_DEFECT_PATTERNS) {
+    const sample = rule.stripDialogue === true ? withoutDialogue : content;
+    if (rule.pattern.test(sample)) warnings.push(rule.label);
+  }
+  return warnings;
+}
+
+async function inspectWrittenProse(fs: StoryFileSystem, root: string, path: string, signal?: AbortSignal): Promise<string[]> {
+  if (fs.readBytes === undefined) return [];
+  try {
+    const file = await target(fs, root, path, signal);
+    const bytes = await fs.readBytes(file, signal, PROSE_INSPECT_LIMIT);
+    const content = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes);
+    return detectProseHardDefects(content);
+  } catch {
+    return [];
+  }
+}
+
 export interface PostWriteReminderOptions {
   /** The book has no 追踪/_tracking-state.json and no import signal. */
   readonly trackingUninitialized?: boolean;
+  /** Deterministic hard-defect findings from the just-written prose file. */
+  readonly hardDefects?: readonly string[];
 }
 
 export function postWriteReminderText(path: string, options: PostWriteReminderOptions = {}): string {
   return [
     `<oh-story-post-write>正文 ${path} 已变更。`,
+    ...(options.hardDefects !== undefined && options.hardDefects.length > 0
+      ? [`检测到疑似硬伤（${options.hardDefects.join("；")}），请在收尾或继续前核查并修正正文，勿将占位词或工程词留到成稿。`]
+      : []),
     "每次写入正文都会出现这条提醒，一章写到一半时也会；它不表示本章已经完成，也不是作者的新写作要求，继续当前步骤即可。",
     ...options.trackingUninitialized === true
       ? [
@@ -352,6 +403,7 @@ export function postWriteReminderText(path: string, options: PostWriteReminderOp
         ]
       : [],
     "等本章写完收尾时再提交追踪：新章先用 story-long-write 的 scripts/tracking_commit.js draft 生成本章草稿，填好后执行 scripts/storyctl.js chapter commit（作者接受当前长度时用 chapter accept-current-length）；",
+    "若 commit 返回 review_required（软门禁重点复核），优先修改对应处；如确认剧情需要保留，重新执行 commit 并附 `--ack <rule-id>:<理由>`（或 `--ack-all <理由>`）。",
     "修改已提交的章节按 workflow-revision 提交一次 mode=revision 事务；导入既有正文时由 story-import 在迁移后用 tracking_commit.js init 统一初始化。",
     "追踪/_tracking-state.json 以及 上下文.md、角色状态/、伏笔.md、时间线/、逐章记录/ 等派生 Tracking 视图只由这些脚本写入，绝不手改。</oh-story-post-write>"
   ].join("");
@@ -378,11 +430,19 @@ export function registerOhStoryHooks(context: Context): void {
     const { mutation, book } = resolved;
     const { root } = mutation;
     if (!(await isLongFormBook(fs, root, book, exec.signal))) return downstream;
-    const trackingUninitialized = !(await hasTrackingState(fs, root, book, exec.signal))
-      && !(await hasImportSignal(fs, root, book, exec.signal));
+    const [trackingPresent, importing, hardDefects] = await Promise.all([
+      hasTrackingState(fs, root, book, exec.signal),
+      hasImportSignal(fs, root, book, exec.signal),
+      inspectWrittenProse(fs, root, mutation.path, exec.signal)
+    ]);
+    const trackingUninitialized = !trackingPresent && !importing;
     const reminder = createUserMessage({
-      source: { kind: "oh-story-post-write", form: "notice", summary: boundContextSummary(`正文 ${mutation.path} 已变更`) },
-      content: [{ type: "text", text: postWriteReminderText(mutation.path, { trackingUninitialized }) }]
+      source: {
+        kind: "oh-story-post-write",
+        form: "notice",
+        summary: boundContextSummary(hardDefects.length > 0 ? `正文 ${mutation.path} 已变更（含硬伤提醒）` : `正文 ${mutation.path} 已变更`)
+      },
+      content: [{ type: "text", text: postWriteReminderText(mutation.path, { trackingUninitialized, hardDefects }) }]
     });
     return {
       ...downstream,

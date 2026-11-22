@@ -48,4 +48,15 @@ describe("production canvas projection", () => {
     expect(canvasNodeStatus(nodes[0]!, undefined)).toBe("来自剧本");
     expect(canvasNodeStatus(nodes[0]!, undefined)).not.toContain("EP001");
   });
+
+  it("marks unresolved VISUAL-* nodes as needing image prompts instead of attaching raw descriptions as produce prompts", () => {
+    const visualOnly = {
+      [`${episode}/视觉设定.md`]: "## 人物 · 江辰\n- ID：VISUAL-CHAR-JIANGCHEN\n- 外观特征：左眉尾旧疤。"
+    };
+    const production = parseEpisodeProduction(visualOnly, episode);
+    const nodes = productionCanvasNodes(production, visualOnly);
+    const visualNode = nodes.find((node) => node.id === "VISUAL-CHAR-JIANGCHEN");
+    expect(visualNode).toMatchObject({ kind: "asset", needsImagePrompt: true, prompt: undefined });
+    expect(canvasNodeStatus(visualNode!, undefined)).toBe("待写图片提示词");
+  });
 });

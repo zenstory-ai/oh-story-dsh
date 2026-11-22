@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { gamePreviewStatus, previewUrls, type GamePreviewObservation } from "../src/client/game-preview-state.js";
+import {
+  clearRuntimeError,
+  formatRuntimeErrorPrompt,
+  gamePreviewStatus,
+  normalizeRuntimeError,
+  previewUrls,
+  type GamePreviewObservation
+} from "../src/client/game-preview-state.js";
 import { gameProjectTitle } from "../src/workspace-route.js";
 
 const settled: GamePreviewObservation = { frameLoaded: true, frameError: false, probe: "ok", building: false, pending: false, isolated: true };
@@ -32,16 +39,39 @@ describe("game preview status", () => {
   it("waits for the frame before claiming the build is loaded", () => {
     expect(gamePreviewStatus({ ...settled, frameLoaded: false, probe: "pending" })).toEqual({ tone: "loading", label: "正在载入预览…" });
   });
+
+  it("surfaces runtime errors even after iframe load and clears cleanly on retry", () => {
+    const failedStatus = gamePreviewStatus({ ...settled, runtimeError: "ReferenceError: player is not defined" });
+    expect(failedStatus.tone).toBe("error");
+    expect(failedStatus.label).toContain("运行报错");
+    expect(gamePreviewStatus({ ...settled, runtimeError: clearRuntimeError() })).toEqual({ tone: "ready", label: "预览已载入" });
+    expect(gamePreviewStatus({ ...settled, runtimeError: "boom", building: true }).tone).toBe("building");
+    expect(gamePreviewStatus({ ...settled, runtimeError: "boom", pending: true })).toEqual({ tone: "loading", label: "新版本已就绪 · 由你决定何时载入" });
+    expect(normalizeRuntimeError("  ")).toBeNull();
+    expect(normalizeRuntimeError(null)).toBeNull();
+    expect(formatRuntimeErrorPrompt("雪夜渡", "TypeError: x")).toContain("雪夜渡");
+    expect(formatRuntimeErrorPrompt("雪夜渡", "TypeError: x")).toContain("TypeError: x");
+  });
 });
 
 describe("game preview URLs", () => {
-  it("frames the other loopback alias but probes the page's own origin, which the route trusts", () => {
+  it("frames the other loopback alias under both http and https while probing the page's own origin", () => {
     const urls = previewUrls("/oh-story/game-preview/s/p/index.html", "v1", 2, "http://127.0.0.1:3180");
     expect(urls.isolated).toBe(true);
     expect(new URL(urls.href).origin).toBe("http://localhost:3180");
     expect(new URL(urls.probeHref).origin).toBe("http://127.0.0.1:3180");
     expect(new URL(urls.href).search).toBe(new URL(urls.probeHref).search);
     expect(new URL(urls.href).searchParams.get("build")).toBe("v1");
+
+    const httpsFromIp = previewUrls("/oh-story/game-preview/s/p/index.html", "v2", 0, "https://127.0.0.1:8443");
+    expect(httpsFromIp.isolated).toBe(true);
+    expect(new URL(httpsFromIp.href).origin).toBe("https://localhost:8443");
+    expect(new URL(httpsFromIp.probeHref).origin).toBe("https://127.0.0.1:8443");
+
+    const httpsFromLocalhost = previewUrls("/oh-story/game-preview/s/p/index.html", "v2", 0, "https://localhost:8443");
+    expect(httpsFromLocalhost.isolated).toBe(true);
+    expect(new URL(httpsFromLocalhost.href).origin).toBe("https://127.0.0.1:8443");
+    expect(new URL(httpsFromLocalhost.probeHref).origin).toBe("https://localhost:8443");
   });
 
   it("is not isolated on a host without a loopback alias", () => {

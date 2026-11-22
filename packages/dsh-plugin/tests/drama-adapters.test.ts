@@ -167,8 +167,15 @@ print("builtin video admitted; non-video and undeclared custom rejected; explici
     expect(result.stdout.trim()).toBe("builtin video admitted; non-video and undeclared custom rejected; explicit profile admitted");
   });
 
-  it("reports presence per adapter without exposing values", () => {
-    const statuses = dramaAdapterStatuses({ OPENAI_API_KEY: "sk-secret", MINIMAX_API_KEY: "mm", MINIMAX_VIDEO_MODEL: "", ARK_API_KEY: "ark" });
+  it("reports presence per adapter including v0.13.0 optional model/site env hints without exposing values", () => {
+    const statuses = dramaAdapterStatuses({
+      OPENAI_API_KEY: "sk-secret",
+      OPENAI_IMAGE_MODEL: "gpt-image-2.6",
+      MINIMAX_API_KEY: "mm",
+      MINIMAX_VIDEO_MODEL: "",
+      MINIMAX_BASE_URL: "https://api.minimaxi.com/v1",
+      ARK_API_KEY: "ark"
+    });
     expect(statuses.map((status) => [status.name, status.configured, status.missing])).toEqual([
       ["openai-image", true, []],
       ["seedance", false, ["SEEDANCE_MODEL"]],
@@ -176,6 +183,16 @@ print("builtin video admitted; non-video and undeclared custom rejected; explici
       ["minimax-music", true, []],
       ["minimax-speech", true, []]
     ]);
+    const openaiImage = statuses.find((status) => status.name === "openai-image");
+    expect(openaiImage?.optionalEnv).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: "OPENAI_IMAGE_MODEL", configured: true }),
+      expect.objectContaining({ name: "OPENAI_BASE_URL", configured: false })
+    ]));
+    const minimaxMusic = statuses.find((status) => status.name === "minimax-music");
+    expect(minimaxMusic?.optionalEnv).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: "MINIMAX_MUSIC_MODEL", configured: false }),
+      expect.objectContaining({ name: "MINIMAX_BASE_URL", configured: true })
+    ]));
     expect(JSON.stringify(statuses)).not.toContain("sk-secret");
   });
 

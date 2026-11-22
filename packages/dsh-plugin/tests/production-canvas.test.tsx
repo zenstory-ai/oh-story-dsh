@@ -30,5 +30,35 @@ describe("ProductionCanvas", () => {
     expect(shotMeta).not.toContain("SHOT-EP001-001");
     const video = /<video[^>]*src="\/media\/shot\.mp4"[^>]*>/u.exec(markup)?.[0];
     expect(video).toContain("controls=\"\"");
+    // Cards must use role="group" (never nested role="button") and min-height/auto height.
+    expect(markup).toContain('role="group"');
+    expect(markup).not.toContain('class="oh-story-canvas-node" tabIndex="0" role="button"');
+    expect(markup).toContain("min-height:310px;height:auto");
+  });
+
+  it("shows 去写图片提示词 instead of 准备素材 for unresolved VISUAL-* cards and resolves GROUP-* video versions", () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const episode = "剧集/EP001";
+    const production = parseEpisodeProduction({
+      [`${episode}/视觉设定.md`]: "## 人物 · 江辰\n- ID：VISUAL-CHAR-JIANGCHEN\n- 外观特征：左眉尾旧疤。",
+      [`${episode}/分镜.md`]: "## SHOT-EP001-001 · 抬头\n- 时长：3s",
+      [`${episode}/视频提示词.md`]: "## MOTION-EP001-001 · 抬头\n- 分镜：SHOT-EP001-001\n## GROUP-EP001-01 · 连镜\n- 成员：MOTION-EP001-001"
+    }, episode);
+    const markup = renderToStaticMarkup(<ProductionCanvas
+      production={production}
+      selectedId={undefined}
+      canvas={{}}
+      viewport={undefined}
+      versions={[{ id: "group-vid", targetId: "GROUP-EP001-01", kind: "video", url: "/media/group.mp4" }]}
+      onSelect={() => undefined}
+      onNavigate={() => undefined}
+      onCanvasChange={() => undefined}
+      onViewportChange={() => undefined}
+      onPrepare={() => undefined}
+      onWriteImagePrompts={() => undefined}
+    />);
+    expect(markup).toContain(">去写图片提示词</button>");
+    expect(markup).not.toContain(">准备素材</button>");
+    expect(markup).toContain('src="/media/group.mp4"');
   });
 });

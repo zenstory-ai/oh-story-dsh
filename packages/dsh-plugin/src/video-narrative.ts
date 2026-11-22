@@ -7,6 +7,14 @@ export interface VideoTimeRange {
   readonly sourcePath?: string | undefined;
 }
 
+export interface VideoTimelineClip {
+  readonly id: string;
+  readonly sourceId?: string | undefined;
+  readonly sourcePath?: string | undefined;
+  readonly source: VideoTimeRange;
+  readonly output: VideoTimeRange;
+}
+
 export interface VideoNarrativeSegment {
   readonly id: string;
   /** Narration array position. Save code must clone that item and retain fields not projected here. */
@@ -15,7 +23,7 @@ export interface VideoNarrativeSegment {
   readonly text?: string | undefined;
   readonly output: VideoTimeRange;
   readonly sourceRanges: readonly VideoTimeRange[];
-  readonly sourceMapping: "identity" | "validated-clips" | "explicit-board" | "unavailable";
+  readonly sourceMapping: "identity" | "validated-clips" | "explicit-board" | "timeline-v3" | "unavailable";
   readonly beatId?: string | undefined;
   readonly audioOwner?: "original_dialogue" | "action_sound" | "ambience" | "music" | undefined;
 }
@@ -34,6 +42,8 @@ export interface VideoNarrativeProjection {
   /** Clock used by the authored narration file; every segment.output is still the playback clock. */
   readonly authoredClock: "source" | "output" | "unknown";
   readonly segments: readonly VideoNarrativeSegment[];
+  /** Ordered output→source clip spans when projected from `timeline.json` v3. */
+  readonly clips?: readonly VideoTimelineClip[] | undefined;
   readonly creative: VideoCreativeSummary;
   readonly facts: {
     readonly narrationCount: number;
@@ -41,10 +51,14 @@ export interface VideoNarrativeProjection {
     readonly mappedNarrationCount: number;
     readonly outputExtent?: VideoTimeRange | undefined;
   };
-  readonly warnings: readonly ("invalid-narration" | "invalid-clip-map" | "invalid-original-audio-beat")[];
+  readonly warnings: readonly ("invalid-narration" | "invalid-clip-map" | "invalid-original-audio-beat" | "invalid-timeline")[];
 }
 
 export interface VideoNarrativeInput {
+  /** Video Recap 0.8.0 canonical `timeline.json` v3 document. Takes precedence when valid v3. */
+  readonly timeline?: unknown;
+  /** Optional resolver normalizing `timeline.sources` entries into workspace-relative paths. */
+  readonly resolveSourcePath?: ((raw: string) => string | undefined) | undefined;
   readonly narration?: unknown;
   readonly validatedClips?: unknown;
   readonly visualAudioBoard?: unknown;
@@ -54,6 +68,7 @@ export interface VideoNarrativeInput {
 }
 
 interface ClipRange extends VideoTimeRange {
+  readonly id?: string | undefined;
   readonly outputStart: number;
   readonly outputEnd: number;
 }
@@ -75,6 +90,10 @@ function list(value: unknown): readonly unknown[] | undefined {
 
 function finiteTime(value: unknown): number | undefined {
   return typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= MAX_SECONDS ? value : undefined;
+}
+
+function roundTime(value: number): number {
+  return Math.round(value * 10_000) / 10_000;
 }
 
 function shortText(value: unknown): string | undefined {
@@ -134,8 +153,8 @@ function mappedSourceRanges(output: VideoTimeRange, clips: readonly ClipRange[])
     const sourceDuration = clip.end - clip.start;
     const scale = sourceDuration / outputDuration;
     mapped.push({
-      start: clip.start + ((overlapStart - clip.outputStart) * scale),
-      end: clip.start + ((overlapEnd - clip.outputStart) * scale),
+      start: roundTime(clip.start + ((overlapStart - clip.outputStart) * scale)),
+      end: roundTime(clip.start + ((overlapEnd - clip.outputStart) * scale)),
       sourceId: clip.sourceId,
       sourcePath: clip.sourcePath
     });
@@ -227,7 +246,194 @@ function creativeSummary(value: unknown): VideoCreativeSummary {
   };
 }
 
+function isTimelineV3(value: Record<string, unknown> | undefined): value is Record<string, unknown> {
+  if (value === undefined) return false;
+  if (value.schema_version === 3) return true;
+  const video = list(value.video);
+  if (video === undefined || video.length === 0) return false;
+  const first = record(video[0]);
+  return first !== undefined && typeof first.in === "number" && typeof first.out === "number";
+}
+
+function projectTimelineV3(
+  timeline: Record<string, unknown>,
+  resolveSourcePath: ((raw: string) => string | undefined) | undefined,
+  storyPlan: unknown
+): VideoNarrativeProjection {
+  const sources = record(timeline.sources);
+  const rawVideo = list(timeline.video);
+  const clips: ClipRange[] = [];
+  const timelineClips: VideoTimelineClip[] = [];
+  const originals: VideoNarrativeSegment[] = [];
+  let timelineInvalid = rawVideo === undefined || rawVideo.length > MAX_SEGMENTS;
+  let cursor = 0;
+
+  if (rawVideo !== undefined) {
+    for (const [index, candidate] of rawVideo.slice(0, MAX_SEGMENTS).entries()) {
+      const item = record(candidate);
+      const sourceSpan = item === undefined ? undefined : range(item.in, item.out);
+      if (item === undefined || sourceSpan === undefined) {
+        timelineInvalid = true;
+        continue;
+      }
+      const clipId = optionalId(item.id) ?? `v${String(index + 1)}`;
+      const sourceId = optionalId(item.source);
+      const mappedRawPath = sourceId !== undefined ? shortText(sources?.[sourceId]) ?? sourceId : undefined;
+      const sourcePath = mappedRawPath !== undefined ? (resolveSourcePath?.(mappedRawPath) ?? mappedRawPath) : undefined;
+      const duration = sourceSpan.end - sourceSpan.start;
+      const outputStart = roundTime(cursor);
+      const outputEnd = roundTime(cursor + duration);
+      cursor += duration;
+
+      clips.push({
+        id: clipId,
+        start: sourceSpan.start,
+        end: sourceSpan.end,
+        outputStart,
+        outputEnd,
+        sourceId,
+        sourcePath
+      });
+      timelineClips.push({
+        id: clipId,
+        sourceId,
+        sourcePath,
+        source: { start: sourceSpan.start, end: sourceSpan.end, sourceId, sourcePath },
+        output: { start: outputStart, end: outputEnd }
+      });
+
+      const keepWindows = list(item.keep_windows);
+      if (keepWindows !== undefined) {
+        for (const windowCandidate of keepWindows) {
+          const pair = list(windowCandidate);
+          const rawStart = pair === undefined ? undefined : finiteTime(pair[0]);
+          const rawEnd = pair === undefined ? undefined : finiteTime(pair[1]);
+          if (rawStart === undefined || rawEnd === undefined || rawEnd - rawStart <= EPSILON) {
+            timelineInvalid = true;
+            continue;
+          }
+          const clampedStart = Math.max(sourceSpan.start, rawStart);
+          const clampedEnd = Math.min(sourceSpan.end, rawEnd);
+          if (clampedEnd - clampedStart <= EPSILON) continue;
+          const outStart = roundTime(outputStart + (clampedStart - sourceSpan.start));
+          const outEnd = roundTime(outputStart + (clampedEnd - sourceSpan.start));
+          originals.push({
+            id: `original-${String(originals.length + 1)}`,
+            kind: "original",
+            text: shortText(item.original_audio_anchor) ?? shortText(item.note),
+            output: { start: outStart, end: outEnd },
+            sourceRanges: [{ start: roundTime(clampedStart), end: roundTime(clampedEnd), sourceId, sourcePath }],
+            sourceMapping: "timeline-v3",
+            beatId: clipId,
+            audioOwner: "original_dialogue"
+          });
+        }
+      }
+    }
+  }
+
+  const rawSubtitles = list(timeline.subtitles) ?? [];
+  const parsedSubtitles: { readonly start: number; readonly end: number; readonly text: string; readonly style?: string | undefined }[] = [];
+  for (const candidate of rawSubtitles.slice(0, MAX_SEGMENTS)) {
+    const item = record(candidate);
+    const span = item === undefined ? undefined : range(item.start, item.end);
+    const subtitleText = item === undefined ? undefined : shortText(item.text);
+    if (span !== undefined && subtitleText !== undefined) {
+      parsedSubtitles.push({ start: span.start, end: span.end, text: subtitleText, style: shortText(item?.style) });
+    }
+  }
+
+  const audio = record(timeline.audio);
+  const rawNarration = list(audio?.narration);
+  const narrations: VideoNarrativeSegment[] = [];
+  let narrationInvalid = rawNarration !== undefined && rawNarration.length > MAX_SEGMENTS;
+
+  if (rawNarration !== undefined && rawNarration.length > 0) {
+    for (const [index, candidate] of rawNarration.slice(0, MAX_SEGMENTS).entries()) {
+      const item = record(candidate);
+      const at = item === undefined ? undefined : finiteTime(item.at);
+      const duration = item === undefined ? undefined : finiteTime(item.duration);
+      const endExplicit = item === undefined ? undefined : finiteTime(item.end);
+      const text = item === undefined ? undefined : shortText(item.text) ?? shortText(item.spoken_text);
+      let end: number | undefined;
+      if (at !== undefined && duration !== undefined && duration > EPSILON) {
+        end = roundTime(at + duration);
+      } else if (at !== undefined && endExplicit !== undefined && endExplicit - at > EPSILON) {
+        end = endExplicit;
+      } else if (at !== undefined) {
+        const matched = parsedSubtitles.find((sub) => Math.abs(sub.start - at) <= 0.05)
+          ?? (text === undefined ? undefined : parsedSubtitles.find((sub) => sub.text === text && sub.start >= at - 0.1));
+        if (matched !== undefined && matched.end - at > EPSILON) end = matched.end;
+      }
+      if (at === undefined || end === undefined || end - at <= EPSILON || text === undefined) {
+        narrationInvalid = true;
+        continue;
+      }
+      const output = { start: at, end };
+      const mapped = clips.length > 0 ? mappedSourceRanges(output, clips) : undefined;
+      narrations.push({
+        id: optionalId(item?.id) ?? `narration-${String(index + 1)}`,
+        index,
+        kind: "narration",
+        text,
+        output,
+        sourceRanges: mapped ?? [],
+        sourceMapping: mapped === undefined ? "unavailable" : "timeline-v3"
+      });
+    }
+  } else if (parsedSubtitles.length > 0) {
+    const narrationSubs = parsedSubtitles.filter((sub) => sub.style === undefined || sub.style === "narration");
+    for (const [index, sub] of narrationSubs.entries()) {
+      const output = { start: sub.start, end: sub.end };
+      const mapped = clips.length > 0 ? mappedSourceRanges(output, clips) : undefined;
+      narrations.push({
+        id: `subtitle-${String(index + 1)}`,
+        kind: "narration",
+        text: sub.text,
+        output,
+        sourceRanges: mapped ?? [],
+        sourceMapping: mapped === undefined ? "unavailable" : "timeline-v3"
+      });
+    }
+  }
+
+  const segments = [...narrations, ...originals]
+    .sort((left, right) => left.output.start - right.output.start || left.output.end - right.output.end || left.kind.localeCompare(right.kind));
+  const warnings: VideoNarrativeProjection["warnings"][number][] = [];
+  if (timelineInvalid) warnings.push("invalid-timeline");
+  if (narrationInvalid) warnings.push("invalid-narration");
+  const extentStarts = [
+    ...segments.map((segment) => segment.output.start),
+    ...timelineClips.map((clip) => clip.output.start)
+  ];
+  const extentEnds = [
+    ...segments.map((segment) => segment.output.end),
+    ...timelineClips.map((clip) => clip.output.end)
+  ];
+  const outputExtent = extentStarts.length === 0 ? undefined : {
+    start: Math.min(...extentStarts),
+    end: Math.max(...extentEnds)
+  };
+  return {
+    authoredClock: "output",
+    segments,
+    clips: timelineClips,
+    creative: creativeSummary(storyPlan),
+    facts: {
+      narrationCount: narrations.length,
+      originalCount: originals.length,
+      mappedNarrationCount: narrations.filter((segment) => segment.sourceRanges.length > 0).length,
+      outputExtent
+    },
+    warnings
+  };
+}
+
 export function projectVideoNarrative(input: VideoNarrativeInput): VideoNarrativeProjection {
+  const timelineRecord = record(input.timeline);
+  if (isTimelineV3(timelineRecord)) {
+    return projectTimelineV3(timelineRecord, input.resolveSourcePath, input.storyPlan);
+  }
   const validatedClips = validatedClipMap(input.validatedClips);
   const clips = input.editMode === "cut" ? validatedClips : undefined;
   const identity = identityMode(input.editMode);

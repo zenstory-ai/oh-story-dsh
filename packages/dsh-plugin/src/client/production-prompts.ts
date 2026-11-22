@@ -82,6 +82,32 @@ ${referenceParagraph(job.kind)}
  * them with a production job. An external mix ends with the loudnorm pass render itself runs
  * (edit_tool.py `_loudnorm_filter`, then AAC 192k at 48 kHz).
  */
+export function nativeVisualImagePromptRequest(
+  production: DramaEpisodeProduction,
+  visual: { readonly id: string; readonly title: string; readonly path?: string | undefined }
+): string {
+  return `/short-drama-image-prompts
+
+请为视觉设定「${visual.title}」（${visual.id}）编写对应的图片提示词条目（IMG-*），写入 ${production.episodeDirectory}/图片提示词.md，以便后续按 IMG-* 投产生成素材。${visual.path === undefined ? "" : `\n- 来源文档：${visual.path}`}\n- 剧集目录：${production.episodeDirectory}\n\n${authorityBoundary}`;
+}
+
+export function nativeMusicProductionPrompt(
+  production: DramaEpisodeProduction,
+  music: { readonly id: string; readonly title: string; readonly prompt?: string | undefined }
+): string {
+  return `/short-drama-produce
+
+请为配乐条目「${music.title}」（${music.id}）准备一份配乐生成预览，先让我核对内容、供应商和成本，再决定是否开始生成。
+
+只准备当前配乐生产任务，不运行 Provider；配乐任务不调用 oh_story_production track_job。
+- 投产对象：${music.id}
+- 建议 adapter 契约：minimax-music（实际配置与模型以当前 DSH 运行环境为准）
+- 创作文档目录：${production.episodeDirectory}
+- 输出目录：${production.episodeDirectory}/制作成果/${music.id}
+${music.prompt === undefined ? "" : `\n待预检提示词：\n${music.prompt}\n`}
+按 short-drama-produce 的硬闸门建立临时 job 并执行 prepare，在 Chat 中完整展示 adapter、模型/profile、参数与输出路径。此按钮只表达“准备预览”，不得 confirm 或 run。${authorityBoundary}`;
+}
+
 export function nativeCompositionPrompt(
   production: DramaEpisodeProduction,
   job: ProductionJob,
@@ -109,7 +135,7 @@ ${orderedSources.map((source, index) => `${String(index + 1)}. ${source.shotId} 
 
 剪辑单落盘后依次运行 edit_tool.py 的 check 与 render，check 报出的问题先改文档再重跑。同宽高比但分辨率或帧率不同的视频素材由 check 提醒、render 自动缩放并转换帧率至交付规格；静帧则按交付规格等比铺满、居中裁切并按运镜出画，因此只要有静帧就必须填写「画幅与帧率」。视频被 check 报出宽高比明显不一致（如横屏混入竖屏）时，在当前 DSH 执行环境里经审批用 ffmpeg 按交付规格统一画幅、保留构图，新文件写到 ${production.episodeDirectory}/制作成果/成片/规格统一/——这是剪辑阶段自己的中间文件，不放在生产阶段的原素材旁边、不覆盖已生产的素材，文件名也不沿用原文件里的任务 ID（可直接用 MOTION 或 GROUP ID）；在该 CUT 下记录裁切或留边（不要写进「画面」行，它只认亮度、饱和、色温或「无」「不校」），把「来源」改指新文件，入出点随转换变化时同步修改，再重跑 check。静帧来源入点写 0.00、出点等于时长（硬下限为 2 帧即 24fps 下 0.08 秒，短于 0.50 秒会列入提醒）；需要运动时只用剪辑单支持的固定、推近、拉远或平移写法。
 
-默认的硬字幕路线需要带 libass 的 ffmpeg，缺 libass 时如实报出，不要悄悄去掉字幕。Remotion 在项目外的 ~/.cache/short-drama-edit/remotion 里装 Node 依赖、逐帧过无头浏览器：可选的 Remotion 字幕路线要它，剪辑单里只要有「画面文字」行也必须要它；只有创作者明确同意这次安装（在该目录 npm install，0.8 之前装过的要重装一次）时才走，未同意就不写「画面文字」行，并告诉创作者画面里留给面板的空白会保持空白。剪辑单的「声音」行只是记录，render 不执行它：render 切段、缩放转换同比例视频、静帧出画与运镜、同场景自动接镜（CUT 写了「画面」校正就替代它，「画面：不校」跳过它，交付规格写「接镜匹配：无」整集关闭）、硬拼接、混入「音效」「配音」「环境声」行、烧字幕与画面文字、可选颗粒、统一响度。配音可用负起点做 J-cut，也可跨切点做 L-cut；字幕同样可跨切点，按整条片核对不重叠且不越过结尾。「音效」「配音」「环境声」之外的混音、交叉淡入、配乐、转场或格式转换都是另一步经审批的外部 ffmpeg 处理，先写到临时文件；这一步最后要像 render 一样按剪辑单的「交付响度」对整片做两遍 loudnorm（I=交付响度、TP=真峰值上限（默认 -1.5）、LRA=11，第二遍代入第一遍的实测值并用 linear=true），音频编码为 AAC 192k、48 kHz，然后才替换 ${production.episodeDirectory}/制作成果/成片/成片.mp4，并把命令记进剪辑单；重新 render 会覆盖成片，这些步骤要重做。最后对交付的这份成片.mp4 运行 edit_tool.py verify 并报告实测数字，「未测」项照实写未测。
+默认的硬字幕路线以及普通「字卡」的 ffmpeg 降级路线需要带 libass 的 ffmpeg，缺 libass 时如实报出，不要悄悄去掉字幕。Remotion 在项目外的 ~/.cache/short-drama-edit/remotion 里装 Node 依赖、逐帧过无头浏览器：可选的 Remotion 字幕路线以及复杂「画面文字」面板（卡片/系统面板/任务面板/角标）需要它，除非使用 --screen-text-mode off 跳过或通过 --overlay-renderer 路由；普通「字卡」在 --screen-text-mode auto 下当 Node/Remotion 不可用时会自动降级为 ffmpeg ASS（也可用 --screen-text-mode ffmpeg 显式走 ffmpeg）。只有创作者明确同意这次安装（在该目录 npm install，0.8 之前装过的要重装一次）时才安装 Remotion；未同意时保留普通「字卡」（需 libass）、使用 --screen-text-mode off 跳过或暂不渲染复杂面板并告知创作者，不要擅自删除剪辑单里已有的普通「字卡」或「画面文字」行。剪辑单的「声音」行只是记录，render 不执行它：render 切段、缩放转换同比例视频、静帧出画与运镜、同场景自动接镜（CUT 写了「画面」校正就替代它，「画面：不校」跳过它，交付规格写「接镜匹配：无」整集关闭）、硬拼接、混入「音效」「配音」「环境声」行、烧字幕与画面文字、可选颗粒、统一响度。配音可用负起点做 J-cut，也可跨切点做 L-cut；字幕同样可跨切点，按整条片核对不重叠且不越过结尾。「音效」「配音」「环境声」之外的混音、交叉淡入、配乐、转场或格式转换都是另一步经审批的外部 ffmpeg 处理，先写到临时文件；这一步最后要像 render 一样按剪辑单的「交付响度」对整片做两遍 loudnorm（I=交付响度、TP=真峰值上限（默认 -1.5）、LRA=11，第二遍代入第一遍的实测值并用 linear=true），音频编码为 AAC 192k、48 kHz，然后才替换 ${production.episodeDirectory}/制作成果/成片/成片.mp4，并把命令记进剪辑单；重新 render 会覆盖成片，这些步骤要重做。最后对交付的这份成片.mp4 运行 edit_tool.py verify 并报告实测数字，「未测」项照实写未测。
 
 ffmpeg 与 ffprobe 通过当前 DSH 执行环境调用，不可用时如实报出来，不要把「没测」写成「通过」。所有命令和写入继续遵守 DSH 权限与审批，不得伪造成功。`;
 }

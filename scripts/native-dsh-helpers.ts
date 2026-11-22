@@ -68,6 +68,11 @@ export async function isolateFirstUseWorkspace(dshHome: string, documents: strin
   );
 }
 
+/** Current session cookie obtained by {@link authorizeDsh}, for raw HTTP contract checks. */
+export function dshAuthCookieHeader(): string {
+  return dshAuthCookie ?? "";
+}
+
 /** Every request to DSH carries the session cookie obtained by {@link authorizeDsh}. */
 export async function dshFetch(input: string | URL, init: RequestInit = {}): Promise<Response> {
   return fetch(input, { ...init, headers: { ...init.headers as Record<string, string>, cookie: dshAuthCookie ?? "" } });

@@ -127,4 +127,82 @@ describe("video narrative projection", () => {
       sourceMapping: "unavailable"
     });
   });
+
+  it("projects Video Recap 0.8.0 timeline.json v3 clips, narration, keep_windows, and source paths", () => {
+    const projection = projectVideoNarrative({
+      resolveSourcePath: (raw) => raw === "../sources/ep1.mp4" ? "video-recaps/demo/sources/ep1.mp4" : raw,
+      timeline: {
+        schema_version: 3,
+        meta: { title: "雨夜复盘" },
+        sources: { s1: "../sources/ep1.mp4", s2: "sources/ep2.mp4" },
+        video: [
+          { id: "v1", source: "s1", in: 10, out: 16, audio: "keep", keep_windows: [[12, 14]] },
+          { id: "v2", source: "s2", in: 30, out: 35, audio: "mute" }
+        ],
+        audio: {
+          narration: [
+            { id: "n1", at: 0.5, duration: 1.5, text: "开场立钩子" },
+            { id: "n2", at: 5, text: "跨镜头解说" }
+          ]
+        },
+        subtitles: [
+          { start: 0.5, end: 2.0, text: "开场立钩子", style: "narration" },
+          { start: 5.0, end: 8.0, text: "跨镜头解说", style: "narration" }
+        ]
+      }
+    });
+    expect(projection.authoredClock).toBe("output");
+    expect(projection.clips).toEqual([
+      {
+        id: "v1",
+        sourceId: "s1",
+        sourcePath: "video-recaps/demo/sources/ep1.mp4",
+        source: { start: 10, end: 16, sourceId: "s1", sourcePath: "video-recaps/demo/sources/ep1.mp4" },
+        output: { start: 0, end: 6 }
+      },
+      {
+        id: "v2",
+        sourceId: "s2",
+        sourcePath: "sources/ep2.mp4",
+        source: { start: 30, end: 35, sourceId: "s2", sourcePath: "sources/ep2.mp4" },
+        output: { start: 6, end: 11 }
+      }
+    ]);
+    expect(projection.segments).toEqual([
+      expect.objectContaining({
+        id: "n1",
+        kind: "narration",
+        text: "开场立钩子",
+        output: { start: 0.5, end: 2 },
+        sourceRanges: [{ start: 10.5, end: 12, sourceId: "s1", sourcePath: "video-recaps/demo/sources/ep1.mp4" }],
+        sourceMapping: "timeline-v3"
+      }),
+      expect.objectContaining({
+        id: "original-1",
+        kind: "original",
+        output: { start: 2, end: 4 },
+        sourceRanges: [{ start: 12, end: 14, sourceId: "s1", sourcePath: "video-recaps/demo/sources/ep1.mp4" }],
+        sourceMapping: "timeline-v3",
+        beatId: "v1",
+        audioOwner: "original_dialogue"
+      }),
+      expect.objectContaining({
+        id: "n2",
+        kind: "narration",
+        text: "跨镜头解说",
+        output: { start: 5, end: 8 },
+        sourceRanges: [
+          { start: 15, end: 16, sourceId: "s1", sourcePath: "video-recaps/demo/sources/ep1.mp4" },
+          { start: 30, end: 32, sourceId: "s2", sourcePath: "sources/ep2.mp4" }
+        ],
+        sourceMapping: "timeline-v3"
+      })
+    ]);
+    expect(projection.facts).toEqual({
+      narrationCount: 2,
+      originalCount: 1,
+      mappedNarrationCount: 2,
+      outputExtent: { start: 0, end: 11 }
+    });
+  });
 });

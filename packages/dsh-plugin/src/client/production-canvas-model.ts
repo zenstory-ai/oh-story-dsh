@@ -12,6 +12,10 @@ export interface ProductionCanvasNode {
   readonly description?: string | undefined;
   readonly prompt?: string | undefined;
   readonly videoPrompt?: string | undefined;
+  /** True for VISUAL-* entries that do not yet have a corresponding IMG-* entry in 图片提示词.md. */
+  readonly needsImagePrompt?: boolean | undefined;
+  /** Multi-shot GROUP-* id when this shot belongs to a video group. */
+  readonly groupId?: string | undefined;
   readonly initial: CanvasPoint;
   readonly width: number;
   readonly height: number;
@@ -30,7 +34,7 @@ const ASSET_SIZE = { width: 248, height: 282 } as const;
 const SHOT_SIZE = { width: 292, height: 310 } as const;
 const ORIGIN = { x: 80, y: 80 } as const;
 const COLUMN_GAP = 36;
-const ROW_GAP = 40;
+const ROW_GAP = 56;
 const GROUP_GAP = 180;
 
 const ASSET_LABEL = {
@@ -70,6 +74,7 @@ export function productionCanvasNodes(production: DramaEpisodeProduction, docume
       kind: asset.kind,
       description: asset.purpose ?? asset.reference,
       prompt: asset.prompt,
+      needsImagePrompt: false,
       target: production.targets.get(asset.id)
     })),
     ...production.visualAssets.filter((asset) => !declaredTitles.has(asset.title)).map((asset) => ({
@@ -77,7 +82,8 @@ export function productionCanvasNodes(production: DramaEpisodeProduction, docume
       title: asset.title,
       kind: asset.kind,
       description: asset.description,
-      prompt: asset.description,
+      prompt: undefined,
+      needsImagePrompt: true,
       target: production.targets.get(asset.id)
     }))
   ];
@@ -93,7 +99,8 @@ export function productionCanvasNodes(production: DramaEpisodeProduction, docume
     eyebrow: `${String(index + 1).padStart(2, "0")} · 镜头${shot.durationSeconds === undefined ? "" : ` · ${String(shot.durationSeconds)}s`}`,
     description: shot.purpose ?? shot.shotSpec ?? shot.start,
     prompt: shot.keyframePrompt,
-    videoPrompt: shot.motion?.prompt,
+    videoPrompt: shot.motion?.prompt ?? shot.group?.prompt,
+    groupId: shot.group?.id,
     target: production.targets.get(shot.id)
   }));
 

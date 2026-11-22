@@ -114,10 +114,71 @@ describe("video recap project projection", () => {
     const summary = summarizeVideoProject(root, files);
     expect(summary.state).toBe("ready");
     expect(summary.stageLabel).toBe("成片已就绪");
-    expect(summary.previews.map((item) => item.role)).toEqual(["source", "edited", "final"]);
+    expect(summary.editedKind).toBe("preview");
+    expect(summary.previews.map((item) => [item.role, item.label, item.editedKind])).toEqual([
+      ["source", "原片", undefined],
+      ["edited", "粗剪预览", "preview"],
+      ["final", "最终成片", undefined]
+    ]);
     expect(summary.artifacts.map((artifact) => artifact.label)).toEqual(expect.arrayContaining([
       "需求与画幅", "素材笔记", "剪辑与旁白方案", "宣发文案", "成片时间线", "成片体检"
     ]));
+  });
+
+  it("parses check.json v1 review hints with timeline timestamps, falls back title to timeline.meta.title, and surfaces v0.8.0 reference/srt/out files", () => {
+    const root = "video-recaps/v08-rich";
+    const files = [
+      file(`${root}/sources/ep1.mp4`, "media", "video/mp4"),
+      file(`${root}/work/REFERENCE_NOTES.md`),
+      file(`${root}/work/reference_metrics.json`),
+      file(`${root}/work/timeline.json`),
+      file(`${root}/work/check.json`),
+      file(`${root}/work/out/custom_cut.srt`),
+      file(`${root}/work/out/custom_cut.mp4`, "media", "video/mp4")
+    ];
+    for (const entry of files) expect(visibleVideoPath(entry.path), entry.path).toBe(true);
+    const summary = summarizeVideoProject(root, files, {
+      storyboard: "没有一级标题的分镜说明\n",
+      timeline: {
+        schema_version: 3,
+        meta: { title: "第一集精剪复盘" },
+        sources: { s1: "../sources/ep1.mp4" },
+        video: [{ id: "v1", source: "s1", in: 5, out: 15 }],
+        audio: { narration: [{ id: "n1", at: 1, duration: 3, text: "开篇解说" }] }
+      },
+      qualityCheck: {
+        schema_version: 1,
+        ok: true,
+        checks: {
+          container_valid: { status: "pass", detail: "mp4" },
+          visual_health: { status: "warn", detail: "black_spans=1, freeze_spans=0" },
+          audio_health: { status: "warn", detail: "-14.0 LUFS" }
+        },
+        review_hints: [
+          { check: "visual_health", code: "black_span", start: 2.5, end: 3.2, duration: 0.7 },
+          { check: "audio_health", code: "edge_speech_truncation", clip_id: "v1", edge: "out", rms_dbfs: -18.5 }
+        ]
+      }
+    });
+    expect(summary.title).toBe("第一集精剪复盘");
+    expect(summary.state).toBe("ready");
+    expect(summary.previews.find((item) => item.role === "final")?.path).toBe(`${root}/work/out/custom_cut.mp4`);
+    expect(summary.timelinePath).toBe(`${root}/work/timeline.json`);
+    expect(summary.narrative?.authoredClock).toBe("output");
+    expect(summary.artifacts.map((item) => item.path)).toEqual(expect.arrayContaining([
+      `${root}/work/REFERENCE_NOTES.md`,
+      `${root}/work/reference_metrics.json`,
+      `${root}/work/out/custom_cut.srt`
+    ]));
+    expect(summary.qualityCheck).toMatchObject({
+      ok: true,
+      status: "warn",
+      path: `${root}/work/check.json`
+    });
+    expect(summary.qualityCheck?.reviewHints).toEqual([
+      expect.objectContaining({ code: "black_span", label: "黑屏片段", severity: "warn", timestamp: 2.5, endTimestamp: 3.2 }),
+      expect.objectContaining({ code: "edge_speech_truncation", label: "切点人声截断", severity: "warn", timestamp: 10 })
+    ]);
   });
 
   it("does not choose an ambiguous narration file for editing", () => {

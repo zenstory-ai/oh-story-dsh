@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { compositionSources, DramaProductionView, productionCanvasAvailable, SequenceBoard, targetDisplayName } from "../src/client/drama-production-view.js";
+import { compositionSources, DramaProductionView, productionCanvasAvailable, ProductionStatus, SequenceBoard, targetDisplayName } from "../src/client/drama-production-view.js";
 import { parseEpisodeProduction } from "../src/client/drama-production.js";
 import type { ProductionMediaVersion } from "../src/client/production-runtime.js";
 
@@ -160,5 +160,159 @@ describe("production sequence view", () => {
     expect(html.match(/缺少素材/gu)).toHaveLength(2);
     expect(html).not.toContain("/media/other");
     expect(html).toContain('<button type="button" disabled="">合成成片</button>');
+  });
+
+  it("renders an inline final MP4 preview player in SequenceBoard when 制作成果/成片/成片.mp4 exists", () => {
+    const finalCut = {
+      id: "final-cut",
+      targetId: "剧集/EP001",
+      kind: "video" as const,
+      url: "/media/final.mp4",
+      path: "剧集/EP001/制作成果/成片/成片.mp4"
+    };
+    const html = renderToStaticMarkup(<SequenceBoard
+      jobs={[]}
+      sequence={[{ shotId: "SHOT-EP001-001", versionId: "still" }, { shotId: "SHOT-EP001-002", versionId: "video" }]}
+      versions={versions}
+      libraryVersions={[...versions, finalCut]}
+      episodeDirectory="剧集/EP001"
+      onOpenMedia={() => undefined}
+      onSequenceChange={() => undefined}
+      onCompose={() => undefined}
+    />);
+    expect(html).toContain('class="oh-story-sequence-cut"');
+    expect(html).toContain('<video class="oh-story-sequence-cut-player" src="/media/final.mp4" controls="" preload="metadata">');
+    expect(html).toContain(">最新成片</strong>");
+    expect(html).toContain(">打开文件</button>");
+  });
+
+  it("shows 去写图片提示词 for unresolved VISUAL-*, audio preview for MUSIC-*/audio library, and group role on shot cards", () => {
+    const episode = "剧集/EP001";
+    const production = parseEpisodeProduction({
+      [`${episode}/视觉设定.md`]: "## 人物 · 江辰\n- ID：VISUAL-CHAR-JIANGCHEN\n- 外观特征：旧疤",
+      [`${episode}/图片提示词.md`]: "## IMG-DOOR · 旧门\n### 可复制提示词\n> 旧木门",
+      [`${episode}/分镜.md`]: "## SHOT-EP001-001 · 门外停步\n- 时长：4s",
+      [`${episode}/视频提示词.md`]: "## MUSIC-EP001-01 · 悬疑铺底\n- 剧情作用：烘托紧张\n### 可复制提示词\n> Dark synth"
+    }, episode);
+    const audioVersion = {
+      id: "music-1",
+      targetId: "MUSIC-EP001-01",
+      kind: "audio" as const,
+      url: "/media/bgm.mp3",
+      path: `${episode}/制作成果/MUSIC-EP001-01/bgm.mp3`
+    };
+    const assetsHtml = renderToStaticMarkup(<DramaProductionView
+      sessionId="s1"
+      production={production}
+      sessionRunning={false}
+      queue={[]}
+      section="assets"
+      selectedId={undefined}
+      jobs={[]}
+      versions={[audioVersion]}
+      libraryVersions={[audioVersion]}
+      selections={{}}
+      manualReferences={{}}
+      sequence={[]}
+      canvas={{}}
+      viewport={undefined}
+      onSectionChange={() => undefined}
+      onSelect={() => undefined}
+      onNavigate={() => undefined}
+      onJobsChange={() => undefined}
+      onSelectionsChange={() => undefined}
+      onManualReferencesChange={() => undefined}
+      onOpenMedia={() => undefined}
+      onSequenceChange={() => undefined}
+      onCanvasChange={() => undefined}
+      onViewportChange={() => undefined}
+      onDispatchPrompt={async () => undefined}
+      onCancelTurn={async () => undefined}
+      onRemoveQueued={async () => undefined}
+      onRefresh={() => undefined}
+    />);
+    expect(assetsHtml).toContain(">去写图片提示词</button>");
+    expect(assetsHtml).toContain(">准备素材</button>");
+    expect(assetsHtml).toContain('<option value="audio">音频</option>');
+    expect(assetsHtml).toContain('<audio class="oh-story-media-preview oh-story-audio-preview" src="/media/bgm.mp3" controls="" preload="metadata">');
+
+    const shotsHtml = renderToStaticMarkup(<DramaProductionView
+      sessionId="s1"
+      production={production}
+      sessionRunning={false}
+      queue={[]}
+      section="shots"
+      selectedId={undefined}
+      jobs={[]}
+      versions={[]}
+      libraryVersions={[]}
+      selections={{}}
+      manualReferences={{}}
+      sequence={[]}
+      canvas={{}}
+      viewport={undefined}
+      onSectionChange={() => undefined}
+      onSelect={() => undefined}
+      onNavigate={() => undefined}
+      onJobsChange={() => undefined}
+      onSelectionsChange={() => undefined}
+      onManualReferencesChange={() => undefined}
+      onOpenMedia={() => undefined}
+      onSequenceChange={() => undefined}
+      onCanvasChange={() => undefined}
+      onViewportChange={() => undefined}
+      onDispatchPrompt={async () => undefined}
+      onCancelTurn={async () => undefined}
+      onRemoveQueued={async () => undefined}
+      onRefresh={() => undefined}
+    />);
+    expect(shotsHtml).toContain('class="oh-story-shot-card" role="group"');
+    expect(shotsHtml).not.toContain('class="oh-story-shot-card" role="button"');
+  });
+
+  it("surfaces optional/model env vars inside .oh-story-production-details wrapper alongside diagnostics", () => {
+    const html = renderToStaticMarkup(<ProductionStatus
+      sessionId="s1"
+      initialOpen
+      initialPreflight={{
+        python: { ok: true, version: "3.12.0", minimum: "3.10" },
+        adapterConfig: { path: "/tmp/drama-adapters.json", generated: true, ok: true },
+        adapters: [
+          {
+            name: "openai-image",
+            label: "OpenAI Image",
+            modality: "image",
+            configured: true,
+            missing: [],
+            optionalEnv: [
+              { name: "OPENAI_IMAGE_MODEL", label: "默认图片模型", configured: false, note: "未设置时需在任务参数显式指定模型" }
+            ]
+          },
+          {
+            name: "seedance",
+            label: "Seedance",
+            modality: "video",
+            configured: true,
+            missing: []
+          }
+        ]
+      }}
+      diagnostics={[{
+        severity: "warning",
+        code: "generated_visual_id",
+        path: "剧集/EP001/视觉设定.md",
+        offset: 0,
+        line: 1,
+        message: "缺少稳定的 VISUAL-* ID"
+      }]}
+      onNavigate={() => undefined}
+    />);
+    expect(html).toContain('aria-expanded="true"');
+    expect(html).toContain('id="oh-story-production-details" class="oh-story-production-details" role="region"');
+    expect(html).toContain("需指定模型或设置 <code>OPENAI_IMAGE_MODEL</code>");
+    expect(html).toContain('class="oh-story-provider-optional-env"');
+    expect(html).toContain("未设置时需在任务参数显式指定模型");
+    expect(html).toContain('id="oh-story-production-environment"');
+    expect(html).toContain('id="oh-story-production-diagnostics"');
   });
 });

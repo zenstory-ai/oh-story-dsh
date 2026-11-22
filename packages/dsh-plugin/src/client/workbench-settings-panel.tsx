@@ -28,7 +28,7 @@ export function WorkbenchSettingsForm({ modes, onChange }: SettingsProps) {
     <section aria-label="模型与 API 配置说明">
       <h3>模型与 API</h3>
       <p>对话模型与 API 在 DSH 设置中管理。</p>
-      <p>图片、视频生成与配音使用各制作工具的供应商配置，不会自动复用对话模型。请按「制作详情」中的提示，在启动 DSH 的环境里配置；Agent 使用沙箱或远程环境时，需在对应执行环境配置。</p>
+      <p>图片、视频、配音与配乐使用各制作工具的供应商配置，不会自动复用对话模型。请按短剧或视频工作台「制作详情」中的提示，在启动 DSH 的环境里配置；Agent 使用沙箱或远程环境时，需在对应执行环境配置。</p>
     </section>
   </>;
 }
@@ -36,8 +36,19 @@ export function WorkbenchSettingsForm({ modes, onChange }: SettingsProps) {
 export function WorkbenchSettingsPanel({ modes, onChange, onClose }: SettingsProps & { readonly onClose: () => void }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const titleId = useId();
-  useEffect(() => { dialog.current?.showModal(); }, []);
-  return <dialog ref={dialog} className="oh-workbench-settings" aria-labelledby={titleId} onClose={onClose}>
+  useEffect(() => {
+    const element = dialog.current;
+    if (element !== null && !element.open) element.showModal();
+  }, []);
+  return <dialog
+    ref={dialog}
+    className="oh-workbench-settings"
+    aria-labelledby={titleId}
+    onClose={onClose}
+    onClick={(event) => {
+      if (event.target === dialog.current) dialog.current?.close();
+    }}
+  >
     <header><h2 id={titleId}>工作台设置</h2><button type="button" aria-label="关闭工作台设置" onClick={() => { dialog.current?.close(); }}>×</button></header>
     <WorkbenchSettingsForm modes={modes} onChange={onChange} />
   </dialog>;

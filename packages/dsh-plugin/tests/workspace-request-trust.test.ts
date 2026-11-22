@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   assertTrustedWorkspaceAuthority,
+  isTrustedPreviewAssetRequest,
   isTrustedPreviewNavigation,
   isTrustedWorkspaceRequest
 } from "../src/workspace-request-trust.js";
@@ -58,6 +59,46 @@ describe("workspace browser trust", () => {
       "sec-fetch-site": "cross-site",
       "sec-fetch-mode": "navigate",
       "sec-fetch-dest": "iframe"
+    }), [])).toBe(false);
+  });
+
+  it("matches DSH bindHost, HTTPS default-port normalization, and http(s) origin scheme rules", () => {
+    expect(isTrustedWorkspaceRequest(request({
+      host: "192.168.1.20:3080",
+      origin: "http://192.168.1.20:3080"
+    }), [], "192.168.1.20", "http:")).toBe(true);
+    expect(isTrustedWorkspaceRequest(request({
+      host: "studio.internal:443",
+      origin: "https://studio.internal"
+    }), ["studio.internal"], undefined, "https:")).toBe(true);
+    expect(isTrustedWorkspaceRequest(request({
+      host: "127.0.0.1:3080",
+      origin: "ftp://127.0.0.1:3080"
+    }), [])).toBe(false);
+  });
+
+  it("permits opaque-origin signed-token preview subresources while rejecting external origins and DNS rebinding", () => {
+    expect(isTrustedPreviewAssetRequest(request({
+      host: "[::1]:3080",
+      origin: "null",
+      "sec-fetch-site": "cross-site",
+      "sec-fetch-mode": "cors",
+      "sec-fetch-dest": "script"
+    }), [])).toBe(true);
+    expect(isTrustedPreviewAssetRequest(request({
+      host: "127.0.0.1:3080",
+      origin: "https://localhost:3080",
+      "sec-fetch-site": "cross-site"
+    }), [])).toBe(true);
+    expect(isTrustedPreviewAssetRequest(request({
+      host: "localhost:3080",
+      origin: "https://evil.example",
+      "sec-fetch-site": "cross-site"
+    }), [])).toBe(false);
+    expect(isTrustedPreviewAssetRequest(request({
+      host: "evil.example:3080",
+      origin: "null",
+      "sec-fetch-site": "cross-site"
     }), [])).toBe(false);
   });
 });

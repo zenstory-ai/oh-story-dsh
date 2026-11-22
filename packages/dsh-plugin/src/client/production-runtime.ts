@@ -4,7 +4,7 @@ export type ProductionJobStatus = "awaiting_confirmation" | "pending" | "running
 export interface ProductionMediaVersion {
   readonly id: string;
   readonly targetId: string;
-  readonly kind: "image" | "video";
+  readonly kind: "image" | "video" | "audio";
   readonly url: string;
   /** Workspace-relative path when the result is owned by the DSH FileSystem. */
   readonly path?: string | undefined;
@@ -202,7 +202,7 @@ export function mediaBelongsToEpisode(path: string | undefined, episodeDirectory
 export function sequenceSourceEligible(shotId: string, version: ProductionMediaVersion): boolean {
   return version.kind === "video"
     ? version.targetId === shotId
-    : version.targetId === shotId || version.targetId.startsWith("IMG-");
+    : version.kind === "image" && (version.targetId === shotId || version.targetId.startsWith("IMG-"));
 }
 
 export function queuedItemForJob(jobId: string, queue: readonly ProductionQueueEntry[]): ProductionQueueEntry | undefined {

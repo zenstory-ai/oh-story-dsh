@@ -1,26 +1,44 @@
 import { useEffect, useState } from "react";
+import type { VideoPreflightStatus } from "../workspace-route.js";
 import { endpoint } from "./workbench-ui.js";
 
-export interface VideoPreflight {
-  readonly python: { readonly ok: boolean; readonly version?: string; readonly minimum: string };
-  readonly ffmpeg: { readonly ok: boolean; readonly subtitles: boolean };
-  readonly ffprobe: { readonly ok: boolean };
-  readonly credentials: { readonly mimo: boolean; readonly fish: boolean; readonly indexTts: boolean; readonly ttsProvider: string };
-}
+export type VideoPreflight = VideoPreflightStatus;
 
 /** The host-process readiness rows; values never leave the process, only whether each is set. */
 export function VideoEnvironmentReport({ preflight }: { readonly preflight: VideoPreflight }) {
-  // auto voices with MiMo when its key is set and falls back to Fish Audio otherwise.
-  const fish = preflight.credentials.ttsProvider === "fish-audio" || (preflight.credentials.ttsProvider === "auto" && !preflight.credentials.mimo);
+  const anyTts = preflight.tts.local.ok || preflight.tts.fish || preflight.tts.openai || preflight.tts.indexTts;
+  const anyAsr = preflight.asr.localWhisper.ok || preflight.asr.remote;
   return <>
-    <span data-ready={preflight.python.ok || undefined}>Python {preflight.python.version ?? "未找到"}{preflight.python.ok ? "" : ` · 需要 ${preflight.python.minimum}+`}</span>
-    <span data-ready={(preflight.ffmpeg.ok && preflight.ffmpeg.subtitles) || undefined}>ffmpeg {!preflight.ffmpeg.ok ? "未找到" : preflight.ffmpeg.subtitles ? "· libass" : "· 缺字幕滤镜"}</span>
-    <span data-ready={preflight.ffprobe.ok || undefined}>ffprobe {preflight.ffprobe.ok ? "可用" : "未找到"}</span>
-    <span data-ready={preflight.credentials.mimo || undefined}>MiMo Key {preflight.credentials.mimo ? "已配置" : "未配置"}</span>
-    {fish && <span data-ready={preflight.credentials.fish || undefined}>Fish Key {preflight.credentials.fish ? "已配置" : "未配置"}</span>}
-    {preflight.credentials.ttsProvider === "index-tts"
-      && <span data-ready={preflight.credentials.indexTts || undefined}>IndexTTS {preflight.credentials.indexTts ? "已配置" : "缺 INDEX_TTS_ENDPOINT / INDEX_TTS_VOICE"}</span>}
-    <em>Key 与 PATH 在启动 DSH 的终端里设置，重启 DSH 后生效。这里检查 DSH Host 进程；Agent 运行环境以 <code>scripts/probe.py</code> 与 <code>scripts/check.py</code> 的结果为准。</em>
+    <span data-ready={preflight.python.ok || undefined}>
+      Python {preflight.python.version ?? "未找到"}{preflight.python.ok ? "" : ` · 需要 ${preflight.python.minimum}+`}
+    </span>
+    <span data-ready={(preflight.ffmpeg.ok && preflight.ffmpeg.subtitles) || undefined}>
+      ffmpeg {!preflight.ffmpeg.ok ? "未找到" : preflight.ffmpeg.subtitles ? "可用 · 含字幕滤镜" : "缺字幕滤镜（subtitles / libass）"}
+    </span>
+    <span data-ready={preflight.ffprobe.ok || undefined}>
+      ffprobe {preflight.ffprobe.ok ? "可用" : "未找到"}
+    </span>
+    <strong className="oh-video-env-group">语音合成（TTS）</strong>
+    <span data-ready={preflight.tts.local.ok || undefined} data-optional={!preflight.tts.local.ok && anyTts ? "true" : undefined}>
+      本地离线 TTS {preflight.tts.local.ok ? `可用（${preflight.tts.local.engine ?? "系统语音"}）` : "未找到（say / espeak-ng）"}
+    </span>
+    <span data-ready={preflight.tts.fish || undefined} data-optional={!preflight.tts.fish && anyTts ? "true" : undefined}>
+      Fish Audio（FISH_API_KEY / FISH_AUDIO_API_KEY）{preflight.tts.fish ? "已配置" : "未配置（可选）"}
+    </span>
+    <span data-ready={preflight.tts.openai || undefined} data-optional={!preflight.tts.openai && anyTts ? "true" : undefined}>
+      OpenAI TTS（OPENAI_API_KEY）{preflight.tts.openai ? "已配置" : "未配置（可选）"}
+    </span>
+    <span data-ready={preflight.tts.indexTts || undefined} data-optional={!preflight.tts.indexTts && anyTts ? "true" : undefined}>
+      IndexTTS（INDEX_TTS_ENDPOINT / INDEX_TTS_VOICE）{preflight.tts.indexTts ? "已配置" : "未配置（可选）"}
+    </span>
+    <strong className="oh-video-env-group">语音转写（ASR）</strong>
+    <span data-ready={preflight.asr.localWhisper.ok || undefined} data-optional={!preflight.asr.localWhisper.ok && anyAsr ? "true" : undefined}>
+      本地 Whisper {preflight.asr.localWhisper.ok ? `可用（${preflight.asr.localWhisper.cli ?? "CLI"}）` : "未找到（whisper / faster-whisper / mlx_whisper / whisper-cli）"}
+    </span>
+    <span data-ready={preflight.asr.remote || undefined} data-optional={!preflight.asr.remote && anyAsr ? "true" : undefined}>
+      远程 ASR（ASR_API_URL / ASR_API_KEY）{preflight.asr.remote ? "已配置" : "未配置（可选）"}
+    </span>
+    <em>Key、环境变量与 PATH 在启动 DSH 的终端里设置，重启 DSH 后生效。这里检查 DSH Host 进程；Agent 运行环境以 <code>scripts/probe.py</code> 与 <code>scripts/check.py</code> 的结果为准。</em>
   </>;
 }
 
@@ -44,6 +62,6 @@ export function VideoEnvironment({ sessionId }: { readonly sessionId: string }) 
     <strong>运行环境</strong>
     {typeof preflight === "object" ? <VideoEnvironmentReport preflight={preflight} />
       : preflight === "failed" ? <button type="button" onClick={() => { setPreflight(undefined); setAttempt((value) => value + 1); }}>环境检查失败 · 重试</button>
-        : <em>正在检查 Python、ffmpeg 与 MiMo Key…</em>}
+        : <em>正在检查 Python、ffmpeg、TTS 与 ASR 运行环境…</em>}
   </div>;
 }

@@ -1,7 +1,13 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { nativeBatchPrompt, nativeCompositionPrompt, nativeProductionPrompt } from "../src/client/production-prompts.js";
+import {
+  nativeBatchPrompt,
+  nativeCompositionPrompt,
+  nativeMusicProductionPrompt,
+  nativeProductionPrompt,
+  nativeVisualImagePromptRequest
+} from "../src/client/production-prompts.js";
 import { parseEpisodeProduction } from "../src/client/drama-production.js";
 import { createPendingJob, referencesForTarget, type ProductionMediaVersion } from "../src/client/production-runtime.js";
 import { dshDramaSkillContent } from "../src/skill-provider.js";
@@ -127,9 +133,13 @@ describe("DSH-native production prompts", () => {
     expect(prompt).toContain("文件名也不沿用原文件里的任务 ID");
     expect(prompt).not.toContain("原文件旁边的新文件");
     expect(prompt).toContain("把「来源」改指新文件");
-    expect(prompt).toContain("默认的硬字幕路线需要带 libass 的 ffmpeg");
-    expect(prompt).toContain("剪辑单里只要有「画面文字」行也必须要它");
-    expect(prompt).toContain("未同意就不写「画面文字」行");
+    expect(prompt).toContain("默认的硬字幕路线以及普通「字卡」的 ffmpeg 降级路线需要带 libass 的 ffmpeg");
+    expect(prompt).toContain("--screen-text-mode auto");
+    expect(prompt).toContain("--screen-text-mode ffmpeg");
+    expect(prompt).toContain("--screen-text-mode off");
+    expect(prompt).toContain("--overlay-renderer");
+    expect(prompt).not.toContain("剪辑单里只要有「画面文字」行也必须要它");
+    expect(prompt).not.toContain("未同意就不写「画面文字」行");
     expect(prompt).toContain("混入「音效」「配音」「环境声」行");
     expect(prompt).toContain("配音可用负起点做 J-cut，也可跨切点做 L-cut");
     expect(prompt).not.toContain("零依赖");
@@ -181,6 +191,28 @@ describe("DSH-native production prompts", () => {
       expect(items.length).toBeGreaterThanOrEqual(3);
       for (const item of items) expect(unusedItem.exec(item)?.[2]?.trim(), item).toBeTruthy();
     }
+  });
+
+  it("routes unresolved VISUAL-* entries to /short-drama-image-prompts and prepares MUSIC-* without track_job", () => {
+    const visualPrompt = nativeVisualImagePromptRequest(production, {
+      id: "VISUAL-CHAR-JIANGCHEN",
+      title: "江辰",
+      path: `${episodeDirectory}/视觉设定.md`
+    });
+    expect(visualPrompt).toMatch(/^\/short-drama-image-prompts/u);
+    expect(visualPrompt).toContain("VISUAL-CHAR-JIANGCHEN");
+    expect(visualPrompt).toContain(`${episodeDirectory}/图片提示词.md`);
+    expect(visualPrompt).not.toContain("/short-drama-produce");
+
+    const musicPrompt = nativeMusicProductionPrompt(production, {
+      id: "MUSIC-EP001-01",
+      title: "监控室悬疑铺底",
+      prompt: "Dark minimalist suspense underscore."
+    });
+    expect(musicPrompt).toMatch(/^\/short-drama-produce/u);
+    expect(musicPrompt).toContain("MUSIC-EP001-01");
+    expect(musicPrompt).toContain("minimax-music");
+    expect(musicPrompt).toContain("不调用 oh_story_production track_job");
   });
 
   it("adds explicit cross-episode image references without accepting videos as reference images", () => {

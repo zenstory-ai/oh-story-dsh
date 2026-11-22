@@ -8,6 +8,7 @@ import { chromium, type Locator, type Page } from "@playwright/test";
 
 import {
   authorizeDsh,
+  dshAuthCookieHeader,
   dshFetch,
   freePort,
   isolateFirstUseWorkspace,
@@ -1117,19 +1118,21 @@ async function main(): Promise<void> {
       body: JSON.stringify({ content: tracking.content, baseVersion: invalidTracking.version })
     });
     if (!restoreTracking.ok) throw new Error(`Tracking fixture restore failed: ${String(restoreTracking.status)}.`);
-    // The Host/Origin/Fetch-Metadata fence is unit-tested in isolation; assert it
-    // against the mounted route so dropping it from the handler cannot pass CI.
+    // Unauthenticated requests are rejected by DSH's connection admission gate (401),
+    // while authenticated requests still enforce the Host/Origin/Fetch-Metadata fence (403).
     // These go over node:http because fetch refuses to forge a Host header.
-    // The same-origin control keeps the rejections below from passing vacuously.
-    const trusted = await rawStatus(chapterUrl, { "sec-fetch-site": "same-origin" });
-    if (trusted !== 200) throw new Error(`Workspace route rejected a same-origin request: ${String(trusted)}.`);
+    const unauthenticated = await rawStatus(chapterUrl, { "sec-fetch-site": "same-origin" });
+    if (unauthenticated !== 401) throw new Error(`Workspace route admitted an unauthenticated request: ${String(unauthenticated)}.`);
+    const authCookie = dshAuthCookieHeader();
+    const trusted = await rawStatus(chapterUrl, { cookie: authCookie, "sec-fetch-site": "same-origin" });
+    if (trusted !== 200) throw new Error(`Workspace route rejected an authenticated same-origin request: ${String(trusted)}.`);
     for (const [label, headers] of [
       ["rebound Host", { host: "attacker.example" }],
       ["cross-site marker", { "sec-fetch-site": "cross-site" }],
       ["foreign Origin", { origin: "http://attacker.example" }],
       ["opaque Origin", { origin: "null" }]
     ] as const) {
-      const status = await rawStatus(chapterUrl, headers);
+      const status = await rawStatus(chapterUrl, { cookie: authCookie, ...headers });
       if (status !== 403) {
         throw new Error(`Workspace route served an untrusted request (${label}): ${String(status)}.`);
       }
@@ -1791,7 +1794,7 @@ async function main(): Promise<void> {
       await gameStudio.getByRole("button", { name: "保存文稿", exact: true }).click();
       const gameConflict = gameStudio.getByRole("alert").filter({ hasText: gameDesignPath });
       await gameConflict.waitFor({ state: "visible", timeout: 10_000 });
-      await gameConflict.getByRole("button", { name: "使用磁盘版本", exact: true }).click();
+      await gameConflict.getByRole("button", { name: "载入磁盘版本", exact: true }).click();
       if (await gameDesignEditor.inputValue() !== externalGameDesign) throw new Error("Game document conflict resolution did not use the authoritative disk version.");
       const restoredGameDesignResponse = await dshFetch(gameDesignUrl, {
         method: "PUT",
@@ -1996,15 +1999,16 @@ async function main(): Promise<void> {
       const videoStudio = page.locator(".oh-video-studio");
       await videoStudio.waitFor({ state: "visible", timeout: 10_000 });
       const videoProject = videoStudio.getByRole("combobox", { name: "视频项目", exact: true });
-      if (await videoProject.inputValue() !== "smoke-recap" || await videoProject.locator("option").count() !== 2) {
-        throw new Error("Video Studio did not discover the manifest-driven smoke project.");
+      const videoProjectValues = await videoProject.locator("option").evaluateAll((options) => options.map((option) => (option as HTMLOptionElement).value));
+      if (await videoProject.inputValue() !== "smoke-recap" || !videoProjectValues.includes("smoke-recap") || !videoProjectValues.includes("smoke-recap-alt")) {
+        throw new Error(`Video Studio did not discover the manifest-driven smoke project: ${JSON.stringify(videoProjectValues)}`);
       }
       const videoTabs = videoStudio.getByRole("tablist", { name: "视频工作台", exact: true });
       for (const label of ["预览", "创作画布", "文稿"]) {
         if (await videoTabs.getByRole("tab", { name: label, exact: true }).count() !== 1) throw new Error(`Video Studio missed ${label}.`);
       }
       const videoChatToggle = videoStudio.getByRole("button", { name: "Chat", exact: true });
-      if (await videoChatToggle.getAttribute("aria-pressed") !== "false") throw new Error("Video Studio did not start with Chat collapsed.");
+      if (await videoChatToggle.getAttribute("aria-expanded") !== "false") throw new Error("Video Studio did not start with Chat collapsed.");
       const recapPlayer = videoStudio.locator(".oh-video-player-stage > video");
       await recapPlayer.waitFor({ state: "visible", timeout: 10_000 });
       await page.waitForFunction(() => (document.querySelector(".oh-video-studio video") as HTMLVideoElement | null)?.readyState !== 0);
@@ -2025,7 +2029,7 @@ async function main(): Promise<void> {
       await scriptToggle.click();
       await scriptPanel.waitFor({ state: "visible", timeout: 10_000 });
       const versionTabs = videoStudio.getByRole("tablist", { name: "预览版本", exact: true });
-      for (const label of ["原片", "剪后画面", "成片"]) {
+      for (const label of ["原片", "剪后片", "成片"]) {
         if (await versionTabs.getByRole("tab", { name: label, exact: true }).count() !== 1) throw new Error(`Video Studio missed ${label}.`);
       }
 
@@ -2171,7 +2175,7 @@ async function main(): Promise<void> {
       await videoStudio.getByRole("button", { name: "保存文稿", exact: true }).click();
       const narrationConflict = videoStudio.getByRole("alert").filter({ hasText: narrationPath });
       await narrationConflict.waitFor({ state: "visible", timeout: 10_000 });
-      await narrationConflict.getByRole("button", { name: "使用磁盘版本", exact: true }).click();
+      await narrationConflict.getByRole("button", { name: "载入磁盘版本", exact: true }).click();
       if (await narrationEditor.inputValue() !== "磁盘并发视频改稿") throw new Error("Narration conflict resolution did not load the authoritative disk version.");
       const externalNarrationRow = JSON.parse(await readFile(narrationFile, "utf8")) as readonly Record<string, unknown>[];
       if (JSON.stringify({ ...externalNarrationRow[0], narration: originalNarration[0]?.narration }) !== JSON.stringify(originalNarration[0])) {
@@ -2299,7 +2303,7 @@ async function main(): Promise<void> {
       await page.setViewportSize({ width: 1_440, height: 900 });
       await page.waitForFunction(() => document.querySelector("[data-conversation-scroll]")?.getAttribute("data-oh-story-layout") === "wide");
       await videoTabs.getByRole("tab", { name: "预览", exact: true }).click();
-      if (await videoChatToggle.getAttribute("aria-pressed") !== "true") await videoChatToggle.click();
+      if (await videoChatToggle.getAttribute("aria-expanded") !== "true") await videoChatToggle.click();
       await videoComposer.waitFor({ state: "visible", timeout: 10_000 });
       const chatOpenScriptToggle = videoStudio.getByRole("button", { name: "解说稿", exact: true });
       if (!await chatOpenScriptToggle.isVisible() || await videoStudio.getByRole("complementary", { name: "分段解说稿", exact: true }).isVisible()) {
@@ -2691,7 +2695,7 @@ async function main(): Promise<void> {
         };
         for (const deadline = Date.now() + 5_000; Date.now() < deadline;) {
           const [selected, node, viewport] = await Promise.all([
-            firstShotCanvasNode.getAttribute("aria-pressed").then((value) => value === "true"),
+            firstShotCanvasNode.getAttribute("data-selected").then((value) => value === "true"),
             firstShotCanvasNode.boundingBox(),
             canvasViewport.boundingBox()
           ]);

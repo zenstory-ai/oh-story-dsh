@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   decideChapterExtractorWrite,
   decideStoryMutation,
+  detectProseHardDefects,
   detectStoryMutation,
   IMPORT_MARKER,
   postWriteReminderText,
@@ -621,9 +622,42 @@ describe("registered native hooks", () => {
       "scripts/tracking_commit.js draft",
       "scripts/storyctl.js chapter commit",
       "chapter accept-current-length",
+      "review_required",
+      "--ack <rule-id>:<理由>",
       "mode=revision",
       "追踪/_tracking-state.json",
       "派生 Tracking 视图只由这些脚本写入，绝不手改"
     ]) expect(text).toContain(rule);
+  });
+
+  it("surfaces deterministic prose hard-defect notices via additionalContexts without blocking writes", async () => {
+    expect(detectProseHardDefects("他推门走进雨里，「作为AI，我不会放弃。」")).toEqual([]);
+    expect(detectProseHardDefects("这里先略过（此处省略三百字），按细纲推进。")).toEqual(expect.arrayContaining([
+      "出现括号省略占位符",
+      "叙述中泄漏写作工程词"
+    ]));
+
+    const book = await project();
+    await mkdir(join(book, "正文"));
+    await writeFile(join(book, "正文", "第002章.md"), "# 第二章\n\n这里未完待续，按细纲补完。\n");
+
+    let postExecute!: (exec: ToolExecution, result: { readonly isError: boolean }, next: () => Promise<PostToolDecision>) => Promise<PostToolDecision>;
+    const mockContext = {
+      on: vi.fn((event: string, listener: unknown) => {
+        if (event === "tools/post-execute") postExecute = listener as typeof postExecute;
+      })
+    } as unknown as Context;
+    registerOhStoryHooks(mockContext);
+
+    const decision = await postExecute(
+      execution("write", { file_path: "正文/第002章.md", content: "..." }, agentOn(book, localDshFs())),
+      { isError: false },
+      async () => ({ kind: "accept" })
+    );
+    expect(decision.kind).toBe("accept");
+    const contexts = (decision as { readonly additionalContexts?: readonly { readonly content: readonly { readonly text?: string }[] }[] }).additionalContexts;
+    expect(contexts).toHaveLength(1);
+    expect(contexts?.[0]?.content[0]?.text).toContain("检测到疑似硬伤");
+    expect(contexts?.[0]?.content[0]?.text).toContain("叙述中泄漏写作工程词");
   });
 });

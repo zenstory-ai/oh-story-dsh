@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { PartialArguments } from "@deepseek-ai/dsh-util-values";
 import {
   creativeRelativePath,
+  fileActivityLabel,
   fileMutations,
   initialWorkbenchMode,
   jsonStringPrefix,
@@ -340,5 +341,51 @@ describe("agent path resolution before the workspace loads", () => {
     // follow-the-agent selection would be dropped permanently.
     expect(creativeRelativePath("/home/runner/work/story/设定/角色/a.md", undefined)).toBeUndefined();
     expect(creativeRelativePath("/home/runner/work/story/设定/角色/a.md", "/home/runner/work/story")).toBe("设定/角色/a.md");
+  });
+});
+
+describe("v0.8.0 video, v0.11.0 story and v0.13.0 drama activity recognition", () => {
+  it("labels v0.8.0 video artifacts and prefers EDIT_PLAN.md / timeline.json / check.json", () => {
+    expect(fileActivityLabel("video-recaps/ep1/work/EDIT_PLAN.md")).toBe("剪辑与旁白方案");
+    expect(fileActivityLabel("video-recaps/ep1/work/timeline.json")).toBe("成片时间线");
+    expect(fileActivityLabel("video-recaps/ep1/work/check.json")).toBe("成片体检");
+    expect(fileActivityLabel("video-recaps/ep1/work/REFERENCE_NOTES.md")).toBe("参考笔记");
+    expect(fileActivityLabel("video-recaps/ep1/work/reference_metrics.json")).toBe("参考指标");
+    expect(fileActivityLabel("video-recaps/ep1/work/out/preview.mp4")).toBe("粗剪预览");
+    expect(fileActivityLabel("video-recaps/ep1/work/out/final.mp4")).toBe("最终成片");
+    expect(fileActivityLabel("video-recaps/ep1/work/out/episode_cut.mp4")).toBe("成片输出");
+    expect(fileActivityLabel("video-recaps/ep1/work/out/episode_cut.srt")).toBe("SRT 字幕");
+    expect(preferredWorkbenchFile([
+      { path: "video-recaps/ep1/work/reference_metrics.json" },
+      { path: "video-recaps/ep1/work/check.json" },
+      { path: "video-recaps/ep1/work/timeline.json" }
+    ], "video")).toBe("video-recaps/ep1/work/timeline.json");
+  });
+
+  it("recognizes Oh Story v0.11.0 directories, publish files and multi-book paths", () => {
+    const cwd = "/books/demo";
+    for (const [path, label] of [
+      ["拆文库/热文拆解.md", "拆文分析"],
+      ["扫榜/番茄男频.md", "榜单分析"],
+      ["封面/封面提示词.md", "封面设计"],
+      ["发布资料-番茄.md", "发布资料"],
+      ["霜雪录/正文/第001章.md", "小说正文"],
+      ["霜雪录/拆文库/拆解.md", "拆文分析"]
+    ] as const) {
+      expect(workbenchModeForPath(path)).toBe("story");
+      expect(creativeRelativePath(`${cwd}/${path}`, cwd)).toBe(path);
+      expect(fileActivityLabel(path)).toBe(label);
+    }
+    expect(preferredWorkbenchFile([
+      { path: "发布资料-番茄.md" },
+      { path: "霜雪录/正文/第001章.md" }
+    ], "story")).toBe("霜雪录/正文/第001章.md");
+  });
+
+  it("recognizes Drama v0.13.0 GROUP-*, MUSIC-* and audio asset activities", () => {
+    expect(workbenchModeForPath("剧集/EP001/制作成果/GROUP-EP001-01/shot.mp4")).toBe("drama");
+    expect(fileActivityLabel("剧集/EP001/制作成果/GROUP-EP001-01/shot.mp4")).toBe("镜头组素材");
+    expect(fileActivityLabel("剧集/EP001/制作成果/MUSIC-EP001-01/bgm.mp3")).toBe("配乐素材");
+    expect(fileActivityLabel("剧集/EP001/制作成果/VOICE-01/line.wav")).toBe("音频素材");
   });
 });

@@ -22,9 +22,10 @@ export function handleTabKey<T extends string>(
   event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>("[role='tab']")[index]?.focus();
 }
 
-export function endpoint(path: string, sessionId: string, file?: string): string {
+export function endpoint(path: string, sessionId: string, file?: string, version?: string): string {
   const url = new URL(`/oh-story/${path}`, globalThis.location.origin);
   url.searchParams.set("sessionId", sessionId);
   if (file !== undefined) url.searchParams.set("path", file);
+  if (version !== undefined && version !== "") url.searchParams.set("version", version);
   return url.toString();
 }

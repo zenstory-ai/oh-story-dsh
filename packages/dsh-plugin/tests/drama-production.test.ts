@@ -4,9 +4,14 @@ import {
   episodeDirectoryForPath,
   parseEpisodeProduction,
   parseImagePrompts,
+  parseMusicPrompts,
   parseStoryboard,
+  parseVideoGroups,
   parseVideoPrompts,
-  productionCompleteness
+  productionCompleteness,
+  productionKnownTargets,
+  resolveMediaTargetIds,
+  targetDisplayName
 } from "../src/client/drama-production.js";
 
 const episode = "剧集/EP001";
@@ -264,5 +269,127 @@ describe("Drama Skills 0.12.0 creator field names and multi-shot groups", () => 
       [`${episode}/视频提示词.md`]: "## GROUP 待补编号\n"
     }, episode);
     expect(production.diagnostics.map((item) => item.code)).toContain("malformed_heading");
+  });
+});
+
+describe("Drama Skills 0.13.0 bold keys, GROUP-* linkage, and MUSIC-* entries", () => {
+  it("strips surrounding ** / __ from bullet field keys and colon-wrapped bold keys", () => {
+    const production = parseEpisodeProduction({
+      [`${episode}/剧本.md`]: "## EP001-SC001 内 · 监控室 · 夜\n江辰盯住屏幕。",
+      [`${episode}/视觉设定.md`]: "## 人物 · 江辰\n- **ID**：VISUAL-CHAR-JIANGCHEN\n- **外观特征：** 左眉尾旧疤。",
+      [`${episode}/分镜.md`]: [
+        "## SHOT-EP001-001 · 监控室停步",
+        "- **来源**：EP001-SC001",
+        "- **时长：** 4s",
+        "- __景别/机位__：中近景",
+        "- **图片提示词项**：IMG-CHAR-A",
+        "### 首帧提示词",
+        "> 江辰站在监控室。"
+      ].join("\n"),
+      [`${episode}/图片提示词.md`]: [
+        "## IMG-CHAR-A · 江辰",
+        "- **用途**：外貌",
+        "- **核心提示词**：窄长眼，左眉尾旧疤。"
+      ].join("\n"),
+      [`${episode}/视频提示词.md`]: [
+        "## MOTION-EP001-001 · 监控室停步",
+        "- **分镜**：SHOT-EP001-001",
+        "- **时长**：4s",
+        "- **开场画面**：Man in control room.",
+        "### 可复制提示词",
+        "> Camera holds steady."
+      ].join("\n")
+    }, episode);
+
+    expect(production.diagnostics).toEqual([]);
+    expect(production.visualAssets[0]).toMatchObject({ id: "VISUAL-CHAR-JIANGCHEN", stableId: true });
+    expect(production.shots[0]).toMatchObject({
+      source: "EP001-SC001",
+      durationSeconds: 4,
+      shotSpec: "中近景",
+      references: ["IMG-CHAR-A"]
+    });
+    expect(production.assets[0]?.prompt).toBe("窄长眼，左眉尾旧疤。");
+    expect(production.shots[0]?.motion).toMatchObject({
+      id: "MOTION-EP001-001",
+      shotId: "SHOT-EP001-001",
+      durationSeconds: 4,
+      startFrame: "Man in control room."
+    });
+  });
+
+  it("parses GROUP-* multi-shot entries and links them to member SHOT-* nodes", () => {
+    const videoDoc = [
+      "## MOTION-EP001-001 · 抬头",
+      "- 分镜：SHOT-EP001-001",
+      "- 时长：4s",
+      "## MOTION-EP001-002 · 转身",
+      "- 分镜：SHOT-EP001-002",
+      "- 时长：4s",
+      "",
+      "## GROUP-EP001-01 · 抬头接转身",
+      "- **成员**：MOTION-EP001-001、MOTION-EP001-002",
+      "- **时长**：8s",
+      "- **理由**：同场紧邻连续动作",
+      "### 可复制提示词",
+      "> Continuous shot from look-up into turn."
+    ].join("\n");
+    const rawGroups = parseVideoGroups(`${episode}/视频提示词.md`, videoDoc);
+    expect(rawGroups[0]).toMatchObject({
+      id: "GROUP-EP001-01",
+      title: "抬头接转身",
+      memberMotionIds: ["MOTION-EP001-001", "MOTION-EP001-002"],
+      durationSeconds: 8,
+      reason: "同场紧邻连续动作",
+      prompt: "Continuous shot from look-up into turn."
+    });
+
+    const production = parseEpisodeProduction({
+      [`${episode}/分镜.md`]: "## SHOT-EP001-001 · 抬头\n- 时长：4s\n\n## SHOT-EP001-002 · 转身\n- 时长：4s",
+      [`${episode}/视频提示词.md`]: videoDoc
+    }, episode);
+    expect(production.groups[0]?.memberShotIds).toEqual(["SHOT-EP001-001", "SHOT-EP001-002"]);
+    expect(production.shots[0]?.group?.id).toBe("GROUP-EP001-01");
+    expect(production.shots[1]?.group?.id).toBe("GROUP-EP001-01");
+    expect(production.targets.get("GROUP-EP001-01")?.path).toBe(`${episode}/视频提示词.md`);
+    expect(targetDisplayName(production, "GROUP-EP001-01")).toBe("抬头接转身");
+    expect(productionKnownTargets(production)).toContain("GROUP-EP001-01");
+    expect(resolveMediaTargetIds(production, "GROUP-EP001-01")).toEqual([
+      "GROUP-EP001-01",
+      "SHOT-EP001-001",
+      "SHOT-EP001-002"
+    ]);
+  });
+
+  it("parses MUSIC-* entries and reports malformed MUSIC headings", () => {
+    const musicDoc = [
+      "## MUSIC-EP001-01 · 监控室悬疑铺底",
+      "- **区间**：SHOT-EP001-001 至 SHOT-EP001-006（约 22s）",
+      "- **剧情作用**：压低环境焦躁感",
+      "- **情绪与乐器**：低频脉冲合成器、轻拨大提琴",
+      "- **禁用**：人声哼唱",
+      "### 可复制提示词",
+      "> Dark minimalist suspense underscore."
+    ].join("\n");
+    const parsed = parseMusicPrompts(`${episode}/视频提示词.md`, musicDoc);
+    expect(parsed[0]).toMatchObject({
+      id: "MUSIC-EP001-01",
+      title: "监控室悬疑铺底",
+      range: "SHOT-EP001-001 至 SHOT-EP001-006（约 22s）",
+      purpose: "压低环境焦躁感",
+      mood: "低频脉冲合成器、轻拨大提琴",
+      avoid: "人声哼唱",
+      prompt: "Dark minimalist suspense underscore."
+    });
+
+    const production = parseEpisodeProduction({ [`${episode}/视频提示词.md`]: musicDoc }, episode);
+    expect(production.music).toHaveLength(1);
+    expect(production.targets.get("MUSIC-EP001-01")?.path).toBe(`${episode}/视频提示词.md`);
+    expect(targetDisplayName(production, "MUSIC-EP001-01")).toBe("监控室悬疑铺底");
+    expect(productionKnownTargets(production)).toContain("MUSIC-EP001-01");
+    expect(production.diagnostics).toEqual([]);
+
+    const malformed = parseEpisodeProduction({ [`${episode}/视频提示词.md`]: "## MUSIC 待补编号\n" }, episode);
+    expect(malformed.diagnostics.map((item) => item.code)).toContain("malformed_heading");
   });
 });
