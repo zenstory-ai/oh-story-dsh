@@ -34,14 +34,12 @@ export const ohStoryPlatformGlue = [
   "story-setup/references/deploy-opencode.md",
   "story-setup/references/deploy-reasonix.md",
   "story-setup/references/deploy-zcode.md",
-  "story-setup/scripts/deploy-antigravity-skills.py",
+  "story-setup/scripts/deploy-antigravity-skills.js",
   "story-setup/scripts/generate-antigravity-agents.mjs",
-  "story-setup/scripts/merge-antigravity-hooks.py",
-  "story-setup/scripts/merge-claude-settings.py",
-  "story-setup/scripts/merge-codex-hooks.py",
-  // Oh Story 0.9.0 merges managed blocks into host CLAUDE.md/AGENTS.md; DSH replaces deployment.
-  "story-setup/scripts/merge-project-instructions.py",
-  "story-setup/scripts/copy-path-safety.py",
+  "story-setup/scripts/merge-hooks.js",
+  // Oh Story 0.9.0+ merges managed blocks into host CLAUDE.md/AGENTS.md; DSH replaces deployment.
+  "story-setup/scripts/merge-project-instructions.js",
+  "story-setup/scripts/copy-path-safety.js",
   "story-setup/UPGRADING.md"
 ] as const;
 

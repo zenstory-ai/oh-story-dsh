@@ -9,7 +9,12 @@ import {
   workbenchModesKey,
   writeWorkbenchModes
 } from "../src/client/workbench-settings.js";
-import { WorkbenchSettingsForm } from "../src/client/workbench-settings-panel.js";
+import {
+  createDialogBackdropGuard,
+  isDialogBackdropClick,
+  WorkbenchSettingsForm,
+  WorkbenchSettingsPanel
+} from "../src/client/workbench-settings-panel.js";
 
 describe("workbench visibility preferences", () => {
   it("defaults to all modes and recovers malformed or empty preferences", () => {
@@ -98,5 +103,36 @@ describe("workbench settings form", () => {
     expect(markup).toContain("不删除项目");
     expect(markup).toContain("DSH");
     expect(markup).not.toContain('type="password"');
+  });
+
+  it("wraps dialog children in .oh-workbench-settings-body and ignores clicks inside the dialog rect", () => {
+    const markup = renderToStaticMarkup(<WorkbenchSettingsPanel modes={["story", "drama"]} onChange={vi.fn()} onClose={vi.fn()} />);
+    expect(markup).toContain('<div class="oh-workbench-settings-body">');
+
+    const dialog = {
+      getBoundingClientRect: () => ({ left: 100, top: 80, right: 500, bottom: 420, width: 400, height: 340 } as DOMRect)
+    };
+    // Clicking inner 20px padding or gaps lands inside the dialog bounding rect -> must NOT close.
+    expect(isDialogBackdropClick(dialog, { target: dialog, detail: 1, clientX: 105, clientY: 85 })).toBe(false);
+    // Clicking an inner child element -> must NOT close.
+    expect(isDialogBackdropClick(dialog, { target: {}, detail: 1, clientX: 10, clientY: 10 })).toBe(false);
+    // Keyboard-triggered click -> must NOT close.
+    expect(isDialogBackdropClick(dialog, { target: dialog, detail: 0, clientX: 0, clientY: 0 })).toBe(false);
+    // Clicking outside the dialog rect (true ::backdrop click) -> closes.
+    expect(isDialogBackdropClick(dialog, { target: dialog, detail: 1, clientX: 40, clientY: 200 })).toBe(true);
+
+    // Dragging a text selection from inside the dialog onto the backdrop must NOT close.
+    const guard = createDialogBackdropGuard();
+    guard.onPointerDown(dialog, { target: {}, clientX: 200, clientY: 200 });
+    expect(guard.shouldCloseOnClick(dialog, { target: dialog, detail: 1, clientX: 40, clientY: 200 })).toBe(false);
+
+    // Pointer down AND click on backdrop -> closes once, then resets.
+    guard.onPointerDown(dialog, { target: dialog, clientX: 40, clientY: 200 });
+    expect(guard.shouldCloseOnClick(dialog, { target: dialog, detail: 1, clientX: 40, clientY: 200 })).toBe(true);
+    expect(guard.shouldCloseOnClick(dialog, { target: dialog, detail: 1, clientX: 40, clientY: 200 })).toBe(false);
+
+    // Pointer down on backdrop then released inside dialog -> must NOT close.
+    guard.onPointerDown(dialog, { target: dialog, clientX: 40, clientY: 200 });
+    expect(guard.shouldCloseOnClick(dialog, { target: dialog, detail: 1, clientX: 200, clientY: 200 })).toBe(false);
   });
 });

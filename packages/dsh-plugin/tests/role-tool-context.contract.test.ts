@@ -253,4 +253,71 @@ describe("oh_story_role Cordis Context contract", () => {
       await topology.root.fiber.dispose();
     }
   });
+
+  it("aborts registration cleanly if the Cordis fiber disposes while loading bundled personas", async () => {
+    const register = vi.fn(() => () => {});
+    const guard = vi.fn(() => () => {});
+    const on = vi.fn(() => () => {});
+    const fiber = { uid: 1 as number | null };
+    const disposedContext = {
+      fiber,
+      tools: { register, guard, get: vi.fn(() => ({})) },
+      subagents: {
+        startActivation: vi.fn(),
+        getProvider: vi.fn(() => ({ name: "spawn" }))
+      },
+      on
+    } as unknown as Context;
+    const pending = registerOhStoryRoleTool(disposedContext);
+    // Simulate fiber disposal during async persona/reference loading.
+    fiber.uid = null;
+    await pending;
+    expect(register).not.toHaveBeenCalled();
+    expect(guard).not.toHaveBeenCalled();
+    expect(on).not.toHaveBeenCalled();
+  });
+
+  it("excludes scope-local-only tools from tools.restrict allow lists so DSH never throws", async () => {
+    let childRestrict: ReturnType<typeof vi.fn> | undefined;
+    const start = vi.fn(async (spec: SubagentActivationSpec) => {
+      const restrict = vi.fn();
+      childRestrict = restrict;
+      // Simulate `write` registered only on the child's local scope (absent from global `tools.get("write")`).
+      const tools = {
+        restrict,
+        get: vi.fn((name: string, scope?: Agent) => {
+          if (name === "write" && scope === undefined) return undefined;
+          return {};
+        })
+      };
+      const agent = {
+        id: spec.childId!,
+        session: { ownEvents: () => [{ type: "subagent/descriptor", data: { label: "oh-story:story-architect" } } as SessionEvent] },
+        ctx: {
+          get: (name: string) => name === "systemPrompt"
+            ? { section: vi.fn(), getSectionOrder: vi.fn(() => 10) }
+            : name === "tools"
+              ? tools
+              : undefined
+        }
+      } as unknown as Agent;
+      await topology.root.serial("agent/created", { agent, source: "startup" });
+      return {
+        childId: spec.childId,
+        result: Promise.resolve({ output: [{ type: "text", text: "ok" }], stopReason: "completed" as const }),
+        dispose: vi.fn(async () => {})
+      };
+    });
+    const topology = await createRoleContextTopology(start, true);
+    try {
+      await topology.root.plugin({ name: "oh-story-restrict-scope-test", inject: ["tools", "subagents"], apply: registerOhStoryRoleTool });
+      const definition = topology.registeredDefinition()!;
+      await executeStoryArchitect(definition, topology.agent, "call-scope-local");
+      expect(childRestrict).toHaveBeenCalledWith({
+        allow: ["oh_story_bundled_reference", "read", "glob", "grep", "edit"]
+      });
+    } finally {
+      await topology.root.fiber.dispose();
+    }
+  });
 });

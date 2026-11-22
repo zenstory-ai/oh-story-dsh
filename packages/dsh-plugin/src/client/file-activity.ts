@@ -10,7 +10,10 @@ import {
   GAME_DIRECTORY,
   isCreativeRootPath,
   isDramaDirectory,
+  isMultiBookStoryPath,
+  isPublishRootFile,
   isStoryDirectory,
+  pathExtension,
   safeRelativePath,
   SHORT_STORY_FILE_SET,
   VIDEO_DIRECTORY
@@ -323,13 +326,126 @@ export function creativeRelativePath(path: string | undefined, cwd: string | und
 }
 
 export function workbenchModeForPath(path: string | undefined): WorkbenchMode | undefined {
+  if (path === undefined || path === "") return undefined;
   if (path === "short-drama.json") return "drama";
-  if (path !== undefined && SHORT_STORY_FILE_SET.has(path)) return "story";
-  const directory = path?.split("/", 1)[0];
+  if (SHORT_STORY_FILE_SET.has(path) || isPublishRootFile(path) || isMultiBookStoryPath(path)) return "story";
+  const directory = path.split("/", 1)[0];
   if (directory !== undefined && isStoryDirectory(directory)) return "story";
   if (directory !== undefined && isDramaDirectory(directory)) return "drama";
   if (directory === GAME_DIRECTORY) return "game";
   if (directory === VIDEO_DIRECTORY) return "video";
+  return undefined;
+}
+
+const VIDEO_ACTIVITY_LABELS: Readonly<Record<string, string>> = {
+  "EDIT_PLAN.md": "剪辑与旁白方案",
+  "BRIEF.md": "需求与画幅",
+  "MEDIA_NOTES.md": "素材笔记",
+  "STORYBOARD.md": "分镜脚本",
+  "SCRIPT.md": "解说脚本",
+  "PROMO.md": "宣发文案",
+  "REFERENCE_NOTES.md": "参考笔记",
+  "reference_metrics.json": "参考指标",
+  "timeline.json": "成片时间线",
+  "check.json": "成片体检",
+  "probe.json": "媒体探测",
+  "transcript.json": "原声转写",
+  "measure.json": "配音实测",
+  "narration.json": "解说稿",
+  "recap_story_plan.json": "故事规划",
+  "assembly_manifest.json": "装配清单",
+  "preview.mp4": "粗剪预览",
+  "edited_source.mp4": "剪后画面",
+  "final.mp4": "最终成片"
+};
+
+const GAME_ACTIVITY_LABELS: Readonly<Record<string, string>> = {
+  "PRODUCT_BRIEF.md": "游戏立项书",
+  "SOURCE_BIBLE.md": "原著与故事依据",
+  "CONCEPT.md": "游戏核心构想",
+  "GAME_DESIGN.md": "游戏设计稿",
+  "ART_DIRECTION.md": "游戏美术方向",
+  "BUILD_BRIEF.md": "试玩构建说明",
+  "verification.json": "游戏验证报告"
+};
+
+const AUDIO_EXTENSIONS = new Set([".mp3", ".wav", ".m4a", ".aac", ".flac"]);
+const VIDEO_EXTENSIONS = new Set([".mp4", ".mov", ".mkv", ".webm"]);
+
+/** Human-facing Chinese label for a creative workspace file activity (Video v0.8.0 / Story v0.11.0 / Drama v0.13.0 / Game v0.9.0). */
+export function fileActivityLabel(path: string | undefined): string | undefined {
+  if (path === undefined || path === "") return undefined;
+  const normalized = path.replaceAll("\\", "/");
+  const parts = normalized.split("/");
+  const name = parts.at(-1) ?? "";
+  const ext = pathExtension(name);
+  const mode = workbenchModeForPath(normalized);
+
+  if (mode === "video") {
+    const exact = VIDEO_ACTIVITY_LABELS[name];
+    if (exact !== undefined) return exact;
+    if (ext === ".srt") return "SRT 字幕";
+    if (ext === ".ass") return "ASS 字幕";
+    if (VIDEO_EXTENSIONS.has(ext) && (parts.includes("out") || parts.includes("outputs") || /^recap_/iu.test(name))) {
+      return "成片输出";
+    }
+    if (VIDEO_EXTENSIONS.has(ext) && parts.includes("sources")) return "原片素材";
+    return "视频项目";
+  }
+
+  if (mode === "game") {
+    const exact = GAME_ACTIVITY_LABELS[name];
+    if (exact !== undefined) return exact;
+    if (parts.includes("build")) return "游戏构建文件";
+    return "游戏项目";
+  }
+
+  if (mode === "story") {
+    if (isPublishRootFile(name)) return "发布资料";
+    const section = isMultiBookStoryPath(normalized) ? parts[1] : parts[0];
+    switch (section) {
+      case "拆文库": return "拆文分析";
+      case "扫榜": return "榜单分析";
+      case "封面": return "封面设计";
+      case "对标": return "对标资料";
+      case "参考资料": return "参考资料";
+      case "正文":
+      case "正文.md": return "小说正文";
+      case "大纲":
+      case "小节大纲.md": return "大纲规划";
+      case "设定":
+      case "设定.md": return "小说设定";
+      case "追踪": return "状态追踪";
+      default: return "小说文件";
+    }
+  }
+
+  if (mode === "drama") {
+    if (normalized === "short-drama.json") return "短剧项目配置";
+    if (parts.some((segment) => /^MUSIC-/u.test(segment))) return "配乐素材";
+    if (parts.some((segment) => /^GROUP-/u.test(segment))) return "镜头组素材";
+    if (AUDIO_EXTENSIONS.has(ext)) return "音频素材";
+    if (name === "剧本.md" || name.toLocaleLowerCase() === "screenplay.md") return "剧集剧本";
+    if (name === "分镜.md") return "分镜脚本";
+    if (name === "视觉设定.md") return "视觉设定";
+    if (name === "图片提示词.md") return "图片提示词";
+    if (name === "视频提示词.md") return "视频提示词";
+    if (name === "剪辑单.md") return "剪辑单";
+    switch (parts[0]) {
+      case "项目开发": return "项目开发";
+      case "设定集": return "设定集";
+      case "审查": return "审查记录";
+      case "输入": return "输入资料";
+      case "创作者决策": return "创作者决策";
+      case "交付": return "交付成果";
+      case "剧集":
+        if (parts.includes("成片")) return "成片输出";
+        if (parts.includes("制作成果")) return "制作素材";
+        return "剧集文档";
+      default: return "短剧文件";
+    }
+  }
+
   return undefined;
 }
 
@@ -357,7 +473,20 @@ export function preferredWorkbenchFile(
 ): string | undefined {
   const matching = files.filter((file) => workbenchModeForPath(file.path) === mode);
   const preferences = mode === "story"
-    ? [/^正文\/.*\.md$/u, /^正文\.md$/u, /^小节大纲\.md$/u, /^大纲\/.*\.md$/u, /\.md$/u]
+    ? [
+        /^正文\/.*\.md$/u,
+        /^[^/]+\/正文\/.*\.md$/u,
+        /^正文\.md$/u,
+        /^[^/]+\/正文\.md$/u,
+        /^小节大纲\.md$/u,
+        /^大纲\/.*\.md$/u,
+        /^[^/]+\/大纲\/.*\.md$/u,
+        /^发布资料-[^/]+\.md$/u,
+        /^拆文库\/.*\.md$/u,
+        /^扫榜\/.*\.md$/u,
+        /^封面\/.*\.md$/u,
+        /\.md$/u
+      ]
     : mode === "drama" ? [
         /^剧集\/EP0*1\/剧本\.md$/u,
         /^剧集\/.*\/剧本\.md$/u,
@@ -374,15 +503,76 @@ export function preferredWorkbenchFile(
         /^game-adaptations\/[^/]+\/build\/app\/index\.html$/u,
         /\.md$/u
       ] : [
+        /^video-recaps\/[^/]+\/work\/EDIT_PLAN\.md$/u,
+        /^video-recaps\/[^/]+\/work\/BRIEF\.md$/u,
+        /^video-recaps\/[^/]+\/work\/STORYBOARD\.md$/u,
+        /^video-recaps\/[^/]+\/work\/SCRIPT\.md$/u,
+        /^video-recaps\/[^/]+\/work\/MEDIA_NOTES\.md$/u,
+        /^video-recaps\/[^/]+\/work\/timeline\.json$/u,
+        /^video-recaps\/[^/]+\/work\/check\.json$/u,
+        /^video-recaps\/[^/]+\/work\/REFERENCE_NOTES\.md$/u,
+        /^video-recaps\/[^/]+\/work\/reference_metrics\.json$/u,
         /^video-recaps\/[^/]+\/work\/recap_story_plan\.json$/u,
         /^video-recaps\/[^/]+\/work\/narration\.json$/u,
-        /^video-recaps\/[^/]+\/work\/assembly_manifest\.json$/u
+        /^video-recaps\/[^/]+\/work\/assembly_manifest\.json$/u,
+        /^video-recaps\/[^/]+\/.*\.srt$/iu
       ];
   for (const pattern of preferences) {
     const match = matching.find((file) => pattern.test(file.path));
     if (match !== undefined) return match.path;
   }
   return matching[0]?.path;
+}
+
+export interface AdjacentStoryChapters {
+  readonly prev?: string | undefined;
+  readonly next?: string | undefined;
+  readonly index?: number | undefined;
+  readonly total?: number | undefined;
+}
+
+function compareChapterPaths(left: string, right: string): number {
+  const leftParts = left.split("/");
+  const rightParts = right.split("/");
+  const shared = Math.min(leftParts.length, rightParts.length);
+  for (let index = 0; index < shared; index += 1) {
+    const diff = (leftParts[index] ?? "").localeCompare(rightParts[index] ?? "", "zh-Hans-CN", { numeric: true });
+    if (diff !== 0) return diff;
+  }
+  return leftParts.length - rightParts.length;
+}
+
+/**
+ * Find the previous and next `.md` chapter inside the same story `正文/` directory
+ * (supports both root `正文/` and multi-book `{书名}/正文/`), sorted with Chinese natural order.
+ */
+export function adjacentStoryChapters(
+  files: readonly WorkspaceFilePath[],
+  selected?: string
+): AdjacentStoryChapters {
+  if (selected === undefined || selected === "" || workbenchModeForPath(selected) !== "story") return {};
+  const match = /^((?:[^/]+\/)?正文\/).+\.md$/iu.exec(selected);
+  if (match === null) return {};
+  const prefix = match[1]!;
+  const unique = new Set<string>();
+  for (const file of files) {
+    if (file.path.startsWith(prefix) && /\.md$/iu.test(file.path) && workbenchModeForPath(file.path) === "story") {
+      unique.add(file.path);
+    }
+  }
+  const chapters = [...unique].sort((left, right) =>
+    compareChapterPaths(left.slice(prefix.length), right.slice(prefix.length))
+  );
+  const index = chapters.indexOf(selected);
+  if (index < 0) return {};
+  const prev = index > 0 ? chapters[index - 1] : undefined;
+  const next = index + 1 < chapters.length ? chapters[index + 1] : undefined;
+  return {
+    ...(prev === undefined ? {} : { prev }),
+    ...(next === undefined ? {} : { next }),
+    index,
+    total: chapters.length
+  };
 }
 
 /** Project one streamed mutation over its immediate predecessor. */

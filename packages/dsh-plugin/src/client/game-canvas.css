@@ -28,7 +28,8 @@
 
 .oh-game-canvas-help { color: var(--dsw-alias-label-secondary); font-size: 12px; }
 .oh-game-canvas-controls { display: flex; align-items: center; gap: 3px; }
-.oh-game-canvas-controls span { min-width: 42px; color: var(--dsw-alias-label-secondary); text-align: center; font-size: 11px; font-variant-numeric: tabular-nums; }
+.oh-game-canvas-controls span,
+.oh-game-canvas-controls .oh-canvas-zoom-readout { min-width: 46px; color: var(--dsw-alias-label-secondary); text-align: center; font-size: 11px; font-variant-numeric: tabular-nums; }
 .oh-game-canvas-controls button,
 .oh-game-canvas-context button,
 .oh-game-canvas-node footer button,

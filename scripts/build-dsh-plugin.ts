@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { access, cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { relative, resolve } from "node:path";
-import { build, type Plugin } from "esbuild";
+import { build, transform } from "esbuild";
 
 import { isLocalArtifactPath } from "../packages/dsh-plugin/build-path-policy.js";
 import { matchesExcludedPrefix } from "./asset-sync-utils.js";
@@ -23,22 +23,28 @@ const ohStoryBundleExcluded = [
 const dramaBundleExcluded = dramaPlatformGlue.map((entry) => `skills/${entry}`);
 const videoRecapBundleExcluded = videoRecapPlatformGlue.map((entry) => `skills/${entry}`);
 
-const inlineCss: Plugin = {
-  name: "inline-css",
-  setup(builder) {
-    builder.onResolve({ filter: /\.css\?inline$/ }, (args) => ({
-      path: resolve(args.resolveDir, args.path.slice(0, -"?inline".length)),
-      namespace: "inline-css"
-    }));
-    builder.onLoad({ filter: /.*/, namespace: "inline-css" }, async (args) => ({
-      contents: await readFile(args.path, "utf8"),
-      loader: "text"
-    }));
-  }
-};
-
 await rm(outputRoot, { recursive: true, force: true });
 await mkdir(outputRoot, { recursive: true });
+
+// Emit a single minified external stylesheet for the workbench + tool cards so Wave 2b
+// can serve it via `/api/oh-story/workbench.css` (and `/oh-story/workbench.css`) instead of
+// inlining ~135 KB of CSS into `lib/client.js`.
+const workbenchCssFiles = [
+  resolve(packageRoot, "src/client/plugin.css"),
+  resolve(packageRoot, "src/client/game-canvas.css"),
+  resolve(packageRoot, "src/client/video-studio.css"),
+  resolve(packageRoot, "src/client/tool-card.css")
+];
+const rawWorkbenchCss = (await Promise.all(workbenchCssFiles.map((file) => readFile(file, "utf8")))).join("\n");
+const minifiedWorkbenchCss = await transform(rawWorkbenchCss, {
+  loader: "css",
+  minify: true,
+  target: ["chrome120", "safari17"]
+});
+if (minifiedWorkbenchCss.code.trim() === "") {
+  throw new Error("Minified workbench.css asset is unexpectedly empty.");
+}
+await writeFile(resolve(outputRoot, "workbench.css"), minifiedWorkbenchCss.code, "utf8");
 
 await build({
   entryPoints: [resolve(packageRoot, "src/index.ts")],
@@ -63,12 +69,12 @@ await build({
   format: "cjs",
   platform: "browser",
   target: ["chrome120", "safari17"],
+  charset: "utf8",
   sourcemap: true,
   treeShaking: true,
   define: { "process.env.NODE_ENV": '"production"' },
   minify: true,
   external: ["@deepseek-ai/*", "react", "react/jsx-runtime", "react-dom", "react-dom/client"],
-  plugins: [inlineCss],
   banner: { js: "window.__ModuleLoader__.load({id:\"@oh-story/dsh\",factory:(require)=>{var module={exports:{}};var exports=module.exports;" },
   footer: { js: ";return module.exports;}});" }
 });

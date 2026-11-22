@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
-import { MarkdownPreview, parseMarkdownBlocks } from "../src/client/markdown-preview.js";
+import { describe, expect, it, vi } from "vitest";
+import { isSafeImageSrc, MarkdownPreview, parseMarkdownBlocks } from "../src/client/markdown-preview.js";
 
 describe("MarkdownPreview", () => {
   it("renders tables, task lists, fenced code, and inline formatting", () => {
@@ -34,7 +34,7 @@ describe("MarkdownPreview", () => {
     ]);
   });
 
-  it("hides HTML comments outside code, as rendered Markdown does", () => {
+  it("hides paired HTML comments outside code while preserving unclosed streaming comments", () => {
     // Oh Story 0.10.0 outlines anchor each plot segment with a heading comment and carry template comments.
     const content = [
       "# 第一卷",
@@ -62,6 +62,67 @@ describe("MarkdownPreview", () => {
     expect(html).toContain("<code>&lt;!-- 保留 --&gt;</code>");
     expect(html).toContain("### 示例 &lt;!-- L1-02 --&gt;");
     expect(parseMarkdownBlocks(content).map((block) => block.kind)).toEqual(["heading", "heading", "paragraph", "paragraph", "code"]);
+
+    const streaming = "# 正在流式输出\n\n第一段正文。\n\n<!-- 未闭合注释\n\n后续正文不能被吞掉。";
+    const streamingHtml = renderToStaticMarkup(<MarkdownPreview content={streaming} label="流式.md" />);
+    expect(streamingHtml).toContain("第一段正文。");
+    expect(streamingHtml).toContain("后续正文不能被吞掉。");
+  });
+
+  it("renders nested bullet and ordered lists by indentation level", () => {
+    const content = [
+      "- 一级条目 A",
+      "  - 二级子项 A1",
+      "    1. 三级有序 1",
+      "    2. 三级有序 2",
+      "  - 二级子项 A2",
+      "- 一级条目 B"
+    ].join("\n");
+    const blocks = parseMarkdownBlocks(content);
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0]?.kind).toBe("ul");
+    if (blocks[0]?.kind === "ul") {
+      expect(blocks[0].items).toHaveLength(2);
+      expect(blocks[0].items[0]?.children?.[0]?.kind).toBe("ul");
+      expect(blocks[0].items[0]?.children?.[0]?.items[0]?.children?.[0]?.kind).toBe("ol");
+    }
+    const html = renderToStaticMarkup(<MarkdownPreview content={content} label="大纲.md" />);
+    expect(html).toContain("<ul><li>一级条目 A<ul><li>二级子项 A1<ol start=\"1\"><li>三级有序 1</li><li>三级有序 2</li></ol></li><li>二级子项 A2</li></ul></li><li>一级条目 B</li></ul>");
+  });
+
+  it("protects inline code spans and supports nested emphasis, links, and safe images", () => {
+    const content = [
+      "**文件名 `细纲_第*章.md` 格式** 与 **外层 *斜体* 内层** 和 ~~**旧设定**~~。",
+      "",
+      "[**加粗链接**](https://example.com) ![封面](https://example.com/cover.png) ![相对](./cover.webp)",
+      "",
+      "![恶意脚本](javascript:alert(1)) ![恶意数据](data:text/html,<script>alert(1)</script>)"
+    ].join("\n");
+    const html = renderToStaticMarkup(<MarkdownPreview content={content} label="格式.md" />);
+    expect(html).toContain("<strong>文件名 <code>细纲_第*章.md</code> 格式</strong>");
+    expect(html).toContain("<strong>外层 <em>斜体</em> 内层</strong>");
+    expect(html).toContain("<del><strong>旧设定</strong></del>");
+    expect(html).toContain('<a href="https://example.com" target="_blank" rel="noreferrer"><strong>加粗链接</strong></a>');
+    expect(html).toContain('<img class="oh-story-markdown-image" src="https://example.com/cover.png" alt="封面" loading="lazy"/>');
+    expect(html).toContain('<img class="oh-story-markdown-image" src="./cover.webp" alt="相对" loading="lazy"/>');
+    expect(html).not.toContain('src="javascript:');
+    expect(html).not.toContain('src="data:text/html');
+  });
+
+  it("does not split table columns on pipes inside inline code spans", () => {
+    const content = [
+      "| 写法 | 说明 |",
+      "| --- | --- |",
+      "| `auto|ffmpeg|off` | 模式选项 |"
+    ].join("\n");
+    const blocks = parseMarkdownBlocks(content);
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0]?.kind).toBe("table");
+    if (blocks[0]?.kind === "table") {
+      expect(blocks[0].rows).toEqual([["`auto|ffmpeg|off`", "模式选项"]]);
+    }
+    const html = renderToStaticMarkup(<MarkdownPreview content={content} label="表格.md" />);
+    expect(html).toContain("<td><code>auto|ffmpeg|off</code></td><td>模式选项</td>");
   });
 
   it("keeps raw HTML inert and only activates safe web links", () => {
@@ -70,5 +131,78 @@ describe("MarkdownPreview", () => {
     expect(html).toContain("&lt;script&gt;alert(1)&lt;/script&gt;");
     expect(html).toContain('href="https://example.com"');
     expect(html).not.toContain('href="javascript:');
+  });
+
+  it("does not misparse pipe text followed by --- as a table and requires matching column counts", () => {
+    const content = "选项A | 选项B\n---\n下一段";
+    expect(parseMarkdownBlocks(content).map((block) => block.kind)).toEqual(["paragraph", "rule", "paragraph"]);
+    const html = renderToStaticMarkup(<MarkdownPreview content={content} label="分隔线.md" />);
+    expect(html).not.toContain("<table>");
+    expect(html).toContain("<hr/>");
+
+    const mismatched = "| 列1 | 列2 |\n| --- | --- | --- |\n| a | b |";
+    expect(parseMarkdownBlocks(mismatched).every((block) => block.kind !== "table")).toBe(true);
+  });
+
+  it("parses fenced code info strings with symbols like c++ and c# without swallowing subsequent text", () => {
+    const content = [
+      "```c++",
+      "int x = 1;",
+      "```",
+      "",
+      "```c#",
+      "var y = 2;",
+      "```",
+      "",
+      "后续正文。"
+    ].join("\n");
+    const blocks = parseMarkdownBlocks(content);
+    expect(blocks.map((block) => block.kind)).toEqual(["code", "code", "paragraph"]);
+    const html = renderToStaticMarkup(<MarkdownPreview content={content} label="代码.md" />);
+    expect(html).toContain('data-language="c++"');
+    expect(html).toContain('data-language="c#"');
+    expect(html).toContain("后续正文。");
+  });
+
+  it("rejects ASCII control characters in URLs, supports optional titles, and resolves workspace-relative images", () => {
+    expect(isSafeImageSrc("\u0001javascript:alert(1)")).toBe(false);
+    expect(isSafeImageSrc("\u0001data:image/svg+xml,<svg/>")).toBe(false);
+    expect(isSafeImageSrc("java\tscript:alert(1)")).toBe(false);
+    expect(isSafeImageSrc("封面/封面_v1.png")).toBe(true);
+
+    const resolveImageSrc = vi.fn((src: string) => (
+      /^https?:\/\//iu.test(src) ? undefined : `/oh-story/media?sessionId=s1&path=${encodeURIComponent(src)}`
+    ));
+    const content = [
+      '[示例](https://example.com "示例标题") [控制符](\u0001https://example.com)',
+      "",
+      '![封面](封面/封面_v1.png "封面图") ![外链](https://example.com/a.png) ![恶意](\u0001javascript:alert(1))'
+    ].join("\n");
+    const html = renderToStaticMarkup(<MarkdownPreview content={content} label="图片.md" resolveImageSrc={resolveImageSrc} />);
+    expect(html).toContain('<a href="https://example.com" title="示例标题" target="_blank" rel="noreferrer">示例</a>');
+    expect(html).not.toContain('href="\u0001');
+    expect(html).toContain('src="/oh-story/media?sessionId=s1&amp;path=%E5%B0%81%E9%9D%A2%2F%E5%B0%81%E9%9D%A2_v1.png" alt="封面" title="封面图"');
+    expect(html).toContain('src="https://example.com/a.png" alt="外链"');
+    expect(html).not.toContain("javascript:alert(1)\"");
+    expect(resolveImageSrc).toHaveBeenCalledTimes(2);
+    expect(resolveImageSrc).toHaveBeenNthCalledWith(1, "封面/封面_v1.png", "图片.md");
+    expect(resolveImageSrc).toHaveBeenNthCalledWith(2, "https://example.com/a.png", "图片.md");
+  });
+
+  it("passes the rendered document path as basePath to resolveImageSrc across inline contexts", () => {
+    const resolveImageSrc = vi.fn((src: string, basePath?: string) => `/media?base=${encodeURIComponent(basePath ?? "")}&src=${encodeURIComponent(src)}`);
+    const content = [
+      "# ![图1](./h.png)",
+      "",
+      "- ![图2](./li.png)",
+      "",
+      "> ![图3](./q.png)"
+    ].join("\n");
+    const docPath = "game-adaptations/snow-ferry/design/GAME_DESIGN.md";
+    const html = renderToStaticMarkup(<MarkdownPreview content={content} label={docPath} resolveImageSrc={resolveImageSrc} />);
+    expect(resolveImageSrc).toHaveBeenCalledWith("./h.png", docPath);
+    expect(resolveImageSrc).toHaveBeenCalledWith("./li.png", docPath);
+    expect(resolveImageSrc).toHaveBeenCalledWith("./q.png", docPath);
+    expect(html).toContain(`base=${encodeURIComponent(docPath)}`);
   });
 });

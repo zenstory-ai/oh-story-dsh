@@ -147,12 +147,6 @@ REFERENCE_SUFFIX_RE = r"(?:png|jpe?g|webp)"
 # job's own `role` is its production translation. The segment is optional so a
 # declaration written before that field existed still prepares, and so the
 # creator-side diagnostic stays with creator_markdown_check.py.
-REFERENCE_LINE_RE = re.compile(
-    rf"(REF-[A-Z0-9][A-Z0-9-]{{0,79}})（顺序：([1-9]\d*)）· "
-    rf"([^；\n]+?\.{REFERENCE_SUFFIX_RE})《([^》\n]+)》"
-    r"（(?:用途：[^；）\n]+；)?控制：([^；）\n]+)；不得控制：([^）\n]+)）",
-    re.IGNORECASE,
-)
 REFERENCE_LINE_WITH_PURPOSE_RE = re.compile(
     rf"(REF-[A-Z0-9][A-Z0-9-]{{0,79}})（顺序：([1-9]\d*)）· "
     rf"([^；\n]+?\.{REFERENCE_SUFFIX_RE})《([^》\n]+)》"
@@ -251,7 +245,7 @@ def _project_file(root: Path, relative: str, *, create_parent: bool = False) -> 
             current.mkdir()
     if target.exists() and (target.is_symlink() or not target.is_file()):
         raise ValueError(f"unsafe project file: {relative}")
-    if not target.parent.resolve().is_relative_to(root):
+    if not target.parent.resolve().is_relative_to(root.resolve()):
         raise ValueError(f"path escapes project root: {relative}")
     return target
 
@@ -312,7 +306,7 @@ def _open_project_input(root: Path, relative: str) -> Iterator[BinaryIO]:
             raise FileNotFoundError(f"job input is missing: {relative}") from exc
         if _is_link_or_reparse(details):
             raise ValueError(f"unsafe job input path: {relative}")
-    if not path.resolve().is_relative_to(root):
+    if not path.resolve().is_relative_to(root.resolve()):
         raise ValueError(f"job input escapes project root: {relative}")
     before = path.lstat()
     if not stat.S_ISREG(before.st_mode):
@@ -334,11 +328,6 @@ def _hash_project_file_with_size(root: Path, relative: str) -> tuple[str, int]:
                 raise ValueError(f"job input exceeds the size limit: {relative}")
             digest.update(chunk)
     return digest.hexdigest(), size
-
-
-def _hash_project_file(root: Path, relative: str) -> str:
-    digest, _ = _hash_project_file_with_size(root, relative)
-    return digest
 
 
 def _read_project_input_bytes(root: Path, relative: str) -> bytes:
@@ -505,10 +494,8 @@ def _metadata_directory(
                     except FileNotFoundError:
                         if not create:
                             raise
-                        try:
+                        with contextlib.suppress(FileExistsError):
                             os.mkdir(part, mode=0o700, dir_fd=directory_fd)
-                        except FileExistsError:
-                            pass
                         next_fd = os.open(
                             part, flags | nofollow, dir_fd=directory_fd
                         )
@@ -535,14 +522,12 @@ def _metadata_directory(
         except FileNotFoundError:
             if not create:
                 raise
-            try:
+            with contextlib.suppress(FileExistsError):
                 current.mkdir(mode=0o700)
-            except FileExistsError:
-                pass
             details = current.lstat()
         if _is_link_or_reparse(details) or not stat.S_ISDIR(details.st_mode):
             raise ValueError("production metadata directory is unsafe")
-    if not current.resolve().is_relative_to(root):
+    if not current.resolve().is_relative_to(root.resolve()):
         raise ValueError("production metadata directory escapes the project")
     yield current, None
 
@@ -584,10 +569,8 @@ def _metadata_atomic_json(
             finally:
                 if descriptor >= 0:
                     os.close(descriptor)
-                try:
+                with contextlib.suppress(FileNotFoundError):
                     os.unlink(temporary_name, dir_fd=directory_fd)
-                except FileNotFoundError:
-                    pass
             return
 
         before = directory.lstat()
@@ -609,10 +592,8 @@ def _metadata_atomic_json(
                 raise ValueError("production metadata directory changed")
             os.replace(temporary, directory / name)
         finally:
-            try:
+            with contextlib.suppress(FileNotFoundError):
                 temporary.unlink()
-            except FileNotFoundError:
-                pass
 
 
 def _metadata_read_json(
@@ -740,9 +721,9 @@ def _project_lock(root: Path) -> Iterator[None]:
                     handle.write(b"0")
                     handle.flush()
                 handle.seek(0)
-                locking = getattr(msvcrt, "locking")
-                lock = getattr(msvcrt, "LK_LOCK")
-                unlock = getattr(msvcrt, "LK_UNLCK")
+                locking = getattr(msvcrt, "locking")  # noqa: B009
+                lock = getattr(msvcrt, "LK_LOCK")  # noqa: B009
+                unlock = getattr(msvcrt, "LK_UNLCK")  # noqa: B009
                 locking(handle.fileno(), lock, 1)
                 try:
                     yield
@@ -769,10 +750,6 @@ def _job_path(root: Path, job_id: str) -> Path:
 
 def _confirmation_path(root: Path, job_id: str) -> Path:
     return root / PRODUCTION_ROOT / "confirmations" / f"{_job_key(job_id)}.json"
-
-
-def _run_directory(root: Path, job_id: str) -> Path:
-    return root / PRODUCTION_ROOT / "runs" / _job_key(job_id)
 
 
 def _contains_secret_key(value: object) -> bool:
@@ -1125,21 +1102,55 @@ def _split_slot_clauses(value: str) -> list[str]:
     return clauses
 
 
+def _leading_emphasis_markers(text: str) -> tuple[list[str], str]:
+    markers: list[str] = []
+    remaining = text
+    while True:
+        for marker in ("**", "__", "*", "_"):
+            if remaining.startswith(marker):
+                markers.append(marker)
+                remaining = remaining[len(marker) :]
+                break
+        else:
+            return markers, remaining
+
+
+def _unwrap_field_key_value(raw_key: str, raw_value: str) -> tuple[str, str]:
+    """Normalize bullet field keys/values whether emphasis wraps the colon or not.
+
+    Supports `- 字段：值`, `- **字段**：值`, `- **字段：** 值`, `* *字段*: 值`,
+    and nested emphasis without stripping emphasis that belongs to the value.
+    """
+    key = _strip_field_emphasis(raw_key)
+    value = raw_value
+    markers, inner = _leading_emphasis_markers(key)
+    inner = inner.strip()
+    if markers and inner:
+        closing = "".join(reversed(markers))
+        stripped_value = value.lstrip(" \t\u3000")
+        if stripped_value.startswith(closing) and not any(marker in inner for marker in markers):
+            key = inner
+            value = stripped_value[len(closing) :]
+    return _strip_field_emphasis(key), value.strip()
+
+
 def _field_values(section: str, field_name: str) -> list[str]:
     """Every value of one `- 字段：值` field, read the way the creator checker reads it.
 
-    `- **参考音频**：…` and `* *输入参考图*: …` are the same fields to a human and
-    to creator_markdown_check.py; reading them any other way here would let the
-    checker validate a binding that production then silently omits.
+    `- **参考音频**：…`, `- **参考音频：** …`, and `* *输入参考图*: …` are the same
+    fields to a human and to creator_markdown_check.py; reading them any other way
+    here would let a bold-colon variant silently drop a reference image or voice
+    binding (especially on `GROUP-*` where `输入参考图` is optional).
     """
-    values = []
-    for key, value in re.findall(
+    values: list[str] = []
+    for raw_key, raw_value in re.findall(
         r"^[ \t\u3000]*[-*+][ \t\u3000]+([^：:\n]+)[：:](.+)$",
         section,
         re.MULTILINE,
     ):
-        if _strip_field_emphasis(key) == field_name:
-            values.append(value.strip())
+        key, value = _unwrap_field_key_value(raw_key, raw_value)
+        if key == field_name:
+            values.append(value)
     return values
 
 
@@ -1354,6 +1365,8 @@ def _extract_markdown_source_defaults(
     source_name = PurePosixPath(_relative_path(source)).name
     document = _read_project_markdown_text(root, source)
     section = _markdown_section(document, source_entry)
+    if source_entry.startswith("MUSIC-"):
+        return _copyable_prompt(section, "可复制提示词"), []
     _, heading, field_name = CREATOR_SOURCE_ENTRIES[source_name]
     extracted_prompt = _copyable_prompt(section, heading)
     creator_supplied_ok = source_name == "分镜.md"
@@ -1397,6 +1410,12 @@ def _verify_markdown_source(
     source_name = PurePosixPath(_relative_path(source)).name
     document = _read_project_markdown_text(root, source)
     section = _markdown_section(document, source_entry)
+    if source_entry.startswith("MUSIC-"):
+        if _copyable_prompt(section, "可复制提示词") != _normalize_newlines(prompt).strip():
+            raise ValueError("job prompt does not match the selected source entry")
+        if bindings:
+            raise ValueError("job reference bindings do not match the selected source entry")
+        return
     _, heading, field_name = CREATOR_SOURCE_ENTRIES[source_name]
     if _copyable_prompt(section, heading) != _normalize_newlines(prompt).strip():
         raise ValueError("job prompt does not match the selected source entry")
@@ -1473,25 +1492,30 @@ def _normalize_job(root: Path, raw: object) -> dict[str, Any]:
     if creator_source_modality == modality and source_entry is None:
         raise ValueError("creator Markdown source requires source_entry")
     if creator_source_modality is not None and modality != creator_source_modality and not (
-        creator_source_modality == "video"
-        and modality == "music"
-        and source_entry is None
+        creator_source_modality == "video" and modality == "music"
     ):
         raise ValueError("creator Markdown source does not match the job modality")
-    expected_entry_prefix = (
-        CREATOR_SOURCE_ENTRIES[PurePosixPath(source).name][0]
-        if source is not None
+    expected_entry_prefix: str | tuple[str, ...] | None
+    if modality == "music":
+        expected_entry_prefix = "MUSIC-"
+    elif (
+        source is not None
         and PurePosixPath(source).name in CREATOR_SOURCE_ENTRIES
         and creator_source_modality == modality
-        else None
-    )
-    if source_entry is not None and creator_source_modality != modality:
-        raise ValueError("source_entry requires the canonical creator Markdown path")
-    if source_entry is not None and (
-        expected_entry_prefix is None
-        or not source_entry.startswith(expected_entry_prefix)
     ):
-        raise ValueError("source_entry does not match the job modality")
+        expected_entry_prefix = CREATOR_SOURCE_ENTRIES[PurePosixPath(source).name][0]
+    else:
+        expected_entry_prefix = None
+    if source_entry is not None:
+        if modality == "music":
+            if source is None or PurePosixPath(source).suffix.casefold() != ".md":
+                raise ValueError("source_entry requires a Markdown source")
+        elif creator_source_modality != modality:
+            raise ValueError("source_entry requires the canonical creator Markdown path")
+        if expected_entry_prefix is None or not source_entry.startswith(
+            expected_entry_prefix
+        ):
+            raise ValueError("source_entry does not match the job modality")
     extracted_prompt: str | None = None
     extracted_bindings: list[dict[str, Any]] | None = None
     if source_entry is not None and (
@@ -1598,11 +1622,9 @@ def prepare_job(root: Path, job_file: Path) -> dict[str, Any]:
             raise RuntimeError("this job is already running")
         job_name = f"{_job_key(str(job['job_id']))}.json"
         _metadata_atomic_json(root, ("jobs",), job_name, job)
-        try:
+        with contextlib.suppress(FileNotFoundError):
             _metadata_unlink(root, ("confirmations",), job_name)
-        except FileNotFoundError:
-            pass
-    return _preview(job)
+    return _preview(job, warnings=_preview_warnings(root, job))
 
 
 def _validate_stored_job(
@@ -1651,12 +1673,15 @@ def _validate_stored_job(
     fallback_entry_prefixes: dict[str, str | tuple[str, ...]] = {
         "image": "IMG-",
         "video": ("MOTION-", "GROUP-"),
+        "music": "MUSIC-",
     }
-    expected_entry_prefix: str | tuple[str, ...] | None = (
-        CREATOR_SOURCE_ENTRIES[PurePosixPath(str(source)).name][0]
-        if source is not None and PurePosixPath(str(source)).name in CREATOR_SOURCE_ENTRIES
-        else fallback_entry_prefixes.get(str(modality))
-    )
+    expected_entry_prefix: str | tuple[str, ...] | None
+    if modality == "music":
+        expected_entry_prefix = "MUSIC-"
+    elif source is not None and PurePosixPath(str(source)).name in CREATOR_SOURCE_ENTRIES:
+        expected_entry_prefix = CREATOR_SOURCE_ENTRIES[PurePosixPath(str(source)).name][0]
+    else:
+        expected_entry_prefix = fallback_entry_prefixes.get(str(modality))
     if source_entry is not None and (
         expected_entry_prefix is None
         or not source_entry.startswith(expected_entry_prefix)
@@ -1668,13 +1693,15 @@ def _validate_stored_job(
     if not legacy and creator_source_modality == modality and source_entry is None:
         raise ValueError("stored creator Markdown job has no source entry")
     if creator_source_modality is not None and modality != creator_source_modality and not (
-        creator_source_modality == "video"
-        and modality == "music"
-        and source_entry is None
+        creator_source_modality == "video" and modality == "music"
     ):
         raise ValueError("stored creator Markdown source has the wrong modality")
-    if source_entry is not None and creator_source_modality != modality:
-        raise ValueError("stored job creator source path is invalid")
+    if source_entry is not None:
+        if modality == "music":
+            if source is None or PurePosixPath(str(source)).suffix.casefold() != ".md":
+                raise ValueError("stored job creator source path is invalid")
+        elif creator_source_modality != modality:
+            raise ValueError("stored job creator source path is invalid")
     references = _string_list(
         document.get("references"), label="stored references", limit=16
     )
@@ -1748,7 +1775,70 @@ def _read_job(root: Path, job_id: str) -> dict[str, Any]:
     return _validate_stored_job(root, document, expected_job_id=job_id)
 
 
-def _preview(job: Mapping[str, Any]) -> dict[str, Any]:
+def _preview_warnings(root: Path, job: Mapping[str, Any]) -> list[dict[str, str]]:
+    """Soft-gate advisory reminders for the Agent/creator to inspect before confirming."""
+    warnings: list[dict[str, str]] = []
+    if job.get("overwrite") is True:
+        existing = [
+            str(output)
+            for output in job.get("outputs", [])
+            if _project_file(root, str(output)).exists()
+        ]
+        if existing:
+            warnings.append(
+                {
+                    "code": "overwrite_existing_output",
+                    "severity": "warning",
+                    "message": (
+                        "target output already exists and overwrite is true: "
+                        + ", ".join(existing)
+                        + "; verify before confirming"
+                    ),
+                }
+            )
+    source = job.get("source")
+    if (
+        job.get("modality") == "music"
+        and isinstance(source, str)
+        and _canonical_creator_source_modality(source) == "video"
+        and job.get("source_entry") is None
+    ):
+        warnings.append(
+            {
+                "code": "music_whole_file_hash",
+                "severity": "warning",
+                "message": (
+                    "music job omits source_entry on 视频提示词.md; editing any video "
+                    "shot will invalidate confirmation. Use a ## MUSIC-... source_entry "
+                    "for entry-level hash stability"
+                ),
+            }
+        )
+    params = job.get("parameters")
+    if (
+        job.get("modality") in {"image", "video"}
+        and job.get("reference_bindings")
+        and isinstance(params, Mapping)
+        and "prompt_language" not in params
+    ):
+        warnings.append(
+            {
+                "code": "missing_prompt_language",
+                "severity": "warning",
+                "message": (
+                    "parameters.prompt_language is unset with reference_bindings; "
+                    "built-in adapters default reference contract wording to 'en'"
+                ),
+            }
+        )
+    return warnings
+
+
+def _preview(
+    job: Mapping[str, Any],
+    *,
+    warnings: Sequence[Mapping[str, str]] = (),
+) -> dict[str, Any]:
     confirmation = f"CONFIRM {job['job_id']} {str(job['fingerprint'])[:12]}"
     return {
         "job_id": job["job_id"],
@@ -1765,6 +1855,7 @@ def _preview(job: Mapping[str, Any]) -> dict[str, Any]:
         "overwrite": job["overwrite"],
         "confirmation": confirmation,
         "state": "needs_confirmation",
+        "warnings": [dict(item) for item in warnings],
     }
 
 
@@ -1818,9 +1909,40 @@ def _is_builtin_audio_capable_command(command: Sequence[str]) -> bool:
     return False
 
 
-def _load_adapter(config_path: Path, profile: str, root: Path) -> tuple[list[str], int, frozenset[str] | None]:
+def _adapter_command_warnings(command: Sequence[str]) -> list[dict[str, str]]:
+    """Advisory soft-gate check for unpinned floating remote package runners."""
+    if not command:
+        return []
+    launcher = PurePosixPath(command[0].replace("\\", "/")).name.casefold()
+    if launcher not in {"uvx", "uvx.exe", "pipx", "pipx.exe", "npx", "npx.exe"}:
+        return []
+    args = list(command[1:])
+    if launcher.startswith(("uvx", "pipx")):
+        pinned = any("==" in arg for arg in args)
+        floating_latest = any(arg.casefold().endswith("@latest") for arg in args)
+    else:
+        pinned = any(re.search(r"@\d+\.\d+", arg) is not None for arg in args)
+        floating_latest = any(arg.casefold().endswith("@latest") for arg in args)
+    if pinned and not floating_latest:
+        return []
+    return [
+        {
+            "code": "unpinned_remote_adapter",
+            "severity": "warning",
+            "message": (
+                f"adapter command uses {command[0]} without an exact pinned version; "
+                "pin an exact version (e.g. drama-providers==X.Y.Z) or use an explicit "
+                "local script path before supplying real paid API keys"
+            ),
+        }
+    ]
+
+
+def _load_adapter(
+    config_path: Path, profile: str, root: Path
+) -> tuple[list[str], int, frozenset[str] | None, bool]:
     resolved = config_path.expanduser().resolve()
-    if resolved.is_relative_to(root):
+    if resolved.is_relative_to(root.resolve()):
         raise ValueError("adapter config must live outside the project")
     document = json.loads(resolved.read_text(encoding="utf-8"))
     adapters = document.get("adapters") if isinstance(document, Mapping) else None
@@ -1829,6 +1951,7 @@ def _load_adapter(config_path: Path, profile: str, root: Path) -> tuple[list[str
         "command",
         "timeout_seconds",
         "reference_roles",
+        "audio_capable",
     }:
         raise ValueError(f"adapter profile is missing or invalid: {profile}")
     command = _string_list(selected.get("command"), label="adapter command", limit=32)
@@ -1838,40 +1961,68 @@ def _load_adapter(config_path: Path, profile: str, root: Path) -> tuple[list[str
     if not isinstance(timeout, int) or isinstance(timeout, bool) or not 1 <= timeout <= MAX_TIMEOUT_SECONDS:
         raise ValueError(f"adapter timeout must be 1-{MAX_TIMEOUT_SECONDS} seconds")
     roles = selected.get("reference_roles")
+    raw_audio_capable = selected.get("audio_capable")
+    if raw_audio_capable is not None and not isinstance(raw_audio_capable, bool):
+        raise ValueError("adapter audio_capable must be a boolean")
+    declared: frozenset[str] | None
+    audio_capable: bool
     if roles is not None:
-        declared: frozenset[str] | None = frozenset(
-            _string_list(roles, label="adapter reference_roles")
-        )
+        declared = frozenset(_string_list(roles, label="adapter reference_roles"))
+        if raw_audio_capable is False and AUDIO_REFERENCE_ROLE in declared:
+            raise ValueError(
+                "adapter profile conflict: audio_capable is false but "
+                "reference_roles includes reference_audio"
+            )
+        if raw_audio_capable is True:
+            declared = declared | {AUDIO_REFERENCE_ROLE}
+        audio_capable = AUDIO_REFERENCE_ROLE in declared
+    elif raw_audio_capable is not None:
+        # Explicit capability flag takes precedence over any script-name heuristic.
+        declared = None
+        audio_capable = raw_audio_capable
     elif _is_builtin_audio_capable_command(command):
+        # v1.x backward-compatibility fallback for built-in provider_adapters.py profiles.
         declared = BUILTIN_DEFAULT_VIDEO_ROLES
+        audio_capable = True
     else:
         declared = None
-    return command, timeout, declared
+        audio_capable = False
+    return command, timeout, declared, audio_capable
 
 
 def _require_adapter_roles(
-    job: Mapping[str, Any], declared: frozenset[str] | None
+    job: Mapping[str, Any],
+    declared: frozenset[str] | None,
+    *,
+    audio_capable: bool = False,
 ) -> None:
     """Refuse, before anything is submitted, a role the target model cannot take.
 
-    A profile may list the `reference_roles` its configured model accepts. A
-    voice reference always needs that declaration: a model without the input
-    can drop it without an error, and the drift is only heard in the take.
+    A profile may list the `reference_roles` its configured model accepts, or set
+    `audio_capable: true` when it accepts `reference_audio` without enumerating
+    an allowlist of visual roles. A voice reference always needs an explicit
+    capability declaration (or the v1.x built-in fallback): a model without the
+    input can drop it without an error, and the drift is only heard in the take.
     """
     unsupported = sorted(
         {
             str(binding["role"])
             for binding in job.get("reference_bindings", [])
             if (declared is not None and binding["role"] not in declared)
-            or (declared is None and binding["role"] == AUDIO_REFERENCE_ROLE)
+            or (
+                declared is None
+                and binding["role"] == AUDIO_REFERENCE_ROLE
+                and not audio_capable
+            )
         }
     )
     if unsupported:
         raise ValueError(
             f"adapter profile {job['adapter']} does not declare reference_roles "
             + ", ".join(unsupported)
-            + "; nothing was submitted. Declare them only if this profile's model "
-            "accepts them, or remove the binding (参考音频) from the source entry"
+            + "; nothing was submitted. Declare reference_roles (or audio_capable: true "
+            "for reference_audio) only if this profile's model accepts them, or remove "
+            "the binding (参考音频) from the source entry"
         )
 
 
@@ -1912,6 +2063,7 @@ def _safe_error_detail(value: object) -> str | None:
 BUILTIN_PROVIDER_SUBCOMMANDS = frozenset(
     {
         "seedance",
+        "openai-image",
         "gpt-image-2",
         "minimax-music",
         "minimax-h3",
@@ -1931,7 +2083,11 @@ def _command_provider_tokens(command: Sequence[str]) -> set[str]:
             candidate = part.split("=", 1)[1]
             if PUBLIC_ERROR_TOKEN_RE.fullmatch(candidate) is not None:
                 tokens.add(candidate)
-        elif PurePosixPath(part.replace("\\", "/")).name == "provider_adapters.py":
+        elif PurePosixPath(part.replace("\\", "/")).name in {
+            "provider_adapters.py",
+            "drama-providers",
+            "drama-providers.exe",
+        }:
             for arg in command[index + 1 :]:
                 if arg in BUILTIN_PROVIDER_SUBCOMMANDS:
                     tokens.add(arg)
@@ -2172,10 +2328,8 @@ def _stage_output_to_temporary(
         if descriptor >= 0:
             os.close(descriptor)
         if not succeeded:
-            try:
+            with contextlib.suppress(FileNotFoundError):
                 temporary.unlink()
-            except FileNotFoundError:
-                pass
 
 
 def _link_without_following(temporary: Path, target: Path) -> None:
@@ -2183,35 +2337,6 @@ def _link_without_following(temporary: Path, target: Path) -> None:
         os.link(temporary, target, follow_symlinks=False)
     else:
         os.link(temporary, target)
-
-
-def _copy_output(
-    source: Path,
-    target: Path,
-    *,
-    overwrite: bool,
-    consumes_confirmation: bool = True,
-) -> tuple[str, int]:
-    temporary, digest, size = _stage_output_to_temporary(
-        source, target, consumes_confirmation=consumes_confirmation
-    )
-    try:
-        if overwrite:
-            os.replace(temporary, target)
-        else:
-            try:
-                _link_without_following(temporary, target)
-            except FileExistsError as exc:
-                raise FileExistsError(
-                    f"output appeared while production was running: {target.name}"
-                ) from exc
-            temporary.unlink()
-    finally:
-        try:
-            temporary.unlink()
-        except FileNotFoundError:
-            pass
-    return digest, size
 
 
 def _commit_outputs(
@@ -2252,17 +2377,13 @@ def _commit_outputs(
                     temporary.unlink()
             except Exception:
                 for created in linked:
-                    try:
+                    with contextlib.suppress(FileNotFoundError):
                         created.unlink()
-                    except FileNotFoundError:
-                        pass
                 raise
     finally:
         for _, temporary, _, _, _ in staged:
-            try:
+            with contextlib.suppress(FileNotFoundError):
                 temporary.unlink()
-            except FileNotFoundError:
-                pass
     return [
         {
             "path": target_name,
@@ -2410,8 +2531,11 @@ def run_job(root: Path, *, job_id: str, adapter_config: Path) -> dict[str, Any]:
             if _active_run(root, job_id) is not None:
                 raise RuntimeError("this job is already running")
             job = _read_job(root, job_id)
-            command, timeout, roles = _load_adapter(adapter_config, str(job["adapter"]), root)
-            _require_adapter_roles(job, roles)
+            command, timeout, roles, audio_capable = _load_adapter(
+                adapter_config, str(job["adapter"]), root
+            )
+            _require_adapter_roles(job, roles, audio_capable=audio_capable)
+            command_warnings = _adapter_command_warnings(command)
             try:
                 receipt = _metadata_read_json(
                     root,
@@ -2529,12 +2653,10 @@ def run_job(root: Path, *, job_id: str, adapter_config: Path) -> dict[str, Any]:
                         )
                     )
                     if unsubmitted_preflight:
-                        try:
+                        with contextlib.suppress(FileNotFoundError):
                             _metadata_unlink(
                                 root, ("runs", _job_key(job_id)), f"{run_id}.json"
                             )
-                        except FileNotFoundError:
-                            pass
                         receipt["consumed_at"] = None
                         receipt["run_id"] = None
                         _metadata_atomic_json(
@@ -2563,12 +2685,15 @@ def run_job(root: Path, *, job_id: str, adapter_config: Path) -> dict[str, Any]:
                     public_error=public_error,
                 ) from exc
             raise
-    return {
+    result: dict[str, Any] = {
         "job_id": job_id,
         "run_id": run_id,
         "state": "succeeded",
         "outputs": run["outputs"],
     }
+    if command_warnings:
+        result["warnings"] = command_warnings
+    return result
 
 
 def _run_status(root: Path, job_id: str, run_id: str) -> str | None:
@@ -2597,7 +2722,9 @@ def collect_job(root: Path, *, job_id: str, adapter_config: Path) -> dict[str, A
         output_root.mkdir(parents=True)
         with _project_lock(root):
             job = _read_job(root, job_id)
-            command, timeout, _ = _load_adapter(adapter_config, str(job["adapter"]), root)
+            command, timeout, _, _ = _load_adapter(
+                adapter_config, str(job["adapter"]), root
+            )
             current = [
                 run
                 for run in _read_run_history(root, job_id)
@@ -3138,10 +3265,8 @@ def prepare_batch(
         for job in jobs:
             job_name = f"{_job_key(str(job['job_id']))}.json"
             _metadata_atomic_json(root, ("jobs",), job_name, job)
-            try:
+            with contextlib.suppress(FileNotFoundError):
                 _metadata_unlink(root, ("confirmations",), job_name)
-            except FileNotFoundError:
-                pass
         batch_doc = {
             "schema_version": JOB_SCHEMA,
             "batch_id": resolved_batch_id,
@@ -3161,6 +3286,11 @@ def prepare_batch(
 
     all_outputs = [str(output) for job in jobs for output in job["outputs"]]
     adapters = sorted({str(job["adapter"]) for job in jobs})
+    batch_warnings: list[dict[str, str]] = [
+        {"job_id": str(job["job_id"]), **warning}
+        for job in jobs
+        for warning in _preview_warnings(root, job)
+    ]
     return {
         "batch_id": resolved_batch_id,
         "job_count": len(jobs),
@@ -3170,6 +3300,7 @@ def prepare_batch(
         "outputs": all_outputs,
         "confirmation": f"CONFIRM BATCH {resolved_batch_id} {batch_fingerprint[:12]}",
         "state": "needs_confirmation",
+        "warnings": batch_warnings,
     }
 
 
@@ -3357,8 +3488,10 @@ def run_batch(
                         f"batch_inputs_changed: job {job_id} changed since prepare-batch; "
                         "prepare and confirm again"
                     )
-            _, _, roles = _load_adapter(adapter_config, str(job["adapter"]), root)
-            _require_adapter_roles(job, roles)
+            _, _, roles, audio_capable = _load_adapter(
+                adapter_config, str(job["adapter"]), root
+            )
+            _require_adapter_roles(job, roles, audio_capable=audio_capable)
             if not _inputs_current(root, job):
                 raise ConfirmationRequiredError(
                     f"job inputs changed; prepare and confirm again: {job_id}"

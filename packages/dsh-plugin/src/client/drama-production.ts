@@ -19,6 +19,30 @@ export interface DramaDocumentTarget {
   readonly id: string;
 }
 
+export interface DramaMotionGroup {
+  readonly id: string;
+  readonly title: string;
+  readonly path: string;
+  readonly offset: number;
+  readonly memberMotionIds: readonly string[];
+  readonly memberShotIds: readonly string[];
+  readonly durationSeconds?: number | undefined;
+  readonly reason?: string | undefined;
+  readonly prompt?: string | undefined;
+}
+
+export interface DramaMusicPrompt {
+  readonly id: string;
+  readonly title: string;
+  readonly path: string;
+  readonly offset: number;
+  readonly range?: string | undefined;
+  readonly purpose?: string | undefined;
+  readonly mood?: string | undefined;
+  readonly avoid?: string | undefined;
+  readonly prompt?: string | undefined;
+}
+
 export interface DramaShot {
   readonly id: string;
   readonly title: string;
@@ -35,6 +59,7 @@ export interface DramaShot {
   readonly references: readonly string[];
   readonly keyframePrompt?: string | undefined;
   readonly motion?: DramaMotionPrompt | undefined;
+  readonly group?: DramaMotionGroup | undefined;
 }
 
 export interface DramaAsset {
@@ -78,6 +103,8 @@ export interface DramaEpisodeProduction {
   readonly assets: readonly DramaAsset[];
   readonly visualAssets: readonly DramaVisualAsset[];
   readonly motions: readonly DramaMotionPrompt[];
+  readonly groups: readonly DramaMotionGroup[];
+  readonly music: readonly DramaMusicPrompt[];
   readonly targets: ReadonlyMap<string, DramaDocumentTarget>;
   readonly documentPaths: readonly string[];
   readonly diagnostics: readonly DramaProductionDiagnostic[];
@@ -118,11 +145,32 @@ export function parseEpisodeProduction(documents: Readonly<Record<string, string
   const shots = parseStoryboard(storyboardPath, documents[storyboardPath] ?? "");
   const assets = parseImagePrompts(imagePromptPath, documents[imagePromptPath] ?? "");
   const motions = parseVideoPrompts(videoPromptPath, documents[videoPromptPath] ?? "");
+  const rawGroups = parseVideoGroups(videoPromptPath, documents[videoPromptPath] ?? "");
+  const music = parseMusicPrompts(videoPromptPath, documents[videoPromptPath] ?? "");
   const visualAssets = parseVisualAssets(visualPath, documents[visualPath] ?? "");
+  const motionById = new Map(motions.map((motion) => [motion.id, motion] as const));
   const motionByShot = new Map(motions.flatMap((motion) => motion.shotId === undefined ? [] : [[motion.shotId, motion] as const]));
-  const linkedShots = shots.map((shot) => ({ ...shot, motion: motionByShot.get(shot.id) }));
+  const groups = rawGroups.map((group): DramaMotionGroup => {
+    const resolvedShots = new Set<string>(group.memberShotIds);
+    for (const memberId of group.memberMotionIds) {
+      const shotId = motionById.get(memberId)?.shotId;
+      if (shotId !== undefined) resolvedShots.add(shotId);
+    }
+    return { ...group, memberShotIds: [...resolvedShots] };
+  });
+  const groupByShot = new Map<string, DramaMotionGroup>();
+  for (const group of groups) {
+    for (const shotId of group.memberShotIds) {
+      if (!groupByShot.has(shotId)) groupByShot.set(shotId, group);
+    }
+  }
+  const linkedShots = shots.map((shot) => ({
+    ...shot,
+    motion: motionByShot.get(shot.id),
+    group: groupByShot.get(shot.id)
+  }));
   const targets = new Map<string, DramaDocumentTarget>();
-  for (const item of [...linkedShots, ...assets, ...motions, ...visualAssets]) {
+  for (const item of [...linkedShots, ...assets, ...motions, ...groups, ...music, ...visualAssets]) {
     targets.set(item.id, { path: item.path, offset: item.offset, id: item.id });
   }
   const screenplayPath = `${episodeDirectory}/剧本.md`;
@@ -139,7 +187,9 @@ export function parseEpisodeProduction(documents: Readonly<Record<string, string
     shots: linkedShots,
     assets,
     visualAssets,
-    motions
+    motions,
+    groups,
+    music
   });
   return {
     protocolVersion: PRODUCTION_PROTOCOL_VERSION,
@@ -148,6 +198,8 @@ export function parseEpisodeProduction(documents: Readonly<Record<string, string
     assets,
     visualAssets,
     motions,
+    groups,
+    music,
     targets,
     documentPaths: Object.keys(documents).filter((path) => path.startsWith(`${episodeDirectory}/`)),
     diagnostics
@@ -161,6 +213,12 @@ export function parseStoryboard(path: string, content: string): DramaShot[] {
     const fields = bulletFields(section.body);
     const id = match[1].toLocaleUpperCase();
     const source = firstField(fields, "来源", "场次");
+    const referenceText = [
+      fields.get("图片提示词项"),
+      fields.get("输入参考图"),
+      fields.get("参考"),
+      fields.get("关联资产")
+    ].filter((value): value is string => value !== undefined && value !== "").join("；");
     return [{
       id,
       title: match[2]?.trim() || id,
@@ -173,7 +231,7 @@ export function parseStoryboard(path: string, content: string): DramaShot[] {
       shotSpec: firstField(fields, "景别/机位", "景别", "镜头规格"),
       start: firstField(fields, "起点", "起始"),
       end: firstField(fields, "终点", "结束"),
-      references: splitReferences(firstField(fields, "图片提示词项", "参考", "关联资产")),
+      references: splitReferences(referenceText),
       keyframePrompt: quoteUnderHeading(section.body, "首帧提示词") ?? quoteUnderHeading(section.body, "冻结关键帧提示词")
     }];
   });
@@ -194,7 +252,7 @@ export function parseImagePrompts(path: string, content: string): DramaAsset[] {
       offset: section.offset,
       purpose: firstField(fields, "用途"),
       reference: firstField(fields, "参考", "参考约束"),
-      prompt: quoteUnderHeading(section.body, "可复制提示词")
+      prompt: quoteUnderHeading(section.body, "可复制提示词") ?? firstField(fields, "核心提示词", "可复制提示词")
     }];
   });
 }
@@ -215,22 +273,89 @@ export function parseVideoPrompts(path: string, content: string): DramaMotionPro
       durationSeconds: seconds(firstField(fields, "时长")),
       startFrame: firstField(fields, "起始帧", "开场画面", "起点"),
       end: firstField(fields, "终点", "动作过程", "结束"),
-      prompt: quoteUnderHeading(section.body, "可复制提示词")
+      prompt: quoteUnderHeading(section.body, "可复制提示词") ?? firstField(fields, "核心提示词", "可复制提示词")
+    }];
+  });
+}
+
+export function parseVideoGroups(path: string, content: string): DramaMotionGroup[] {
+  return levelTwoSections(content).flatMap((section) => {
+    const match = /^(GROUP-[A-Z0-9-]+)\s*(?:[·｜|]\s*)?(.*)$/iu.exec(section.heading.trim());
+    if (match === null || match[1] === undefined) return [];
+    const fields = bulletFields(section.body);
+    const id = match[1].toLocaleUpperCase();
+    const membersField = firstField(fields, "成员", "分镜", "镜头") ?? "";
+    const memberMotionIds = [...new Set((membersField.match(/MOTION-[A-Z0-9-]+/giu) ?? []).map((item) => item.toLocaleUpperCase()))];
+    const memberShotIds = [...new Set((membersField.match(/SHOT-[A-Z0-9-]+/giu) ?? []).map((item) => item.toLocaleUpperCase()))];
+    return [{
+      id,
+      title: match[2]?.trim() || id,
+      path,
+      offset: section.offset,
+      memberMotionIds,
+      memberShotIds,
+      durationSeconds: seconds(firstField(fields, "时长")),
+      reason: firstField(fields, "理由", "合生理由"),
+      prompt: quoteUnderHeading(section.body, "可复制提示词") ?? firstField(fields, "核心提示词", "可复制提示词")
+    }];
+  });
+}
+
+export function parseMusicPrompts(path: string, content: string): DramaMusicPrompt[] {
+  return levelTwoSections(content).flatMap((section) => {
+    const match = /^(MUSIC-[A-Z0-9-]+)\s*(?:[·｜|]\s*)?(.*)$/iu.exec(section.heading.trim());
+    if (match === null || match[1] === undefined) return [];
+    const fields = bulletFields(section.body);
+    const id = match[1].toLocaleUpperCase();
+    return [{
+      id,
+      title: match[2]?.trim() || id,
+      path,
+      offset: section.offset,
+      range: firstField(fields, "区间", "覆盖区间"),
+      purpose: firstField(fields, "剧情作用", "用途"),
+      mood: firstField(fields, "情绪与乐器", "曲风", "风格"),
+      avoid: firstField(fields, "禁用", "避免"),
+      prompt: quoteUnderHeading(section.body, "可复制提示词") ?? firstField(fields, "核心提示词", "可复制提示词")
     }];
   });
 }
 
 export function parseVisualAssets(path: string, content: string): DramaVisualAsset[] {
   return levelTwoSections(content).flatMap((section) => {
-    const match = /^(人物|角色|造型|地点|场景|道具|状态)\s*(?:[·｜|:]\s*)?(.*)$/u.exec(section.heading.trim());
-    if (match === null || match[1] === undefined) return [];
+    const match = /^(人物|角色|造型|地点|场景|道具|状态)\s*[·｜|:：]\s*(.+)$/u.exec(section.heading.trim());
+    if (match === null || match[1] === undefined || match[2] === undefined) return [];
+    const title = match[2].trim();
+    if (title === "") return [];
     const fields = bulletFields(section.body);
-    const title = match[2]?.trim() || section.heading.trim();
     const declaredId = firstField(fields, "ID", "资产 ID", "资产ID")?.trim().toLocaleUpperCase();
     const stableId = declaredId !== undefined && /^VISUAL-[A-Z0-9-]+$/u.test(declaredId);
     const id = stableId ? declaredId : `VISUAL-${slug(`${match[1]}-${title}`)}`;
     return [{ id, title, kind: inferAssetKind(`${match[1]} ${title}`), path, offset: section.offset, description: section.body.trim(), stableId, declaredId }];
   });
+}
+
+/** Known episode production target IDs for matching workspace media paths (longest first). */
+export function productionKnownTargets(production: DramaEpisodeProduction): string[] {
+  return [
+    ...production.shots.map((shot) => shot.id),
+    ...production.assets.map((asset) => asset.id),
+    ...production.visualAssets.map((asset) => asset.id),
+    ...production.motions.map((motion) => motion.id),
+    ...production.groups.map((group) => group.id),
+    ...production.music.map((item) => item.id)
+  ].sort((left, right) => right.length - left.length);
+}
+
+/** Map a matched media target ID (`MOTION-*`, `GROUP-*`, `MUSIC-*`, etc.) to its canonical display target(s). */
+export function resolveMediaTargetIds(production: DramaEpisodeProduction, matchedId: string): string[] {
+  const motion = production.motions.find((item) => item.id === matchedId);
+  if (motion?.shotId !== undefined) return [motion.shotId];
+  const group = production.groups.find((item) => item.id === matchedId);
+  if (group !== undefined) {
+    return group.memberShotIds.length > 0 ? [group.id, ...group.memberShotIds] : [group.id];
+  }
+  return [matchedId];
 }
 
 function validateProductionProtocol(input: {
@@ -240,12 +365,14 @@ function validateProductionProtocol(input: {
   readonly assets: readonly DramaAsset[];
   readonly visualAssets: readonly DramaVisualAsset[];
   readonly motions: readonly DramaMotionPrompt[];
+  readonly groups: readonly DramaMotionGroup[];
+  readonly music: readonly DramaMusicPrompt[];
 }): DramaProductionDiagnostic[] {
   const diagnostics: DramaProductionDiagnostic[] = [];
   const add = (value: Omit<DramaProductionDiagnostic, "line">): void => {
     diagnostics.push({ ...value, line: lineAt(input.documents[value.path] ?? "", value.offset) });
   };
-  const all = [...input.shots, ...input.assets, ...input.visualAssets, ...input.motions];
+  const all = [...input.shots, ...input.assets, ...input.visualAssets, ...input.motions, ...input.groups, ...input.music];
   const byId = new Map<string, typeof all>();
   for (const item of all) byId.set(item.id, [...(byId.get(item.id) ?? []), item]);
   for (const [id, items] of byId) {
@@ -254,16 +381,22 @@ function validateProductionProtocol(input: {
   }
 
   for (const visual of input.visualAssets) {
-    if (visual.stableId) continue;
-    add(visual.declaredId === undefined
-      ? { severity: "warning", code: "generated_visual_id", path: visual.path, offset: visual.offset, targetId: visual.id, message: `${visual.title} 缺少稳定的 “- ID：VISUAL-*”；修改标题会改变画布节点身份。` }
-      : { severity: "warning", code: "invalid_visual_id", path: visual.path, offset: visual.offset, targetId: visual.id, message: `${visual.title} 的 “- ID：${visual.declaredId}” 格式无效，已回退为按标题生成的 ID；请写成 VISUAL- 加大写字母、数字或连字符。` });
+    if (visual.stableId || visual.declaredId === undefined) continue;
+    add({
+      severity: "warning",
+      code: "invalid_visual_id",
+      path: visual.path,
+      offset: visual.offset,
+      targetId: visual.id,
+      message: `${visual.title} 的 “- ID：${visual.declaredId}” 格式无效，已回退为按标题生成的 ID；请写成 VISUAL- 加大写字母、数字或连字符。`
+    });
   }
 
-  const knownReferences = new Set([...input.assets, ...input.visualAssets, ...input.shots, ...input.motions].map((item) => item.id));
+  const knownReferences = new Set([...input.assets, ...input.visualAssets, ...input.shots, ...input.motions, ...input.groups, ...input.music].map((item) => item.id));
   const screenplayPath = `${input.episodeDirectory}/剧本.md`;
   for (const shot of input.shots) {
     for (const reference of shot.references) {
+      if (reference.startsWith("REF-")) continue;
       if (!knownReferences.has(reference)) add({ severity: "warning", code: "unknown_reference", path: shot.path, offset: shot.offset, targetId: shot.id, message: `${shot.id} 引用了未解析的 ${reference}。` });
     }
     for (const id of sourceKeys(shot)) {
@@ -288,19 +421,20 @@ function validateProductionProtocol(input: {
     for (const motion of motions) add({ severity: "error", code: "multiple_motions", path: motion.path, offset: motion.offset, targetId: motion.id, message: `${shotId} 同时绑定了多个 MOTION，画布只能确定一个。` });
   }
 
-  const parsedOffsets = new Set([...input.shots, ...input.assets, ...input.motions].map((item) => `${item.path}:${String(item.offset)}`));
-  for (const [path, prefix] of [
-    [`${input.episodeDirectory}/分镜.md`, "SHOT"],
-    [`${input.episodeDirectory}/图片提示词.md`, "IMG"],
-    [`${input.episodeDirectory}/视频提示词.md`, "MOTION"]
+  const parsedOffsets = new Set([...input.shots, ...input.assets, ...input.motions, ...input.groups, ...input.music].map((item) => `${item.path}:${String(item.offset)}`));
+  for (const [path, prefixes] of [
+    [`${input.episodeDirectory}/分镜.md`, ["SHOT"]],
+    [`${input.episodeDirectory}/图片提示词.md`, ["IMG"]],
+    [`${input.episodeDirectory}/视频提示词.md`, ["MOTION", "GROUP", "MUSIC"]]
   ] as const) {
     for (const section of levelTwoSections(input.documents[path] ?? "")) {
       const heading = section.heading.trim();
-      if (heading.toLocaleUpperCase().startsWith(prefix) && !parsedOffsets.has(`${path}:${String(section.offset)}`)) {
-        add({ severity: "error", code: "malformed_heading", path, offset: section.offset, message: `无法解析标题 “${heading}”，需要稳定的 ${prefix}-* ID。` });
-      }
-      if (prefix === "MOTION" && heading.toLocaleUpperCase().startsWith("GROUP") && !/^GROUP-[A-Z0-9-]+(?:\s*(?:[·｜|]|$))/iu.test(heading)) {
-        add({ severity: "error", code: "malformed_heading", path, offset: section.offset, message: `无法解析标题 “${heading}”，需要稳定的 GROUP-* ID。` });
+      const upper = heading.toLocaleUpperCase();
+      for (const prefix of prefixes) {
+        if (upper.startsWith(prefix) && !parsedOffsets.has(`${path}:${String(section.offset)}`)) {
+          add({ severity: "error", code: "malformed_heading", path, offset: section.offset, message: `无法解析标题 “${heading}”，需要稳定的 ${prefix}-* ID。` });
+          break;
+        }
       }
     }
   }
@@ -314,7 +448,7 @@ export function productionCompleteness(shot: DramaShot): {
   readonly complete: boolean;
 } {
   const keyframe = Boolean(shot.keyframePrompt?.trim());
-  const motion = Boolean(shot.motion?.prompt?.trim());
+  const motion = Boolean(shot.motion?.prompt?.trim() ?? shot.group?.prompt?.trim());
   const references = shot.references.length > 0;
   return { keyframe, motion, references, complete: keyframe && motion };
 }
@@ -331,9 +465,13 @@ function levelTwoSections(content: string): MarkdownSection[] {
 function bulletFields(body: string): Map<string, string> {
   const fields = new Map<string, string>();
   for (const match of body.matchAll(/^\s*[-*]\s+([^：:\n]+)[：:]\s*(.+?)\s*$/gmu)) {
-    const key = match[1]?.trim();
-    const value = match[2]?.trim();
-    if (key !== undefined && value !== undefined) fields.set(key, value);
+    const rawKey = match[1]?.trim() ?? "";
+    let rawValue = match[2]?.trim() ?? "";
+    const wrappedColon = (rawKey.startsWith("**") && !rawKey.endsWith("**") && rawValue.startsWith("**"))
+      || (rawKey.startsWith("__") && !rawKey.endsWith("__") && rawValue.startsWith("__"));
+    if (wrappedColon) rawValue = rawValue.slice(2).trim();
+    const key = rawKey.replace(/^(?:\*\*|__)+|(?:\*\*|__)+$/gu, "").trim();
+    if (key !== "" && rawValue !== "") fields.set(key, rawValue);
   }
   return fields;
 }
@@ -366,9 +504,20 @@ function seconds(value: string | undefined): number | undefined {
 }
 
 function splitReferences(value: string | undefined): string[] {
-  if (value === undefined) return [];
-  const ids = value.match(/(?:IMG|SHOT|MOTION)-[A-Z0-9-]+/giu) ?? [];
-  return [...new Set(ids.map((id) => id.toLocaleUpperCase()))];
+  if (value === undefined || value.trim() === "") return [];
+  const ids: string[] = [];
+  for (const segment of value.split(/[;；]/u)) {
+    const known = segment.match(/(?:IMG|SHOT|MOTION|GROUP|MUSIC)-[A-Z0-9-]+/giu);
+    if (known !== null && known.length > 0) {
+      ids.push(...known.map((id) => id.toLocaleUpperCase()));
+      continue;
+    }
+    const refs = segment.match(/REF-[A-Z0-9-]+/giu);
+    if (refs !== null && refs.length > 0) {
+      ids.push(...refs.map((id) => id.toLocaleUpperCase()));
+    }
+  }
+  return [...new Set(ids)];
 }
 
 function inferAssetKind(value: string): DramaAssetKind {
@@ -425,7 +574,9 @@ export function targetDisplayName(
   const matched = production.shots.find((item) => item.id === id)?.title
     ?? production.assets.find((item) => item.id === id)?.title
     ?? production.visualAssets.find((item) => item.id === id)?.title
-    ?? production.motions.find((item) => item.id === id)?.title;
+    ?? production.motions.find((item) => item.id === id)?.title
+    ?? production.groups.find((item) => item.id === id)?.title
+    ?? production.music.find((item) => item.id === id)?.title;
   if (matched !== undefined) return matched;
   const screenplay = documents?.[`${production.episodeDirectory}/剧本.md`];
   if (screenplay !== undefined) {

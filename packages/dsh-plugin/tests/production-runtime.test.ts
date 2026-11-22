@@ -5,10 +5,12 @@ import {
   createPendingJob,
   mediaTargetFromPath,
   mediaVersionMatchesJob,
+  outputsForJob,
   productionQueueFromInbox,
   queuedItemForJob,
   reconcileProductionJobs,
   reconcileSequence,
+  referencesForTarget,
   reorderSequence,
   sequenceIssues,
   settleSupersededCompositions,
@@ -352,5 +354,45 @@ describe("paid-job reconciliation regressions", () => {
     expect(next.status).toBe("running");
     expect(next.completedOutputs).toBe(1);
     expect(next.error).toBeUndefined();
+  });
+
+  it("deduplicates GROUP-* expanded versions in outputsForJob so batch jobs do not complete prematurely", () => {
+    const batch = {
+      ...createPendingJob({ id: "batch-grp", targetId: "BATCH-VIDEOS", kind: "video", prompt: "p", expectedOutputs: 2 }),
+      status: "running" as const
+    };
+    const path = "剧集/EP001/制作成果/GROUP-EP001-01/GROUP-EP001-01-batch-grp.mp4";
+    const expanded: ProductionMediaVersion[] = [
+      { id: `workspace:${path}:1`, targetId: "GROUP-EP001-01", kind: "video", url: "/media/g", path },
+      { id: `workspace:${path}:1`, targetId: "SHOT-EP001-001", kind: "video", url: "/media/g", path },
+      { id: `workspace:${path}:1`, targetId: "SHOT-EP001-002", kind: "video", url: "/media/g", path }
+    ];
+    expect(outputsForJob(batch, expanded)).toHaveLength(1);
+    const reconciled = reconcileProductionJobs([batch], [], true, expanded)[0]!;
+    expect(reconciled.status).toBe("running");
+    expect(reconciled.completedOutputs).toBe(1);
+  });
+
+  it("resolves declared and manual references when targetId is a GROUP-* or MOTION-* entry", () => {
+    const imgA: ProductionMediaVersion = { id: "img-a", targetId: "IMG-A", kind: "image", url: "/a", path: "a.png" };
+    const imgB: ProductionMediaVersion = { id: "img-b", targetId: "IMG-B", kind: "image", url: "/b", path: "b.png" };
+    const manualImg: ProductionMediaVersion = { id: "img-m", targetId: "IMG-M", kind: "image", url: "/m", path: "m.png" };
+    const production = {
+      shots: [
+        { id: "SHOT-EP001-001", references: ["IMG-A"], motion: { id: "MOTION-EP001-001" }, group: { id: "GROUP-EP001-01" } },
+        { id: "SHOT-EP001-002", references: ["IMG-B"], motion: { id: "MOTION-EP001-002" }, group: { id: "GROUP-EP001-01" } }
+      ],
+      motions: [
+        { id: "MOTION-EP001-001", shotId: "SHOT-EP001-001" },
+        { id: "MOTION-EP001-002", shotId: "SHOT-EP001-002" }
+      ],
+      groups: [
+        { id: "GROUP-EP001-01", memberShotIds: ["SHOT-EP001-001", "SHOT-EP001-002"] }
+      ]
+    };
+    expect(referencesForTarget("GROUP-EP001-01", production, [imgA, imgB], {}, [imgA, imgB, manualImg], {
+      "SHOT-EP001-002": ["img-m"]
+    })).toEqual([imgA, imgB, manualImg]);
+    expect(referencesForTarget("MOTION-EP001-001", production, [imgA, imgB], {})).toEqual([imgA]);
   });
 });

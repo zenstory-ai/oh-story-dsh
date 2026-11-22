@@ -49,9 +49,9 @@
 我端起碗转身倒进了水槽。
 ```
 
-### 两套共同的硬约束（所有平台）
+### 两套共同的格式规范（所有平台）
 
-- **单换行无空行、无缩进、禁正文 Markdown**：相邻段落间只允许一个 `\n`（禁 `\n\n` 空行）；不用全角/半角空格缩进；小节标记外不用 `**`、`*`、`#`、`---`。
+- **单换行无空行、无缩进、禁正文 Markdown**：默认相邻段落间只用一个 `\n`（段间空行 `\n\n` 在交付检查中为软提醒 `advisory`，除平台要求或刻意转场留白外不加）；不用全角/半角空格缩进；小节标记外不用 `**`、`*`、`#`、`---`。
 - **长短交错**：忌把每段切成同一字数。
 
 ---
@@ -87,28 +87,26 @@
 整篇字数只认交付检查（`scripts/check-delivery-contract.js`）报的非空白字数，不自写计数，不要模型估算。要找哪节明显偏短时，用下面的命令逐节报非空白字符数：
 
 ```bash
-for PYBIN in python3 python py; do "$PYBIN" -c "" 2>/dev/null && break; done
-"$PYBIN" -c "
-import re
-from pathlib import Path
-pat = re.compile(r'###\s*\d+\.|###\s*第[一二三四五六七八九十百千万两〇零0-9]+章|\d+\.')
-cur, buf, out = None, [], []
-for line in Path('正文.md').read_text(encoding='utf-8').splitlines():
-    if pat.fullmatch(line.strip()):
-        out.append((cur, buf)); cur, buf = line.strip(), []
-    else:
-        buf.append(line)
-out.append((cur, buf))
-for name, body in out:
-    n = len(''.join(''.join(body).split()))
-    if name is not None or n:
-        print(name or '导语', n)
-"
+node -e '
+const fs = require("fs");
+const pat = /^(?:###\s*\d+\.|###\s*第[一二三四五六七八九十百千万两〇零0-9]+章|\d+\.)$/;
+let cur = null, buf = [], out = [];
+for (const line of fs.readFileSync("正文.md", "utf8").split(/\r?\n/)) {
+  const s = line.trim();
+  if (pat.test(s)) { out.push([cur, buf]); cur = s; buf = []; }
+  else buf.push(line);
+}
+out.push([cur, buf]);
+for (const [name, body] of out) {
+  const n = [...body.join("").replace(/\s+/g, "")].length;
+  if (name !== null || n) console.log(name || "导语", n);
+}
+'
 ```
 
 分布只用来定位异常节：某节明显短于相邻节时，回大纲核对该节批准的情节点、动作和后果是否已经写完；写完就保留，不为拉齐长度补戏。
 
-先按上面的 `python3→python→py` 探测可用解释器，避免直接调用 Windows 的 Microsoft Store 占位程序；禁止用统计字节的 `wc -c`。交付检查跑不了时声明“未完成机器字数验证”，不得声称通过。
+以上命令使用 Node.js 18+ 运行；禁止用统计字节的 `wc -c`。交付检查跑不了时声明“未完成机器字数验证”，不得声称通过。
 
 ---
 
@@ -158,7 +156,7 @@ for name, body in out:
 ## 写完每段快速检查
 
 - [ ] 段落形态贴合目标平台（黑岩一句一段 / 番茄系短段交织叙述），长短交错？
-- [ ] 相邻段落之间只有一个 `\n`，没有 `\n\n` 空行？
+- [ ] 相邻段落之间默认只用一个 `\n`，没有多余的 `\n\n` 空行？
 - [ ] 对话独立成行、引号统一（盐言 `「」` 合法）、标签不机械？
 - [ ] 没有缩进空格？
 - [ ] 正文内没有 `**`、`*`、`#`、`---` 等 Markdown 符号？

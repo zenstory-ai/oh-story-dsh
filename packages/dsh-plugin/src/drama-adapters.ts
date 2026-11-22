@@ -31,13 +31,75 @@ export interface DramaAdapterSpec {
   readonly referenceHeading: string;
 }
 
+export interface DramaAdapterOptionalEnvStatus {
+  readonly name: string;
+  readonly label: string;
+  readonly configured: boolean;
+  readonly note: string;
+}
+
 export interface DramaAdapterStatus {
   readonly name: string;
   readonly label: string;
   readonly modality: DramaAdapterModality;
   readonly configured: boolean;
   readonly missing: readonly string[];
+  readonly optionalEnv?: readonly DramaAdapterOptionalEnvStatus[];
 }
+
+interface OptionalEnvDescriptor {
+  readonly name: string;
+  readonly label: string;
+  readonly note: string;
+}
+
+const ADAPTER_OPTIONAL_ENV_NOTES: Readonly<Record<string, readonly OptionalEnvDescriptor[]>> = {
+  "openai-image": [
+    {
+      name: "OPENAI_IMAGE_MODEL",
+      label: "默认图片模型",
+      note: "Drama 0.13.0 不再硬编码模型版本；未设置时须在任务 parameters.model 中显式指定模型 ID。"
+    },
+    {
+      name: "OPENAI_BASE_URL",
+      label: "接口地址覆盖",
+      note: "可选 HTTPS 地址覆盖，默认 https://api.openai.com/v1。"
+    }
+  ],
+  seedance: [
+    {
+      name: "SEEDANCE_BASE_URL",
+      label: "接口地址覆盖",
+      note: "可选，默认 https://ark.cn-beijing.volces.com/api/v3。"
+    }
+  ],
+  "minimax-h3": [
+    {
+      name: "MINIMAX_VIDEO_BASE_URL",
+      label: "国内/海外站地址",
+      note: "默认海外站 https://api.minimax.io/v2；国内站账号请设为 https://api.minimaxi.com/v2。"
+    }
+  ],
+  "minimax-music": [
+    {
+      name: "MINIMAX_MUSIC_MODEL",
+      label: "默认音乐模型",
+      note: "Drama 0.13.0 不再硬编码模型版本；未设置时须在任务 parameters.model 中显式指定模型 ID。"
+    },
+    {
+      name: "MINIMAX_BASE_URL",
+      label: "国内/海外站地址",
+      note: "默认海外站 https://api.minimax.io/v1；国内站账号请设为 https://api.minimaxi.com/v1。"
+    }
+  ],
+  "minimax-speech": [
+    {
+      name: "MINIMAX_BASE_URL",
+      label: "国内/海外站地址",
+      note: "默认海外站 https://api.minimax.io/v1；国内站账号请设为 https://api.minimaxi.com/v1。"
+    }
+  ]
+};
 
 export interface DramaAdapterConfigLocation {
   readonly path: string;
@@ -53,14 +115,14 @@ const BUILTIN_PROVIDERS_REFERENCE = "short-drama-produce/references/builtin-prov
 
 export const DRAMA_ADAPTERS: readonly DramaAdapterSpec[] = [
   {
-    name: "gpt-image-2",
-    label: "GPT Image 2",
+    name: "openai-image",
+    label: "OpenAI Image",
     modality: "image",
     requiredEnv: ["OPENAI_API_KEY"],
-    optionalEnv: ["OPENAI_BASE_URL"],
+    optionalEnv: ["OPENAI_IMAGE_MODEL", "OPENAI_BASE_URL"],
     timeoutSeconds: 600,
     reference: BUILTIN_PROVIDERS_REFERENCE,
-    referenceHeading: "GPT Image 2"
+    referenceHeading: "OpenAI 图片（GPT Image）"
   },
   {
     name: "seedance",
@@ -104,7 +166,7 @@ export const DRAMA_ADAPTERS: readonly DramaAdapterSpec[] = [
     label: "MiniMax Music",
     modality: "music",
     requiredEnv: ["MINIMAX_API_KEY"],
-    optionalEnv: ["MINIMAX_BASE_URL"],
+    optionalEnv: ["MINIMAX_MUSIC_MODEL", "MINIMAX_BASE_URL"],
     timeoutSeconds: 600,
     reference: BUILTIN_PROVIDERS_REFERENCE,
     referenceHeading: "MiniMax 音乐"
@@ -120,6 +182,11 @@ export const DRAMA_ADAPTERS: readonly DramaAdapterSpec[] = [
     referenceHeading: "MiniMax 语音"
   }
 ];
+
+/** Backward-compatible upstream provider CLI aliases (Drama Skills 0.13.0 keeps `gpt-image-2` for `openai-image`). */
+export const DRAMA_ADAPTER_ALIASES: Readonly<Record<string, string>> = {
+  "gpt-image-2": "openai-image"
+};
 
 /** Directory owned by this user: `/tmp` is world-writable on Linux, so the name carries the uid. */
 function generatedDirectory(temporaryRoot: string): string {
@@ -160,6 +227,12 @@ export function dramaAdapterConfigDocument(skillRoot: string, python = "python3"
   for (const adapter of DRAMA_ADAPTERS) {
     adapters[adapter.name] = { command: [python, script, adapter.name], timeout_seconds: adapter.timeoutSeconds };
   }
+  for (const [alias, canonical] of Object.entries(DRAMA_ADAPTER_ALIASES)) {
+    const target = DRAMA_ADAPTERS.find((adapter) => adapter.name === canonical);
+    if (target !== undefined) {
+      adapters[alias] = { command: [python, script, alias], timeout_seconds: target.timeoutSeconds };
+    }
+  }
   return { adapters };
 }
 
@@ -193,7 +266,21 @@ export async function ensureDramaAdapterConfig(
 export function dramaAdapterStatuses(env: NodeJS.ProcessEnv = process.env): DramaAdapterStatus[] {
   return DRAMA_ADAPTERS.map((adapter) => {
     const missing = adapter.requiredEnv.filter((name) => (env[name] ?? "") === "");
-    return { name: adapter.name, label: adapter.label, modality: adapter.modality, configured: missing.length === 0, missing };
+    const descriptors = ADAPTER_OPTIONAL_ENV_NOTES[adapter.name];
+    const optionalEnv = descriptors?.map((item) => ({
+      name: item.name,
+      label: item.label,
+      configured: (env[item.name] ?? "") !== "",
+      note: item.note
+    }));
+    return {
+      name: adapter.name,
+      label: adapter.label,
+      modality: adapter.modality,
+      configured: missing.length === 0,
+      missing,
+      ...(optionalEnv === undefined ? {} : { optionalEnv })
+    };
   });
 }
 

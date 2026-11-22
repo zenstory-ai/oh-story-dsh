@@ -4,15 +4,15 @@
 
 ## Step 1：生成本批任务包
 
-按当前平台探测 Python 3（`python3` → `python` → `py -3`），请求第 B+1 章起的 20 章（剩下不足 20 章就到最后一章；已生成细纲的局部返修直接传对应章范围）：
+用 Node.js 18+ 请求第 B+1 章起的 20 章（剩下不足 20 章就到最后一章；已生成细纲的局部返修直接传对应章范围）：
 
 ```text
-{PYTHON} {story-import skill 根}/scripts/build_outline_brief.py --project {书目录} --chapters {A-B}
+node {story-import skill 根}/scripts/build_outline_brief.js --project {书目录} --chapters {A-B}
 ```
 
 脚本将反推规则与模板（[outline-reverse-rules.md](outline-reverse-rules.md) 全文）、测好的历史长度、摘要要点和覆盖本批的卷纲剧情单元卡，拼成 `{书目录}/.story/work/排纲/导入细纲_第AAA-BBB章.md`。历史长度按 `visible_chars_v1` 计算；执行者要读的总量超过约 25K 字时脚本自动少排几章（可少于 10 章）。以 stdout JSON 的 `chapters` 为实际范围、`next` 为下一批起点，`null` 表示已到最后一章。缺摘要的章改读正文，所需正文量也计入总量。
 
-长度必须由脚本测，不得用模型估算或静默跳过。找不到 Python 3 或脚本报错时停下，用一句话告诉作者卡在哪（如「第 12 章正文读不到，先把正文迁完」），原文报错放技术备注；卷纲缺失或找不到覆盖本批的单元卡时，先回结构迁移补卷纲。
+长度必须由脚本测，不得用模型估算，也不得跳过不报。找不到 Node.js 或脚本报错时停下，用一句话告诉作者卡在哪（如「第 12 章正文读不到，先把正文迁完」），不贴原始报错堆栈也不另加技术备注行；卷纲缺失或找不到覆盖本批的单元卡时，先回结构迁移补卷纲。
 
 ## Step 2：写本批细纲
 
@@ -21,4 +21,4 @@
 
 ## Step 3：验收与交接
 
-每批写完由主会话运行 `node {story-import skill 根}/scripts/check-outline-contract.js --json <本批细纲路径...>`：exit 1 时只按报告补缺的字段或小节（有 story-architect 时把报错原样交回同一 agent 修一次）。通过后把导入记录的细纲进度改成「已验收到第 B 章」。还有下一批时，向作者一句话说到第几章了，末尾按 [SKILL.md 的换上下文规则](../SKILL.md#时刻表与交接) 建议新开对话说「继续导入」；没有子代理时每批都这样建议。全部章节细纲写完再进 Phase 4。
+每批写完由主会话运行 `node {story-import skill 根}/scripts/check-outline-contract.js --json <本批细纲路径...>`（需严格拦截软提醒加 `--strict`）：exit 1（`hard_failures`：文件可读、字数目标、两项意图字段实质内容）时按报告补齐再复验（有 story-architect 时把报错原样交回同一 agent 修一次）；exit 0 但带 `soft_warnings`（其余字段、四小节、五行、情节点表、设定引用）时重点复核，确认漏写则补、确属原文如此可保留。通过后把导入记录的细纲进度改成「已验收到第 B 章」。还有下一批时，向作者一句话说到第几章了，末尾按 [SKILL.md 的换上下文规则](../SKILL.md#时刻表与交接) 建议新开对话说「继续导入」；没有子代理时每批都这样建议。全部章节细纲写完再进 Phase 4。

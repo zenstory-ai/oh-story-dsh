@@ -6,10 +6,12 @@ import { describe, expect, it, vi } from "vitest";
 import { Config, readWelcomeGuideConfig } from "../src/index.js";
 import {
   OhStoryPluginConfig,
+  WELCOME_STARTERS,
   WelcomeGuide,
   WelcomeGuideController,
   type WelcomeConfigForm
 } from "../src/client/welcome-guide.js";
+import { detectOhStoryApiPrefix, endpoint, ohStoryEndpointUrl } from "../src/client/workbench-ui.js";
 import type { WorkbenchPreferenceStorage } from "../src/client/workbench-presence.js";
 import { registerWorkspaceRoute } from "../src/workspace-route.js";
 
@@ -130,17 +132,25 @@ describe("welcomeGuide Host Config contract", () => {
 describe("WelcomeGuide and OhStoryPluginConfig UI contract", () => {
   it("explains the real boundary between installed workbench and skill-enabled presets", () => {
     const onDismiss = vi.fn();
-    const markup = renderToStaticMarkup(<WelcomeGuide onDismiss={onDismiss} />);
+    const onStartPrompt = vi.fn(() => true);
+    const markup = renderToStaticMarkup(<WelcomeGuide onDismiss={onDismiss} onStartPrompt={onStartPrompt} />);
 
     expect(markup).toContain("Oh Story 创作工作台");
     expect(markup).not.toContain("Oh Story 已加载");
+    expect(markup).not.toContain("内置示例");
+    expect(markup).not.toContain("<style>");
     expect(markup).toContain("Minimal");
     expect(markup).toContain("Standard");
     expect(markup).toContain("关闭欢迎引导");
     expect(markup).toContain("welcomeGuide");
+    expect(markup).toContain('class="oh-story-welcome-starters"');
+    for (const starter of WELCOME_STARTERS) {
+      expect(markup).toContain(starter.title);
+      expect(markup).toContain(starter.prompt);
+    }
 
-    const element = WelcomeGuide({ onDismiss });
-    const header = (element.props.children as readonly { readonly props?: { readonly children?: unknown } }[])[1];
+    const element = WelcomeGuide({ onDismiss, onStartPrompt });
+    const header = (element.props.children as readonly { readonly props?: { readonly children?: unknown } }[])[0];
     const children = header?.props?.children as readonly { readonly props?: { readonly onClick?: () => void } }[];
     children[1]?.props?.onClick?.();
     expect(onDismiss).toHaveBeenCalledTimes(1);
@@ -202,5 +212,50 @@ describe("WelcomeGuide and OhStoryPluginConfig UI contract", () => {
     reloaded.ensureFallbackHostConfig(() => Promise.resolve(true));
     await Promise.resolve();
     expect(renderToStaticMarkup(<OhStoryPluginConfig controller={reloaded} />)).toContain('aria-checked="false"');
+    expect(renderToStaticMarkup(<OhStoryPluginConfig controller={reloaded} />)).not.toContain("<style>");
+  });
+
+  it("resolves api/oh-story URLs document-relatively under HTTP mount prefixes and falls back cleanly in non-HTTP environments", () => {
+    try {
+      vi.stubGlobal("document", { baseURI: "https://proxy.example/dsh/mount/" });
+      vi.stubGlobal("location", { origin: "https://proxy.example" });
+      expect(ohStoryEndpointUrl("config")).toBe("https://proxy.example/dsh/mount/api/oh-story/config");
+      expect(endpoint("workspace", "s1")).toBe("https://proxy.example/dsh/mount/api/oh-story/workspace?sessionId=s1");
+      expect(endpoint("media", "s1", "封面/a.png", "v2")).toBe(
+        "https://proxy.example/dsh/mount/api/oh-story/media?sessionId=s1&path=%E5%B0%81%E9%9D%A2%2Fa.png&version=v2"
+      );
+
+      vi.stubGlobal("document", { baseURI: "about:blank" });
+      vi.stubGlobal("location", { origin: "null" });
+      expect(ohStoryEndpointUrl("config")).toBe("/api/oh-story/config");
+      expect(endpoint("workspace", "s1")).toBe("/api/oh-story/workspace?sessionId=s1");
+
+      // Legacy DSH 0.2.0-rc.2 host signals `oh-story` via link href or data-oh-story-api-prefix.
+      const mockLink = (attrs: Record<string, string>) => ({
+        getAttribute: (name: string) => attrs[name] ?? null
+      });
+      vi.stubGlobal("document", {
+        baseURI: "http://127.0.0.1:3000/",
+        getElementById: (id: string) => id === "oh-story-workbench-css" ? mockLink({ href: "oh-story/workbench.css?v=abc" }) : null
+      });
+      expect(detectOhStoryApiPrefix()).toBe("oh-story");
+      expect(ohStoryEndpointUrl("workspace")).toBe("http://127.0.0.1:3000/oh-story/workspace");
+
+      vi.stubGlobal("document", {
+        baseURI: "https://proxy.example/dsh/",
+        getElementById: (id: string) => id === "oh-story-workbench-css" ? mockLink({ "data-oh-story-api-prefix": "oh-story", href: "api/oh-story/workbench.css" }) : null
+      });
+      expect(detectOhStoryApiPrefix()).toBe("oh-story");
+      expect(endpoint("config", "s1")).toBe("https://proxy.example/dsh/oh-story/config?sessionId=s1");
+
+      vi.stubGlobal("document", {
+        baseURI: "https://proxy.example/dsh/",
+        getElementById: (id: string) => id === "oh-story-workbench-css" ? mockLink({ href: "api/oh-story/workbench.css?v=abc" }) : null
+      });
+      expect(detectOhStoryApiPrefix()).toBe("api/oh-story");
+      expect(ohStoryEndpointUrl("config")).toBe("https://proxy.example/dsh/api/oh-story/config");
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

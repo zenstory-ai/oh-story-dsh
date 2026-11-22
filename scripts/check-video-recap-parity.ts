@@ -28,29 +28,31 @@ if (JSON.stringify(skills) !== JSON.stringify(expectedSkills) || JSON.stringify(
   throw new Error(`Expected video-recap plus video-reference, found ${skills.join(", ") || "none"}.`);
 }
 for (const required of [
-  "skills/video-recap/scripts/recap.py",
-  "skills/video-recap/scripts/recap_inspect.py",
-  "skills/video-recap/scripts/doctor.py",
-  "skills/video-recap/scripts/understand.py",
-  "skills/video-recap/scripts/cut.py",
-  "skills/video-recap/scripts/voiceover.py",
-  "skills/video-recap/scripts/assemble.py",
-  "skills/video-recap/scripts/final_qc.py",
-  "skills/video-recap/scripts/validate.py",
+  "skills/video-recap/SKILL.md",
+  "skills/video-recap/references/timeline-schema.md",
+  "skills/video-recap/references/editorial-craft.md",
+  "skills/video-recap/references/remote-services.md",
+  "skills/video-recap/scripts/probe.py",
+  "skills/video-recap/scripts/frames.py",
+  "skills/video-recap/scripts/transcribe.py",
+  "skills/video-recap/scripts/tts.py",
+  "skills/video-recap/scripts/render.py",
+  "skills/video-recap/scripts/check.py",
+  "skills/video-recap/scripts/packaging.py",
+  "skills/video-recap/scripts/export_jianying.py",
   "skills/video-recap/scripts/library.py",
   "skills/video-reference/SKILL.md",
-  "skills/video-reference/references/reference-schema.md",
-  "skills/video-reference/scripts/reference.py"
+  "skills/video-reference/scripts/analyze_reference.py"
 ]) {
   if (!manifest.files.some((entry) => entry.path === required)) throw new Error(`Bundled video-recap asset is missing ${required}.`);
 }
-const finalQc = await readFile(join(videoRecapRoot, "skills/video-recap/scripts/final_qc.py"), "utf8");
-if (!/^SCHEMA_VERSION = 2$/mu.test(finalQc)) {
-  throw new Error("Bundled final_qc.py no longer emits the v0.6.1 schema_version 2 contract.");
+const timelineSchema = await readFile(join(videoRecapRoot, "skills/video-recap/references/timeline-schema.md"), "utf8");
+if (!timelineSchema.includes('"schema_version": 3') || !timelineSchema.includes("review_hints")) {
+  throw new Error("Bundled timeline-schema.md no longer carries the v0.8.0 timeline v3 / check.json review_hints contract.");
 }
-const narrationValidator = await readFile(join(videoRecapRoot, "skills/video-recap/scripts/validate.py"), "utf8");
-if (!narrationValidator.includes("Validation never rewrites the agent's text, timing, order or metadata.")) {
-  throw new Error("Bundled narration validator no longer carries the v0.6.1 lint-only contract.");
+const checkScript = await readFile(join(videoRecapRoot, "skills/video-recap/scripts/check.py"), "utf8");
+if (!checkScript.includes("review_hints")) {
+  throw new Error("Bundled check.py no longer emits v0.8.0 review_hints.");
 }
 for (const glue of videoRecapPlatformGlue) {
   const forbidden = `skills/${glue}`;

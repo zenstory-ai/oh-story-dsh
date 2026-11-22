@@ -33,32 +33,32 @@
 
 | 工作台 | 内置技能包（随插件固定版本打包） | 常用入口 |
 | --- | --- | --- |
-| **小说** | [Oh Story 0.10.5](https://github.com/zenstory-ai/oh-story-claudecode/releases/tag/v0.10.5) · 14 Skills · 7 Roles | `/story`、`/story-long-write`、`/story-review`、`/story-publish` |
-| **短剧** | [Drama Skills 0.12.1](https://github.com/zenstory-ai/drama-skills/releases/tag/v0.12.1) · 12 Skills | `/short-drama`、`/short-drama-write`、`/short-drama-storyboard`、`/short-drama-edit` |
+| **小说** | [Oh Story 0.11.0](https://github.com/zenstory-ai/oh-story-claudecode/releases/tag/v0.11.0) · 14 Skills · 7 Roles | `/story`、`/story-long-write`、`/story-review`、`/story-publish` |
+| **短剧** | [Drama Skills 0.13.0](https://github.com/zenstory-ai/drama-skills/releases/tag/v0.13.0) · 12 Skills | `/short-drama`、`/short-drama-write`、`/short-drama-storyboard`、`/short-drama-edit` |
 | **互动游戏** | [NovelToGame 0.9.0](https://github.com/zenstory-ai/novel-to-game/releases/tag/v0.9.0) · 5 Skills | `/novel-to-game quick`、`/game-build`、`/game-qa` |
-| **视频解说** | [video-recap-skills 0.7.1](https://github.com/zenstory-ai/video-recap-skills/releases/tag/v0.7.1) · 2 Skills | `/video-recap`、`/video-reference` |
+| **视频解说** | [video-recap-skills 0.8.0](https://github.com/zenstory-ai/video-recap-skills/releases/tag/v0.8.0) · 2 Skills | `/video-recap`、`/video-reference` |
 
-> 当前版本 **v0.1.27**，默认配套 DeepSeek Harness `0.2.2-rc.1`（需 Node.js 24.9+），同时兼容 `0.2.1-rc.5`、`0.2.0-rc.2` 与 `0.2.2-rc.3`。版本记录与迁移说明见 [CHANGELOG.md](CHANGELOG.md)、[Releases](https://github.com/zenstory-ai/oh-story-dsh/releases) 与[升级问答](#升级到新版本后要做什么)。
+> 当前版本 **v0.1.28**，默认配套 DeepSeek Harness `0.2.2-rc.5`（需 Node.js 24.9+），同时兼容 `0.2.2-rc.1`、`0.2.1-rc.5` 与 `0.2.0-rc.2`。版本记录与迁移说明见 [CHANGELOG.md](CHANGELOG.md)、[Releases](https://github.com/zenstory-ai/oh-story-dsh/releases) 与[升级问答](#升级到新版本后要做什么)。
 
 ## 安装
 
-默认配套 DSH `0.2.2-rc.1`，需要 **Node.js 24.9+**（命令已自带临时 `pnpm`，无需提前安装）：
+默认配套 DSH `0.2.2-rc.5`，需要 **Node.js 24.9+**（命令已自带临时 `pnpm`，无需提前安装）：
 
 ```bash
-npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.2-rc.1 dsh plugin --profile web add @oh-story/dsh@0.1.27 &&
-npx -y @deepseek-ai/dsh@0.2.2-rc.1 web
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.2-rc.5 dsh plugin --profile web add @oh-story/dsh@0.1.28 &&
+npx -y @deepseek-ai/dsh@0.2.2-rc.5 web
 ```
 
 保持终端开启；浏览器若未自动弹出，复制终端打印的完整 `http://127.0.0.1:3080/?token=...` 链接打开（首次登录靠链接里的 `token` 认证）。进入后在「设置 → 模型」填入 Provider 与 API Key，或在启动前设置环境变量 `DEEPSEEK_API_KEY`；只看本地已有工程可在首次引导点「稍后配置 / Configure later」。
 
-安装和启动请保持同一个 DSH 版本（支持 `>=0.2.0-rc.2 <0.2.1-0`、`>=0.2.1-alpha.1 <0.2.2-0` 与 `>=0.2.2-alpha.2 <0.2.3-0`；改用 `0.2.1-rc.5`、`0.2.0-rc.2` 或 `0.2.2-rc.3` 时把两条命令里的版本号一起替换）。
+安装和启动请保持同一个 DSH 版本（支持 `>=0.2.0-rc.2 <0.2.1-0`、`>=0.2.1-alpha.1 <0.2.2-0` 与 `>=0.2.2-alpha.2 <0.2.3-0`；改用 `0.2.1-rc.5` 或 `0.2.0-rc.2` 时把两条命令里的版本号一起替换）。
 
 <details>
 <summary>从 GitHub Release 安装预构建包</summary>
 
 ```bash
-npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.2-rc.1 dsh plugin --profile web add https://github.com/zenstory-ai/oh-story-dsh/releases/download/v0.1.27/oh-story-dsh-0.1.27.tgz &&
-npx -y @deepseek-ai/dsh@0.2.2-rc.1 web
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.2-rc.5 dsh plugin --profile web add https://github.com/zenstory-ai/oh-story-dsh/releases/download/v0.1.28/oh-story-dsh-0.1.28.tgz &&
+npx -y @deepseek-ai/dsh@0.2.2-rc.5 web
 ```
 
 </details>
@@ -70,16 +70,16 @@ DeepSeek 负责写剧本、分镜和提示词；生成图片、视频、配音�
 
 | 能力 | 供应商 | 必需环境变量 | 可选配置 |
 | --- | --- | --- | --- |
-| 图片 | GPT Image 2 | `OPENAI_API_KEY` | `OPENAI_BASE_URL` |
+| 图片 | OpenAI Image（`openai-image`） | `OPENAI_API_KEY` | `OPENAI_IMAGE_MODEL`（或任务 `parameters.model`）、`OPENAI_BASE_URL` |
 | 视频 | Seedance（火山方舟） | `ARK_API_KEY`、`SEEDANCE_MODEL` | `SEEDANCE_BASE_URL`、`SEEDANCE_POLL_INTERVAL`、`SEEDANCE_TIMEOUT_SECONDS`、`SEEDANCE_ALLOWED_RATIOS`、`SEEDANCE_MIN_DURATION` / `SEEDANCE_MAX_DURATION` |
 | 视频 | MiniMax H3 | `MINIMAX_API_KEY`、`MINIMAX_VIDEO_MODEL` | `MINIMAX_VIDEO_BASE_URL`、`MINIMAX_VIDEO_POLL_INTERVAL`、`MINIMAX_VIDEO_TIMEOUT_SECONDS`、`MINIMAX_VIDEO_ALLOWED_RESOLUTIONS`、`MINIMAX_VIDEO_ALLOWED_RATIOS`、`MINIMAX_VIDEO_MIN_DURATION` / `MINIMAX_VIDEO_MAX_DURATION` |
 | 语音 | MiniMax Speech | `MINIMAX_API_KEY` | `MINIMAX_BASE_URL` |
-| 音乐 | MiniMax Music | `MINIMAX_API_KEY` | `MINIMAX_BASE_URL` |
+| 音乐 | MiniMax Music | `MINIMAX_API_KEY` | `MINIMAX_MUSIC_MODEL`（或任务 `parameters.model`）、`MINIMAX_BASE_URL` |
 
 ```bash
 export OPENAI_API_KEY=...
 export ARK_API_KEY=... SEEDANCE_MODEL=...
-npx -y @deepseek-ai/dsh@0.2.2-rc.1 web
+npx -y @deepseek-ai/dsh@0.2.2-rc.5 web
 ```
 
 短剧「制作详情」会列出各供应商是否就绪、缺哪个环境变量（只检查变量是否存在，不读取或回传密钥值）。内置 `seedance` 与 `minimax-h3` 默认支持角色参考音频 `reference_audio`（仍请确认所选模型本身支持音频输入）；要自定义适配器、超时或外部 `reference_roles`，把 `OH_STORY_DRAMA_ADAPTER_CONFIG` 指向自定义配置文件即可。参数范围见内置的 `short-drama-produce/references/builtin-providers.md`。
@@ -89,7 +89,7 @@ npx -y @deepseek-ai/dsh@0.2.2-rc.1 web
 <details>
 <summary>配置视频解说本地依赖（Python / ffmpeg）</summary>
 
-视频解说需要本机安装 **Python 3.10+** 与可在 `PATH` 中调用的 **ffmpeg / ffprobe**（Ubuntu 可执行 `sudo apt install ffmpeg`），并在启动终端设置 `MIMO_API_KEY`；若用 Fish Audio 配音，再补配 `FISH_API_KEY`。`ffmpeg` 带 `libass` 滤镜时默认烧录硬字幕，否则输出外挂 SRT。
+视频解说 0.8.0 默认本地优先运行，只需本机安装 **Python 3.10+** 与可在 `PATH` 中调用的 **ffmpeg / ffprobe**（Ubuntu 可执行 `sudo apt install ffmpeg`）。如需云端转写或配音，再按需设置 `ASR_API_URL` / `ASR_API_KEY`、`FISH_API_KEY`（或 `FISH_AUDIO_API_KEY`）、`OPENAI_API_KEY` 或自托管 `INDEX_TTS_ENDPOINT`。`ffmpeg` 带 `libass` 滤镜时默认烧录硬字幕。
 
 </details>
 
@@ -99,7 +99,7 @@ npx -y @deepseek-ai/dsh@0.2.2-rc.1 web
 在装有本插件的 profile 下，只要会话模式启用了技能工具（如 `Standard`、`PTC`；`Minimal` 不加载技能），就能调用内置创作技能。想让默认 `web` 环境保持原样，可装进独立的 `story` profile：
 
 ```bash
-npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.2-rc.1 dsh plugin --profile story add @oh-story/dsh@0.1.27
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.2-rc.5 dsh plugin --profile story add @oh-story/dsh@0.1.28
 ```
 
 再编辑 `~/.dsh/profiles/story/package.json`，把 Web 界面包排在插件前面：
@@ -115,8 +115,8 @@ npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.2-rc.1 dsh plugin --
 之后两个环境可用不同端口同时运行，模型配置、工作区与会话记录由 DSH 共享：
 
 ```bash
-npx -y @deepseek-ai/dsh@0.2.2-rc.1 web                          # 原版 DSH
-npx -y @deepseek-ai/dsh@0.2.2-rc.1 --profile story --port 3081  # 创作工作台
+npx -y @deepseek-ai/dsh@0.2.2-rc.5 web                          # 原版 DSH
+npx -y @deepseek-ai/dsh@0.2.2-rc.5 --profile story --port 3081  # 创作工作台
 ```
 
 </details>

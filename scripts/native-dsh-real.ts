@@ -17,7 +17,7 @@ import {
 } from "./native-dsh-helpers.js";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const dshVersion = process.env.DSH_TEST_VERSION ?? "0.2.2-rc.1";
+const dshVersion = process.env.DSH_TEST_VERSION ?? "0.2.2-rc.5";
 
 function run(command: string, args: readonly string[], env: NodeJS.ProcessEnv = process.env): void {
   const result = spawnSync(command, args, { cwd: repositoryRoot, env, encoding: "utf8", stdio: "pipe" });

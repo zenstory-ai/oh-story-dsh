@@ -47,7 +47,31 @@ export interface UseInfiniteCanvasOptions<Node extends InfiniteCanvasNode> {
 const CLICK_SLOP = 4;
 const BUTTON_ZOOM_STEP = 1.2;
 const WHEEL_COMMIT_DELAY = 160;
+const INTERACTIVE_TAGS = new Set(["BUTTON", "INPUT", "TEXTAREA", "SELECT", "A", "VIDEO", "AUDIO"]);
 const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
+
+function safeSetPointerCapture(element: Element, pointerId: number): void {
+  try {
+    element.setPointerCapture(pointerId);
+  } catch {
+    // Synthetic or already-ended pointers can throw DOMException.
+  }
+}
+
+function safeReleasePointerCapture(element: Element, pointerId: number): void {
+  try {
+    if ("hasPointerCapture" in element && typeof element.hasPointerCapture === "function" && !element.hasPointerCapture(pointerId)) return;
+    element.releasePointerCapture(pointerId);
+  } catch {
+    // Ignore when capture was already released or lost.
+  }
+}
+
+function isInteractiveEventTarget(target: EventTarget | null, currentTarget: EventTarget | null): boolean {
+  if (target !== currentTarget) return true;
+  if (target instanceof Element && INTERACTIVE_TAGS.has(target.tagName)) return true;
+  return false;
+}
 
 export function nodeRects(nodes: readonly InfiniteCanvasNode[], positions: Readonly<Record<string, CanvasPoint>>): CanvasRect[] {
   return nodes.map((node) => ({ ...(positions[node.id] ?? node.initial), width: node.width, height: node.height }));
@@ -68,6 +92,7 @@ export function useInfiniteCanvas<Node extends InfiniteCanvasNode>(options: UseI
   const [liveNode, setLiveNode] = useState<{ readonly id: string; readonly point: CanvasPoint }>();
   const [panning, setPanning] = useState(false);
   const wheelCommit = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const activeGestureCleanup = useRef<(() => void) | undefined>(undefined);
   const selectedHere = useRef<string>(undefined);
   const followed = useRef<string>(undefined);
   const followedSize = useRef<CanvasSize>(undefined);
@@ -84,6 +109,11 @@ export function useInfiniteCanvas<Node extends InfiniteCanvasNode>(options: UseI
 
   const latest = useRef({ viewport, committedViewport, options, size });
   latest.current = { viewport, committedViewport, options, size };
+
+  useEffect(() => () => {
+    activeGestureCleanup.current?.();
+    activeGestureCleanup.current = undefined;
+  }, []);
 
   useIsomorphicLayoutEffect(() => {
     const element = viewportRef.current;
@@ -166,6 +196,10 @@ export function useInfiniteCanvas<Node extends InfiniteCanvasNode>(options: UseI
 
   const zoomIn = () => { commitViewport(zoomAt(viewport, BUTTON_ZOOM_STEP, { x: size.width / 2, y: size.height / 2 })); };
   const zoomOut = () => { commitViewport(zoomAt(viewport, 1 / BUTTON_ZOOM_STEP, { x: size.width / 2, y: size.height / 2 })); };
+  const resetZoom = () => {
+    if (viewport.zoom === 1) return;
+    commitViewport(zoomAt(viewport, 1 / viewport.zoom, { x: size.width / 2, y: size.height / 2 }));
+  };
   const fitAll = () => { commitViewport(fitRects(rects, size)); };
   const resetLayout = () => {
     clearTimeout(wheelCommit.current);
@@ -175,17 +209,20 @@ export function useInfiniteCanvas<Node extends InfiniteCanvasNode>(options: UseI
   };
 
   const startPan = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (event.target instanceof Element && event.target.closest("article, button") !== null) return;
+    if (event.target instanceof Element && event.target.closest("article, button, video, audio, input, select, textarea, a") !== null) return;
     if (event.button !== 0 && event.button !== 1) return;
     event.preventDefault();
     flushWheel();
+    activeGestureCleanup.current?.();
     const element = event.currentTarget;
-    element.setPointerCapture(event.pointerId);
+    const pointerId = event.pointerId;
+    safeSetPointerCapture(element, pointerId);
     element.focus({ preventScroll: true });
     const origin = viewport;
     const start = { x: event.clientX, y: event.clientY };
     let moved = false;
     let next = origin;
+    let finished = false;
     setPanning(true);
     const move = (moveEvent: PointerEvent) => {
       const dx = moveEvent.clientX - start.x;
@@ -195,10 +232,25 @@ export function useInfiniteCanvas<Node extends InfiniteCanvasNode>(options: UseI
       next = { ...origin, x: origin.x + dx, y: origin.y + dy };
       setLiveViewport(next);
     };
-    const end = () => {
+    const detach = () => {
       element.removeEventListener("pointermove", move);
       element.removeEventListener("pointerup", end);
       element.removeEventListener("pointercancel", end);
+      element.removeEventListener("lostpointercapture", end);
+      safeReleasePointerCapture(element, pointerId);
+      if (activeGestureCleanup.current === abort) activeGestureCleanup.current = undefined;
+    };
+    const abort = () => {
+      if (finished) return;
+      finished = true;
+      detach();
+      setPanning(false);
+      setLiveViewport(undefined);
+    };
+    const end = () => {
+      if (finished) return;
+      finished = true;
+      detach();
       setPanning(false);
       if (moved) commitViewport(next);
       else {
@@ -206,21 +258,26 @@ export function useInfiniteCanvas<Node extends InfiniteCanvasNode>(options: UseI
         options.onCommit({ selectedId: null });
       }
     };
+    activeGestureCleanup.current = abort;
     element.addEventListener("pointermove", move);
     element.addEventListener("pointerup", end);
     element.addEventListener("pointercancel", end);
+    element.addEventListener("lostpointercapture", end);
   };
 
   const startDrag = (event: ReactPointerEvent<HTMLElement>, id: string) => {
-    if (event.button !== 0 || (event.target instanceof Element && event.target.closest("button") !== null)) return;
+    if (event.button !== 0 || (event.target instanceof Element && event.target.closest("button, video, audio, input, select, textarea, a") !== null)) return;
     event.stopPropagation();
+    activeGestureCleanup.current?.();
     const element = event.currentTarget;
-    element.setPointerCapture(event.pointerId);
+    const pointerId = event.pointerId;
+    safeSetPointerCapture(element, pointerId);
     const origin = positions[id] ?? { x: 0, y: 0 };
     const start = { x: event.clientX, y: event.clientY };
     const zoom = viewport.zoom;
     let moved = false;
     let next = origin;
+    let finished = false;
     const move = (moveEvent: PointerEvent) => {
       const dx = moveEvent.clientX - start.x;
       const dy = moveEvent.clientY - start.y;
@@ -229,10 +286,24 @@ export function useInfiniteCanvas<Node extends InfiniteCanvasNode>(options: UseI
       next = { x: origin.x + dx / zoom, y: origin.y + dy / zoom };
       setLiveNode({ id, point: next });
     };
-    const end = () => {
+    const detach = () => {
       element.removeEventListener("pointermove", move);
       element.removeEventListener("pointerup", end);
       element.removeEventListener("pointercancel", end);
+      element.removeEventListener("lostpointercapture", end);
+      safeReleasePointerCapture(element, pointerId);
+      if (activeGestureCleanup.current === abort) activeGestureCleanup.current = undefined;
+    };
+    const abort = () => {
+      if (finished) return;
+      finished = true;
+      detach();
+      setLiveNode(undefined);
+    };
+    const end = () => {
+      if (finished) return;
+      finished = true;
+      detach();
       setLiveNode(undefined);
       if (moved) options.onCommit({ positions: { ...options.positions, [id]: next } });
       else {
@@ -240,12 +311,15 @@ export function useInfiniteCanvas<Node extends InfiniteCanvasNode>(options: UseI
         options.onCommit({ selectedId: id });
       }
     };
+    activeGestureCleanup.current = abort;
     element.addEventListener("pointermove", move);
     element.addEventListener("pointerup", end);
     element.addEventListener("pointercancel", end);
+    element.addEventListener("lostpointercapture", end);
   };
 
   const onNodeKeyDown = (event: ReactKeyboardEvent<HTMLElement>, node: Node) => {
+    if (isInteractiveEventTarget(event.target, event.currentTarget)) return;
     if (event.key === "Enter" || (options.activateOnSpace === true && event.key === " ")) {
       event.preventDefault();
       options.onActivate(node);
@@ -268,7 +342,7 @@ export function useInfiniteCanvas<Node extends InfiniteCanvasNode>(options: UseI
   };
 
   const onViewportKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
-    if (event.target !== event.currentTarget) return;
+    if (isInteractiveEventTarget(event.target, event.currentTarget)) return;
     const delta = arrowDelta(event.key, event.shiftKey ? 240 : 60);
     if (delta !== undefined) {
       event.preventDefault();
@@ -296,6 +370,7 @@ export function useInfiniteCanvas<Node extends InfiniteCanvasNode>(options: UseI
     draggingId: liveNode?.id,
     zoomIn,
     zoomOut,
+    resetZoom,
     fitAll,
     resetLayout,
     startPan,

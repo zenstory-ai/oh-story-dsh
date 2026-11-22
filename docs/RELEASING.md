@@ -33,8 +33,8 @@ provenance. Once Trusted Publishing is verified, remove the long-lived
 1. Update the root and package versions, installation examples, and
    `CHANGELOG.md`.
 2. Run `pnpm verify:release` locally. Keep fresh packaged Chrome E2E runs on
-   the default DSH `0.2.2-rc.1` line, the `0.2.0-rc.2` compatibility line, and
-   the `0.2.2` trial line (`0.2.2-rc.3` via `pnpm test:dsh:next`, included in
+   the default DSH `0.2.2-rc.5` line, the `0.2.0-rc.2` compatibility line, and
+   the `0.2.2` trial line (`0.2.2-rc.5` via `pnpm test:dsh:next`, included in
    local `verify:release`); never claim support for a host line from peer
    ranges or unit tests alone.
 3. Merge the release PR into `main` once all four required CI checks pass, then
@@ -101,17 +101,16 @@ that requires investigation rather than overwriting published artifacts.
 Wait until npm serves the new version before announcing the release:
 
 ```bash
-VERSION=0.1.27
+VERSION=0.1.28
 npm view "@oh-story/dsh@$VERSION" version dist.integrity
-npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.2-rc.1 dsh plugin --profile web add "@oh-story/dsh@$VERSION"
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.2-rc.5 dsh plugin --profile web add "@oh-story/dsh@$VERSION"
 ```
 
-After the default `0.2.2-rc.1` smoke passes, repeat the isolated install and
-browser check on `@deepseek-ai/dsh@0.2.0-rc.2` and
-`@deepseek-ai/dsh@0.2.2-rc.3`; never mix DSH versions inside a single profile.
+After the default `0.2.2-rc.5` smoke passes, repeat the isolated install and
+browser check on `@deepseek-ai/dsh@0.2.0-rc.2`; never mix DSH versions inside a single profile.
 
 The GitHub Release tarball provides a registry-independent install path:
 
 ```bash
-npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.2-rc.1 dsh plugin --profile web add "https://github.com/zenstory-ai/oh-story-dsh/releases/download/v$VERSION/oh-story-dsh-$VERSION.tgz"
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.2-rc.5 dsh plugin --profile web add "https://github.com/zenstory-ai/oh-story-dsh/releases/download/v$VERSION/oh-story-dsh-$VERSION.tgz"
 ```

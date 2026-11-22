@@ -28,17 +28,79 @@ export function WorkbenchSettingsForm({ modes, onChange }: SettingsProps) {
     <section aria-label="模型与 API 配置说明">
       <h3>模型与 API</h3>
       <p>对话模型与 API 在 DSH 设置中管理。</p>
-      <p>图片、视频生成与配音使用各制作工具的供应商配置，不会自动复用对话模型。请按「制作详情」中的提示，在启动 DSH 的环境里配置；Agent 使用沙箱或远程环境时，需在对应执行环境配置。</p>
+      <p>图片、视频、配音与配乐使用各制作工具的供应商配置，不会自动复用对话模型。请按短剧或视频工作台「制作详情」中的提示，在启动 DSH 的环境里配置；Agent 使用沙箱或远程环境时，需在对应执行环境配置。</p>
     </section>
   </>;
 }
 
+export interface DialogBackdropEvent {
+  readonly target: unknown;
+  readonly detail?: number;
+  readonly clientX: number;
+  readonly clientY: number;
+}
+
+export function isDialogBackdropClick(
+  dialog: Pick<HTMLDialogElement, "getBoundingClientRect">,
+  event: DialogBackdropEvent
+): boolean {
+  if (event.target !== dialog) return false;
+  if (event.detail === 0 && event.clientX === 0 && event.clientY === 0) return false;
+  const rect = dialog.getBoundingClientRect();
+  const inside = rect.width > 0 && rect.height > 0
+    && event.clientX >= rect.left
+    && event.clientX <= rect.right
+    && event.clientY >= rect.top
+    && event.clientY <= rect.bottom;
+  return !inside;
+}
+
+export interface DialogBackdropGuard {
+  onPointerDown(dialog: Pick<HTMLDialogElement, "getBoundingClientRect"> | null, event: DialogBackdropEvent): void;
+  shouldCloseOnClick(dialog: Pick<HTMLDialogElement, "getBoundingClientRect"> | null, event: DialogBackdropEvent): boolean;
+}
+
+/**
+ * Require both `pointerdown` and `click` outside the dialog box before closing,
+ * so dragging a text selection from inside the modal onto the backdrop never dismisses it.
+ */
+export function createDialogBackdropGuard(): DialogBackdropGuard {
+  let pointerDownOnBackdrop = false;
+  return {
+    onPointerDown(dialog, event) {
+      pointerDownOnBackdrop = dialog !== null && isDialogBackdropClick(dialog, event);
+    },
+    shouldCloseOnClick(dialog, event) {
+      const startedOnBackdrop = pointerDownOnBackdrop;
+      pointerDownOnBackdrop = false;
+      return startedOnBackdrop && dialog !== null && isDialogBackdropClick(dialog, event);
+    }
+  };
+}
+
 export function WorkbenchSettingsPanel({ modes, onChange, onClose }: SettingsProps & { readonly onClose: () => void }) {
   const dialog = useRef<HTMLDialogElement>(null);
+  const backdropGuard = useRef(createDialogBackdropGuard());
   const titleId = useId();
-  useEffect(() => { dialog.current?.showModal(); }, []);
-  return <dialog ref={dialog} className="oh-workbench-settings" aria-labelledby={titleId} onClose={onClose}>
-    <header><h2 id={titleId}>工作台设置</h2><button type="button" aria-label="关闭工作台设置" onClick={() => { dialog.current?.close(); }}>×</button></header>
-    <WorkbenchSettingsForm modes={modes} onChange={onChange} />
+  useEffect(() => {
+    const element = dialog.current;
+    if (element !== null && !element.open) element.showModal();
+  }, []);
+  return <dialog
+    ref={dialog}
+    className="oh-workbench-settings"
+    aria-labelledby={titleId}
+    onClose={onClose}
+    onPointerDown={(event) => {
+      backdropGuard.current.onPointerDown(dialog.current, event);
+    }}
+    onClick={(event) => {
+      if (backdropGuard.current.shouldCloseOnClick(dialog.current, event)) dialog.current?.close();
+    }}
+  >
+    <div className="oh-workbench-settings-body">
+      <header><h2 id={titleId}>工作台设置</h2><button type="button" aria-label="关闭工作台设置" onClick={() => { dialog.current?.close(); }}>×</button></header>
+      <WorkbenchSettingsForm modes={modes} onChange={onChange} />
+    </div>
   </dialog>;
 }

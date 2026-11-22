@@ -16,7 +16,7 @@ metadata: {"openclaw":{"source":"https://github.com/zenstory-ai/oh-story-claudec
 
 - 未限定范围的独立去味，完整检查表达、用笔、故事三层（每层可无问题）；用户明确只查词句、某段或某类问题时按指定范围检查。
 - 普通去味可修表达、恢复已有承接、调整已定内容的详略；允许删除整段无功能内容，保护伏笔、因果、人物选择、情绪体验与揭露顺序。需要改变事件、动机、结果或新增成立条件时，按故事层区分设计提案和已授权重写；不得用新微动作、粗话、证据或冲突制造“真人感”。
-- 文风裁决只影响表达，不改变事实与信息边界。准确直写、心理活动、带立场的叙述和有功能的停顿均可保留，不机械套 Show/Tell、句长或删减率。
+- 文风裁决只影响表达，不改变事实与信息边界。准确直写、心理活动、带立场的叙述和有功能的停顿均可保留，不机械套「只展示不说明」、句长或删减率。
 - 用户只要检测或标注时，只出诊断，不修改正文。作者只说「去AI味」「这篇太AI了」时按改稿处理：表达与用笔直接改，故事层缺口给出方案，作者授权后再改。作者报告用白话、原文位置与阅读后果，不写检测类别名或脚本字段。
 - 长篇项目（书目录下有 `正文/` 与 `追踪/`）需要改变事件、关系、人物所知或结果时，即使作者已授权，也带着诊断和授权转 `/story-long-write`「修改第X章」执行，由那边备份原文并同步追踪；本流程只改表达、用笔和已有依据的承接。
 - 用户提供外部检测报告或 `/story-review` 的审稿结论时，只提取能对应到正文的具体问题作为本次范围。
@@ -42,12 +42,12 @@ metadata: {"openclaw":{"source":"https://github.com/zenstory-ai/oh-story-claudec
 本地正文先运行确定性预检，只报告不改写。下列命令均从本 skill 根执行，正文参数使用绝对路径：
 
 ```bash
-node scripts/check-ai-patterns.js --check --fail-on=blocking <正文文件...>
+node scripts/check-ai-patterns.js --check --fail-on=review_required <正文文件...>
 ```
 
-脚本命中是定位线索，零命中不代替三层扫描。每类提示归哪层、判断什么，见 expression.md 末节的索引；blocking 要改到净或按白名单保留（见 Phase 4），advisory 回到语境判断，不为归零机械改稿。完整词条仅在需要定位某种表达时查 [references/banned-words.md](references/banned-words.md)。
+脚本命中是定位线索，零命中不代替三层扫描。每类提示归哪层、判断什么，见 expression.md 末节的索引；风格规则高风险命中标为 `review_required`（重点复核：优先改写，确为剧情需要可说明理由保留或登记白名单），`advisory` 回到语境判断，不为归零机械改稿。完整词条仅在需要定位某种表达时查 [references/banned-words.md](references/banned-words.md)。
 
-文件前 6 行内、章节标题下有 `<!-- 去味:跳过 -->` 而作者这次要求去味时，照常处理：blocking 清零后删掉这一行；仍有剩余阻塞时保留，并在报告里告诉作者这章仍按跳过处理。
+文件前 6 行内、章节标题下有 `<!-- 去味:跳过 -->` 而作者这次要求去味时，照常处理：`review_required` 清零后删掉这一行；仍有剩余项时保留，并在报告里告诉作者这章仍按跳过处理。
 
 ### Phase 2：定位问题与确定改法
 
@@ -73,9 +73,9 @@ node scripts/check-ai-patterns.js --check --fail-on=blocking <正文文件...>
 
 ### Phase 3：按授权改稿
 
-> Agent 兼容性：只检查当前宿主：Claude `.claude/agents/{agent}.md`（`subagent_type`）、OpenCode `.opencode/agents/{agent}.md`（`subagent` 的 `agent`）、Codex `.codex/agents/{agent}.toml`（`agent_type`）、Antigravity `.agents/agents/agent-name/agent.md`（`invoke_subagent` + `TypeName`）。ZCode 查插件注册的同名角色，用 `Agent` 按实际 schema 派发，不要求 `.zcode/agents`。仅角色/工具不可用或返回未知 agent 时降级 solo/direct：白话告诉作者「这次由我直接改」，`Fallback: project custom agents unavailable -> solo` 原文只进报告最后一行「技术备注：」。
+> Agent 兼容性：只检查当前宿主：Claude `.claude/agents/{agent}.md`（`subagent_type`）、OpenCode `.opencode/agents/{agent}.md`（`subagent` 的 `agent`）、Codex `.codex/agents/{agent}.toml`（`agent_type`）、Antigravity `.agents/agents/agent-name/agent.md`（`invoke_subagent` + `TypeName`）。ZCode 查插件注册的同名角色，用 `Agent` 按实际 schema 派发，不要求 `.zcode/agents`。仅角色/工具不可用或返回未知 agent 时降级 solo/direct：白话告诉作者「这次由我直接改」，不另加技术备注行。
 >
-> Spawn 版本提示（不阻断 spawn）：先读取项目根 `.story-deployed` 的 `agents_version`。与本版 `agents_version: 44` 不一致时（标记缺失、字段缺失/非整数、小于或大于 44）**照常按当前宿主角色来源检查并 spawn**，同时用一句白话提示作者「写作助手是旧版，运行 /story-setup（ZCode 先更新插件）后新开会话」，`Notice: agents bundle 版本不匹配（项目 {N}，本版 44）` 原文写进技术备注行；大于 44 时额外提示先更新 oh-story-claudecode，不要用本地旧版 setup 降级覆盖。只有当前宿主角色缺失或不暴露调用能力时才降级 solo/direct，`Fallback: ... -> solo` 同样只进技术备注行。
+> 版本：先读取项目根 `.story-deployed` 的 `agents_version`。与本版 `agents_version: 45` 不一致时（标记缺失、字段缺失/非整数、小于或大于 45）**照常按当前宿主角色来源检查并 spawn**，只用一句白话提示作者「写作助手是旧版，运行 /story-setup（ZCode 先更新插件）后新开会话」；大于 45 时额外提示先更新 oh-story-claudecode，不要用本地旧版 setup 降级覆盖。只有当前宿主角色缺失或不暴露调用能力时才降级 solo/direct，对作者只说「这次由我直接改」，不另加技术备注行。
 
 改动文件前，先把原文复制到书内 `.story/work/去味原稿/{YYYYMMDD}_{原文件名}`，Phase 4 对照它回读；作者要撤回时用它恢复。
 
@@ -89,18 +89,18 @@ node scripts/check-ai-patterns.js --check --fail-on=blocking <正文文件...>
 
 对照改前原稿、已定设计和授权，回读完整场景：事实、人物选择、因果、情绪承接、空间方向和悬念是否保住，详写重心是否恢复，有没有引入新套式或新的剧情依据。三层各自复核；信息齐全却仍逐项播报、对白仍像提纲时，表达检查不算完成，脚本不能替代这一遍。
 
-文件改稿落盘后先复扫：
+文件改稿保存后先复扫：
 
 ```bash
-node scripts/check-ai-patterns.js --check --fail-on=blocking <正文文件...>
+node scripts/check-ai-patterns.js --check --fail-on=review_required <正文文件...>
 node scripts/check-degeneration.js --check --fail-on=blocking <正文文件...>
 ```
 
-- 两个脚本只报告；退出 1 表示有 blocking，退出 2 是命令或文件错误。
-- 句式 blocking：保留叙事功能自然改写；作者明确选择的原句按文风裁决文件登记白名单；两样都做不到就列为剩余阻塞。破折号按功能改写，不留给标点脚本机械替换。advisory 按文风和语境判断，功能性写法可以保留并说明。
-- 退化 blocking（逐字复读、打转、截断、占位符或工程词泄漏）重新生成受损段，再核对已有事实；advisory 只作提示。
+- 两个脚本只报告；退出 1 表示有 `review_required`（句式）或 `blocking`（退化），退出 2 是命令或文件错误。
+- 句式 `review_required`：保留叙事功能自然改写；确认剧情需要或作者明确选择的原句可说明理由保留（长篇提交时传 `--ack <rule-id>:<理由>`）或登记白名单，不强迫改坏正文。破折号按功能改写，不留给标点脚本机械替换。advisory 按文风和语境判断，功能性写法可以保留并说明。
+- 退化 `blocking`（逐字复读、打转、截断、占位符或工程词泄漏）必须重新生成受损段，再核对已有事实；advisory 只作提示。
 
-语义改完、复扫没有 blocking 后再整理标点。整份文件的完整去味默认整理；只改指定段落或问题时不跑，在范围内人工整理，范围外问题只作提示：
+语义改完、复扫无硬阻断后再整理标点。整份文件的完整去味默认整理；只改指定段落或问题时不跑，在范围内人工整理，范围外问题只作提示：
 
 ```bash
 node scripts/normalize-punctuation.js <正文文件...>
@@ -129,7 +129,6 @@ node scripts/normalize-punctuation.js <正文文件...>
 
 {文件模式：给修改文件路径，只附 ≤200 字代表片段，不回全文；交互贴入且无文件路径的零散片段：给改后全文。}
 {有原稿备份时：改前原文留在 {备份路径}，想撤回告诉我。}
-技术备注：{仅确有降级、版本提示或未运行的检查时保留；否则删此行}
 ```
 
 ## 流程衔接

@@ -9,7 +9,32 @@
 `Removed` / `Fixed` / `Security`），正文为中文。收紧到会拒绝旧输入的改动记入 `Changed`。
 同步上游时写清上游版本号与提交，便于定位。
 
-## [Unreleased]
+## [0.1.28] - 2026-11-22
+
+### Added
+
+- **小说工作台阅读与导航体验升级**：正文预览与源码顶栏新增「← 上一章 / 下一章 →」快捷切章与底部章节导航条（支持根目录 `正文/` 与多书 `{书名}/正文/`）；桌面端新增可折叠左侧文件目录按钮；正文阅读与编辑采用 `42rem` 舒适版心并实时显示中英文字数与保存成功提示（`✓ 已保存`）。
+- **短剧工作台生产进度与画布过滤**：制作详情旁新增可点击的一行式进度条（剧本 · 设定 · 关键帧 · 视频 · 成片）；无限画布新增「全部 / 待准备 / 已生成」分段筛选器（未命中节点与连线自动柔和淡化）与多版本缩略图 `V1/V2` 角标；新增 `MUSIC-*` 配乐卡片与音频播放预览。
+- **互动游戏试玩错误日志与讨论入口**：预览沙箱新增运行期错误捕获桥接，支持累计最多 10 条去重错误、展开查看全部报错并一键「全部带去 Chat 修复」；预览状态栏新增「讨论试玩」入口。
+- **视频解说质检时间轴与新建引导**：成片与剪后片播放器下方新增质检标记轨（按时间戳定位 `fail`/`warn` 提示，点击直接跳转对应时间点）；项目选择器新增「+ 新建视频项目」入口，支持 `timeline.json` v3、`check.json` v1（`review_hints`）与 0.8.0 本地优先环境检查。
+- **欢迎引导 2×2 快速起步卡**：空白会话引导卡新增「写小说 / 编短剧 / 做互动游戏 / 剪视频解说」四方向一键填入对话入口，同时保留清晰的 `Standard` / `PTC` / `Minimal` 会话模式边界提示。
+
+### Changed
+
+- 同步 [Oh Story 0.11.0](https://github.com/zenstory-ai/oh-story-claudecode/releases/tag/v0.11.0)（`e5a8b98657c05ddb3d53b77d5afe696a63d79985`，`agents_version` 44 → 45，14 Skills、7 Roles）：核心写作、拆文、导入、审稿、发布准备与作者记忆脚本全面迁至零依赖 Node.js 18+（Python 3 仅用于长篇拆文可选关系图渲染 `render_relation_chart.py`）；写作门禁重构为「确定性硬底线 + 可确认放行的软提醒」，角色快照扩容至 64 KiB，退役三层灵感库。现有书稿、设定、追踪和作者记忆无需迁移。
+- 同步 [Drama Skills 0.13.0](https://github.com/zenstory-ai/drama-skills/releases/tag/v0.13.0)（`7fed9dfcd33c5a3134ff1b51709dd826488b5aab`，12 Skills）：确立软门禁架构与跨宿主可移植性，技能目录移除内置 `selftest.py` 与硬编码模型默认名（生图主入口改名 `openai-image`，保留 `gpt-image-2` 兼容别名，生图与配乐须显式传入 `parameters.model` 或 `OPENAI_IMAGE_MODEL` / `MINIMAX_MUSIC_MODEL`）；`/short-drama-edit` 新增 `--screen-text-mode auto|remotion|ffmpeg|off`（无 Node/Remotion 时普通 `字卡` 自动回退 `ffmpeg` ASS 烧录）与 `--overlay-renderer` 外置叠层协议，并打通 `MUSIC-*` 成片配乐条目全链路。
+- 同步 [video-recap-skills 0.8.0](https://github.com/zenstory-ai/video-recap-skills/releases/tag/v0.8.0)（`4ae6380a6a5a24199f2ecaf203ac4e38a3471eb5`，2 Skills）：架构瘦身为 6 支无状态原子 CLI（`probe.py` / `frames.py` / `transcribe.py` / `tts.py` / `render.py` / `check.py`）+ 3 支随包叶工具（`packaging.py` / `export_jianying.py` / `library.py`）与单支 `video-reference`（`analyze_reference.py`），全面转向本地优先的纯 Markdown 创作工作区（`BRIEF.md` / `MEDIA_NOTES.md` / `EDIT_PLAN.md` / `PROMO.md`）+ `timeline.json` v3 + `check.json` v1（`review_hints` 软门禁）；视频工作台同步支持 0.8.0 新工作区文稿与 `out/preview.mp4`、`out/final.mp4` 预览，同时保留既有 0.7.x 工程的只读兼容。若旧项目仍依赖 0.7.1 单体流水线脚本（`recap.py` 等），请固定使用插件 `0.1.27`。
+- 默认宿主更新到 npm `latest` / `next` 的 [DeepSeek Harness 0.2.2-rc.5](https://www.npmjs.com/package/@deepseek-ai/dsh/v/0.2.2-rc.5)（需要 Node.js 24.9+），配套 Cordis `4.1.0` / Schemastery `3.19.0`；兼容范围 `>=0.2.0-rc.2 <0.2.1-0 || >=0.2.1-alpha.1 <0.2.2-0 || >=0.2.2-alpha.2 <0.2.3-0` 不变（`0.2.3-alpha.1` 暂未纳入默认线）。
+- **DSH 0.2.2-rc.5 原生架构升级与双线兼容**：工作台 API 迁至 DSH `connection.fetch.register`（`/api/oh-story/*`，自动兼容 `0.2.0-rc.2` 的 `/oh-story/*`）；欢迎引导卡迁至官方 `conversation.hero.frame` 插槽（保留 `<0.2.2-rc.2` 兼容回退）；工作台样式独立打包为静态 `lib/workbench.css` 并通过 `webserver/index-inject` 注入与按需重试，客户端 JS 体积由 379 KB 降至 275 KB；会话工作台桥接改为轻量祖先卸载监听，避免在会话流式输出期间常驻 `document.body` 全树观察。
+
+### Fixed
+
+- 修复窄屏（`<620px` / `<720px`）下小说、短剧、游戏与视频工作台的网格列/行优先级冲突、短剧顶部工具栏滚动脱离、视频画布在 DSH `0.2.0-rc.2` 下被列宽拖动热区拦截点击、弹窗内边距区域误触发背景关闭、视频亮色主题对比度不足及长草稿删除后无法复制挽救等问题。
+- 修复 `oh_story_role` 在子会话释放时的并发竞态、`native-hooks` 对短篇 `正文.md` 与中文括号正常措辞的误判、`video-narrative` 丢弃 `duration: null` 预配音草稿条目，以及 Markdown 相对路径图片与反向代理挂载前缀的 URL 解析问题。
+
+### Security
+
+- 加固游戏试玩预览路由与工作区文件/媒体接口：预览令牌改为 12 小时分桶 HMAC 并绑定规范化 `Host`（12–24 小时过期、常量时间校验）；严格校验 `Host` authority 与 `previewContentSecurityPolicy`（覆盖 IPv6 `[::1]`，拒绝非裸 authority 注入）；回退 `/oh-story/*` 路由统一委托 `connection.admit` 并校验 `owner` 主体；拦截符号链接逃逸与点文件越界访问，为工作区遍历加入 `node_modules` 跳过与深度/数量上限，媒体 Range 响应改用定点分段读取并在客户端断开时主动取消流。
 
 ## [0.1.27] - 2026-11-17
 

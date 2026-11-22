@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { gamePreviewStatus, previewUrls, type GamePreviewObservation } from "../src/client/game-preview-state.js";
+import {
+  appendRuntimeError,
+  clearRuntimeError,
+  formatRuntimeErrorPrompt,
+  formatRuntimeErrorsPrompt,
+  gamePreviewStatus,
+  normalizeRuntimeError,
+  previewUrls,
+  type GamePreviewObservation
+} from "../src/client/game-preview-state.js";
 import { gameProjectTitle } from "../src/workspace-route.js";
 
 const settled: GamePreviewObservation = { frameLoaded: true, frameError: false, probe: "ok", building: false, pending: false, isolated: true };
@@ -32,16 +41,77 @@ describe("game preview status", () => {
   it("waits for the frame before claiming the build is loaded", () => {
     expect(gamePreviewStatus({ ...settled, frameLoaded: false, probe: "pending" })).toEqual({ tone: "loading", label: "正在载入预览…" });
   });
+
+  it("surfaces runtime errors even after iframe load and clears cleanly on retry", () => {
+    const failedStatus = gamePreviewStatus({ ...settled, runtimeError: "ReferenceError: player is not defined" });
+    expect(failedStatus.tone).toBe("error");
+    expect(failedStatus.label).toContain("运行报错");
+    expect(gamePreviewStatus({ ...settled, runtimeError: clearRuntimeError() })).toEqual({ tone: "ready", label: "预览已载入" });
+    expect(gamePreviewStatus({ ...settled, runtimeError: "boom", building: true }).tone).toBe("building");
+    expect(gamePreviewStatus({ ...settled, runtimeError: "boom", pending: true })).toEqual({ tone: "loading", label: "新版本已就绪 · 由你决定何时载入" });
+    expect(normalizeRuntimeError("  ")).toBeNull();
+    expect(normalizeRuntimeError(null)).toBeNull();
+    expect(normalizeRuntimeError({
+      type: "oh-story:game-preview-error",
+      message: "ReferenceError: player is not defined",
+      filename: "http://localhost:3180/app/main.js",
+      lineno: 42,
+      colno: 13
+    })).toBe("ReferenceError: player is not defined (http://localhost:3180/app/main.js:42:13)");
+    expect(normalizeRuntimeError({
+      type: "oh-story:game-preview-error",
+      message: "Resource failed to load: http://localhost:3180/app/missing.png",
+      filename: "http://localhost:3180/app/missing.png"
+    })).toBe("Resource failed to load: http://localhost:3180/app/missing.png");
+    expect(normalizeRuntimeError({
+      type: "oh-story:game-preview-error",
+      message: "Unhandled promise rejection"
+    })).toBe("Unhandled promise rejection");
+    expect(normalizeRuntimeError({ type: "oh-story:game-preview-error", message: "   " })).toBeNull();
+    expect(normalizeRuntimeError(["not an error"])).toBeNull();
+    expect(formatRuntimeErrorPrompt("雪夜渡", "TypeError: x")).toContain("雪夜渡");
+    expect(formatRuntimeErrorPrompt("雪夜渡", "TypeError: x")).toContain("TypeError: x");
+
+    // Multi-error runtime log deduplicates and caps at 10 (retaining newest).
+    let list: readonly string[] = [];
+    list = appendRuntimeError(list, null);
+    list = appendRuntimeError(list, "   ");
+    expect(list).toEqual([]);
+    list = appendRuntimeError(list, "Err 1");
+    expect(appendRuntimeError(list, "Err 1")).toBe(list);
+    for (let i = 2; i <= 12; i += 1) {
+      list = appendRuntimeError(list, `Err ${String(i)}`);
+    }
+    expect(list).toHaveLength(10);
+    expect(list[0]).toBe("Err 3");
+    expect(list.at(-1)).toBe("Err 12");
+
+    expect(formatRuntimeErrorsPrompt("雪夜渡", ["TypeError: x"])).toBe(formatRuntimeErrorPrompt("雪夜渡", "TypeError: x"));
+    const multiPrompt = formatRuntimeErrorsPrompt("雪夜渡", ["TypeError: x", "ReferenceError: y"]);
+    expect(multiPrompt).toContain("2 条运行报错");
+    expect(multiPrompt).toContain("1. TypeError: x");
+    expect(multiPrompt).toContain("2. ReferenceError: y");
+  });
 });
 
 describe("game preview URLs", () => {
-  it("frames the other loopback alias but probes the page's own origin, which the route trusts", () => {
+  it("frames the other loopback alias under both http and https while probing the page's own origin", () => {
     const urls = previewUrls("/oh-story/game-preview/s/p/index.html", "v1", 2, "http://127.0.0.1:3180");
     expect(urls.isolated).toBe(true);
     expect(new URL(urls.href).origin).toBe("http://localhost:3180");
     expect(new URL(urls.probeHref).origin).toBe("http://127.0.0.1:3180");
     expect(new URL(urls.href).search).toBe(new URL(urls.probeHref).search);
     expect(new URL(urls.href).searchParams.get("build")).toBe("v1");
+
+    const httpsFromIp = previewUrls("/oh-story/game-preview/s/p/index.html", "v2", 0, "https://127.0.0.1:8443");
+    expect(httpsFromIp.isolated).toBe(true);
+    expect(new URL(httpsFromIp.href).origin).toBe("https://localhost:8443");
+    expect(new URL(httpsFromIp.probeHref).origin).toBe("https://127.0.0.1:8443");
+
+    const httpsFromLocalhost = previewUrls("/oh-story/game-preview/s/p/index.html", "v2", 0, "https://localhost:8443");
+    expect(httpsFromLocalhost.isolated).toBe(true);
+    expect(new URL(httpsFromLocalhost.href).origin).toBe("https://127.0.0.1:8443");
+    expect(new URL(httpsFromLocalhost.probeHref).origin).toBe("https://localhost:8443");
   });
 
   it("is not isolated on a host without a loopback alias", () => {

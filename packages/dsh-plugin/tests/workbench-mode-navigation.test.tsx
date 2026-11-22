@@ -52,7 +52,7 @@ describe("WorkbenchModeTabs", () => {
 
 describe("narrow Chat entry", () => {
   it("hides the game and video Chat buttons where 制作/对话 owns the same state", () => {
-    expect(css("plugin.css")).toMatch(/\[data-oh-story-workbench="game"\]\[data-oh-story-layout="compact"\] \.oh-game-toolbar-actions \{ display: none; \}/u);
+    expect(css("plugin.css")).toMatch(/\[data-oh-story-workbench="game"\]\[data-oh-story-layout="compact"\] \.oh-game-chat-toggle \{ display: none; \}/u);
     expect(css("video-studio.css")).toMatch(/\[data-oh-story-workbench="video"\]\[data-oh-story-layout="compact"\] \.oh-video-chat-toggle \{ display:none; \}/u);
   });
 

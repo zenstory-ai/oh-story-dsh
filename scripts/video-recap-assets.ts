@@ -29,18 +29,12 @@ export function videoRecapUpstreamRoot(): string {
   return resolve(process.env.VIDEO_RECAP_UPSTREAM_DIR ?? join(repoRoot, "..", "video-recap-skills"));
 }
 
-// Upstream ships a standalone local dashboard (0.7.0's read-only 审片台: its own web server and UI over
-// run directories). The native 视频 tab owns that view in DSH, so the server, its dashboard/ package
-// and its static assets stay out. Listed per path: library.py and resources/ sit beside them but are
-// imported by the pipeline.
+// Upstream ships a standalone local dashboard (0.8.0's read-only review dashboard: zero-server HTML
+// builder + local 127.0.0.1 loopback server). The native 视频 tab owns that view in DSH, so the
+// dashboard script and its HTML asset stay out.
 export const videoRecapPlatformGlue: readonly string[] = [
-  "video-recap/scripts/dashboard_server.py",
-  "video-recap/scripts/dashboard/",
-  "video-recap/scripts/dashboard_data.py",
-  "video-recap/scripts/dashboard_io.py",
-  "video-recap/scripts/dashboard_runs.py",
-  "video-recap/scripts/dashboard_templates.py",
-  "video-recap/assets/dashboard/"
+  "video-recap/scripts/dashboard.py",
+  "video-recap/assets/dashboard.html"
 ];
 
 export async function currentVideoRecapFiles(): Promise<VideoRecapAssetManifest["files"]> {
@@ -61,7 +55,7 @@ export async function synchronizeVideoRecapAssets(): Promise<VideoRecapAssetMani
     filter: (path) => isPortableSourceAsset(path)
       && !matchesExcludedPrefix(portableRelative(sourceSkills, path), videoRecapPlatformGlue)
   });
-  for (const file of ["LICENSE", "README.md", "README.en.md", "CHANGELOG.md"]) {
+  for (const file of ["LICENSE", "README.md", "README_EN.md", "CHANGELOG.md"]) {
     await cp(join(source, file), join(videoRecapRoot, file));
   }
   const plugin = JSON.parse(await readFile(join(source, ".claude-plugin/plugin.json"), "utf8")) as { readonly version?: unknown };

@@ -1,7 +1,13 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { nativeBatchPrompt, nativeCompositionPrompt, nativeProductionPrompt } from "../src/client/production-prompts.js";
+import {
+  nativeBatchPrompt,
+  nativeCompositionPrompt,
+  nativeMusicProductionPrompt,
+  nativeProductionPrompt,
+  nativeVisualImagePromptRequest
+} from "../src/client/production-prompts.js";
 import { parseEpisodeProduction } from "../src/client/drama-production.js";
 import { createPendingJob, referencesForTarget, type ProductionMediaVersion } from "../src/client/production-runtime.js";
 import { dshDramaSkillContent } from "../src/skill-provider.js";
@@ -82,7 +88,7 @@ describe("DSH-native production prompts", () => {
     expect(batchPrompt).toContain("对应镜头 ID 与批次任务 ID batch-001");
     expect(batchPrompt).toContain("请为这 2 个镜头准备一份关键帧生成预览，先让我核对内容和成本，再决定是否开始生成。");
     expect(batchPrompt).toContain("## SHOT-EP001-002\n第二镜");
-    expect(batchPrompt).toContain("建议 adapter 契约：gpt-image-2");
+    expect(batchPrompt).toContain("建议 adapter 契约：openai-image");
     expect(batchPrompt).toContain("不得 confirm 或 run");
 
     const composition = createPendingJob({ id: "compose-001", targetId: episodeDirectory, kind: "composition", prompt: "合成" });
@@ -127,9 +133,13 @@ describe("DSH-native production prompts", () => {
     expect(prompt).toContain("文件名也不沿用原文件里的任务 ID");
     expect(prompt).not.toContain("原文件旁边的新文件");
     expect(prompt).toContain("把「来源」改指新文件");
-    expect(prompt).toContain("默认的硬字幕路线需要带 libass 的 ffmpeg");
-    expect(prompt).toContain("剪辑单里只要有「画面文字」行也必须要它");
-    expect(prompt).toContain("未同意就不写「画面文字」行");
+    expect(prompt).toContain("默认的硬字幕路线以及普通「字卡」的 ffmpeg 降级路线需要带 libass 的 ffmpeg");
+    expect(prompt).toContain("--screen-text-mode auto");
+    expect(prompt).toContain("--screen-text-mode ffmpeg");
+    expect(prompt).toContain("--screen-text-mode off");
+    expect(prompt).toContain("--overlay-renderer");
+    expect(prompt).not.toContain("剪辑单里只要有「画面文字」行也必须要它");
+    expect(prompt).not.toContain("未同意就不写「画面文字」行");
     expect(prompt).toContain("混入「音效」「配音」「环境声」行");
     expect(prompt).toContain("配音可用负起点做 J-cut，也可跨切点做 L-cut");
     expect(prompt).not.toContain("零依赖");
@@ -183,6 +193,28 @@ describe("DSH-native production prompts", () => {
     }
   });
 
+  it("routes unresolved VISUAL-* entries to /short-drama-image-prompts and prepares MUSIC-* without track_job", () => {
+    const visualPrompt = nativeVisualImagePromptRequest(production, {
+      id: "VISUAL-CHAR-JIANGCHEN",
+      title: "江辰",
+      path: `${episodeDirectory}/视觉设定.md`
+    });
+    expect(visualPrompt).toMatch(/^\/short-drama-image-prompts/u);
+    expect(visualPrompt).toContain("VISUAL-CHAR-JIANGCHEN");
+    expect(visualPrompt).toContain(`${episodeDirectory}/图片提示词.md`);
+    expect(visualPrompt).not.toContain("/short-drama-produce");
+
+    const musicPrompt = nativeMusicProductionPrompt(production, {
+      id: "MUSIC-EP001-01",
+      title: "监控室悬疑铺底",
+      prompt: "Dark minimalist suspense underscore."
+    });
+    expect(musicPrompt).toMatch(/^\/short-drama-produce/u);
+    expect(musicPrompt).toContain("MUSIC-EP001-01");
+    expect(musicPrompt).toContain("minimax-music");
+    expect(musicPrompt).toContain("不调用 oh_story_production track_job");
+  });
+
   it("adds explicit cross-episode image references without accepting videos as reference images", () => {
     const image: ProductionMediaVersion = {
       id: "workspace:ep2-image",
@@ -195,5 +227,58 @@ describe("DSH-native production prompts", () => {
     expect(referencesForTarget("SHOT-EP001-001", production, [], {}, [image, video], {
       "SHOT-EP001-001": [image.id, video.id]
     })).toEqual([image]);
+  });
+
+  it("passes canonical GROUP-* / MOTION-* source_entry for video production while keeping shot context", () => {
+    const groupedProduction = parseEpisodeProduction({
+      [`${episodeDirectory}/分镜.md`]: [
+        "## SHOT-EP001-001 · 抬头",
+        "- 时长：4s",
+        "## SHOT-EP001-002 · 转身",
+        "- 时长：4s",
+        "## SHOT-EP001-003 · 推门",
+        "- 时长：3s"
+      ].join("\n"),
+      [`${episodeDirectory}/视频提示词.md`]: [
+        "## MOTION-EP001-001 · 抬头",
+        "- 分镜：SHOT-EP001-001",
+        "### 可复制提示词",
+        "> Look up.",
+        "## MOTION-EP001-002 · 转身",
+        "- 分镜：SHOT-EP001-002",
+        "### 可复制提示词",
+        "> Turn around.",
+        "## MOTION-EP001-003 · 推门",
+        "- 分镜：SHOT-EP001-003",
+        "### 可复制提示词",
+        "> Push the door.",
+        "## GROUP-EP001-01 · 抬头接转身",
+        "- 成员：MOTION-EP001-001、MOTION-EP001-002",
+        "### 可复制提示词",
+        "> Continuous look-up into turn."
+      ].join("\n")
+    }, episodeDirectory);
+
+    const groupJob = createPendingJob({ id: "vid-group-1", targetId: "GROUP-EP001-01", kind: "video", prompt: "Continuous look-up into turn." });
+    const groupPrompt = nativeProductionPrompt(groupedProduction, groupJob, []);
+    expect(groupPrompt).toContain("投产对象（source_entry）：GROUP-EP001-01（对应分镜：SHOT-EP001-001、SHOT-EP001-002）");
+    expect(groupPrompt).toContain(`${episodeDirectory}/制作成果/GROUP-EP001-01`);
+
+    // Even if a bare SHOT-* id reaches nativeProductionPrompt for a video job, it resolves to GROUP-* / MOTION-*.
+    const shotVideoJob = createPendingJob({ id: "vid-shot-3", targetId: "SHOT-EP001-003", kind: "video", prompt: "Push the door." });
+    const motionPrompt = nativeProductionPrompt(groupedProduction, shotVideoJob, []);
+    expect(motionPrompt).toContain("投产对象（source_entry）：MOTION-EP001-003（对应分镜：SHOT-EP001-003）");
+    expect(motionPrompt).toContain(`${episodeDirectory}/制作成果/MOTION-EP001-003`);
+
+    const batchJob = createPendingJob({ id: "vid-batch-1", targetId: "BATCH-VIDEOS", kind: "video", prompt: "batch", expectedOutputs: 2 });
+    const batchPrompt = nativeBatchPrompt(groupedProduction, batchJob, [
+      { id: "SHOT-EP001-001", prompt: "Continuous look-up into turn." },
+      { id: "SHOT-EP001-002", prompt: "Continuous look-up into turn." },
+      { id: "MOTION-EP001-003", prompt: "Push the door." }
+    ]);
+    expect(batchPrompt).toContain("投产对象（source_entry）：GROUP-EP001-01、MOTION-EP001-003");
+    expect(batchPrompt).toContain("## GROUP-EP001-01（对应分镜：SHOT-EP001-001、SHOT-EP001-002）");
+    expect(batchPrompt).toContain("## MOTION-EP001-003（对应分镜：SHOT-EP001-003）");
+    expect(batchPrompt.match(/## GROUP-EP001-01/gu)).toHaveLength(1);
   });
 });

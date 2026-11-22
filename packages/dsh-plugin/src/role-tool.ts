@@ -58,6 +58,20 @@ export type OhStoryRoleSubagents = {
 
 const configuredRoleAgents = new WeakSet<Agent>();
 
+/**
+ * Filter requested role tools to names that are both visible to `agent` AND present
+ * in the global tool layer (never scope-local-only tools), because DSH's
+ * `tools.restrict({ allow })` throws if `allow` contains any non-inherited tool name.
+ */
+function restrictableRoleTools(
+  tools: { get?(name: string, scope?: Agent): unknown } | undefined,
+  agent: Agent | undefined,
+  requested: readonly string[]
+): readonly string[] {
+  if (typeof tools?.get !== "function") return requested;
+  return requested.filter((name) => tools.get!(name) !== undefined && tools.get!(name, agent) !== undefined);
+}
+
 function configureRoleAgent(agent: Agent, role: OhStoryRoleName, persona: string, allow: readonly string[]): void {
   if (configuredRoleAgents.has(agent)) return;
   const systemPrompt = agent.ctx.get("systemPrompt");
@@ -68,7 +82,7 @@ function configureRoleAgent(agent: Agent, role: OhStoryRoleName, persona: string
     order: systemPrompt.getSectionOrder("DEPLOYMENT_PERSONA_PREFIX"),
     text: persona
   });
-  tools.restrict({ allow });
+  tools.restrict({ allow: restrictableRoleTools(tools, agent, allow) });
   markOhStoryRoleSession(agent.session, role);
   configuredRoleAgents.add(agent);
 }
@@ -171,8 +185,7 @@ export async function createOhStoryRoleTool(
       if (exec.agent === undefined) throw new Error("oh_story_role requires a calling DSH Agent.");
       const persona = personas.get(args.role);
       if (persona === undefined) throw new Error(`Oh Story Role ${args.role} is not bundled.`);
-      const allowed = roleToolFilter(args.role).allow.filter((name) =>
-        exec.agent?.ctx.tools.get(name, exec.agent) !== undefined);
+      const allowed = restrictableRoleTools(exec.agent.ctx.tools, exec.agent, roleToolFilter(args.role).allow);
       const runtime = subagents ?? exec.agent.ctx.get("subagents");
       if (runtime === undefined) throw new Error("oh_story_role requires the DSH subagent runtime.");
       const run = await startRole(runtime, args.role, {
@@ -210,6 +223,7 @@ export async function registerOhStoryRoleTool(context: Context): Promise<void> {
     createOhStoryReferenceTool()
   ]);
   const definition = await createOhStoryRoleTool(context.subagents, personas);
+  if (context.fiber?.uid === null) return;
   context.tools.register(referenceDefinition);
   context.tools.guard(bundledReferenceGuard(referenceDefinition, context.tools));
   if ("startActivation" in context.subagents) {
@@ -229,7 +243,7 @@ export async function registerOhStoryRoleTool(context: Context): Promise<void> {
       const persona = personas.get(role);
       if (persona === undefined) return;
       const tools = agent.ctx.get("tools");
-      const allow = roleToolFilter(role).allow.filter((tool) => tools?.get(tool, agent) !== undefined);
+      const allow = restrictableRoleTools(tools, agent, roleToolFilter(role).allow);
       configureRoleAgent(agent, role, persona, allow);
     });
   }
