@@ -14,6 +14,7 @@ jobs:
   credential-preflight:
     name: Credential preflight
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
       available: ${{ steps.credential.outputs.available }}
     env:
@@ -58,6 +59,7 @@ jobs:
       - deepseek
     if: ${{ always() }}
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Report execution outcome
         env:
