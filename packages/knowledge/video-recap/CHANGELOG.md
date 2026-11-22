@@ -10,6 +10,46 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-11-21
+
+**架构级瘦身与通用化重构版本**：`video-recap-skills` 从 24,207 行 / 99 文件的重型中文短剧垂直流水线框架，彻底重构为 **4,978 行 / 14 文件（-79.4%）的通用、本地优先 AI 视频剪辑与解说技能包**。核心理念回归“**判断归宿主多模态 Agent，机械执行归极简无状态原子 CLI**”，围绕单一规范 `timeline.json` v3 总线协作，并引入 Remotion 现代电影杂志风透明动态包装、Fish Audio `s2.1-pro-free` 整篇连贯配音、硬/软门禁分离质检与 CI 防膨胀预算守卫。
+
+> **升级提示**：本版移除了旧版 `recap.py` / `understand.py` / `cut.py` / `validate.py` / `voiceover.py` / `assemble.py` 单体编排流水线与 50 份跨阶段 JSON 状态契约；若现有工作流仍依赖旧版编排脚本，请固定使用 `v0.7.1`。
+
+### Added
+
+- **6 支无状态核心原子 CLI（纯 Python 3.10+ 标准库 + `ffmpeg`/`ffprobe`）**：
+  - `probe.py`：多源媒体探测、切镜点（默认 `--scene-threshold 0.15`）与静音段扫描。
+  - `frames.py`：接触表网格、时间点抽帧与局部裁切放大，让宿主多模态 Agent 直接看图选镜。
+  - `transcribe.py`：宿主机优先语音转写（外挂/内嵌字幕 → 本机 Whisper → 可选远程 OpenAI 兼容 API → 纯音乐片干净返回 `unavailable`）。
+  - `tts.py`：严格离线本地引擎（`say`/`espeak-ng`/`espeak`）+ 可选插拔远程后端；Fish Audio 默认采用免费最新模型 **`s2.1-pro-free`**（`temperature=0.9`、`top_p=0.9`），支持 `--whole-article` 整篇一次合成与停顿 DP 切段、内联情绪标签（`[chuckle]`/`[sigh]`）保留、`spoken_text` 读音与字幕原文分离、SHA-256 内容缓存与 `--sync-subtitles` 自动同步字幕，实测真实时长且绝不变速挤压。
+  - `render.py`：多源 `timeline.json` v3 编译器，内建 CFR/BT.709 统一、`canvas.viewport.fit`（`contain|cover` + 逐镜 `focus` 构图）、静态 PNG 与透明通道动画视频（`.mov` ProRes 4444 / `.webm` VP9）叠层、闪帧保护、人声闪避混音、语义均衡双行字幕折行（默认去行尾标点 + `\fad(90,70)` 淡入）、两遍线性 `-14 LUFS / -1.5 dBTP` 响度闭环与 `--preview`/`--audio-only`/`--range` 局部重渲染。
+  - `check.py`：**硬门禁 / 软门禁分离体检**（`check.json` v1）：仅 100% 确定性物理损毁判 `fail`；黑屏/定格/死寂/低响度/底镜漏音与切边台词截断/字幕或旁白重叠一律降为非阻断 `warn` 并汇总到顶层 `review_hints[]` 提醒 Agent 复核（`render.py` 同样默认软告警，仅 `--strict` 才拒渲）。
+- **4 支单向消费 `timeline.json` 的配套叶工具**：
+  - `packaging.py`：新增 Remotion 透明动态包装工作流（`remotion-init` / `remotion-render`，内置原创无框现代杂志风双层叠排排版与 `drama-recap` 3:4 满画幅主题），保留幂等离线 PNG 主题与 `place-sfx` 防撞音效作为零依赖回退。
+  - `export_jianying.py`：纯下游 `timeline.json` v3 → 便携剪映/CapCut 草稿导出，新增原生 `audio.sfx` 轨与 `.mov`/`.webm` 动态视频叠层轨，共享 `_audio.ducking_keyframes` 闪避曲线。
+  - `dashboard.py`：`build` 生成零服务器单文件 `review.html`（含 `review_hints` 展示），`serve` 提供只读回环多项目与素材库审片台（HTTP `206` Range 流式播放）。
+  - `library.py`：扁平可扩展 `catalog.json`、面向 `timeline.json` v3 的频道预设合并、跨机可移植分析缓存与非阻塞版权/音色同意巡检。
+- **CI 硬性防膨胀守卫**：在 `tests/orchestrator/test_test_suite_architecture.py` 中锁死 Skill Markdown 字符预算（`SKILL.md <= 4,000`、`references/*.md <= 2,500`、全仓 `<= 22,000`）、运行时 Python 预算（单文件 `<= 550` 行、全仓 `<= 5,000` 行、单技能 `<= 20` 文件）、环境变量上限（`<= 25`）与核心到配套叶工具的单向导入隔离。
+
+### Changed
+
+- **全面转向通用、本地优先的创作范式**：解除中文短剧与单一云端厂商硬编码；开篇流程新增画幅比例与裁切方式前置确认；工艺文档沉淀“块状聚拢、克制切换（禁乒乓插话）”与 3:4 满画幅选镜铁律；创作方案收敛为人类可读 Markdown（`BRIEF.md`、`MEDIA_NOTES.md`、`EDIT_PLAN.md`、`PROMO.md`），彻底消除 `packaging_plan.json` 冲突。
+- **精简 `video-reference` 技能**：收敛为单支本地实测脚本 `analyze_reference.py`（314 行）与极简 `SKILL.md`，辅助 Agent 输出脱敏 Markdown `REFERENCE_NOTES.md`。
+- **重组测试与文档**：测试收敛为 `core` / `companions` / `reference` / `orchestrator` 四组隔离进程（106 项全绿），并全面同步 `docs/`、`README.md`、`README_EN.md`、`examples/`、`.claude-plugin/` 与 `tools/measure_subtitle.py`。
+
+### Fixed
+
+- **实片 dogfood 与发版逐模块审计修复**：修正 `_common.py::parse_fps("24")` 误吸附 `24000/1001` 及奇数宽高被提前抹平导致 `check.py` 漏检的问题；修复 `render.py --range` 被尾部 `-t` 覆盖、含单引号路径的 ASS 滤镜转义、全静音视频轨加旁白/BGM 时的 `anullsrc` 悬空端口崩溃与极短片段负 `t_out`；修复 `tts.py` 对 Fish 流式 WAV 头（`0`/`0xFFFFFFFF`）的误拒、`--measure-only` 跨目录/空文本处理、无 `ffmpeg` 环境透传合规 PCM16 WAV 及 `say`/`espeak-ng` 缺 `--` 选项分隔符；修复 Windows 下 `packaging.py` 调用 `npx.cmd` 与 `packaging.py`/`export_jianying.py` 子进程显式 UTF-8 解码、`export_jianying.py` 越界非循环 BGM 零时长段、`_subtitles.py` 省略小时的 WebVTT 时间码以及 `check.py` 对 `"audio": null` 的容错。
+
+### Security
+
+- **审片台 DOM XSS 与缓存脱敏加固**：`skills/video-recap/assets/dashboard.html` 全面改用纯 DOM API 构建节点（零 `innerHTML`），收紧 `mediaUrl()` 协议白名单并在 `dashboard.py` 转义 `<!--`，通过 CodeQL 零告警扫描；`library.py` 扩展密钥脱敏规则覆盖 `FISH_API_KEY`、`FISH_AUDIO_API_KEY`、`OPENAI_API_KEY`、`GROQ_API_KEY` 及通用 `*_API_KEY`/`*_TOKEN`/`*_SECRET`。
+
+### Removed
+
+- **移除旧版单体编排框架与主观启发式门禁**：删除 `recap.py`、`understand.py`、`cut.py`、`validate.py`、`voiceover.py`、`assemble.py`、`vlm.py`、`doctor.py`、`final_qc.py`、`lib.py`（149 键 `CONFIG`）、`{size, mtime_ns}` 清单锁、手写 PCM 拟音波形、硬编码抖音预设、`examples/resource-library/` 退休 v0.7 JSON 与 `video-reference` 的 523 行 R1–R8 JSON 校验链。
+
 ## [0.7.1] - 2026-11-15
 
 升级后请将原写入 `work_dir/packaging_plan.json` 的平台发布标题与封面看点备忘迁至 `work_dir/promo_copy.json`，`packaging_plan.json` 现仅用于画布视觉包装；未显式设置 `MIMO_MODEL` 时默认请求 `mimo-v2.6-flash`（旧 `mimo-v2.5` 已由服务端下线）。本版同时收束语境依赖型校验门禁、全面中文化动态创作简报，并修复实片制作中的短台词让口、声学谷值 ASR 分窗、同帧 VLM 去重与跨平台运行边界。

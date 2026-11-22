@@ -29,8 +29,6 @@ from collections.abc import Collection, Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
-OPENAI_MODEL = "gpt-image-2"
-MINIMAX_MUSIC_MODEL = "music-3.0"
 OPENAI_BASE_URL = "https://api.openai.com/v1"
 SEEDANCE_BASE_URL = "https://ark.cn-beijing.volces.com/api/v3"
 MINIMAX_BASE_URL = "https://api.minimax.io/v1"
@@ -365,7 +363,10 @@ def _prompt_with_reference_contract(
             if role != "reference_audio" or not isinstance(character, str) or not character.strip():
                 raise ValueError("reference audio character is invalid")
             # The source's explicit speaker wins over the free-form asset label.
-            label = f"{character.strip()}音色参考"
+            if language.startswith("zh"):
+                label = f"{character.strip()}音色参考"
+            else:
+                label = f"{character.strip()} voice reference"
         role_text = role.strip()
         values = {
             "order": index,
@@ -829,12 +830,44 @@ def _minimax_video_runtime_profile() -> tuple[
     return allowed_ratios, allowed_resolutions, duration_range
 
 
-def compile_gpt_image_2_payload(job: Mapping[str, Any]) -> dict[str, Any]:
-    """Compile an image job into GPT Image 2 generation/edit fields."""
+def _require_configured_model(
+    parameters: dict[str, Any],
+    *,
+    env_name: str,
+    explicit: str | None = None,
+    label: str,
+) -> str:
+    """Resolve mandatory model ID: parameters.model > explicit arg > env var.
+
+    Built-in adapters deliberately refuse to hardcode model versions so stale
+    provider IDs never ship silently.
+    """
+    raw_param = parameters.pop("model", None)
+    if raw_param is not None:
+        if not isinstance(raw_param, str) or not raw_param.strip():
+            raise ValueError(f"{label} model must be a non-empty string")
+        return raw_param.strip()
+    if explicit is not None:
+        if not isinstance(explicit, str) or not explicit.strip():
+            raise ValueError(f"{label} model must be a non-empty string")
+        return explicit.strip()
+    env_value = (os.environ.get(env_name) or "").strip()
+    if env_value:
+        return env_value
+    raise ValueError(
+        f"{label} model must be explicitly configured via parameters.model or {env_name}"
+    )
+
+
+def compile_openai_image_payload(
+    job: Mapping[str, Any], *, model: str | None = None
+) -> dict[str, Any]:
+    """Compile an image job into OpenAI Image (GPT Image) generation/edit fields."""
     prompt, parameters = _require_job(job, "image", max_outputs=16)
     parameters = _take(
         parameters,
         {
+            "model",
             "width",
             "height",
             "size",
@@ -843,6 +876,12 @@ def compile_gpt_image_2_payload(job: Mapping[str, Any]) -> dict[str, Any]:
             "moderation",
             "prompt_language",
         },
+    )
+    resolved_model = _require_configured_model(
+        parameters,
+        env_name="OPENAI_IMAGE_MODEL",
+        explicit=model,
+        label="OpenAI image",
     )
     prompt_language = _pop_prompt_language(parameters)
     prompt = _prompt_with_reference_contract(
@@ -883,9 +922,11 @@ def compile_gpt_image_2_payload(job: Mapping[str, Any]) -> dict[str, Any]:
             )
         ):
             raise ValueError("GPT Image size violates official dimension constraints")
-    if parameters.get("background") == "transparent":
-        raise ValueError("GPT Image 2 transparent background is unsupported")
-    if "background" in parameters and parameters["background"] not in {"auto", "opaque"}:
+    if "background" in parameters and parameters["background"] not in {
+        "auto",
+        "opaque",
+        "transparent",
+    }:
         raise ValueError("GPT Image background is invalid")
     if "quality" in parameters and parameters["quality"] not in {"auto", "low", "medium", "high"}:
         raise ValueError("GPT Image quality is invalid")
@@ -911,12 +952,19 @@ def compile_gpt_image_2_payload(job: Mapping[str, Any]) -> dict[str, Any]:
     ):
         raise ValueError("GPT Image references must be supported image files")
     return {
-        "model": OPENAI_MODEL,
+        "model": resolved_model,
         "prompt": prompt,
         "n": len(job["outputs"]),
         "output_format": output_format,
         **parameters,
     }
+
+
+def compile_gpt_image_2_payload(
+    job: Mapping[str, Any], *, model: str | None = None
+) -> dict[str, Any]:
+    """Backward-compatible alias for ``compile_openai_image_payload``."""
+    return compile_openai_image_payload(job, model=model)
 
 
 MINIMAX_SPEECH_EMOTIONS = {
@@ -995,12 +1043,28 @@ def compile_minimax_speech_payload(job: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-def compile_minimax_music_payload(job: Mapping[str, Any]) -> dict[str, Any]:
-    """Compile an audio job into the official MiniMax Music 3.0 JSON body."""
+def compile_minimax_music_payload(
+    job: Mapping[str, Any], *, model: str | None = None
+) -> dict[str, Any]:
+    """Compile an audio job into the official MiniMax Music JSON body."""
     prompt, parameters = _require_job(job, "music")
     parameters = _take(
         parameters,
-        {"lyrics", "sample_rate", "bitrate", "format", "lyrics_optimizer", "is_instrumental"},
+        {
+            "model",
+            "lyrics",
+            "sample_rate",
+            "bitrate",
+            "format",
+            "lyrics_optimizer",
+            "is_instrumental",
+        },
+    )
+    resolved_model = _require_configured_model(
+        parameters,
+        env_name="MINIMAX_MUSIC_MODEL",
+        explicit=model,
+        label="MiniMax music",
     )
     target_format = Path(job["outputs"][0]).suffix.casefold().lstrip(".")
     requested_format = parameters.pop("format", target_format)
@@ -1026,7 +1090,7 @@ def compile_minimax_music_payload(job: Mapping[str, Any]) -> dict[str, Any]:
     if bitrate not in {32000, 64000, 128000, 256000}:
         raise ValueError("unsupported MiniMax bitrate")
     body: dict[str, Any] = {
-        "model": MINIMAX_MUSIC_MODEL,
+        "model": resolved_model,
         "prompt": prompt,
         "stream": False,
         "output_format": "hex",
@@ -1088,12 +1152,12 @@ def _request_json(
     token: str,
 ) -> tuple[dict[str, Any], Mapping[str, str]]:
     data = None if body is None else json.dumps(body, ensure_ascii=False).encode("utf-8")
-    request = urllib.request.Request(url, data=data, method=method)
+    request = urllib.request.Request(url, data=data, method=method)  # noqa: S310  # HTTPS enforced by _base_url
     request.add_header("Authorization", f"Bearer {token}")
     if body is not None:
         request.add_header("Content-Type", "application/json")
     try:
-        with urllib.request.urlopen(request, timeout=180) as response:
+        with urllib.request.urlopen(request, timeout=180) as response:  # noqa: S310  # HTTPS enforced by _base_url
             raw = response.read(MAX_JSON_RESPONSE + 1)
             headers = dict(response.headers.items())
     except urllib.error.HTTPError as exc:
@@ -1455,7 +1519,7 @@ def _download(
     path = _output_root(job) / ("result" + Path(target).suffix.casefold())
     size = 0
     try:
-        with urllib.request.urlopen(url, timeout=180) as response, path.open("xb") as handle:
+        with urllib.request.urlopen(url, timeout=180) as response, path.open("xb") as handle:  # noqa: S310  # HTTPS checked above
             while chunk := response.read(1024 * 1024):
                 size += len(chunk)
                 if size > MAX_OUTPUT_BYTES:
@@ -1682,27 +1746,27 @@ def _poll_seedance(
 def _run_openai(job: Mapping[str, Any]) -> tuple[Path | list[Path], str | None]:
     if _collect_target(job) is not None:
         raise AdapterFailure(
-            "gpt-image-2 uses synchronous generation and cannot collect a prior task",
+            "openai-image uses synchronous generation and cannot collect a prior task",
             category="invalid_request",
             code="collect_not_supported",
             submitted=False,
-            detail="gpt-image-2 does not support collect",
+            detail="openai-image does not support collect",
         )
     token = _credential("OPENAI_API_KEY")
-    body = compile_gpt_image_2_payload(job)
+    body = compile_openai_image_payload(job)
     base = _base_url("OPENAI_BASE_URL", OPENAI_BASE_URL)
     references = _reference_paths(job)
     if references:
         encoded, content_type = _multipart(body, references)
-        request = urllib.request.Request(f"{base}/images/edits", data=encoded, method="POST")
+        request = urllib.request.Request(f"{base}/images/edits", data=encoded, method="POST")  # noqa: S310  # HTTPS enforced by _base_url
         request.add_header("Authorization", f"Bearer {token}")
         request.add_header("Content-Type", content_type)
         try:
-            with urllib.request.urlopen(request, timeout=300) as response:
+            with urllib.request.urlopen(request, timeout=300) as response:  # noqa: S310  # HTTPS enforced by _base_url
                 raw = response.read(MAX_JSON_RESPONSE + 1)
                 request_id = _request_id(dict(response.headers.items()))
         except urllib.error.HTTPError as exc:
-            raise _http_failure("gpt-image-2", exc) from exc
+            raise _http_failure("openai-image", exc) from exc
         except (TimeoutError, socket.timeout, urllib.error.URLError, OSError) as exc:
             if _is_timeout_error(exc):
                 raise AdapterFailure(
@@ -1734,7 +1798,7 @@ def _run_openai(job: Mapping[str, Any]) -> tuple[Path | list[Path], str | None]:
     else:
         result, headers = _request_json(
             f"{base}/images/generations",
-            provider="gpt-image-2",
+            provider="openai-image",
             body=body,
             token=token,
         )
@@ -1990,108 +2054,23 @@ def _poll_minimax_video(
     )
 
 
-def _selftest() -> None:
-    image = {
-        "modality": "image", "prompt": "portrait", "references": [],
-        "outputs": ["制作成果/a.png"], "parameters": {"width": 1024, "height": 1536},
-    }
-    video = {
-        "modality": "video", "prompt": "slow push in", "references": [],
-        "outputs": ["制作成果/a.mp4"], "parameters": {"duration": 5, "ratio": "9:16"},
-    }
-    music = {
-        "modality": "music", "prompt": "cinematic", "references": [],
-        "outputs": ["制作成果/a.mp3"], "parameters": {"lyrics": "[Verse]\nHello"},
-    }
-    speech = {
-        "modality": "tts", "prompt": "你们做了多久？", "references": [],
-        "outputs": ["制作成果/a.mp3"],
-        "parameters": {"model": "configured-speech-model", "voice_id": "a-preset"},
-    }
-    if compile_gpt_image_2_payload(image)["model"] != OPENAI_MODEL:
-        raise RuntimeError("GPT Image 2 self-test failed")
-    if compile_minimax_speech_payload(speech)["voice_setting"]["voice_id"] != "a-preset":
-        raise RuntimeError("MiniMax speech self-test failed")
-    seedance = compile_seedance_payload(
-        video,
-        model="configured-model",
-        allowed_ratios={"9:16"},
-        duration_range=(5, 10),
-    )
-    if seedance["model"] != "configured-model":
-        raise RuntimeError("Seedance model self-test failed")
-    if seedance.get("ratio") != "9:16" or seedance.get("duration") != 5:
-        raise RuntimeError("Seedance parameter self-test failed")
-    minimax_video = compile_minimax_h3_payload(
-        {**video, "parameters": {"duration": 6, "ratio": "9:16", "resolution": "768P"}},
-        model="configured-video-model",
-        allowed_ratios={"9:16"},
-        allowed_resolutions={"768P"},
-        duration_range=(4, 15),
-    )
-    if minimax_video["model"] != "configured-video-model":
-        raise RuntimeError("MiniMax video model self-test failed")
-    if minimax_video["duration"] != 6 or minimax_video["resolution"] != "768P":
-        raise RuntimeError("MiniMax video parameter self-test failed")
-    try:
-        compile_minimax_h3_payload(
-            {**video, "parameters": {"duration": 6, "resolution": "768P"}},
-            model="configured-video-model",
-            allowed_resolutions={"768P"},
-            duration_range=(4, 15),
-        )
-    except ValueError:
-        pass
-    else:
-        raise AssertionError("MiniMax text-to-video without a ratio was accepted")
-    compiled_music = compile_minimax_music_payload(music)
-    if compiled_music["model"] != MINIMAX_MUSIC_MODEL:
-        raise RuntimeError("MiniMax model self-test failed")
-    if compiled_music["output_format"] != "hex":
-        raise RuntimeError("MiniMax output self-test failed")
-    for invalid_image in (
-        {**image, "parameters": {"background": "transparent"}},
-        {**image, "parameters": {"input_fidelity": "high"}},
-        {**image, "parameters": {"size": "1023x1024"}},
-    ):
-        try:
-            compile_gpt_image_2_payload(invalid_image)
-        except ValueError:
-            pass
-        else:
-            raise AssertionError("invalid GPT Image payload was accepted")
-    invalid_reference = {**video, "references": ["clip.mp4"]}
-    try:
-        compile_seedance_payload(
-            invalid_reference,
-            model="configured-model",
-            reference_urls=["asset://asset-example-clip"],
-            reference_roles=["reference_image"],
-        )
-    except ValueError:
-        pass
-    else:
-        raise AssertionError("mismatched Seedance reference role was accepted")
-
-
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "provider",
-        nargs="?",
         choices=(
-            "seedance", "gpt-image-2", "minimax-music", "minimax-h3",
+            "seedance",
+            "openai-image",
+            "gpt-image-2",
+            "minimax-music",
+            "minimax-h3",
             "minimax-speech",
         ),
     )
-    parser.add_argument("--selftest", action="store_true")
     args = parser.parse_args(argv)
-    if args.selftest:
-        _selftest()
-        return 0
-    if args.provider is None:
-        parser.error("provider is required unless --selftest is used")
-    effective_provider: str = args.provider
+    effective_provider: str = (
+        "openai-image" if args.provider == "gpt-image-2" else args.provider
+    )
     try:
         raw_stdin: bytes | str = (
             sys.stdin.buffer.read()
@@ -2106,6 +2085,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             effective_provider = adapter_name
         runners = {
             "seedance": _run_seedance,
+            "openai-image": _run_openai,
             "gpt-image-2": _run_openai,
             "minimax-music": _run_minimax,
             "minimax-h3": _run_minimax_video,

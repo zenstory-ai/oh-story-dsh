@@ -579,7 +579,7 @@ describe("registered native hooks", () => {
       "draft 之前先按 story-long-write workflow-chapter 开头的初始化步骤",
       "references/tracking-initialization.md",
       "last_chapter=0 的初始化事务存书目录 .story/work/init.json",
-      "运行 scripts/tracking_commit.py init，再运行 tracking_commit.py check，通过后删掉 init.json",
+      "运行 scripts/tracking_commit.js init，再运行 tracking_commit.js check，通过后删掉 init.json",
       "story-import 的「旧追踪项目迁移」"
     ]) expect(fresh).toContain(step);
 
@@ -618,8 +618,8 @@ describe("registered native hooks", () => {
       "每次写入正文都会出现这条提醒，一章写到一半时也会",
       "不是作者的新写作要求",
       "等本章写完收尾时再提交追踪",
-      "scripts/tracking_commit.py draft",
-      "scripts/storyctl.py chapter commit",
+      "scripts/tracking_commit.js draft",
+      "scripts/storyctl.js chapter commit",
       "chapter accept-current-length",
       "mode=revision",
       "追踪/_tracking-state.json",

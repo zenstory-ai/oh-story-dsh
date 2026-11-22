@@ -14,10 +14,21 @@ export function videoRange(range: { readonly start: number; readonly end: number
   return `${videoTime(range.start)}–${videoTime(range.end)}`;
 }
 export function videoDocumentTitle(artifact: VideoArtifactSummary): string {
-  return ({ "narration.json": "解说稿", "recap_story_plan.json": "故事与表达", "agent_narration_brief.md": "解说方向", "visual_audio_board.json": "画面与声音", "subtitles.srt": "字幕稿", "subtitles.ass": "字幕样式" } as Record<string, string>)[artifact.path.split("/").at(-1) ?? ""] ?? artifact.label;
+  return ({
+    "BRIEF.md": "需求与画幅",
+    "MEDIA_NOTES.md": "素材笔记",
+    "EDIT_PLAN.md": "剪辑与旁白方案",
+    "PROMO.md": "宣发文案",
+    "narration.json": "解说稿",
+    "recap_story_plan.json": "故事与表达",
+    "agent_narration_brief.md": "解说方向",
+    "visual_audio_board.json": "画面与声音",
+    "subtitles.srt": "字幕稿",
+    "subtitles.ass": "字幕样式"
+  } as Record<string, string>)[artifact.path.split("/").at(-1) ?? ""] ?? artifact.label;
 }
 export function videoCreativeDocuments(project: VideoProject): readonly VideoArtifactSummary[] {
-  const order = ["narration.json", "recap_story_plan.json", "agent_narration_brief.md", "visual_audio_board.json", "subtitles.srt", "subtitles.ass"];
+  const order = ["EDIT_PLAN.md", "BRIEF.md", "MEDIA_NOTES.md", "PROMO.md", "narration.json", "recap_story_plan.json", "agent_narration_brief.md", "visual_audio_board.json", "subtitles.srt", "subtitles.ass"];
   return project.artifacts.filter((artifact) => order.includes(artifact.path.split("/").at(-1) ?? "")).sort((a, b) => order.indexOf(a.path.split("/").at(-1) ?? "") - order.indexOf(b.path.split("/").at(-1) ?? ""));
 }
 

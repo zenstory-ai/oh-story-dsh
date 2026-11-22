@@ -11,6 +11,13 @@
 
 ## [Unreleased]
 
+### Changed
+
+- 同步 [Oh Story 0.11.0](https://github.com/zenstory-ai/oh-story-claudecode/releases/tag/v0.11.0)（`e5a8b98657c05ddb3d53b77d5afe696a63d79985`，`agents_version` 44 → 45，14 Skills、7 Roles）：核心写作、拆文、导入、审稿、发布准备与作者记忆脚本全面迁至零依赖 Node.js 18+（Python 3 仅用于长篇拆文可选关系图渲染 `render_relation_chart.py`）；写作门禁重构为「确定性硬底线 + 可确认放行的软提醒」，角色快照扩容至 64 KiB，退役三层灵感库。现有书稿、设定、追踪和作者记忆无需迁移。
+- 同步 [Drama Skills 0.13.0](https://github.com/zenstory-ai/drama-skills/releases/tag/v0.13.0)（`7fed9dfcd33c5a3134ff1b51709dd826488b5aab`，12 Skills）：确立软门禁架构与跨宿主可移植性，技能目录移除内置 `selftest.py` 与硬编码模型默认名（生图主入口改名 `openai-image`，保留 `gpt-image-2` 兼容别名，生图与配乐须显式传入 `parameters.model` 或 `OPENAI_IMAGE_MODEL` / `MINIMAX_MUSIC_MODEL`）；`/short-drama-edit` 新增 `--screen-text-mode auto|remotion|ffmpeg|off`（无 Node/Remotion 时普通 `字卡` 自动回退 `ffmpeg` ASS 烧录）与 `--overlay-renderer` 外置叠层协议，并打通 `MUSIC-*` 成片配乐条目全链路。
+- 同步 [video-recap-skills 0.8.0](https://github.com/zenstory-ai/video-recap-skills/releases/tag/v0.8.0)（`4ae6380a6a5a24199f2ecaf203ac4e38a3471eb5`，2 Skills）：架构瘦身为 6 支无状态原子 CLI（`probe.py` / `frames.py` / `transcribe.py` / `tts.py` / `render.py` / `check.py`）+ 3 支随包叶工具（`packaging.py` / `export_jianying.py` / `library.py`）与单支 `video-reference`（`analyze_reference.py`），全面转向本地优先的纯 Markdown 创作工作区（`BRIEF.md` / `MEDIA_NOTES.md` / `EDIT_PLAN.md` / `PROMO.md`）+ `timeline.json` v3 + `check.json` v1（`review_hints` 软门禁）；视频工作台同步支持 0.8.0 新工作区文稿与 `out/preview.mp4`、`out/final.mp4` 预览，同时保留既有 0.7.x 工程的只读兼容。若旧项目仍依赖 0.7.1 单体流水线脚本（`recap.py` 等），请固定使用插件 `0.1.27`。
+- 默认宿主更新到 npm `latest` / `next` 的 [DeepSeek Harness 0.2.2-rc.5](https://www.npmjs.com/package/@deepseek-ai/dsh/v/0.2.2-rc.5)（需要 Node.js 24.9+），配套 Cordis `4.1.0` / Schemastery `3.19.0`；兼容范围 `>=0.2.0-rc.2 <0.2.1-0 || >=0.2.1-alpha.1 <0.2.2-0 || >=0.2.2-alpha.2 <0.2.3-0` 不变（`0.2.3-alpha.1` 暂未纳入默认线）。
+
 ## [0.1.27] - 2026-11-17
 
 从 0.1.26 升级无需迁移项目。更早版本的短剧字段迁移要求仍见升级说明。

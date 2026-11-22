@@ -19,17 +19,17 @@
 
 ## 3. 运行环境与追踪
 
-实际执行 `node --version`；Python 按跨平台约定依次探测 `python3`、`python`、`py`，运行版本检查，确认是 Python 3 后使用该解释器。命令存在但不能执行不算通过。缺失时说明受影响的具体脚本；不自动安装依赖，不调用模型或联网鉴权。
+执行 `node --version` 确认 Node.js 18+（核心技能必需）；Python 3 可选（仅长篇拆文关系图 PNG 需要，按 `python3`→`python`→`py` 探测）。不可执行不算通过；缺失说明影响，不自动装依赖、不调模型或联网鉴权。
 
 若本次检查涉及长篇项目，按用户指定书目、`.active-book` 或已有 `追踪/` 确定书根；支持当前目录就是书根和 `长篇/{书名}/` 的布局。没有长篇项目则跳过追踪检查，不因此告警。
 
 使用已安装 `story-long-write` skill 的现有校验器：
 
 ```bash
-"$PYBIN" -B "{story-long-write skill目录}/scripts/tracking_commit.py" check --project "{书根}"
+node "{story-long-write skill目录}/scripts/tracking_commit.js" check --project "{书根}"
 ```
 
-`PYBIN` 是前面已成功探测的 Python 3。这个 `check` 校验追踪状态及自动生成的追踪文件；不要用「JSON 能解析」代替它。缺解释器、校验器或其依赖时报告未能完成检查，不另写简化校验器，也不调用 `init` / `commit` 修复。追踪问题沿用 `UPGRADING.md` 的迁移说明和现有追踪事务流程。
+这个 `check` 校验追踪状态及自动生成的追踪文件；不要用「JSON 能解析」代替它。缺 Node.js、校验器或其依赖时报告未能完成检查，不另写简化校验器，也不调用 `init` / `commit` 修复。追踪问题沿用 `UPGRADING.md` 的迁移说明和现有追踪事务流程。
 
 ## 4. 报告与后续
 

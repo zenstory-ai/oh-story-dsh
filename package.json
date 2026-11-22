@@ -41,7 +41,7 @@
     "verify:release": "pnpm verify && pnpm test:dsh && pnpm test:dsh:rc && pnpm test:dsh:next",
     "pack:release": "pnpm --filter @oh-story/dsh pack --pack-destination release",
     "test:dsh:rc": "tsx scripts/native-dsh-smoke.ts 0.2.0-rc.2",
-    "test:dsh:next": "tsx scripts/native-dsh-smoke.ts 0.2.2-rc.3"
+    "test:dsh:next": "tsx scripts/native-dsh-smoke.ts 0.2.2-rc.5"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

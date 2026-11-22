@@ -18,7 +18,7 @@ import {
 } from "./native-dsh-helpers.js";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const dshVersion = process.env.DSH_TEST_VERSION ?? process.argv[2] ?? "0.2.2-rc.1";
+const dshVersion = process.env.DSH_TEST_VERSION ?? process.argv[2] ?? "0.2.2-rc.5";
 /** ChatFlow may wrap rows in its slot; nested process rows do not belong to the main tail. */
 const CHAT_FLOW_ROW_SELECTOR = ":is([data-chat-flow-key], [data-chat-running]):not([data-step-process-content] *)";
 const demoFramesDirectory = process.env.OH_STORY_DEMO_FRAMES_DIR;
@@ -629,9 +629,10 @@ async function main(): Promise<void> {
       "package/lib/drama/skills/short-drama-produce/references/builtin-providers.md",
       "package/lib/novel-to-game/skills/novel-to-game/SKILL.md",
       "package/lib/novel-to-game/skills/game-qa/references/qa-contract.md",
-      "package/lib/video-recap/skills/video-recap/scripts/recap.py",
-      "package/lib/video-recap/skills/video-recap/scripts/recap_inspect.py",
-      "package/lib/video-recap/skills/video-reference/scripts/reference.py"
+      "package/lib/video-recap/skills/video-recap/scripts/probe.py",
+      "package/lib/video-recap/skills/video-recap/scripts/render.py",
+      "package/lib/video-recap/skills/video-recap/scripts/check.py",
+      "package/lib/video-recap/skills/video-reference/scripts/analyze_reference.py"
     ]) {
       if (!entries.has(required)) throw new Error(`Plugin tarball is missing ${required}.`);
     }
@@ -647,10 +648,10 @@ async function main(): Promise<void> {
         || /\.pyc$/u.test(entry)
         || /(?:^|\/)\.DS_Store$/u.test(entry)
         || /(?:^|\/)\.omc(?:\/|$)/u.test(entry)
-        || /copy-path-safety\.py$/u.test(entry)
+        || /copy-path-safety\.(?:py|js)$/u.test(entry)
         || /dashboard_server\.py$/u.test(entry)
         || /drama\/skills\/short-drama\/scripts\/creator_views\.py$/u.test(entry)
-        || /video-recap\/skills\/video-recap\/(?:scripts\/dashboard_[a-z]+\.py|scripts\/dashboard\/|assets\/dashboard\/)/u.test(entry)
+        || /video-recap\/skills\/video-recap\/(?:scripts\/dashboard\.py|assets\/dashboard\.html|scripts\/dashboard_[a-z]+\.py|scripts\/dashboard\/|assets\/dashboard\/)/u.test(entry)
         || /drama\/skills\/short-drama\/references\/lifecycle-commands\.md$/u.test(entry)) {
         throw new Error(`Plugin tarball retained forbidden content: ${entry}`);
       }

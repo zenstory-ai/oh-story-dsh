@@ -4,7 +4,7 @@
 
 使用当前运行时的 Agent 工具并行调用（Codex 原生子代理使用 `agent_type`，Claude Code 使用 `subagent_type`，OpenCode 使用 `subagent` 工具的 `agent` 参数，Antigravity 使用 `invoke_subagent` + 同名 `TypeName`，ZCode 用 `Agent` 派发注册角色；实际字段以当前 CLI 暴露的工具为准）。每个 Agent 不继承父对话上下文，prompt 必须自包含项目路径、审查范围、文件路径、必要摘录和统一 Findings Schema。结构、角色、文字三个视角的 prompt 还要内联审查基准包摘要与 Rubric Source，使子 Agent 能直接开审；prompt 不写本 Skill 的资料路径，各 reviewer 按自己模板里的读取表加载方法资料。consistency-checker 按自己的检查项核对事实，不带内容评分基准包。所有 reviewer 只读：不改任何文件，只输出结果。
 
-**追踪修订号**：长篇工程（有 `追踪/_tracking-state.json`）派 consistency-checker 前，先跑本 skill 的 `scripts/tracking_commit.py check --project {项目根}`，把输出的 `last_committed_chapter`、`state_revision` 填进它的 prompt；check 报错时这一栏写「check 失败，追踪文件不可信：{报错首行}」，报告「没法判断的地方」用白话写明追踪记录和正文对不上、这次没据它核对。短篇不填。
+**追踪修订号**：长篇工程（有 `追踪/_tracking-state.json`）派 consistency-checker 前，先跑本 skill 的 `scripts/tracking_commit.js check --project {项目根}`，把输出的 `last_committed_chapter`、`state_revision` 填进它的 prompt；若返回 `drift_warnings`（默认 exit 0，严格拦截加 `--strict`）需注明存在派生视图漂移、核对以 `_tracking-state.json` 为准，check 报错（exit 2）时这一栏写「check 失败，追踪文件不可信：{报错首行}」，报告「没法判断的地方」用白话写明追踪记录和正文对不上、这次没据它核对。短篇不填。
 
 **story-explorer 预查询（可选）**。仅当 `Effective Mode` 仍为 `full`/`lean`、当前允许 spawn 且当前运行时的 Agent 工具可用时，才可按 Phase 0 的当前宿主来源确认 `story-explorer` 可用并 spawn（ZCode 查插件注册角色）；Antigravity 检查 `.agents/agents/story-explorer/agent.md`，用 `invoke_subagent` + `TypeName: "story-explorer"`。`solo` 或子代理递归保护场景下不得 spawn，只能直接读取/检索。Prompt 示例：
 
@@ -96,7 +96,7 @@
   Rubric Source: file | embedded fallback
   去味判据：按你模板里的读取表完整读 expression、narrative-focus、story-logic 及 banned-words、deslop-gates，三层都审；方法里的改写动作仅用作建议，不落改
   检查项：
-  1. 词句信号（套话、陈词滥调、“像/好像/仿佛/如同”比喻堆叠、代偿情绪的无后果手眼/道具微动作）是否造成阅读损失？（直写情绪与角色算账有功能时保留）
+  1. 词句信号（套话、陈词滥调、“像/好像/仿佛/如同”比喻堆叠、代偿情绪的无后果手眼/道具微动作）是否影响读感？（直写情绪与角色算账有功能时保留）
   2. 表达是否机械（碎句/电报体）、视角是否越过信息边界、章末是否只剩重复总结？
   3. 格式是否合规（按戏剧单元/镜头自然断段、无空行、对话独立成行、主语节奏自然）？
   4. 标点节奏是否匹配语气/人物声线（有无通篇句号化、随机堆砌问号/感叹号、旁白未授权 `——` 或 `……` 刷屏；对话内 `——` 与有节制的 `……` 不算错）？
@@ -145,7 +145,7 @@
 2. 合并去重：按 `severity` 排序（S1 > S2 > S3 > S4），同级内按影响范围排序。
 3. **可选事实核查**：如果审查内容涉及需要验证的外部事实（历史年代、地理方位、职业细节等），只有在 `Effective Mode` 仍为 `full`/`lean`、当前不是子 Agent、当前运行时的 Agent 工具可用且按 Phase 0 的当前宿主来源确认 `story-researcher` 可用时（ZCode 查插件注册角色），才可额外 spawn；Antigravity 检查 `.agents/agents/story-researcher/agent.md`，用 `invoke_subagent` + `TypeName: "story-researcher"`。`solo`、missing/malformed/spawn failed 降级或子代理递归保护场景下不得 spawn，只能在报告中标记“需人工事实核查”。
 4. **分歧呈现**：如果 reviewer 间有冲突意见，明确呈现分歧让用户裁决；不要自动妥协。
-5. 按 SKILL.md「报告面向作者」输出综合审查报告：开头说明审查方式与范围，证据不足项写成作者能补的材料，执行路径只进技术备注行。
+5. 按 SKILL.md「报告面向作者」输出综合审查报告：开头说明审查方式与范围，证据不足项写成作者能补的材料，不另加技术备注行。
 
 ## 报告模板
 
@@ -179,5 +179,4 @@
 {仅分批审查：留到下一批回头看的问题 + 预计在哪几章兑现；否则删掉本节}
 
 下一步：{例如「说"改第12章"，我按必须改的几处动手」「AI 味集中的段落可以说"去 AI 味"」}
-技术备注：Mode {full | lean}→{full | lean} · Fallback none · Rubric {…} ({file | embedded})
 ```

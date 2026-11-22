@@ -374,6 +374,9 @@ export function preferredWorkbenchFile(
         /^game-adaptations\/[^/]+\/build\/app\/index\.html$/u,
         /\.md$/u
       ] : [
+        /^video-recaps\/[^/]+\/work\/EDIT_PLAN\.md$/u,
+        /^video-recaps\/[^/]+\/work\/BRIEF\.md$/u,
+        /^video-recaps\/[^/]+\/work\/timeline\.json$/u,
         /^video-recaps\/[^/]+\/work\/recap_story_plan\.json$/u,
         /^video-recaps\/[^/]+\/work\/narration\.json$/u,
         /^video-recaps\/[^/]+\/work\/assembly_manifest\.json$/u

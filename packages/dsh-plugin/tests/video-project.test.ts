@@ -97,6 +97,29 @@ describe("video recap project projection", () => {
     expect(summary.stage).toBe("voiceover");
   });
 
+  it("supports video-recap 0.8.0 Markdown workspace, timeline v3, check.json, and out/ previews", () => {
+    const root = "video-recaps/v08";
+    const files = [
+      file(`${root}/sources/source.mp4`, "media", "video/mp4"),
+      file(`${root}/work/BRIEF.md`),
+      file(`${root}/work/MEDIA_NOTES.md`),
+      file(`${root}/work/EDIT_PLAN.md`),
+      file(`${root}/work/PROMO.md`),
+      file(`${root}/work/timeline.json`),
+      file(`${root}/work/check.json`),
+      file(`${root}/work/out/preview.mp4`, "media", "video/mp4"),
+      file(`${root}/work/out/final.mp4`, "media", "video/mp4")
+    ];
+    for (const entry of files) expect(visibleVideoPath(entry.path), entry.path).toBe(true);
+    const summary = summarizeVideoProject(root, files);
+    expect(summary.state).toBe("ready");
+    expect(summary.stageLabel).toBe("成片已就绪");
+    expect(summary.previews.map((item) => item.role)).toEqual(["source", "edited", "final"]);
+    expect(summary.artifacts.map((artifact) => artifact.label)).toEqual(expect.arrayContaining([
+      "需求与画幅", "素材笔记", "剪辑与旁白方案", "宣发文案", "成片时间线", "成片体检"
+    ]));
+  });
+
   it("does not choose an ambiguous narration file for editing", () => {
     const root = "video-recaps/ambiguous";
     const summary = summarizeVideoProject(root, [

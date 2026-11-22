@@ -53,14 +53,14 @@ const BUILTIN_PROVIDERS_REFERENCE = "short-drama-produce/references/builtin-prov
 
 export const DRAMA_ADAPTERS: readonly DramaAdapterSpec[] = [
   {
-    name: "gpt-image-2",
-    label: "GPT Image 2",
+    name: "openai-image",
+    label: "OpenAI Image",
     modality: "image",
     requiredEnv: ["OPENAI_API_KEY"],
-    optionalEnv: ["OPENAI_BASE_URL"],
+    optionalEnv: ["OPENAI_IMAGE_MODEL", "OPENAI_BASE_URL"],
     timeoutSeconds: 600,
     reference: BUILTIN_PROVIDERS_REFERENCE,
-    referenceHeading: "GPT Image 2"
+    referenceHeading: "OpenAI 图片（GPT Image）"
   },
   {
     name: "seedance",
@@ -104,7 +104,7 @@ export const DRAMA_ADAPTERS: readonly DramaAdapterSpec[] = [
     label: "MiniMax Music",
     modality: "music",
     requiredEnv: ["MINIMAX_API_KEY"],
-    optionalEnv: ["MINIMAX_BASE_URL"],
+    optionalEnv: ["MINIMAX_MUSIC_MODEL", "MINIMAX_BASE_URL"],
     timeoutSeconds: 600,
     reference: BUILTIN_PROVIDERS_REFERENCE,
     referenceHeading: "MiniMax 音乐"
@@ -120,6 +120,11 @@ export const DRAMA_ADAPTERS: readonly DramaAdapterSpec[] = [
     referenceHeading: "MiniMax 语音"
   }
 ];
+
+/** Backward-compatible upstream provider CLI aliases (Drama Skills 0.13.0 keeps `gpt-image-2` for `openai-image`). */
+export const DRAMA_ADAPTER_ALIASES: Readonly<Record<string, string>> = {
+  "gpt-image-2": "openai-image"
+};
 
 /** Directory owned by this user: `/tmp` is world-writable on Linux, so the name carries the uid. */
 function generatedDirectory(temporaryRoot: string): string {
@@ -159,6 +164,12 @@ export function dramaAdapterConfigDocument(skillRoot: string, python = "python3"
   const adapters: Record<string, { readonly command: readonly string[]; readonly timeout_seconds: number }> = {};
   for (const adapter of DRAMA_ADAPTERS) {
     adapters[adapter.name] = { command: [python, script, adapter.name], timeout_seconds: adapter.timeoutSeconds };
+  }
+  for (const [alias, canonical] of Object.entries(DRAMA_ADAPTER_ALIASES)) {
+    const target = DRAMA_ADAPTERS.find((adapter) => adapter.name === canonical);
+    if (target !== undefined) {
+      adapters[alias] = { command: [python, script, alias], timeout_seconds: target.timeoutSeconds };
+    }
   }
   return { adapters };
 }

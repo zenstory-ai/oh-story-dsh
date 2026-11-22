@@ -5,6 +5,7 @@ import { basename, dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  DRAMA_ADAPTER_ALIASES,
   DRAMA_ADAPTER_CONFIG_ENV,
   DRAMA_ADAPTERS,
   dramaAdapterConfigDocument,
@@ -38,7 +39,8 @@ describe("bundled Drama media adapters", () => {
   it("names exactly the adapters the pinned upstream provider script accepts", async () => {
     const script = await readFile(join(dramaRoot, "short-drama-produce/scripts/provider_adapters.py"), "utf8");
     const choices = /choices=\(([^)]*)\)/u.exec(script)?.[1]?.match(/"([^"]+)"/gu)?.map((entry) => entry.replaceAll('"', ""));
-    expect(choices?.sort()).toEqual(DRAMA_ADAPTERS.map((adapter) => adapter.name).sort());
+    const expected = [...DRAMA_ADAPTERS.map((adapter) => adapter.name), ...Object.keys(DRAMA_ADAPTER_ALIASES)].sort();
+    expect(choices?.sort()).toEqual(expected);
   });
 
   it("documents each required and optional environment variable in the pinned upstream provider reference", async () => {
@@ -55,12 +57,19 @@ describe("bundled Drama media adapters", () => {
       const requiredLine = /^- \*\*必填环境变量\*\*：([^\r\n]+)/mu.exec(section)?.[1];
       const optionalLine = /^- \*\*可选环境变量\*\*：([^\r\n]+)/mu.exec(section)?.[1];
       const combinedLine = /^- \*\*环境变量\*\*：([^\r\n]+)/mu.exec(section)?.[1];
+      // Drama 0.13.0 documents `parameters.model` OR `<PROVIDER>_MODEL` inline on the same bullet;
+      // treat env vars preceded by `parameters.model` 或 as optional (since parameters.model satisfies them).
+      const modelEnv = (line: string | undefined): Set<string> => new Set(
+        [...(line ?? "").matchAll(/`parameters\.model`\s*或\s*`([A-Z][A-Z0-9]*_[A-Z0-9_]+)`/gu)].map((match) => match[1]!)
+      );
+      const requiredModelFallback = modelEnv(requiredLine);
+      const combinedModelFallback = modelEnv(combinedLine);
       const required = requiredLine === undefined
         ? [...(combinedLine ?? "").matchAll(/`([A-Z][A-Z0-9]*_[A-Z0-9_]+)`（必填）/gu)].map((match) => match[1]!)
-        : [...requiredLine.matchAll(envName)].map((match) => match[1]!);
+        : [...requiredLine.matchAll(envName)].map((match) => match[1]!).filter((name) => !requiredModelFallback.has(name));
       const optional = optionalLine === undefined
-        ? [...(combinedLine ?? "").matchAll(/`([A-Z][A-Z0-9]*_[A-Z0-9_]+)`（可选/gu)].map((match) => match[1]!)
-        : [...optionalLine.matchAll(envName)].map((match) => match[1]!);
+        ? [...[...(combinedLine ?? "").matchAll(/`([A-Z][A-Z0-9]*_[A-Z0-9_]+)`（可选/gu)].map((match) => match[1]!), ...combinedModelFallback]
+        : [...[...optionalLine.matchAll(envName)].map((match) => match[1]!), ...requiredModelFallback];
       expect(required.sort(), `${adapter.name} required`).toEqual([...adapter.requiredEnv].sort());
       expect(optional.sort(), `${adapter.name} optional`).toEqual([...adapter.optionalEnv].sort());
     }
@@ -132,23 +141,24 @@ from pathlib import Path
 tool = runpy.run_path(sys.argv[1])
 project = Path(sys.argv[5])
 for builtin_video in ("seedance", "minimax-h3"):
-    _, _, roles = tool["_load_adapter"](Path(sys.argv[2]), builtin_video, project)
+    _, _, roles, _ = tool["_load_adapter"](Path(sys.argv[2]), builtin_video, project)
     tool["_require_adapter_roles"]({"adapter": builtin_video, "reference_bindings": [{"role": "reference_audio"}]}, roles)
-_, _, image_roles = tool["_load_adapter"](Path(sys.argv[2]), "gpt-image-2", project)
-try:
-    tool["_require_adapter_roles"]({"adapter": "gpt-image-2", "reference_bindings": [{"role": "reference_audio"}]}, image_roles)
-except ValueError as error:
-    assert "reference_audio; nothing was submitted" in str(error), error
-else:
-    raise AssertionError("gpt-image-2 admitted reference_audio")
-_, _, undeclared_roles = tool["_load_adapter"](Path(sys.argv[3]), "custom", project)
+for image_adapter in ("openai-image", "gpt-image-2"):
+    _, _, image_roles, _ = tool["_load_adapter"](Path(sys.argv[2]), image_adapter, project)
+    try:
+        tool["_require_adapter_roles"]({"adapter": image_adapter, "reference_bindings": [{"role": "reference_audio"}]}, image_roles)
+    except ValueError as error:
+        assert "reference_audio; nothing was submitted" in str(error), error
+    else:
+        raise AssertionError(f"{image_adapter} admitted reference_audio")
+_, _, undeclared_roles, _ = tool["_load_adapter"](Path(sys.argv[3]), "custom", project)
 try:
     tool["_require_adapter_roles"]({"adapter": "custom", "reference_bindings": [{"role": "reference_audio"}]}, undeclared_roles)
 except ValueError as error:
     assert "reference_audio; nothing was submitted" in str(error), error
 else:
     raise AssertionError("undeclared custom profile admitted reference_audio")
-_, _, declared_roles = tool["_load_adapter"](Path(sys.argv[4]), "custom", project)
+_, _, declared_roles, _ = tool["_load_adapter"](Path(sys.argv[4]), "custom", project)
 tool["_require_adapter_roles"]({"adapter": "custom", "reference_bindings": [{"role": "reference_audio"}]}, declared_roles)
 print("builtin video admitted; non-video and undeclared custom rejected; explicit profile admitted")
 `;
@@ -160,7 +170,7 @@ print("builtin video admitted; non-video and undeclared custom rejected; explici
   it("reports presence per adapter without exposing values", () => {
     const statuses = dramaAdapterStatuses({ OPENAI_API_KEY: "sk-secret", MINIMAX_API_KEY: "mm", MINIMAX_VIDEO_MODEL: "", ARK_API_KEY: "ark" });
     expect(statuses.map((status) => [status.name, status.configured, status.missing])).toEqual([
-      ["gpt-image-2", true, []],
+      ["openai-image", true, []],
       ["seedance", false, ["SEEDANCE_MODEL"]],
       ["minimax-h3", false, ["MINIMAX_VIDEO_MODEL"]],
       ["minimax-music", true, []],

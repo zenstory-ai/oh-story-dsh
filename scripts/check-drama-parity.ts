@@ -63,9 +63,10 @@ for (const document of ["剧本.md", "视觉设定.md", "分镜.md", "图片提�
 // creative truth: lines, shot purpose and declared durations stay in the five documents.
 if (!routeSkill.includes("剪辑单.md")) throw new Error("Drama v0.7 route no longer declares the 剪辑单.md assembly stage.");
 const editSkill = await readFile(join(dramaRoot, "skills/short-drama-edit/SKILL.md"), "utf8");
+const editFormat = await readFile(join(dramaRoot, "skills/short-drama-edit/references/format-spec.md"), "utf8");
 if (!editSkill.includes("剧集/<EP>/剪辑单.md")) throw new Error("Drama v0.7 assembly document contract is missing.");
-if (!editSkill.includes("SHOT-...") || !editSkill.includes("IMG-...") || !editSkill.includes("- 配音 N：")) {
-  throw new Error("Drama v0.8.1 static-frame assembly contract is missing.");
+if (!editSkill.includes("SHOT-...") || !editSkill.includes("IMG-...") || !editFormat.includes("- 配音 N：")) {
+  throw new Error("Drama v0.13.0 static-frame assembly contract is missing.");
 }
 const reviewSkill = await readFile(join(dramaRoot, "skills/short-drama-review/SKILL.md"), "utf8");
 if (!reviewSkill.includes("审查/EP001-审查.md")) throw new Error("Drama v0.6 review Markdown contract is missing.");
@@ -73,20 +74,20 @@ const produceSkill = await readFile(join(dramaRoot, "skills/short-drama-produce/
 if (!produceSkill.includes("剧集/<EP>/制作成果/")) throw new Error("Drama v0.6 production output contract is missing.");
 const adapterContract = await readFile(join(dramaRoot, "skills/short-drama-produce/references/adapter-contract.md"), "utf8");
 if (
-  !produceSkill.includes("reference_audio") ||
+  !produceSkill.includes("reference_roles") ||
   !adapterContract.includes('"reference_audio"') ||
   !adapterContract.includes("character") ||
   !adapterContract.includes("reference_roles")
 ) {
-  throw new Error("Drama v0.8.1 reference-audio production contract is missing.");
+  throw new Error("Drama v0.13.0 reference-audio production contract is missing.");
 }
 const productionTool = await readFile(join(dramaRoot, "skills/short-drama-produce/scripts/production_tool.py"), "utf8");
 if (!productionTool.includes('AUDIO_REFERENCE_ROLE = "reference_audio"') || !productionTool.includes('"reference_roles"')) {
   throw new Error("Drama v0.8.1 reference-audio enforcement is missing.");
 }
 const creatorCheck = await readFile(join(dramaRoot, "skills/short-drama/scripts/creator_markdown_check.py"), "utf8");
-if (!creatorCheck.includes("不说话的人物不绑定参考音频") || !creatorCheck.includes("声音参考重复")) {
-  throw new Error("Drama v0.12.0 voice identity and control checks are missing.");
+if (!creatorCheck.includes("声音参考重复") || !creatorCheck.includes("没有声音参考行") || !creatorCheck.includes("MUSIC-")) {
+  throw new Error("Drama v0.13.0 voice identity and MUSIC-* checks are missing.");
 }
 const fixtureSources = JSON.parse(await readFile(join(import.meta.dirname, "demo-fixtures/sources.json"), "utf8")) as {
   readonly fixtures: readonly {
@@ -116,30 +117,31 @@ for (const expected of dramaFixture.files) {
     throw new Error(`Drama demo fixture ${expected.path} differs from its recorded upstream content.`);
   }
 }
-// v0.9.1 dropped the legacy JSON checkers, and with them the selftests of Skills that now ship
-// no scripts; every Skill that still ships scripts must still ship and pass its selftest.
-const scriptedSkills = [...new Set(manifest.files
-  .map(({ path }) => /^skills\/([^/]+)\/scripts\/[^/]+\.py$/u.exec(path)?.[1])
-  .filter((skill) => skill !== undefined))].sort();
-const selftests = manifest.files
+// v0.13.0 moved the 7 per-skill selftest.py scripts and fixture_adapter.py out of skills/ into
+// upstream tests/. Verify none leaked back into the bundled skills and compile every bundled script.
+const leakedTests = manifest.files
   .map(({ path }) => path)
-  .filter((path) => path.endsWith("/scripts/selftest.py"));
-const missingSelftests = scriptedSkills.filter((skill) => !paths.has(`skills/${skill}/scripts/selftest.py`));
-if (scriptedSkills.length === 0 || missingSelftests.length > 0) {
-  throw new Error(`Every Drama Skill with scripts needs a selftest; missing: ${missingSelftests.join(", ") || "all"}.`);
+  .filter((path) => path.endsWith("/scripts/selftest.py") || path.endsWith("/scripts/fixture_adapter.py"));
+if (leakedTests.length > 0) {
+  throw new Error(`Bundled Drama Skills retained upstream test scripts: ${leakedTests.join(", ")}.`);
+}
+const bundledScripts = manifest.files
+  .map(({ path }) => path)
+  .filter((path) => /^skills\/[^/]+\/scripts\/[^/]+\.py$/u.test(path));
+if (bundledScripts.length === 0) {
+  throw new Error("Bundled Drama Skills are missing runtime Python scripts.");
 }
 const python = await dramaPython();
-for (const selftest of selftests) {
-  // A selftest must never wait on a prompt (ffmpeg asks before overwriting); close its stdin and
-  // bound it, so a stuck one fails with its name instead of holding CI until the job times out.
-  const run = execFileAsync(python, ["-B", join(dramaRoot, selftest)], {
+try {
+  const compile = execFileAsync(python, ["-B", "-m", "py_compile", ...bundledScripts.map((script) => join(dramaRoot, script))], {
     encoding: "utf8",
-    timeout: 300_000,
+    timeout: 60_000,
     env: { ...process.env, PYTHONDONTWRITEBYTECODE: "1" }
   });
-  run.child.stdin?.end();
-  try { await run; }
-  catch (error) { throw new Error(`Drama selftest ${selftest} failed: ${String(error)}`, { cause: error }); }
+  compile.child.stdin?.end();
+  await compile;
+} catch (error) {
+  throw new Error(`Bundled Drama Python scripts failed syntax check: ${String(error)}`, { cause: error });
 }
 const source = dramaUpstreamRoot();
 if (process.env.DRAMA_SKILLS_UPSTREAM_DIR !== undefined && (await stat(source).catch(() => undefined))?.isDirectory()) {
@@ -151,4 +153,4 @@ if (process.env.DRAMA_SKILLS_UPSTREAM_DIR !== undefined && (await stat(source).c
     if (!upstream.equals(local)) throw new Error(`Drama demo fixture ${expected.path} differs from the pinned upstream example.`);
   }
 }
-process.stdout.write(`Drama parity OK: ${String(manifest.skills.length)} bundled skills and ${String(selftests.length)} selftests at ${manifest.upstream.commit.slice(0, 12)}.\n`);
+process.stdout.write(`Drama parity OK: ${String(manifest.skills.length)} bundled skills and ${String(bundledScripts.length)} compiled scripts at ${manifest.upstream.commit.slice(0, 12)}.\n`);

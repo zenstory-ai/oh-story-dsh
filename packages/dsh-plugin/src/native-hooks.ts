@@ -177,7 +177,7 @@ const TRACKING_STATE = "追踪/_tracking-state.json";
  * DSH's explicit import-window marker, relative to the book directory (the
  * workspace root in DSH's single-book layout). The story-import overlay has
  * the model create it before copying chapters and delete it once
- * `tracking_commit.py init` and `check` succeed.
+ * `tracking_commit.js init` and `check` succeed.
  */
 export const IMPORT_MARKER = ".story/work/导入中.md";
 
@@ -189,7 +189,7 @@ async function hasTrackingState(fs: StoryFileSystem, root: string, book: string,
  * Upstream story-import's long-form structure migration (structure-mapping-long.md)
  * creates 大纲/ and 追踪/ (Step 1) and copies the manuscript into 正文/ (Step 2)
  * long before it reverse-builds 细纲 (Step 10) and Phase 4 runs
- * `tracking_commit.py init`. Upstream recognises that window by
+ * `tracking_commit.js init`. Upstream recognises that window by
  * `拆文库/{basename(书目录)}`; in DSH's single-book layout the book is the
  * workspace root, so that key must equal the workspace folder name and rarely
  * does. DSH therefore also accepts its own marker, {@link IMPORT_MARKER}.
@@ -347,12 +347,12 @@ export function postWriteReminderText(path: string, options: PostWriteReminderOp
     "每次写入正文都会出现这条提醒，一章写到一半时也会；它不表示本章已经完成，也不是作者的新写作要求，继续当前步骤即可。",
     ...options.trackingUninitialized === true
       ? [
-          "本书还没有 追踪/_tracking-state.json。新书写第一章时，draft 之前先按 story-long-write workflow-chapter 开头的初始化步骤完整读取 references/tracking-initialization.md，构造 last_chapter=0 的初始化事务存书目录 .story/work/init.json，运行 scripts/tracking_commit.py init，再运行 tracking_commit.py check，通过后删掉 init.json；",
+          "本书还没有 追踪/_tracking-state.json。新书写第一章时，draft 之前先按 story-long-write workflow-chapter 开头的初始化步骤完整读取 references/tracking-initialization.md，构造 last_chapter=0 的初始化事务存书目录 .story/work/init.json，运行 scripts/tracking_commit.js init，再运行 tracking_commit.js check，通过后删掉 init.json；",
           "书里在本章之前已有正文时不要初始化，停下来改走 story-import 的「旧追踪项目迁移」。"
         ]
       : [],
-    "等本章写完收尾时再提交追踪：新章先用 story-long-write 的 scripts/tracking_commit.py draft 生成本章草稿，填好后执行 scripts/storyctl.py chapter commit（作者接受当前长度时用 chapter accept-current-length）；",
-    "修改已提交的章节按 workflow-revision 提交一次 mode=revision 事务；导入既有正文时由 story-import 在迁移后用 tracking_commit.py init 统一初始化。",
+    "等本章写完收尾时再提交追踪：新章先用 story-long-write 的 scripts/tracking_commit.js draft 生成本章草稿，填好后执行 scripts/storyctl.js chapter commit（作者接受当前长度时用 chapter accept-current-length）；",
+    "修改已提交的章节按 workflow-revision 提交一次 mode=revision 事务；导入既有正文时由 story-import 在迁移后用 tracking_commit.js init 统一初始化。",
     "追踪/_tracking-state.json 以及 上下文.md、角色状态/、伏笔.md、时间线/、逐章记录/ 等派生 Tracking 视图只由这些脚本写入，绝不手改。</oh-story-post-write>"
   ].join("");
 }

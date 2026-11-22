@@ -13,15 +13,15 @@ if (JSON.stringify(actualFiles) !== JSON.stringify(manifest.files)) {
 const forbiddenPortableAssets = manifest.files.filter(({ path }) =>
   path.includes("/__pycache__/") || path.endsWith(".pyc") || path.endsWith("/.DS_Store")
     || path === "skills/story-long-analyze.zip"
-    || path === "skills/story-setup/scripts/copy-path-safety.py"
+    || /^skills\/story-setup\/scripts\/copy-path-safety\.(?:py|js)$/u.test(path)
     || path === "skills/story/scripts/dashboard-server.mjs"
     || path.startsWith("skills/story-setup/references/antigravity/")
-    // Oh Story 0.8.2 per-host deploy steps; DSH replaces story-setup's deployment entirely.
+    // Oh Story 0.8.2+ per-host deploy steps; DSH replaces story-setup's deployment entirely.
     || /^skills\/story-setup\/references\/deploy-[a-z-]+\.md$/u.test(path)
-    || path === "skills/story-setup/scripts/deploy-antigravity-skills.py"
+    || /^skills\/story-setup\/scripts\/deploy-antigravity-skills\.(?:py|js)$/u.test(path)
     || path === "skills/story-setup/scripts/generate-antigravity-agents.mjs"
-    || path === "skills/story-setup/scripts/merge-antigravity-hooks.py"
-    || path === "skills/story-setup/scripts/merge-project-instructions.py");
+    || /^skills\/story-setup\/scripts\/merge-(?:antigravity-hooks|claude-settings|codex-hooks|hooks)\.(?:py|js)$/u.test(path)
+    || /^skills\/story-setup\/scripts\/merge-project-instructions\.(?:py|js)$/u.test(path));
 if (forbiddenPortableAssets.length > 0) {
   throw new Error(`Bundled knowledge retained upstream workspace/platform artifacts: ${forbiddenPortableAssets.map(({ path }) => path).join(", ")}`);
 }

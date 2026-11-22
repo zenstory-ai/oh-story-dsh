@@ -11,7 +11,7 @@
     {
       "kind": "drama",
       "repository": "https://github.com/zenstory-ai/drama-skills",
-      "commit": "37232f6d22e174c36e321d2e3a1a3ae871e7d602",
+      "commit": "7fed9dfcd33c5a3134ff1b51709dd826488b5aab",
       "sourcePath": "examples/creator-first/EP001",
       "localPath": "drama/让你管账号/剧集/EP001",
       "files": [

@@ -35,7 +35,7 @@ export function nativeProductionPrompt(
 只准备当前单项生产任务，不运行 Provider。
 - 任务 ID：${job.id}
 - 任务类型：${job.kind === "image" ? "图片/关键帧" : "镜头视频"}
-- 建议 adapter 契约：${job.kind === "image" ? "gpt-image-2" : "seedance"}（实际配置与模型以当前 DSH 运行环境为准）
+- 建议 adapter 契约：${job.kind === "image" ? "openai-image" : "seedance"}（实际配置与模型以当前 DSH 运行环境为准）
 - 投产对象：${job.targetId}
 - 创作文档目录：${production.episodeDirectory}
 - 工作台列出的补充参考（不是生产输入快照）：
@@ -63,7 +63,7 @@ export function nativeBatchPrompt(
 只准备当前批量生产任务，不运行 Provider。
 - 批次任务 ID：${job.id}
 - 任务类型：${job.kind === "image" ? "批量关键帧" : "批量镜头视频"}
-- 建议 adapter 契约：${job.kind === "image" ? "gpt-image-2" : "seedance"}（实际配置与模型以当前 DSH 运行环境为准）
+- 建议 adapter 契约：${job.kind === "image" ? "openai-image" : "seedance"}（实际配置与模型以当前 DSH 运行环境为准）
 - 创作文档目录：${production.episodeDirectory}
 - 输出根目录：${production.episodeDirectory}/制作成果
 - 每个输出文件名必须包含对应镜头 ID 与批次任务 ID ${job.id}。

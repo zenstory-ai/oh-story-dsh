@@ -48,6 +48,16 @@ const VIDEO_EXTENSIONS = new Set([".mp4", ".mov", ".mkv", ".webm"]);
 const SKIPPED_DIRECTORIES = new Set(["frames", "tts_segments", "asr_chunks", "chunks", "cache", "tmp", ".subtitle_measure"]);
 const VISIBLE_TEXT_FILES = new Set([
   "project.json",
+  // Video Recap 0.8.0 creative Markdown workspace + timeline v3 + check.json v1
+  "BRIEF.md",
+  "MEDIA_NOTES.md",
+  "EDIT_PLAN.md",
+  "PROMO.md",
+  "check.json",
+  "probe.json",
+  "transcript.json",
+  "measure.json",
+  // Legacy pre-0.8.0 artifacts (kept read-compatible for existing projects)
   "recap_run_manifest.json",
   "recap_phase.json",
   "agent_narration_brief.md",
@@ -80,6 +90,14 @@ const VISIBLE_TEXT_FILES = new Set([
 ]);
 
 const ARTIFACT_META: Readonly<Record<string, { readonly label: string; readonly kind: VideoArtifactSummary["kind"] }>> = {
+  "BRIEF.md": { label: "需求与画幅", kind: "plan" },
+  "MEDIA_NOTES.md": { label: "素材笔记", kind: "plan" },
+  "EDIT_PLAN.md": { label: "剪辑与旁白方案", kind: "script" },
+  "PROMO.md": { label: "宣发文案", kind: "plan" },
+  "check.json": { label: "成片体检", kind: "quality" },
+  "probe.json": { label: "媒体探测", kind: "manifest" },
+  "transcript.json": { label: "原声转写", kind: "subtitle" },
+  "measure.json": { label: "配音实测", kind: "quality" },
   "recap_run_manifest.json": { label: "运行清单", kind: "manifest" },
   "recap_phase.json": { label: "阶段账本", kind: "manifest" },
   "agent_narration_brief.md": { label: "解说 Brief", kind: "plan" },
@@ -131,7 +149,11 @@ export function visibleVideoPath(path: string): boolean {
   if (!VIDEO_EXTENSIONS.has(extension)) return false;
   return path.startsWith(`${root}/sources/`)
     || path.startsWith(`${root}/outputs/`)
+    || path.startsWith(`${root}/work/out/`)
+    || path.startsWith(`${root}/out/`)
     || name === "edited_source.mp4"
+    || name === "preview.mp4"
+    || name === "final.mp4"
     || /^recap_.+\.(?:mp4|mov|webm)$/iu.test(name);
 }
 
@@ -180,9 +202,19 @@ export function summarizeVideoProject(
   const assembly = record(metadata.assembly);
   const source = referencedMedia(projectFiles, manifest?.source_video)
     ?? projectFiles.find((file) => file.kind === "media" && file.path.startsWith(`${root}/sources/`) && file.mimeType?.startsWith("video/") === true);
-  const edited = projectFiles.find((file) => file.path.split("/").at(-1) === "edited_source.mp4");
+  const edited = projectFiles.find((file) => {
+    const name = file.path.split("/").at(-1);
+    return name === "edited_source.mp4" || name === "preview.mp4";
+  });
   const final = referencedMedia(projectFiles, assembly?.final_output)
-    ?? projectFiles.filter((file) => file.kind === "media" && (file.path.startsWith(`${root}/outputs/`) || /^recap_.+\.(?:mp4|mov|webm)$/iu.test(file.path.split("/").at(-1) ?? ""))).at(-1);
+    ?? projectFiles.filter((file) => {
+      const name = file.path.split("/").at(-1) ?? "";
+      return file.kind === "media" && (
+        file.path.startsWith(`${root}/outputs/`)
+        || name === "final.mp4"
+        || /^recap_.+\.(?:mp4|mov|webm)$/iu.test(name)
+      );
+    }).at(-1);
   const previews = [
     source === undefined ? undefined : previewAsset(source, "source", "原片"),
     edited === undefined ? undefined : previewAsset(edited, "edited", "剪后片"),
@@ -199,10 +231,14 @@ export function summarizeVideoProject(
   let nextArtifact: string | undefined;
   if (final !== undefined) {
     state = "ready"; stage = "complete"; stageLabel = "成片已就绪";
-  } else if (names.has("tts_meta.json")) {
+  } else if (names.has("tts_meta.json") || names.has("measure.json")) {
     state = "working"; stage = "assemble"; stageLabel = "正在合成";
-  } else if (names.has("narration.json")) {
+  } else if (names.has("timeline.json")) {
+    state = "working"; stage = "assemble"; stageLabel = "已建时间线";
+  } else if (names.has("narration.json") || names.has("EDIT_PLAN.md")) {
     state = "working"; stage = "voiceover"; stageLabel = "配音与合成";
+  } else if (names.has("BRIEF.md") || names.has("MEDIA_NOTES.md")) {
+    state = "working"; stage = "plan"; stageLabel = "方案与选镜";
   } else if (cutMode && edited !== undefined) {
     if (narrated) { state = "waiting"; stage = "narration"; stageLabel = "等待解说词"; nextArtifact = "narration.json"; }
     else { state = "working"; stage = "assemble"; stageLabel = "正在合成"; }
