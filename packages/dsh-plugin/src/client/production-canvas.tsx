@@ -1,4 +1,4 @@
-import { useMemo, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
+import { useMemo, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from "react";
 import type { DramaDocumentTarget, DramaEpisodeProduction } from "./drama-production.js";
 import type { CanvasPoint, ProductionJob, ProductionMediaVersion } from "./production-runtime.js";
 import { initialReadableViewport, type CanvasViewport } from "./canvas-viewport.js";
@@ -41,6 +41,25 @@ function selectCanvasVersion(
   return versions.find((version) => version.id === explicit) ?? versions.at(-1);
 }
 
+export type CanvasNodeFilter = "all" | "pending" | "ready";
+
+const CANVAS_FILTERS: ReadonlyArray<{ readonly value: CanvasNodeFilter; readonly label: string }> = [
+  { value: "all", label: "全部" },
+  { value: "pending", label: "待准备" },
+  { value: "ready", label: "已生成" }
+];
+
+/** Decide whether a canvas node matches the lightweight status filter (non-matching nodes dim, never unmount). */
+export function canvasNodeMatchesFilter(
+  node: Pick<ProductionCanvasNode, "kind">,
+  versions: readonly DramaMediaVersion[],
+  filter: CanvasNodeFilter
+): boolean {
+  if (filter === "all") return true;
+  if (filter === "ready") return versions.length > 0;
+  return node.kind !== "story" && versions.length === 0;
+}
+
 export interface ProductionCanvasProps {
   readonly production: DramaEpisodeProduction;
   readonly selectedId: string | undefined;
@@ -56,6 +75,7 @@ export interface ProductionCanvasProps {
   readonly jobs?: readonly ProductionJob[] | undefined;
   readonly selections?: Readonly<Record<string, string>> | undefined;
   readonly documents?: Readonly<Record<string, string>> | undefined;
+  readonly initialFilter?: CanvasNodeFilter | undefined;
   readonly onSelectionsChange?: ((value: Record<string, string>) => void) | undefined;
   readonly onPrepare?: ((targetId: string, kind: "image" | "video", prompt: string) => void | Promise<void>) | undefined;
   readonly onWriteImagePrompts?: ((node: ProductionCanvasNode) => void | Promise<void>) | undefined;
@@ -64,6 +84,7 @@ export interface ProductionCanvasProps {
 }
 
 export function ProductionCanvas(props: ProductionCanvasProps) {
+  const [filter, setFilter] = useState<CanvasNodeFilter>(props.initialFilter ?? "all");
   const nodes = useMemo(() => productionCanvasNodes(props.production, props.documents), [props.production, props.documents]);
   const edges = useMemo(
     () => productionCanvasEdges(props.production, new Set(nodes.map((node) => node.id))),
@@ -90,12 +111,36 @@ export function ProductionCanvas(props: ProductionCanvasProps) {
     }
   });
 
+  const nodeVersionsById = useMemo(
+    () => new Map(nodes.map((node) => [node.id, versionsForNode(node, versions)] as const)),
+    [nodes, versions]
+  );
+  const dimmedIds = useMemo(() => {
+    const set = new Set<string>();
+    if (filter === "all") return set;
+    for (const node of nodes) {
+      const nodeVersions = nodeVersionsById.get(node.id) ?? [];
+      if (!canvasNodeMatchesFilter(node, nodeVersions, filter)) set.add(node.id);
+    }
+    return set;
+  }, [filter, nodes, nodeVersionsById]);
+
   const selectedNode = nodes.find((node) => node.id === props.selectedId);
   const gridSize = 20 * canvas.viewport.zoom;
 
   return <section className="oh-story-canvas-shell" aria-label="短剧故事与镜头无限画布">
     <div className="oh-story-canvas-toolbar">
       <div className="oh-story-canvas-help" id="oh-story-canvas-help">拖动空白处平移 · 滚轮缩放 · 方向键移动卡片 · 双击打开原文</div>
+      <div className="oh-story-canvas-filter" role="group" aria-label="筛选画布节点">
+        {CANVAS_FILTERS.map((option) => (
+          <button
+            key={option.value}
+            type="button"
+            aria-pressed={filter === option.value}
+            onClick={() => { setFilter(option.value); }}
+          >{option.label}</button>
+        ))}
+      </div>
       <div className="oh-story-canvas-controls">
         <button type="button" aria-label="缩小画布" title="缩小 (-)" onClick={canvas.zoomOut}>−</button>
         <button type="button" className="oh-canvas-zoom-readout" aria-label="重置缩放到 100%" title="点击重置缩放到 100%" aria-live="polite" onClick={canvas.resetZoom}>{Math.round(canvas.viewport.zoom * 100)}%</button>
@@ -130,7 +175,8 @@ export function ProductionCanvas(props: ProductionCanvasProps) {
           const x1 = a.x + from.width;
           const bend = Math.max(60, Math.abs(b.x - x1) / 2);
           const active = edge.to === props.selectedId || edge.from === props.selectedId;
-          return <g data-edge-kind={edge.kind} key={`${edge.kind}:${edge.from}:${edge.to}`}>
+          const edgeDimmed = dimmedIds.has(edge.from) || dimmedIds.has(edge.to);
+          return <g data-edge-kind={edge.kind} data-dimmed={edgeDimmed ? "true" : undefined} key={`${edge.kind}:${edge.from}:${edge.to}`}>
             <path className="oh-story-canvas-edge" data-active={active || undefined} d={`M ${String(x1)} ${String(y1)} C ${String(x1 + bend)} ${String(y1)}, ${String(b.x - bend)} ${String(y2)}, ${String(b.x)} ${String(y2)}`} />
             <text className="oh-story-canvas-edge-label" data-active={active || undefined} x={(x1 + b.x) / 2} y={(y1 + y2) / 2 - 7}>{edge.label}</text>
           </g>;
@@ -141,8 +187,9 @@ export function ProductionCanvas(props: ProductionCanvasProps) {
           point={canvas.positions[node.id] ?? node.initial}
           selected={node.id === props.selectedId}
           dragging={canvas.draggingId === node.id}
+          dimmed={dimmedIds.has(node.id)}
           relations={edges.filter((edge) => edge.from === node.id || edge.to === node.id).length}
-          versions={versionsForNode(node, versions)}
+          versions={nodeVersionsById.get(node.id) ?? []}
           job={props.jobs?.findLast((job) => (
             job.targetId === node.id
             || (node.groupId !== undefined && job.targetId === node.groupId)
@@ -179,6 +226,7 @@ function CanvasNodeCard(props: {
   readonly point: CanvasPoint;
   readonly selected: boolean;
   readonly dragging: boolean;
+  readonly dimmed: boolean;
   readonly relations: number;
   readonly versions: readonly DramaMediaVersion[];
   readonly job: ProductionJob | undefined;
@@ -203,6 +251,7 @@ function CanvasNodeCard(props: {
     data-node-type={props.node.kind}
     data-selected={props.selected || undefined}
     data-dragging={props.dragging || undefined}
+    data-dimmed={props.dimmed ? "true" : undefined}
     style={{ left: props.point.x, top: props.point.y, width: props.node.width, minHeight: props.node.height, height: "auto" }}
     onKeyDown={(event) => {
       if (event.target !== event.currentTarget) return;
@@ -222,7 +271,7 @@ function CanvasNodeCard(props: {
     </div>}
     <div className="oh-story-canvas-node-copy">{props.node.description !== undefined && <p>{props.node.description}</p>}</div>
     <div className="oh-story-canvas-node-meta"><span className="oh-story-status-chip" data-status={canvasNodeStatusTone(props.node, selectedVersion, props.job)}><i aria-hidden />{canvasNodeStatus(props.node, selectedVersion, props.job)}</span>{props.versions.length > 0 && <span>{props.versions.length} 个版本</span>}</div>
-    {props.versions.length > 1 && <div className="oh-story-canvas-node-versions" aria-label={`${props.node.title} 成果版本`}>{props.versions.map((version, index) => <button
+    {props.versions.length > 1 && <div className="oh-story-canvas-node-versions" aria-label={`${props.node.title} 成果版本`} onPointerDown={stopPointer}>{props.versions.map((version, index) => <button
       type="button"
       key={version.id}
       aria-label={`选择 ${props.node.title} 版本 ${String(index + 1)}`}
@@ -230,7 +279,7 @@ function CanvasNodeCard(props: {
       data-selected={version.id === selectedVersion?.id || undefined}
       onPointerDown={stopPointer}
       onClick={(event) => { event.stopPropagation(); props.onSelectionsChange?.({ ...props.selections, [props.node.id]: version.id }); }}
-    ><MediaPreview version={version} /><span>V{String(index + 1)}</span></button>)}</div>}
+    ><MediaPreview version={version} /><span className="oh-story-canvas-version-badge">V{String(index + 1)}</span></button>)}</div>}
     <footer className="oh-story-canvas-node-actions">
       {canWriteImagePrompts
         ? <button type="button" onPointerDown={stopPointer} onClick={(event) => {

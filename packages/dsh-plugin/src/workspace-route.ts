@@ -82,7 +82,7 @@ export interface WorkspaceRouteOptions {
 /** Structural contract for DSH 0.2.2-rc.5 `@deepseek-ai/dsh-client-connection` exact Fetch routes. */
 interface ConnectionFetchRouteSpec {
   readonly path: string;
-  readonly methods: readonly ("GET" | "HEAD" | "POST" | "PUT")[];
+  readonly methods: readonly ("GET" | "HEAD" | "POST")[];
   readonly requestBody: "buffered" | "streaming";
   readonly fetch: (request: Request) => Promise<Response>;
 }
@@ -210,11 +210,20 @@ export function createPreviewTokenSecret(): Buffer {
   return randomBytes(32);
 }
 
+/** Reset the cached workbench stylesheet (for recovery and unit tests). */
+export function resetWorkbenchStylesheetCache(): void {
+  cachedWorkbenchStylesheet = undefined;
+  workbenchStylesheetInFlight = undefined;
+}
+
 /**
  * Load and cache the combined workbench stylesheet (`lib/workbench.css` in built packages,
  * falling back to concatenating `src/client/*.css` during direct source/test runs).
+ * Empty reads are never cached so transient startup/rebuild failures recover automatically.
  */
-export async function loadWorkbenchStylesheet(): Promise<WorkbenchStylesheetAsset> {
+export async function loadWorkbenchStylesheet(
+  readText: (file: string) => Promise<string> = (file) => readFile(file, "utf8")
+): Promise<WorkbenchStylesheetAsset> {
   if (cachedWorkbenchStylesheet !== undefined) return cachedWorkbenchStylesheet;
   workbenchStylesheetInFlight ??= (async () => {
     try {
@@ -225,7 +234,7 @@ export async function loadWorkbenchStylesheet(): Promise<WorkbenchStylesheetAsse
       ];
       let css: string | undefined;
       for (const candidate of candidates) {
-        css = await readFile(candidate, "utf8").catch(() => undefined);
+        css = await readText(candidate).catch(() => undefined);
         if (css !== undefined && css.trim() !== "") break;
       }
       if (css === undefined || css.trim() === "") {
@@ -235,13 +244,15 @@ export async function loadWorkbenchStylesheet(): Promise<WorkbenchStylesheetAsse
           resolve(here, "client/video-studio.css"),
           resolve(here, "client/tool-card.css")
         ];
-        const parts = await Promise.all(sourceFiles.map((file) => readFile(file, "utf8").catch(() => "")));
-        css = parts.filter((part) => part !== "").join("\n");
+        const parts = await Promise.all(sourceFiles.map((file) => readText(file).catch(() => "")));
+        css = parts.filter((part) => part.trim() !== "").join("\n");
       }
       const bytes = Buffer.from(css, "utf8");
       const version = createHash("sha256").update(bytes).digest("hex").slice(0, 16);
       const asset: WorkbenchStylesheetAsset = { css, bytes, version, etag: `"sha256-${version}"` };
-      cachedWorkbenchStylesheet = asset;
+      if (css.trim() !== "") {
+        cachedWorkbenchStylesheet = asset;
+      }
       return asset;
     } finally {
       workbenchStylesheetInFlight = undefined;
@@ -696,9 +707,13 @@ async function writeFetchResponseToNode(
   const cancel = (): void => { void reader.cancel().catch(() => undefined); };
   if (signal.aborted) cancel();
   else signal.addEventListener("abort", cancel, { once: true });
+  let cancelled = false;
   try {
     for (let item = await reader.read(); !item.done; item = await reader.read()) {
-      if (signal.aborted || response.destroyed) break;
+      if (signal.aborted || response.destroyed) {
+        cancelled = true;
+        break;
+      }
       if (!response.write(Buffer.from(item.value)) && !response.destroyed && !signal.aborted) {
         await new Promise<void>((accept) => {
           const done = (): void => {
@@ -709,10 +724,17 @@ async function writeFetchResponseToNode(
           response.once("drain", done);
           response.once("close", done);
         });
+        if (signal.aborted || response.destroyed) {
+          cancelled = true;
+          break;
+        }
       }
     }
   } finally {
     signal.removeEventListener("abort", cancel);
+    if (cancelled || response.destroyed || signal.aborted) {
+      await reader.cancel().catch(() => undefined);
+    }
     reader.releaseLock();
   }
   if (!response.writableEnded && !response.destroyed) response.end();
@@ -1175,8 +1197,8 @@ export function injectGamePreviewErrorBridge(html: string): string {
   return `${GAME_PREVIEW_ERROR_BRIDGE}${html}`;
 }
 
-function previewAssetSources(request: IncomingMessage): string {
-  const authority = request.headers.host;
+function previewAssetSources(request: IncomingMessage, protocol: "http:" | "https:" = "http:"): string {
+  const authority = normalizePreviewAuthority(request.headers.host, protocol);
   if (authority === undefined) return "'none'";
   const prefix = `${authority}/oh-story/game-preview/`;
   return `http://${prefix} https://${prefix}`;
@@ -1204,12 +1226,12 @@ export function previewContentSecurityPolicy(assets: string): string {
     "object-src 'none'",
     "base-uri 'none'",
     "form-action 'none'",
-    "frame-ancestors 'self' http://127.0.0.1:* http://localhost:* https://127.0.0.1:* https://localhost:*"
+    "frame-ancestors 'self' http://127.0.0.1:* http://localhost:* https://127.0.0.1:* https://localhost:* http://[::1]:* https://[::1]:*"
   ].join("; ");
 }
 
-function previewSecurityHeaders(request: IncomingMessage): Record<string, string> {
-  const assets = previewAssetSources(request);
+function previewSecurityHeaders(request: IncomingMessage, protocol: "http:" | "https:" = "http:"): Record<string, string> {
+  const assets = previewAssetSources(request, protocol);
   return {
     "cache-control": "no-store",
     "x-content-type-options": "nosniff",
@@ -1275,9 +1297,10 @@ async function sendPreviewAsset(
   request: IncomingMessage,
   response: ServerResponse,
   asset: ResolvedPreviewAsset,
-  signal: AbortSignal
+  signal: AbortSignal,
+  protocol: "http:" | "https:" = "http:"
 ): Promise<void> {
-  const security = previewSecurityHeaders(request);
+  const security = previewSecurityHeaders(request, protocol);
   if (asset.mimeType.startsWith("audio/") || asset.mimeType.startsWith("video/")) {
     const fetchResponse = await workspaceMediaResponse(
       request.method ?? "GET",
@@ -1358,6 +1381,10 @@ function assertAdmittedWorkspaceRequest(context: Context, request: IncomingMessa
         admission.rejection === 401 ? "需要通过 DSH 登录验证。" : "请求来源不受信任。"
       );
     }
+    const peer = admission.peer as { readonly principal?: { readonly kind?: unknown } } | undefined;
+    if (peer?.principal !== undefined && peer.principal.kind !== "owner") {
+      throw new WorkspaceHttpError(403, "仅工作区所有者可访问创作工作台接口。");
+    }
     return;
   }
   const webServer = context.get("webServer") as { readonly host?: string; readonly protocol?: "http:" | "https:" } | undefined;
@@ -1368,9 +1395,19 @@ function assertAdmittedWorkspaceRequest(context: Context, request: IncomingMessa
 
 async function handleStylesheetFetch(request: Request): Promise<Response> {
   const asset = await loadWorkbenchStylesheet();
+  if (asset.bytes.byteLength === 0) {
+    return new Response("/* workbench stylesheet unavailable */\n", {
+      status: 503,
+      headers: {
+        "content-type": "text/css; charset=utf-8",
+        "cache-control": "no-store",
+        "x-content-type-options": "nosniff"
+      }
+    });
+  }
   const url = new URL(request.url);
   const versionMatched = url.searchParams.get("v") === asset.version;
-  const cacheControl = versionMatched ? "private, max-age=31536000, immutable" : "private, max-age=3600";
+  const cacheControl = versionMatched ? "private, max-age=31536000, immutable" : "no-cache";
   const baseHeaders: Record<string, string> = {
     "content-type": "text/css; charset=utf-8",
     "cache-control": cacheControl,
@@ -1537,7 +1574,7 @@ async function handle(
         throw new WorkspaceHttpError(403, "请求来源不受信任。");
       }
       const asset = await resolvePreviewAsset(context, parsed, signal);
-      await sendPreviewAsset(request, response, asset, signal);
+      await sendPreviewAsset(request, response, asset, signal, protocol);
       return;
     }
 
@@ -1580,7 +1617,7 @@ function buildConnectionFetchRoutes(
     },
     {
       path: "/api/oh-story/file",
-      methods: ["GET", "POST", "PUT"],
+      methods: ["GET", "POST"],
       requestBody: "buffered",
       fetch: (request) => handleApiFetch(context, "file", request, options, previewSecret)
     },
@@ -1649,16 +1686,15 @@ export function registerWorkspaceRoute(context: Context, options: WorkspaceRoute
 
   if (typeof (context as { on?: unknown }).on === "function") {
     context.on("webserver/index-inject", (table) => {
-      const hasConnFetch = mountedOnConnection
-        || typeof (context.get("connection") as ConnectionAdmissionService | undefined)?.fetch?.register === "function";
-      const baseHref = hasConnFetch ? "api/oh-story/workbench.css" : "oh-story/workbench.css";
+      const apiPrefix = mountedOnConnection ? "api/oh-story" : "oh-story";
+      const baseHref = `${apiPrefix}/workbench.css`;
       const href = cachedWorkbenchStylesheet !== undefined
         ? `${baseHref}?v=${cachedWorkbenchStylesheet.version}`
         : baseHref;
       table.push({
         kind: "html",
         placement: "head",
-        html: `<link id="oh-story-workbench-css" rel="stylesheet" href="${href}">`
+        html: `<link id="oh-story-workbench-css" rel="stylesheet" href="${href}" data-oh-story-api-prefix="${apiPrefix}">`
       });
     });
   }

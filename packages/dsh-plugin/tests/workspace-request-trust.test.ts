@@ -133,4 +133,25 @@ describe("workspace browser trust", () => {
       origin: "https://evil.example"
     }), "studio.example.com")).toBe(false);
   });
+
+  it("rejects non-bare authorities and CSP/header-injection payloads in Host headers", () => {
+    const payloads = [
+      "127.0.0.1:3080/;script-src *",
+      "127.0.0.1:3080;script-src 'unsafe-eval'",
+      "127.0.0.1:3080/path",
+      "127.0.0.1:3080?x=1",
+      "127.0.0.1:3080#frag",
+      "user:pass@127.0.0.1:3080",
+      "@127.0.0.1:3080",
+      "127.0.0.1:3080\r\nX-Injected: 1",
+      "127.0.0.1:3080,evil.example"
+    ];
+    for (const host of payloads) {
+      expect(normalizePreviewAuthority(host), host).toBeUndefined();
+      expect(isTrustedWorkspaceRequest(request({ host }), []), host).toBe(false);
+      expect(isBoundPreviewAssetRequest(request({ host }), "127.0.0.1:3080"), host).toBe(false);
+      expect(isTrustedPreviewAssetRequest(request({ host, origin: "null" }), []), host).toBe(false);
+      expect(() => { assertTrustedWorkspaceAuthority(host); }, host).toThrow(/bare host\[:port\] authority/u);
+    }
+  });
 });

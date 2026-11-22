@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  appendRuntimeError,
   clearRuntimeError,
   formatRuntimeErrorPrompt,
+  formatRuntimeErrorsPrompt,
   gamePreviewStatus,
   normalizeRuntimeError,
   previewUrls,
@@ -69,6 +71,26 @@ describe("game preview status", () => {
     expect(normalizeRuntimeError(["not an error"])).toBeNull();
     expect(formatRuntimeErrorPrompt("雪夜渡", "TypeError: x")).toContain("雪夜渡");
     expect(formatRuntimeErrorPrompt("雪夜渡", "TypeError: x")).toContain("TypeError: x");
+
+    // Multi-error runtime log deduplicates and caps at 10 (retaining newest).
+    let list: readonly string[] = [];
+    list = appendRuntimeError(list, null);
+    list = appendRuntimeError(list, "   ");
+    expect(list).toEqual([]);
+    list = appendRuntimeError(list, "Err 1");
+    expect(appendRuntimeError(list, "Err 1")).toBe(list);
+    for (let i = 2; i <= 12; i += 1) {
+      list = appendRuntimeError(list, `Err ${String(i)}`);
+    }
+    expect(list).toHaveLength(10);
+    expect(list[0]).toBe("Err 3");
+    expect(list.at(-1)).toBe("Err 12");
+
+    expect(formatRuntimeErrorsPrompt("雪夜渡", ["TypeError: x"])).toBe(formatRuntimeErrorPrompt("雪夜渡", "TypeError: x"));
+    const multiPrompt = formatRuntimeErrorsPrompt("雪夜渡", ["TypeError: x", "ReferenceError: y"]);
+    expect(multiPrompt).toContain("2 条运行报错");
+    expect(multiPrompt).toContain("1. TypeError: x");
+    expect(multiPrompt).toContain("2. ReferenceError: y");
   });
 });
 

@@ -524,6 +524,57 @@ export function preferredWorkbenchFile(
   return matching[0]?.path;
 }
 
+export interface AdjacentStoryChapters {
+  readonly prev?: string | undefined;
+  readonly next?: string | undefined;
+  readonly index?: number | undefined;
+  readonly total?: number | undefined;
+}
+
+function compareChapterPaths(left: string, right: string): number {
+  const leftParts = left.split("/");
+  const rightParts = right.split("/");
+  const shared = Math.min(leftParts.length, rightParts.length);
+  for (let index = 0; index < shared; index += 1) {
+    const diff = (leftParts[index] ?? "").localeCompare(rightParts[index] ?? "", "zh-Hans-CN", { numeric: true });
+    if (diff !== 0) return diff;
+  }
+  return leftParts.length - rightParts.length;
+}
+
+/**
+ * Find the previous and next `.md` chapter inside the same story `正文/` directory
+ * (supports both root `正文/` and multi-book `{书名}/正文/`), sorted with Chinese natural order.
+ */
+export function adjacentStoryChapters(
+  files: readonly WorkspaceFilePath[],
+  selected?: string
+): AdjacentStoryChapters {
+  if (selected === undefined || selected === "" || workbenchModeForPath(selected) !== "story") return {};
+  const match = /^((?:[^/]+\/)?正文\/).+\.md$/iu.exec(selected);
+  if (match === null) return {};
+  const prefix = match[1]!;
+  const unique = new Set<string>();
+  for (const file of files) {
+    if (file.path.startsWith(prefix) && /\.md$/iu.test(file.path) && workbenchModeForPath(file.path) === "story") {
+      unique.add(file.path);
+    }
+  }
+  const chapters = [...unique].sort((left, right) =>
+    compareChapterPaths(left.slice(prefix.length), right.slice(prefix.length))
+  );
+  const index = chapters.indexOf(selected);
+  if (index < 0) return {};
+  const prev = index > 0 ? chapters[index - 1] : undefined;
+  const next = index + 1 < chapters.length ? chapters[index + 1] : undefined;
+  return {
+    ...(prev === undefined ? {} : { prev }),
+    ...(next === undefined ? {} : { next }),
+    index,
+    total: chapters.length
+  };
+}
+
 /** Project one streamed mutation over its immediate predecessor. */
 export function previewMutation(activity: FileMutationActivity, base: string): string | undefined {
   if (activity.operation === "replace-file") return activity.newText;

@@ -369,7 +369,7 @@ function projectTimelineV3(
           ?? (text === undefined ? undefined : parsedSubtitles.find((sub) => sub.text === text && sub.start >= at - 0.1));
         if (matched !== undefined && matched.end - at > EPSILON) {
           end = matched.end;
-        } else if (text !== undefined && item?.duration === undefined && item?.end === undefined) {
+        } else if (text !== undefined && item?.duration == null && item?.end == null) {
           // Pre-TTS draft timeline.json entries (before `tts.py --update-timeline`) have `at` + `text`
           // without `duration`. Derive a bounded provisional span from spoken text length, the next
           // narration `at`, and the timeline cursor so the Studio still surfaces and maps draft lines.

@@ -21,7 +21,9 @@ describe("game preview security boundary", () => {
     expect(policy).toContain(`connect-src ${assets}`);
     expect(policy).toContain("object-src 'none'");
     expect(policy).toContain("base-uri 'none'");
-    expect(policy).toContain("frame-ancestors 'self' http://127.0.0.1:* http://localhost:* https://127.0.0.1:* https://localhost:*");
+    expect(policy).toContain(
+      "frame-ancestors 'self' http://127.0.0.1:* http://localhost:* https://127.0.0.1:* https://localhost:* http://[::1]:* https://[::1]:*"
+    );
   });
 
   it("confines the workspace API to the preview asset prefix", () => {

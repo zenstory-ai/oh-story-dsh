@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   batchProductionCandidates,
   compositionSources,
+  dramaPipelineProgress,
   DramaProductionView,
   findAssembledCut,
   productionCanvasAvailable,
@@ -413,5 +414,62 @@ describe("production sequence view", () => {
     />);
     expect(html).toContain("<em>未配置媒体 API</em>");
     expect(html).not.toContain("部分能力可用");
+  });
+
+  it("renders glanceable clickable pipeline progress pills inside .oh-story-status-pills without adding tabs", () => {
+    const episode = "剧集/EP001";
+    const docs = {
+      [`${episode}/剧本.md`]: "## EP001-SC001 门外\n夜雨。",
+      [`${episode}/分镜.md`]: "## SHOT-EP001-001 · 门外停步\n- 时长：4s\n## SHOT-EP001-002 · 推门\n- 时长：3s",
+      [`${episode}/图片提示词.md`]: "## IMG-EP001-CARD · 泛黄卡片\n### 可复制提示词\n> 泛黄卡片"
+    };
+    const production = parseEpisodeProduction(docs, episode);
+    const steps = dramaPipelineProgress(production, docs, versions, []);
+    expect(steps.map((step) => ({ id: step.id, label: step.label, done: step.done }))).toEqual([
+      { id: "screenplay", label: "剧本", done: true },
+      { id: "assets", label: "设定 1/1", done: true },
+      { id: "keyframes", label: "关键帧 1/2", done: false },
+      { id: "videos", label: "视频 1/2", done: false },
+      { id: "cut", label: "成片", done: false }
+    ]);
+
+    const html = renderToStaticMarkup(<DramaProductionView
+      sessionId="s1"
+      production={production}
+      documents={docs}
+      sessionRunning={false}
+      queue={[]}
+      section="tasks"
+      selectedId={undefined}
+      jobs={[]}
+      versions={versions}
+      libraryVersions={[]}
+      selections={{}}
+      manualReferences={{}}
+      sequence={[]}
+      canvas={{}}
+      viewport={undefined}
+      onSectionChange={() => undefined}
+      onSelect={() => undefined}
+      onNavigate={() => undefined}
+      onJobsChange={() => undefined}
+      onSelectionsChange={() => undefined}
+      onManualReferencesChange={() => undefined}
+      onOpenMedia={() => undefined}
+      onSequenceChange={() => undefined}
+      onCanvasChange={() => undefined}
+      onViewportChange={() => undefined}
+      onDispatchPrompt={async () => undefined}
+      onCancelTurn={async () => undefined}
+      onRemoveQueued={async () => undefined}
+      onRefresh={() => undefined}
+    />);
+    expect(html.match(/role="tab"/gu)).toHaveLength(4);
+    expect(html).toContain('class="oh-story-pipeline-strip"');
+    expect(html).toContain(">剧本</button>");
+    expect(html).toContain(">设定 1/1</button>");
+    expect(html).toContain(">关键帧 1/2</button>");
+    expect(html).toContain(">视频 1/2</button>");
+    expect(html).toContain(">成片</button>");
   });
 });

@@ -234,6 +234,83 @@ export function mapPreviewSwitchTime(input: {
   return { time: fallback, mapped: false };
 }
 
+export interface VideoQcMarker {
+  readonly key: string;
+  readonly hint: VideoQualityReviewHint;
+  readonly leftPercent: number;
+  readonly widthPercent?: number | undefined;
+  readonly label: string;
+}
+
+/**
+ * Compute single-row QC timestamp marker positions for an output preview (`edited` / `final`).
+ * Clamps timestamps cleanly to `[0, duration]` and omits hints without valid timestamps.
+ */
+export function qcMarkerPositions(
+  reviewHints: readonly VideoQualityReviewHint[],
+  duration: number
+): readonly VideoQcMarker[] {
+  if (!Number.isFinite(duration) || duration <= 0) return [];
+  const markers: VideoQcMarker[] = [];
+  for (let index = 0; index < reviewHints.length; index += 1) {
+    const hint = reviewHints[index];
+    if (hint === undefined || hint.timestamp === undefined || !Number.isFinite(hint.timestamp) || hint.timestamp < 0) continue;
+    const clampedStart = Math.min(duration, Math.max(0, hint.timestamp));
+    const leftPercent = Number(((clampedStart / duration) * 100).toFixed(2));
+    let widthPercent: number | undefined;
+    if (hint.endTimestamp !== undefined && Number.isFinite(hint.endTimestamp) && hint.endTimestamp > clampedStart) {
+      const clampedEnd = Math.min(duration, hint.endTimestamp);
+      if (clampedEnd > clampedStart) {
+        widthPercent = Number((((clampedEnd - clampedStart) / duration) * 100).toFixed(2));
+      }
+    }
+    const timing = hint.endTimestamp !== undefined && hint.endTimestamp > hint.timestamp
+      ? videoRange({ start: hint.timestamp, end: hint.endTimestamp })
+      : videoTime(hint.timestamp);
+    markers.push({
+      key: `${hint.check}-${hint.code}-${String(index)}`,
+      hint,
+      leftPercent,
+      ...(widthPercent === undefined ? {} : { widthPercent }),
+      label: `${hint.label}（${timing}）`
+    });
+  }
+  return markers;
+}
+
+export function VideoQcMarkerRail({
+  reviewHints,
+  duration,
+  onSeekHint
+}: {
+  readonly reviewHints: readonly VideoQualityReviewHint[];
+  readonly duration: number;
+  readonly onSeekHint: (hint: VideoQualityReviewHint) => void;
+}) {
+  const markers = qcMarkerPositions(reviewHints, duration);
+  if (markers.length === 0) return null;
+  return <div className="oh-video-qc-rail" role="group" aria-label="体检问题标记">
+    <div className="oh-video-qc-rail-track">
+      {markers.map((marker) => (
+        <button
+          key={marker.key}
+          type="button"
+          className="oh-video-qc-tick"
+          data-severity={marker.hint.severity}
+          data-span={marker.widthPercent !== undefined ? "true" : undefined}
+          aria-label={`跳到 ${marker.label}`}
+          title={`${marker.label}：${marker.hint.message}`}
+          style={{
+            left: `${String(marker.leftPercent)}%`,
+            ...(marker.widthPercent === undefined ? {} : { width: `${String(marker.widthPercent)}%` })
+          }}
+          onClick={() => { onSeekHint(marker.hint); }}
+        />
+      ))}
+    </div>
+  </div>;
+}
+
 export function VideoQualityCheckPanel({
   qualityCheck,
   initialOpen = false,
@@ -372,7 +449,8 @@ export interface VideoStudioProps {
   readonly onRetryRead?: (() => void) | undefined;
   readonly workspaceError?: string | null | undefined;
   readonly truncated?: boolean | undefined;
-  readonly resolveImageSrc?: ((src: string) => string | undefined) | undefined;
+  readonly resolveImageSrc?: ((src: string, basePath?: string) => string | undefined) | undefined;
+  readonly justSaved?: boolean | undefined;
 }
 
 export function VideoStudio(props: VideoStudioProps) {
@@ -504,6 +582,7 @@ function VideoWorkspace(props: VideoStudioProps & {
   const [error, setError] = useState(false);
   const [selectedId, setSelectedId] = useState<string>();
   const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
   const [showScript, setShowScript] = useState(false);
   const [scriptCollapsed, setScriptCollapsed] = useState(false);
   const [range, setRange] = useState<VideoTimeRange>();
@@ -571,6 +650,7 @@ function VideoWorkspace(props: VideoStudioProps & {
     setReady(false);
     setError(false);
     setCurrentTime(0);
+    setDuration(0);
     setRange(seek?.range);
     setNotice(nextNotice);
     setRevision((value) => value + 1);
@@ -747,6 +827,8 @@ function VideoWorkspace(props: VideoStudioProps & {
                 onLoadedMetadata={() => {
                   setReady(true);
                   setError(false);
+                  const nextDuration = video.current?.duration;
+                  setDuration(typeof nextDuration === "number" && Number.isFinite(nextDuration) && nextDuration > 0 ? nextDuration : 0);
                   const request = pendingSeek.current;
                   pendingSeek.current = undefined;
                   if (request !== undefined) seekLoaded(request);
@@ -768,7 +850,12 @@ function VideoWorkspace(props: VideoStudioProps & {
               />
               {error && <div className="oh-video-media-error" role="alert"><strong>暂时无法播放这段视频</strong><button type="button" onClick={() => { load(loaded.asset); }}>重新读取视频</button><a href={mediaUrl(sessionId, loaded.asset, revision)} target="_blank" rel="noreferrer">在新窗口打开</a></div>}
             </div>
-            <div role="status">{(props.running || range !== undefined) && <div className="oh-video-player-caption"><span>{range === undefined ? "" : `核对 ${videoRange(range)}`}</span><span>{props.running ? "正在继续制作 · 当前视频保留" : ""}</span></div>}</div>
+            <div className="oh-video-player-footer">
+              {loaded.asset.role !== "source" && qualityCheck !== undefined && (
+                <VideoQcMarkerRail reviewHints={qualityCheck.reviewHints} duration={duration} onSeekHint={seekReviewHint} />
+              )}
+              <div role="status">{(props.running || range !== undefined) && <div className="oh-video-player-caption"><span>{range === undefined ? "" : `核对 ${videoRange(range)}`}</span><span>{props.running ? "正在继续制作 · 当前视频保留" : ""}</span></div>}</div>
+            </div>
           </div>}
           {qualityCheck !== undefined && <VideoQualityCheckPanel key={`${project.id}:${qualityCheck.version ?? qualityCheck.status}`} qualityCheck={qualityCheck} initialOpen={qualityCheck.status === "fail"} onSeekHint={seekReviewHint} onDiscussHint={discussReviewHint} />}
           {loaded !== undefined && currentAsset === undefined && <p className="oh-video-notice" role="status">当前视频已从项目移除，已打开的画面保留；可以选择其他视频继续核对。</p>}
@@ -779,7 +866,7 @@ function VideoWorkspace(props: VideoStudioProps & {
       </div>
     </section>
     <section role="tabpanel" id={`${props.tabsId}-canvas-panel`} aria-labelledby={`${props.tabsId}-canvas-tab`} hidden={props.tab !== "canvas"}><CreativeCanvas<VideoCanvasNode> nodes={canvasModel.nodes} edges={canvasModel.edges} state={canvas} onChange={(value) => { props.onCanvasChange(project.id, value); }} ariaLabel="视频创作无限画布" helpText="拖动空白处平移 · 滚轮缩放 · 双击打开内容" empty={{ title: "先从想讲的故事开始", description: "和 AI 讨论主线，已有文稿和媒体会出现在这里。", actionLabel: "聊聊解说想法", onAction: () => { props.onContinueInChat(`我想讨论《${project.title}》的故事主线和解说方向。`); } }} onOpen={onNodeOpen} onContinueInChat={(node) => { if (node.segment !== undefined) discuss(node.segment); else props.onContinueInChat(`我想继续调整《${project.title}》的「${node.title}」。${node.path === undefined ? "" : `内容：${node.path}。`}请先讨论思路。`); }} renderNodeMedia={(node) => { const asset = node.id === "source" ? project.previews.find((item) => item.role === "source") : node.id === "preview" ? preferredPreview(project) : undefined; return asset === undefined || props.tab !== "canvas" ? null : <video className="oh-video-canvas-thumbnail" src={mediaUrl(sessionId, asset)} preload="metadata" muted playsInline tabIndex={-1} aria-hidden />; }} renderNodeActions={(node) => <button type="button" onClick={() => { onNodeOpen(node); }}>{node.segment !== undefined ? project.narrative?.authoredClock === "unknown" ? "打开文稿" : "定位这段" : node.id === "source" ? "看原片" : node.id === "preview" ? "回到预览" : "打开文稿"}</button>} renderContextActions={(node) => <><button type="button" onClick={() => { onNodeOpen(node); }}>{node.segment === undefined ? "打开内容" : "定位这段"}</button>{node.segment !== undefined && <button type="button" onClick={() => { openDocument(); }}>打开文稿</button>}</>} /></section>
-    <section role="tabpanel" id={`${props.tabsId}-docs-panel`} aria-labelledby={`${props.tabsId}-docs-tab`} hidden={props.tab !== "docs"}>{!props.hidden && props.tab === "docs" && <VideoDocuments project={project} editor={props.editor} onChat={props.onContinueInChat} fileReadError={props.fileReadError} onRetryRead={props.onRetryRead} resolveImageSrc={props.resolveImageSrc} />}<div className="oh-video-document-export">{subtitleArtifact !== undefined && <button type="button" disabled={exporting} onClick={() => { void downloadSubtitles(); }}>{exporting ? "正在导出…" : "导出项目字幕"}</button>}</div></section>
+    <section role="tabpanel" id={`${props.tabsId}-docs-panel`} aria-labelledby={`${props.tabsId}-docs-tab`} hidden={props.tab !== "docs"}>{!props.hidden && props.tab === "docs" && <VideoDocuments project={project} editor={props.editor} onChat={props.onContinueInChat} fileReadError={props.fileReadError} onRetryRead={props.onRetryRead} resolveImageSrc={props.resolveImageSrc} justSaved={props.justSaved} />}<div className="oh-video-document-export">{subtitleArtifact !== undefined && <button type="button" disabled={exporting} onClick={() => { void downloadSubtitles(); }}>{exporting ? "正在导出…" : "导出项目字幕"}</button>}</div></section>
     {props.detailsOpen && <VideoDetails key={project.id} sessionId={sessionId} project={project} fileReadError={detailsFileReadError} fileReadErrorPath={props.editor.selected} onRetryRead={props.onRetryRead} onSeekHint={seekReviewHint} onDiscussHint={discussReviewHint} onClose={props.onCloseDetails} />}
   </div>;
 }

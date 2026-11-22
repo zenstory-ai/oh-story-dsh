@@ -16,7 +16,9 @@ import {
   mapPreviewSwitchTime,
   observeStudioNarrow,
   previewAssetVersionKey,
+  qcMarkerPositions,
   resolveReviewHintSeek,
+  VideoQcMarkerRail,
   VideoQualityCheckPanel,
   VideoStudio,
   type VideoPreviewAsset,
@@ -586,6 +588,53 @@ describe("VideoDetails dialog guard, self-healing selection & qualityCheck break
       onClose={vi.fn()}
     />);
     expect(html).toContain("正在读取制作记录…");
+    expect(html).toContain('class="oh-loading-state"');
     expect(html).not.toContain("主编辑器读取 BRIEF.md 失败");
+  });
+
+  it("renders styled QC hint rows with severity badges in VideoDetails and computes interactive QC marker rail positions", () => {
+    const detailsHtml = renderToStaticMarkup(<VideoDetails
+      sessionId="s1"
+      project={{
+        id: "recap",
+        root: "video-recaps/recap",
+        title: "雪夜来信",
+        state: "ready",
+        stage: "complete",
+        stageLabel: "成片已就绪",
+        previews: [],
+        artifacts: [],
+        qualityCheck: sampleQualityCheck
+      }}
+      onSeekHint={vi.fn()}
+      onDiscussHint={vi.fn()}
+      onClose={vi.fn()}
+    />);
+    expect(detailsHtml).toContain('class="oh-video-qc-hint-copy"');
+    expect(detailsHtml).toContain('class="oh-video-qc-hint-badge" data-severity="warn"');
+
+    expect(qcMarkerPositions(sampleQualityCheck.reviewHints, 0)).toEqual([]);
+    const markers = qcMarkerPositions([
+      ...sampleQualityCheck.reviewHints,
+      { check: "av_sync", code: "no_ts", label: "全局音画", message: "无时间戳", severity: "fail" },
+      { check: "subtitle", code: "tail", label: "片尾超长", message: "超出片尾", severity: "fail", timestamp: 45, endTimestamp: 50 }
+    ], 40);
+    expect(markers).toHaveLength(3);
+    expect(markers[0]).toMatchObject({ leftPercent: 31.25, widthPercent: 3.75 });
+    expect(markers[1]).toMatchObject({ leftPercent: 70 });
+    expect(markers[1]?.widthPercent).toBeUndefined();
+    expect(markers[2]).toMatchObject({ leftPercent: 100 });
+
+    const railHtml = renderToStaticMarkup(<VideoQcMarkerRail
+      reviewHints={[
+        ...sampleQualityCheck.reviewHints,
+        { check: "av_sync", code: "desync", label: "音画偏移", message: "20s 偏移", severity: "fail", timestamp: 20 }
+      ]}
+      duration={40}
+      onSeekHint={vi.fn()}
+    />);
+    expect(railHtml).toContain('class="oh-video-qc-rail" role="group" aria-label="体检问题标记"');
+    expect(railHtml).toContain('class="oh-video-qc-tick" data-severity="warn" data-span="true"');
+    expect(railHtml).toContain('class="oh-video-qc-tick" data-severity="fail"');
   });
 });

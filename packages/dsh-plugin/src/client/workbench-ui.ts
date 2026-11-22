@@ -22,13 +22,38 @@ export function handleTabKey<T extends string>(
   event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>("[role='tab']")[index]?.focus();
 }
 
+export type OhStoryApiPrefix = "api/oh-story" | "oh-story";
+
 /**
- * Resolve an `api/oh-story/*` endpoint relative to `document.baseURI` when running on HTTP(S)
- * so DSH `connection.fetch.register` routes work across mount-prefix proxies, Electron IPC,
- * and Web Workers, falling back cleanly to `/api/oh-story/*` in non-HTTP / jsdom environments.
+ * Detect whether the active DSH host mounts Oh Story endpoints under `api/oh-story` (DSH 0.2.2+
+ * `connection.fetch.register`) or legacy `oh-story` (DSH 0.2.0-rc.2 `webServer.register`),
+ * reading the injected `#oh-story-workbench-css` link element and defaulting to `api/oh-story`.
+ */
+export function detectOhStoryApiPrefix(): OhStoryApiPrefix {
+  if (typeof document !== "object" || document === null || typeof document.getElementById !== "function") {
+    return "api/oh-story";
+  }
+  const link = document.getElementById("oh-story-workbench-css");
+  if (link === null || typeof link.getAttribute !== "function") return "api/oh-story";
+  const explicit = link.getAttribute("data-oh-story-api-prefix");
+  if (explicit === "oh-story" || explicit === "api/oh-story") return explicit;
+  const href = link.getAttribute("href");
+  if (typeof href === "string" && href !== "") {
+    if (/(?:^|\/)api\/oh-story\/workbench\.css(?:[?#]|$)/u.test(href)) return "api/oh-story";
+    if (/(?:^|\/)oh-story\/workbench\.css(?:[?#]|$)/u.test(href)) return "oh-story";
+  }
+  return "api/oh-story";
+}
+
+/**
+ * Resolve an Oh Story endpoint relative to `document.baseURI` when running on HTTP(S)
+ * so DSH `connection.fetch.register` (`api/oh-story/*`) and legacy `webServer` (`oh-story/*`)
+ * routes work across mount-prefix proxies, Electron IPC, and Web Workers, falling back cleanly
+ * to a root-relative path in non-HTTP / jsdom environments.
  */
 export function ohStoryEndpointUrl(path: string): string {
-  const relative = `api/oh-story/${path.replace(/^\/+/u, "")}`;
+  const prefix = detectOhStoryApiPrefix();
+  const relative = `${prefix}/${path.replace(/^\/+/u, "")}`;
   const baseUri = typeof document === "object" && document !== null && typeof document.baseURI === "string"
     ? document.baseURI
     : undefined;

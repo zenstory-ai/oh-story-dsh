@@ -12,6 +12,7 @@ import {
   mintPreviewToken,
   probeVideoPreflight,
   registerWorkspaceRoute,
+  resetWorkbenchStylesheetCache,
   WORKBENCH_CSS_API_PATH,
   type WorkspacePayload
 } from "../src/workspace-route.js";
@@ -462,8 +463,11 @@ describe("workspace route security, media, scanning, and preflight", () => {
       WORKBENCH_CSS_API_PATH,
       "/api/oh-story/workspace"
     ].sort());
+    // /api/oh-story/file strictly obeys DSH ConnectionFetchMethod ('GET' | 'HEAD' | 'POST').
+    expect(harness.fetchRoutes.get("/api/oh-story/file")?.methods).toEqual(["GET", "POST"]);
 
-    // Static CSS route returns minified CSS with ETag, 304, and immutable cache when versioned.
+    // Static CSS route returns minified CSS with ETag, 304, immutable cache when versioned,
+    // and no-cache when unversioned or stale-versioned so upgrades never serve stale CSS.
     const cssAsset = await loadWorkbenchStylesheet();
     expect(cssAsset.bytes.byteLength).toBeGreaterThan(1_000);
     const cssRoute = harness.fetchRoutes.get(WORKBENCH_CSS_API_PATH)!;
@@ -472,18 +476,30 @@ describe("workspace route security, media, scanning, and preflight", () => {
     expect(cssRes.headers.get("content-type")).toBe("text/css; charset=utf-8");
     expect(cssRes.headers.get("cache-control")).toContain("immutable");
     expect(cssRes.headers.get("etag")).toBe(cssAsset.etag);
+    const unversionedCssRes = await cssRoute.fetch(new Request(`http://dsh.internal${WORKBENCH_CSS_API_PATH}`));
+    expect(unversionedCssRes.status).toBe(200);
+    expect(unversionedCssRes.headers.get("cache-control")).toBe("no-cache");
+    expect(unversionedCssRes.headers.get("etag")).toBe(cssAsset.etag);
+    const staleVersionCssRes = await cssRoute.fetch(new Request(`http://dsh.internal${WORKBENCH_CSS_API_PATH}?v=stale`));
+    expect(staleVersionCssRes.status).toBe(200);
+    expect(staleVersionCssRes.headers.get("cache-control")).toBe("no-cache");
     const css304 = await cssRoute.fetch(new Request(`http://dsh.internal${WORKBENCH_CSS_API_PATH}`, {
       headers: { "if-none-match": cssAsset.etag }
     }));
     expect(css304.status).toBe(304);
+    expect(css304.headers.get("cache-control")).toBe("no-cache");
 
     // Index injection emits a document-relative <link id="oh-story-workbench-css"> to api/oh-story/workbench.css
+    // with explicit data-oh-story-api-prefix signaling.
     const injected: unknown[] = [];
     for (const listener of harness.indexInjectListeners) listener(injected);
     expect(injected).toContainEqual(expect.objectContaining({
       kind: "html",
       placement: "head",
       html: expect.stringContaining(`id="oh-story-workbench-css" rel="stylesheet" href="api/oh-story/workbench.css`)
+    }));
+    expect(injected).toContainEqual(expect.objectContaining({
+      html: expect.stringContaining(`data-oh-story-api-prefix="api/oh-story"`)
     }));
 
     // Remote host admitted by connection.admit succeeds WITHOUT oh-story.trustedHosts duplication,
@@ -591,5 +607,89 @@ describe("workspace route security, media, scanning, and preflight", () => {
     expect(payload.files).toHaveLength(1_000);
     expect(payload.truncated).toBe(true);
     void rootTarget;
+  });
+
+  it("enforces owner principal parity, rejects CSP Host injection, gates index-inject on mount, and refuses to cache empty CSS", async () => {
+    const root = await mkdtemp(join(tmpdir(), "oh-story-route-hardening-"));
+    tempDirs.push(root);
+    const appDir = join(root, "game-adaptations", "demo", "build", "app");
+    await mkdir(appDir, { recursive: true });
+    await writeFile(join(appDir, "index.html"), "<!doctype html><html><head></head><body>OK</body></html>");
+
+    // 1. Non-owner principals admitted by connection.admit() are rejected with 403 on /oh-story/* fallback.
+    const principalHarness = createHarness(root, makeLocalFs(root), {
+      admit: (req) => req.headers["x-role"] === "guest"
+        ? { peer: { principal: { kind: "guest" } } }
+        : { peer: { principal: { kind: "owner" } } }
+    });
+    const guestRes = await principalHarness.invoke("GET", "/oh-story/config", { "x-role": "guest" });
+    expect(guestRes.status).toBe(403);
+    const ownerRes = await principalHarness.invoke("GET", "/oh-story/config", { "x-role": "owner" });
+    expect(ownerRes.status).toBe(200);
+
+    // 2. Game preview rejects CSP-injection Host headers (no unsanitized Host reaches CSP).
+    const ws = await principalHarness.invoke("GET", "/oh-story/workspace?sessionId=sess-1", { "x-role": "owner" });
+    const previewUrl = (JSON.parse(ws.body.toString("utf8")) as WorkspacePayload).games[0]?.previewUrl;
+    expect(previewUrl).toBeDefined();
+    const injectedHostRes = await principalHarness.invoke("GET", previewUrl!, {
+      host: "127.0.0.1:3080/;script-src *",
+      origin: "null"
+    });
+    expect(injectedHostRes.status).toBe(403);
+
+    // 3. Fallback index-inject emits oh-story/workbench.css and data-oh-story-api-prefix="oh-story"
+    //    even if connection.fetch.register exists on context before context.inject(["connection"]) mounts.
+    const indexInjectListeners: Array<(table: unknown[]) => void> = [];
+    let pendingInjectCallback: ((connCtx: Context) => void) | undefined;
+    const connWithFetch = {
+      admit: vi.fn(() => ({ peer: { principal: { kind: "owner" } } })),
+      fetch: { register: vi.fn(() => () => {}) }
+    };
+    const deferredContext = {
+      effect: (fn: () => (() => void | Promise<void>) | void) => { fn(); },
+      inject: (_deps: readonly string[], cb: (connCtx: Context) => void) => {
+        pendingInjectCallback = cb;
+      },
+      on: (event: string, listener: (table: unknown[]) => void) => {
+        if (event === "webserver/index-inject") indexInjectListeners.push(listener);
+        return () => {};
+      },
+      get: (key: string) => key === "connection" ? connWithFetch : undefined,
+      logger: () => ({ error: vi.fn() }),
+      typert: { lookups: new Map() },
+      webServer: { register: () => vi.fn() }
+    } as unknown as Context;
+    registerWorkspaceRoute(deferredContext, { maxBytes: 1_048_576 });
+
+    const beforeMount: unknown[] = [];
+    for (const listener of indexInjectListeners) listener(beforeMount);
+    expect(beforeMount).toContainEqual(expect.objectContaining({
+      html: expect.stringContaining(`href="oh-story/workbench.css`)
+    }));
+    expect(beforeMount).toContainEqual(expect.objectContaining({
+      html: expect.stringContaining(`data-oh-story-api-prefix="oh-story"`)
+    }));
+
+    // Once context.inject(["connection"]) completes and mounts routes, index-inject flips to api/oh-story.
+    pendingInjectCallback?.(deferredContext);
+    const afterMount: unknown[] = [];
+    for (const listener of indexInjectListeners) listener(afterMount);
+    expect(afterMount).toContainEqual(expect.objectContaining({
+      html: expect.stringContaining(`href="api/oh-story/workbench.css`)
+    }));
+    expect(afterMount).toContainEqual(expect.objectContaining({
+      html: expect.stringContaining(`data-oh-story-api-prefix="api/oh-story"`)
+    }));
+
+    // 4. loadWorkbenchStylesheet() refuses to cache empty CSS and recovers on the next call.
+    resetWorkbenchStylesheetCache();
+    try {
+      const emptyAsset = await loadWorkbenchStylesheet(async () => "");
+      expect(emptyAsset.bytes.byteLength).toBe(0);
+      const recoveredAsset = await loadWorkbenchStylesheet();
+      expect(recoveredAsset.bytes.byteLength).toBeGreaterThan(1_000);
+    } finally {
+      resetWorkbenchStylesheetCache();
+    }
   });
 });

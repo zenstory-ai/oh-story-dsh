@@ -698,13 +698,16 @@ async function main(): Promise<void> {
     await firstRunPage.getByRole("dialog").waitFor({ state: "detached", timeout: 10_000 });
     const welcome = firstRunPage.getByRole("region", { name: "Oh Story 使用引导" });
     await welcome.waitFor({ state: "visible", timeout: 20_000 });
+    const expectedApiPrefix = await firstRunPage.locator("link#oh-story-workbench-css").getAttribute("data-oh-story-api-prefix");
+    const usesConnectionFetch = expectedApiPrefix === "api/oh-story" || /^0\.(?:[3-9]|2\.[2-9])/u.test(dshVersion);
+    const apiPrefix = usesConnectionFetch ? "api/oh-story" : "oh-story";
     const workbenchStylesheetHref = await firstRunPage.locator("link#oh-story-workbench-css").getAttribute("href");
-    if (workbenchStylesheetHref === null || !workbenchStylesheetHref.includes("api/oh-story/workbench.css")) {
-      throw new Error(`Expected static workbench stylesheet link in head, found: ${String(workbenchStylesheetHref)}`);
+    if (workbenchStylesheetHref === null || !workbenchStylesheetHref.includes(`${apiPrefix}/workbench.css`)) {
+      throw new Error(`Expected static workbench stylesheet link (${apiPrefix}/workbench.css) in head, found: ${String(workbenchStylesheetHref)}`);
     }
-    const stylesheetResponse = await dshFetch(`${origin}/api/oh-story/workbench.css`);
+    const stylesheetResponse = await dshFetch(`${origin}/${apiPrefix}/workbench.css`);
     if (!stylesheetResponse.ok || !(stylesheetResponse.headers.get("content-type") ?? "").includes("text/css")) {
-      throw new Error(`Expected /api/oh-story/workbench.css to return text/css, got ${String(stylesheetResponse.status)} (${String(stylesheetResponse.headers.get("content-type"))}).`);
+      throw new Error(`Expected /${apiPrefix}/workbench.css to return text/css, got ${String(stylesheetResponse.status)} (${String(stylesheetResponse.headers.get("content-type"))}).`);
     }
     const welcomeText = await welcome.innerText();
     if (!welcomeText.includes("Oh Story 创作工作台") || !welcomeText.includes("Minimal") || welcomeText.includes("Oh Story 已加载")) {
@@ -1535,10 +1538,10 @@ async function main(): Promise<void> {
       const editedChapter = `${chapter.content}\n<!-- native DSH editor smoke -->\n`;
       await restoredDraft.fill(editedChapter);
       const saveButton = page.getByRole("button", { name: "保存", exact: true });
-      const apiChapterUrl = `${origin}/api/oh-story/file?sessionId=${encodeURIComponent(storySession.sessionId)}&path=${encodeURIComponent(chapterPath)}`;
+      const browserChapterUrl = `${origin}/${apiPrefix}/file?sessionId=${encodeURIComponent(storySession.sessionId)}&path=${encodeURIComponent(chapterPath)}`;
       const saveRequest = page.waitForResponse((response) => (
         response.request().method() === "POST"
-        && response.url() === apiChapterUrl
+        && response.url() === browserChapterUrl
       ));
       await saveButton.click();
       const browserSaveResponse = await saveRequest;
@@ -3156,7 +3159,9 @@ async function main(): Promise<void> {
       userInvocableVideoSkills: videoSkills.length,
       provider: useRealDeepSeek ? "deepseek-official" : "local-fixture",
       fixtures: [storyProjectName, dramaProjectName, generatedGameId, altGameId],
-      uiSlots: ["conversation.hero.frame", "shell.overlay", "plugins.bundle.config", "tool.call.toolview"],
+      uiSlots: usesConnectionFetch
+        ? ["conversation.hero.frame", "shell.overlay", "plugins.bundle.config", "tool.call.toolview"]
+        : ["shell.overlay", "plugins.bundle.config", "tool.call.toolview"],
       workbenchGate: "creative-project-only",
       workbenchCollapse: "per-workspace",
       workbenchTabs: "per-workspace-hide-restore-persist",

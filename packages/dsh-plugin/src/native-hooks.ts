@@ -66,7 +66,7 @@ function proseLocation(path: string): ProseLocation | undefined {
   if (name === "正文.md") {
     return { book: segments.slice(0, -1).join("/"), name, kind: "short" };
   }
-  if (segments.length < 2) return undefined;
+  if (segments.length < 2 || name.startsWith(".") || !/\.md$/iu.test(name)) return undefined;
   const index = segments.lastIndexOf("正文", segments.length - 2);
   if (index < 0) return undefined;
   return { book: segments.slice(0, index).join("/"), name, kind: "long" };
@@ -456,14 +456,14 @@ function isSkippableProseLine(line: string): boolean {
 }
 
 const HARD_DEFECT_PATTERNS: readonly { readonly pattern: RegExp; readonly label: string; readonly stripDialogue?: boolean }[] = [
-  { pattern: /\uFFFD/u, label: "出现乱码替换字符（）" },
+  { pattern: /\uFFFD/u, label: "出现乱码替换字符（\uFFFD）" },
   { pattern: /^(?:Sure|Certainly|Here'?s|As an AI|I (?:cannot|can't|am unable|apologize))\b/u, label: "出现英文 AI 元信息前缀", stripDialogue: true },
   {
     pattern: /我(?:无法|不能)(?:继续(?:写|创作|生成|下去|输出)?|生成(?:内容|文本|正文)?|创作|续写|写作|完成(?:这个|本)?(?:章|篇|创作|请求)?)/u,
     label: "叙述中出现生成拒绝语",
     stripDialogue: true
   },
-  { pattern: /[（(](?:此处|以下|这里|下文|后续)?[^）)]{0,10}(?:省略|略去|略过|略)[^）)]{0,10}[）)]/u, label: "出现括号省略占位符" },
+  { pattern: /[（(](?:此处|以下|这里|下文|后续)?[^）)]{0,10}(?:省略|略去|略过)[^）)]{0,10}[）)]/u, label: "出现括号省略占位符" },
   { pattern: /(?:未完待续|TODO|占位符|placeholder|待补充|此处待填|此处待补)/u, label: "出现未完成占位词" },
   {
     pattern: /作为(?:一个)?(?:AI|人工智能|大?语言模型|智能助手|聊天助手)(?:语言模型|大?模型|助手|机器人)?(?=[，,。、；;：:！!？?\s）)」』"】]|我|无法|不能|没法|$)/u,
@@ -489,7 +489,7 @@ export function detectProseHardDefects(content: string): string[] {
     const line = raw.trim();
     if (isSkippableProseLine(line)) continue;
     proseLines.push(line);
-    const outsideQuotes = line.replace(QUOTED_DIALOGUE_LINE, "");
+    const outsideQuotes = line.replace(QUOTED_DIALOGUE_LINE, "？");
     for (const rule of HARD_DEFECT_PATTERNS) {
       const sample = rule.stripDialogue === true ? outsideQuotes : line;
       if (rule.pattern.test(sample)) warnings.add(rule.label);

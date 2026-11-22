@@ -3,6 +3,7 @@ import type { ConversationTimelineSnapshot, RunningToolCall } from "@deepseek-ai
 import { describe, expect, it } from "vitest";
 import { PartialArguments } from "@deepseek-ai/dsh-util-values";
 import {
+  adjacentStoryChapters,
   creativeRelativePath,
   fileActivityLabel,
   fileMutations,
@@ -414,5 +415,47 @@ describe("v0.8.0 video, v0.11.0 story and v0.13.0 drama activity recognition", (
     }
     expect(fileActivityLabel("笔记.md")).toBeUndefined();
     expect(fileActivityLabel(undefined)).toBeUndefined();
+  });
+
+  it("finds adjacent story chapters in natural Chinese order for root and multi-book 正文/ directories", () => {
+    const rootFiles = [
+      { path: "正文/第10章.md" },
+      { path: "正文/第2章.md" },
+      { path: "正文/第1章.md" },
+      { path: "正文/notes.txt" },
+      { path: "大纲/卷纲.md" },
+      { path: "霜雪录/正文/第1章.md" },
+      { path: "霜雪录/正文/第2章.md" },
+      { path: "青云志/正文/第1章.md" }
+    ];
+    expect(adjacentStoryChapters(rootFiles, "正文/第1章.md")).toEqual({
+      next: "正文/第2章.md",
+      index: 0,
+      total: 3
+    });
+    expect(adjacentStoryChapters(rootFiles, "正文/第2章.md")).toEqual({
+      prev: "正文/第1章.md",
+      next: "正文/第10章.md",
+      index: 1,
+      total: 3
+    });
+    expect(adjacentStoryChapters(rootFiles, "正文/第10章.md")).toEqual({
+      prev: "正文/第2章.md",
+      index: 2,
+      total: 3
+    });
+    expect(adjacentStoryChapters(rootFiles, "霜雪录/正文/第1章.md")).toEqual({
+      next: "霜雪录/正文/第2章.md",
+      index: 0,
+      total: 2
+    });
+    expect(adjacentStoryChapters(rootFiles, "青云志/正文/第1章.md")).toEqual({
+      index: 0,
+      total: 1
+    });
+    expect(adjacentStoryChapters(rootFiles, "大纲/卷纲.md")).toEqual({});
+    expect(adjacentStoryChapters(rootFiles, "正文/notes.txt")).toEqual({});
+    expect(adjacentStoryChapters(rootFiles, "剧集/正文/第1章.md")).toEqual({});
+    expect(adjacentStoryChapters(rootFiles, undefined)).toEqual({});
   });
 });

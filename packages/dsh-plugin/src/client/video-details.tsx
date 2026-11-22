@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { VideoCheckItemStatus, VideoQualityReviewHint } from "../video-project.js";
 import { endpoint } from "./workbench-ui.js";
-import { isDialogBackdropClick } from "./workbench-settings-panel.js";
+import { createDialogBackdropGuard } from "./workbench-settings-panel.js";
 import { VideoEnvironment } from "./video-environment.js";
 import { videoDocumentTitle, videoRange, videoTime, type VideoProject } from "./video-workspace-model.js";
 
@@ -73,6 +73,7 @@ export function VideoDetails({
   onDiscussHint
 }: VideoDetailsProps) {
   const dialog = useRef<HTMLDialogElement>(null);
+  const backdropGuard = useRef(createDialogBackdropGuard());
   const closed = useRef(false);
   const [selected, setSelected] = useState<string | undefined>(() => project?.artifacts[0]?.path);
   const [attempt, setAttempt] = useState(0);
@@ -147,8 +148,11 @@ export function VideoDetails({
     className="oh-video-details"
     aria-label="视频制作详情"
     onClose={notifyClose}
+    onPointerDown={(event) => {
+      backdropGuard.current.onPointerDown(dialog.current, event);
+    }}
     onClick={(event) => {
-      if (dialog.current !== null && isDialogBackdropClick(dialog.current, event)) closeDialog();
+      if (backdropGuard.current.shouldCloseOnClick(dialog.current, event)) closeDialog();
     }}
   >
     <div className="oh-video-details-body">
@@ -176,9 +180,10 @@ export function VideoDetails({
       </ul>
       {qualityCheck.reviewHints.length > 0 && <ul className="oh-video-qc-hints">
         {qualityCheck.reviewHints.map((hint, index) => <li key={`${hint.check}-${hint.code}-${String(index)}`} className="oh-video-qc-hint" data-severity={hint.severity}>
-          <div>
+          <div className="oh-video-qc-hint-copy">
+            <span className="oh-video-qc-hint-badge" data-severity={hint.severity}>{hint.severity === "fail" ? "失败" : "待复核"}</span>
             <strong>{hint.label}</strong>
-            <span>{hint.message}</span>
+            <p>{hint.message}</p>
           </div>
           <div className="oh-video-qc-hint-actions">
             {hint.timestamp !== undefined && onSeekHint !== undefined && <button type="button" onClick={() => { onSeekHint(hint); closeDialog(); }}>
@@ -197,7 +202,7 @@ export function VideoDetails({
         <small>{artifact.path}</small>
         {displayError !== undefined
           ? <div className="oh-video-details-error" role="alert"><p>{displayError}</p><button type="button" onClick={retryFetch}>重新读取</button></div>
-          : <pre>{content ?? "正在读取制作记录…"}</pre>}
+          : <pre className={content === undefined ? "oh-loading-state" : undefined}>{content ?? "正在读取制作记录…"}</pre>}
       </>}
     </>}
     </div>

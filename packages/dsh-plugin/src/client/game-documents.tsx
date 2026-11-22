@@ -19,23 +19,43 @@ export interface GameDocumentEditor {
   readonly onRetry: () => void;
 }
 
-export function GameDocuments({ project, files, editor, onChat, fileReadError, onRetryRead, resolveImageSrc }: {
+export function GameDocuments({ project, files, editor, onChat, fileReadError, onRetryRead, resolveImageSrc, justSaved }: {
   readonly project: GameProject;
   readonly files: readonly GameWorkspaceFile[];
   readonly editor: GameDocumentEditor;
   readonly onChat: (prompt: string) => void;
   readonly fileReadError?: string | null | undefined;
   readonly onRetryRead?: (() => void) | undefined;
-  readonly resolveImageSrc?: ((src: string) => string | undefined) | undefined;
+  readonly resolveImageSrc?: ((src: string, basePath?: string) => string | undefined) | undefined;
+  readonly justSaved?: boolean | undefined;
 }) {
   const available = files.filter((file) => file.kind === "text" && file.path.startsWith(`${project.root}/`));
+  const availablePaths = new Set(available.map((file) => file.path));
+  const missingDrafts: GameWorkspaceFile[] = Object.entries(editor.buffers)
+    .filter(([filePath, buf]) =>
+      filePath.startsWith(`${project.root}/`)
+      && buf.missing === true
+      && !availablePaths.has(filePath)
+    )
+    .map(([filePath, buf]) => ({
+      path: filePath,
+      bytes: buf.content.length,
+      version: buf.version,
+      kind: "text" as const
+    }));
   const creative = KNOWN_CREATIVE_DOCUMENTS.flatMap(({ relativePath, title }) => {
     const file = available.find((item) => item.path === `${project.root}/${relativePath}`);
     return file === undefined ? [] : [{ ...file, title }];
   });
   const other = available.filter((file) => !creative.some((item) => item.path === file.path));
-  const selected = editor.selected?.startsWith(`${project.root}/`) === true && (available.some((file) => file.path === editor.selected) || editor.buffers[editor.selected] !== undefined)
-    ? editor.selected : creative[0]?.path ?? available[0]?.path;
+  const allFiles = [...available, ...missingDrafts];
+  const missingLabel = (filePath: string): string => {
+    const relative = filePath.slice(project.root.length + 1);
+    const known = KNOWN_CREATIVE_DOCUMENTS.find((item) => item.relativePath === relative);
+    return `${known?.title ?? relative}（已删除草稿）`;
+  };
+  const selected = editor.selected?.startsWith(`${project.root}/`) === true && (allFiles.some((file) => file.path === editor.selected) || editor.buffers[editor.selected] !== undefined)
+    ? editor.selected : creative[0]?.path ?? allFiles[0]?.path;
   useEffect(() => {
     if (selected !== undefined && selected !== editor.selected) editor.onSelect(selected);
   }, [selected, editor.selected, editor.onSelect]);
@@ -48,12 +68,12 @@ export function GameDocuments({ project, files, editor, onChat, fileReadError, o
   const source = editor.mode === "source";
   const navButton = (file: GameWorkspaceFile, label: string) => <button type="button" key={file.path} aria-label={file.path} title={file.path} aria-current={file.path === selected ? "page" : undefined} onClick={() => { editor.onSelect(file.path); }}><span>{label}</span>{editor.buffers[file.path] !== undefined && editor.buffers[file.path]?.content !== editor.buffers[file.path]?.saved && <i title="尚未保存" />}</button>;
   return <div className="oh-game-documents">
-    <nav aria-label="游戏创作文稿">{creative.map((file) => navButton(file, file.title))}{other.length > 0 && <details open={other.some((file) => file.path === selected)}><summary>更多项目文件</summary>{other.map((file) => navButton(file, file.path.slice(project.root.length + 1)))}</details>}</nav>
-    <label className="oh-game-doc-picker">创作文稿<select aria-label="选择游戏创作文稿" value={selected ?? ""} onChange={(event) => { editor.onSelect(event.target.value); }}>{available.map((file) => <option key={file.path} value={file.path}>{creative.find((item) => item.path === file.path)?.title ?? file.path.slice(project.root.length + 1)}</option>)}</select></label>
+    <nav aria-label="游戏创作文稿">{creative.map((file) => navButton(file, file.title))}{missingDrafts.map((file) => navButton(file, missingLabel(file.path)))}{other.length > 0 && <details open={other.some((file) => file.path === selected)}><summary>更多项目文件</summary>{other.map((file) => navButton(file, file.path.slice(project.root.length + 1)))}</details>}</nav>
+    <label className="oh-game-doc-picker">创作文稿<select aria-label="选择游戏创作文稿" value={selected ?? ""} onChange={(event) => { editor.onSelect(event.target.value); }}>{available.map((file) => <option key={file.path} value={file.path}>{creative.find((item) => item.path === file.path)?.title ?? file.path.slice(project.root.length + 1)}</option>)}{missingDrafts.map((file) => <option key={file.path} value={file.path}>{missingLabel(file.path)}</option>)}</select></label>
     <section className="oh-game-document-body">
-      <header><div><h2>{title}</h2>{dirty && <span className="oh-game-draft-label">本地草稿 · 尚未保存</span>}</div><div>{buffer !== undefined && buffer.missing !== true && <><button type="button" aria-pressed={source} onClick={() => { editor.onMode(source ? "preview" : "source"); }}>{source ? "阅读文稿" : "编辑文稿"}</button>{dirty && <button type="button" disabled={buffer.saving === true} onClick={() => { if (selected !== undefined) void editor.onSave(selected); }}>{buffer.saving === true ? "正在保存…" : "保存文稿"}</button>}</>}<button type="button" aria-label="讨论这份文稿" onClick={() => { onChat(`我想讨论「${title}」这份创作设定。${selected === undefined ? "" : `文稿：${selected}`} 请先和我讨论思路。`); }}>Chat</button></div></header>
+      <header><div><h2>{title}</h2>{dirty && <span className="oh-game-draft-label">本地草稿 · 尚未保存</span>}{!dirty && buffer?.saving !== true && justSaved === true && <span className="oh-story-saved-pill" role="status">✓ 已保存</span>}</div><div>{buffer !== undefined && buffer.missing !== true && <><button type="button" aria-pressed={source} onClick={() => { editor.onMode(source ? "preview" : "source"); }}>{source ? "阅读文稿" : "编辑文稿"}</button>{dirty && <button className="oh-story-save" data-dirty="true" title="保存（⌘S / Ctrl+S）" type="button" disabled={buffer.saving === true} onClick={() => { if (selected !== undefined) void editor.onSave(selected); }}>{buffer.saving === true ? "正在保存…" : "保存文稿"}</button>}</>}<button type="button" aria-label="讨论这份文稿" onClick={() => { onChat(`我想讨论「${title}」这份创作设定。${selected === undefined ? "" : `文稿：${selected}`} 请先和我讨论思路。`); }}>Chat</button></div></header>
       {selected === undefined ? <div className="oh-game-design-empty"><strong>把想法留在文稿里</strong><p>先和 AI 讨论故事、玩法和美术方向，已有的创作内容会出现在这里。</p><button type="button" onClick={() => { onChat("我想先梳理这个游戏的故事、核心玩法和美术方向，请和我讨论思路。"); }}>和 AI 讨论创作设定</button></div>
-        : buffer === undefined ? <div className="oh-game-design-empty" role={readError === undefined ? "status" : "alert"}><p>{readError ?? "正在读取创作文稿…"}</p>{readError !== undefined && <button type="button" onClick={retryRead}>重新读取</button>}</div>
+        : buffer === undefined ? <div className={`oh-game-design-empty${readError === undefined ? " oh-loading-state" : ""}`} role={readError === undefined ? "status" : "alert"}><p>{readError ?? "正在读取创作文稿…"}</p>{readError !== undefined && <button type="button" onClick={retryRead}>重新读取</button>}</div>
           : <>
             {buffer.error !== undefined && <div className="oh-story-error" role="alert">{buffer.error}</div>}
             {buffer.conflict !== undefined && <div className="oh-story-conflict" role="alert"><p>{buffer.conflict.message}</p>{buffer.conflict.theirs !== undefined && <><button type="button" onClick={() => { editor.onConflict(false); }}>载入磁盘版本</button><button type="button" onClick={() => { editor.onConflict(true); }}>保留本地草稿</button></>}</div>}

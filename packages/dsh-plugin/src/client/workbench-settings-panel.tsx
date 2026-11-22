@@ -33,9 +33,16 @@ export function WorkbenchSettingsForm({ modes, onChange }: SettingsProps) {
   </>;
 }
 
+export interface DialogBackdropEvent {
+  readonly target: unknown;
+  readonly detail?: number;
+  readonly clientX: number;
+  readonly clientY: number;
+}
+
 export function isDialogBackdropClick(
   dialog: Pick<HTMLDialogElement, "getBoundingClientRect">,
-  event: { readonly target: unknown; readonly detail?: number; readonly clientX: number; readonly clientY: number }
+  event: DialogBackdropEvent
 ): boolean {
   if (event.target !== dialog) return false;
   if (event.detail === 0 && event.clientX === 0 && event.clientY === 0) return false;
@@ -48,8 +55,32 @@ export function isDialogBackdropClick(
   return !inside;
 }
 
+export interface DialogBackdropGuard {
+  onPointerDown(dialog: Pick<HTMLDialogElement, "getBoundingClientRect"> | null, event: DialogBackdropEvent): void;
+  shouldCloseOnClick(dialog: Pick<HTMLDialogElement, "getBoundingClientRect"> | null, event: DialogBackdropEvent): boolean;
+}
+
+/**
+ * Require both `pointerdown` and `click` outside the dialog box before closing,
+ * so dragging a text selection from inside the modal onto the backdrop never dismisses it.
+ */
+export function createDialogBackdropGuard(): DialogBackdropGuard {
+  let pointerDownOnBackdrop = false;
+  return {
+    onPointerDown(dialog, event) {
+      pointerDownOnBackdrop = dialog !== null && isDialogBackdropClick(dialog, event);
+    },
+    shouldCloseOnClick(dialog, event) {
+      const startedOnBackdrop = pointerDownOnBackdrop;
+      pointerDownOnBackdrop = false;
+      return startedOnBackdrop && dialog !== null && isDialogBackdropClick(dialog, event);
+    }
+  };
+}
+
 export function WorkbenchSettingsPanel({ modes, onChange, onClose }: SettingsProps & { readonly onClose: () => void }) {
   const dialog = useRef<HTMLDialogElement>(null);
+  const backdropGuard = useRef(createDialogBackdropGuard());
   const titleId = useId();
   useEffect(() => {
     const element = dialog.current;
@@ -60,8 +91,11 @@ export function WorkbenchSettingsPanel({ modes, onChange, onClose }: SettingsPro
     className="oh-workbench-settings"
     aria-labelledby={titleId}
     onClose={onClose}
+    onPointerDown={(event) => {
+      backdropGuard.current.onPointerDown(dialog.current, event);
+    }}
     onClick={(event) => {
-      if (dialog.current !== null && isDialogBackdropClick(dialog.current, event)) dialog.current.close();
+      if (backdropGuard.current.shouldCloseOnClick(dialog.current, event)) dialog.current?.close();
     }}
   >
     <div className="oh-workbench-settings-body">

@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { access, cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { relative, resolve } from "node:path";
-import { build, transform, type Plugin } from "esbuild";
+import { build, transform } from "esbuild";
 
 import { isLocalArtifactPath } from "../packages/dsh-plugin/build-path-policy.js";
 import { matchesExcludedPrefix } from "./asset-sync-utils.js";
@@ -22,24 +22,6 @@ const ohStoryBundleExcluded = [
 ];
 const dramaBundleExcluded = dramaPlatformGlue.map((entry) => `skills/${entry}`);
 const videoRecapBundleExcluded = videoRecapPlatformGlue.map((entry) => `skills/${entry}`);
-
-const inlineCss: Plugin = {
-  name: "inline-css",
-  setup(builder) {
-    builder.onResolve({ filter: /\.css\?inline$/ }, (args) => ({
-      path: resolve(args.resolveDir, args.path.slice(0, -"?inline".length)),
-      namespace: "inline-css"
-    }));
-    builder.onLoad({ filter: /.*/, namespace: "inline-css" }, async (args) => {
-      const raw = await readFile(args.path, "utf8");
-      const minified = await transform(raw, { loader: "css", minify: true, target: ["chrome120", "safari17"] });
-      return {
-        contents: minified.code,
-        loader: "text"
-      };
-    });
-  }
-};
 
 await rm(outputRoot, { recursive: true, force: true });
 await mkdir(outputRoot, { recursive: true });
@@ -93,7 +75,6 @@ await build({
   define: { "process.env.NODE_ENV": '"production"' },
   minify: true,
   external: ["@deepseek-ai/*", "react", "react/jsx-runtime", "react-dom", "react-dom/client"],
-  plugins: [inlineCss],
   banner: { js: "window.__ModuleLoader__.load({id:\"@oh-story/dsh\",factory:(require)=>{var module={exports:{}};var exports=module.exports;" },
   footer: { js: ";return module.exports;}});" }
 });

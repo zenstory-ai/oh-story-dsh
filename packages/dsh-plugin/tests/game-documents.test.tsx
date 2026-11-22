@@ -84,4 +84,47 @@ describe("GameDocuments", () => {
     expect(loadDisk).toBeGreaterThan(-1);
     expect(keepLocal).toBeGreaterThan(loadDisk);
   });
+
+  it("keeps all missing dirty drafts reachable in nav and select, shows saved pill, dirty save button and loading state", () => {
+    const activePath = `${project.root}/PRODUCT_BRIEF.md`;
+    const missingA = `${project.root}/design/GAME_DESIGN.md`;
+    const missingB = `${project.root}/notes.md`;
+    const html = renderToStaticMarkup(<GameDocuments
+      project={project}
+      files={[{ path: activePath, bytes: 20, version: "1", kind: "text" }]}
+      editor={makeEditor({
+        selected: activePath,
+        buffers: {
+          [activePath]: { content: "# 改稿", saved: "# 原稿", version: "1", source: "human" },
+          [missingA]: { content: "# 删前草稿", saved: "# 旧", version: "1", source: "human", missing: true },
+          [missingB]: { content: "随笔草稿", saved: "", version: "1", source: "human", missing: true }
+        }
+      })}
+      onChat={vi.fn()}
+    />);
+    expect(html).toContain("选择与玩法（已删除草稿）");
+    expect(html).toContain("notes.md（已删除草稿）");
+    expect(html).toContain('data-dirty="true"');
+    expect(html).toContain('title="保存（⌘S / Ctrl+S）"');
+
+    const savedHtml = renderToStaticMarkup(<GameDocuments
+      project={project}
+      files={[{ path: activePath, bytes: 20, version: "1", kind: "text" }]}
+      editor={makeEditor({
+        selected: activePath,
+        buffers: { [activePath]: { content: "# 稳稿", saved: "# 稳稿", version: "1", source: "disk" } }
+      })}
+      justSaved
+      onChat={vi.fn()}
+    />);
+    expect(savedHtml).toContain("✓ 已保存");
+
+    const loadingHtml = renderToStaticMarkup(<GameDocuments
+      project={project}
+      files={[{ path: activePath, bytes: 20, version: "1", kind: "text" }]}
+      editor={makeEditor({ selected: activePath })}
+      onChat={vi.fn()}
+    />);
+    expect(loadingHtml).toContain("oh-loading-state");
+  });
 });

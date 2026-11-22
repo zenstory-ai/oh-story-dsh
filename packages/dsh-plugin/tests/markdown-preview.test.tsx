@@ -185,5 +185,24 @@ describe("MarkdownPreview", () => {
     expect(html).toContain('src="https://example.com/a.png" alt="外链"');
     expect(html).not.toContain("javascript:alert(1)\"");
     expect(resolveImageSrc).toHaveBeenCalledTimes(2);
+    expect(resolveImageSrc).toHaveBeenNthCalledWith(1, "封面/封面_v1.png", "图片.md");
+    expect(resolveImageSrc).toHaveBeenNthCalledWith(2, "https://example.com/a.png", "图片.md");
+  });
+
+  it("passes the rendered document path as basePath to resolveImageSrc across inline contexts", () => {
+    const resolveImageSrc = vi.fn((src: string, basePath?: string) => `/media?base=${encodeURIComponent(basePath ?? "")}&src=${encodeURIComponent(src)}`);
+    const content = [
+      "# ![图1](./h.png)",
+      "",
+      "- ![图2](./li.png)",
+      "",
+      "> ![图3](./q.png)"
+    ].join("\n");
+    const docPath = "game-adaptations/snow-ferry/design/GAME_DESIGN.md";
+    const html = renderToStaticMarkup(<MarkdownPreview content={content} label={docPath} resolveImageSrc={resolveImageSrc} />);
+    expect(resolveImageSrc).toHaveBeenCalledWith("./h.png", docPath);
+    expect(resolveImageSrc).toHaveBeenCalledWith("./li.png", docPath);
+    expect(resolveImageSrc).toHaveBeenCalledWith("./q.png", docPath);
+    expect(html).toContain(`base=${encodeURIComponent(docPath)}`);
   });
 });

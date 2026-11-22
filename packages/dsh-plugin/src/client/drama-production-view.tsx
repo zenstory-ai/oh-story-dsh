@@ -193,6 +193,79 @@ export function compositionSources(
   });
 }
 
+export interface DramaPipelineStep {
+  readonly id: "screenplay" | "assets" | "keyframes" | "videos" | "cut";
+  readonly label: string;
+  readonly done: boolean;
+  readonly ready?: number | undefined;
+  readonly total?: number | undefined;
+  readonly screenplayPath?: string | undefined;
+  readonly section?: DramaProductionSection | undefined;
+}
+
+/** Glanceable non-blocking episode progress pills computed from real documents and outputs. */
+export function dramaPipelineProgress(
+  production: DramaEpisodeProduction,
+  documents: Readonly<Record<string, string>> | undefined,
+  versions: readonly DramaMediaVersion[],
+  libraryVersions: readonly DramaMediaVersion[] | undefined
+): readonly DramaPipelineStep[] {
+  const screenplayPath = production.documentPaths.find((path) => path.endsWith("/剧本.md"))
+    ?? production.documentPaths.find((path) => /\/screenplay\.md$/iu.test(path))
+    ?? `${production.episodeDirectory}/剧本.md`;
+  const screenplayText = documents?.[screenplayPath]?.trim();
+  const hasScreenplay = (screenplayText !== undefined && screenplayText !== "")
+    || production.documentPaths.includes(screenplayPath);
+
+  const allAssets = [
+    ...production.assets,
+    ...production.visualAssets.filter((visual) => !production.assets.some((asset) => asset.title === visual.title))
+  ];
+  const totalAssets = allAssets.length;
+  const readyAssets = allAssets.filter((asset) =>
+    versions.some((version) => version.targetId === asset.id && isVisualMediaVersion(version))
+  ).length;
+
+  const totalShots = production.shots.length;
+  const readyKeyframes = production.shots.filter((shot) =>
+    versionsForShot(shot, versions).some((version) => isVisualMediaVersion(version) && version.kind === "image")
+  ).length;
+  const readyVideos = production.shots.filter((shot) =>
+    versionsForShot(shot, versions).some((version) => isVisualMediaVersion(version) && version.kind === "video")
+  ).length;
+
+  const assembledCut = findAssembledCut(versions, libraryVersions, production.episodeDirectory);
+
+  return [
+    { id: "screenplay", label: "剧本", done: hasScreenplay, screenplayPath },
+    {
+      id: "assets",
+      label: totalAssets > 0 ? `设定 ${String(readyAssets)}/${String(totalAssets)}` : "设定",
+      done: totalAssets > 0 && readyAssets === totalAssets,
+      ready: readyAssets,
+      total: totalAssets,
+      section: "assets"
+    },
+    {
+      id: "keyframes",
+      label: totalShots > 0 ? `关键帧 ${String(readyKeyframes)}/${String(totalShots)}` : "关键帧",
+      done: totalShots > 0 && readyKeyframes === totalShots,
+      ready: readyKeyframes,
+      total: totalShots,
+      section: "shots"
+    },
+    {
+      id: "videos",
+      label: totalShots > 0 ? `视频 ${String(readyVideos)}/${String(totalShots)}` : "视频",
+      done: totalShots > 0 && readyVideos === totalShots,
+      ready: readyVideos,
+      total: totalShots,
+      section: "shots"
+    },
+    { id: "cut", label: "成片", done: assembledCut !== undefined, section: "sequence" }
+  ];
+}
+
 export function productionCanvasAvailable(production: DramaEpisodeProduction, documents: Readonly<Record<string, string>> | undefined): boolean {
   const screenplay = documents?.[`${production.episodeDirectory}/剧本.md`]?.trim();
   return production.shots.length + production.assets.length + production.visualAssets.length > 0 || (screenplay !== undefined && screenplay !== "");
@@ -210,10 +283,12 @@ function missingModelEnvVars(adapter: DramaAdapterPreflightStatus): readonly Dra
  * and the keys live in the host environment, so the 生产 view states it up front —
  * as one compact status pill per concern, with the detail one click away.
  */
-export function ProductionStatus({ sessionId, diagnostics, onNavigate, initialPreflight, initialOpen = false }: {
+export function ProductionStatus({ sessionId, diagnostics, onNavigate, onSectionChange, pipeline, initialPreflight, initialOpen = false }: {
   readonly sessionId: string;
   readonly diagnostics: DramaEpisodeProduction["diagnostics"];
   readonly onNavigate: (target: DramaDocumentTarget) => void;
+  readonly onSectionChange?: ((section: DramaProductionSection) => void) | undefined;
+  readonly pipeline?: readonly DramaPipelineStep[] | undefined;
   readonly initialPreflight?: DramaPreflight | "failed" | undefined;
   readonly initialOpen?: boolean | undefined;
 }) {
@@ -307,6 +382,22 @@ export function ProductionStatus({ sessionId, diagnostics, onNavigate, initialPr
       <button ref={triggerRef} type="button" className="oh-story-status-pill" data-tone={detailTone} aria-expanded={open} aria-controls="oh-story-production-details" onClick={() => { setOpen((current) => !current); }}>
         <i aria-hidden="true" />制作详情<em>{detailSummary}</em><b aria-hidden="true" />
       </button>
+      {pipeline !== undefined && pipeline.length > 0 && <div className="oh-story-pipeline-strip" role="group" aria-label="本集制作进度">
+        {pipeline.map((step) => <button
+          key={step.id}
+          type="button"
+          className="oh-story-pipeline-pill"
+          data-step={step.id}
+          data-done={step.done || undefined}
+          onClick={() => {
+            if (step.screenplayPath !== undefined) {
+              onNavigate({ path: step.screenplayPath, offset: 0, id: step.screenplayPath });
+            } else if (step.section !== undefined) {
+              onSectionChange?.(step.section);
+            }
+          }}
+        >{step.label}</button>)}
+      </div>}
     </div>
     {open && <div id="oh-story-production-details" className="oh-story-production-details" role="region" aria-label="制作详情面板">
       {preflight === "failed" && <section className="oh-story-status-panel" aria-label="制作环境检查失败"><p>暂时无法检查制作能力。你仍可整理画布和素材，生成前请重新检查。</p><button type="button" onClick={() => { setPreflight(undefined); setAttempt((value) => value + 1); }}>重新检查</button></section>}
@@ -479,9 +570,13 @@ export function DramaProductionView(props: Props) {
 
   const activeJobs = props.jobs.filter((job) => job.status === "awaiting_confirmation" || job.status === "running" || job.status === "pending").length;
   const canvasAvailable = productionCanvasAvailable(props.production, props.documents);
+  const pipeline = useMemo(
+    () => dramaPipelineProgress(props.production, props.documents, props.versions, props.libraryVersions),
+    [props.production, props.documents, props.versions, props.libraryVersions]
+  );
   return <div className="oh-story-production">
     <div className="oh-story-production-bar"><div className="oh-story-production-tabs" role="tablist" aria-label="短剧生产视图">{PRIMARY_SECTIONS.map((item) => <button type="button" role="tab" tabIndex={props.section === item || (props.section === "shots" && item === "canvas") ? 0 : -1} aria-selected={props.section === item} key={item} onKeyDown={(event) => { handleTabKey(event, PRIMARY_SECTIONS, item, props.onSectionChange); }} onClick={() => { props.onSectionChange(item); }}>{SECTION_LABELS[item]}</button>)}</div><div className="oh-story-production-meta"><span className="oh-story-production-summary">{props.production.shots.length} 个镜头 · {props.production.assets.length + props.production.visualAssets.length + props.production.music.length} 项素材{activeJobs > 0 ? ` · ${String(activeJobs)} 项制作中` : ""}</span><button type="button" className="oh-story-shot-list-trigger" aria-pressed={props.section === "shots"} onClick={() => { props.onSectionChange("shots"); }}>镜头清单</button><button type="button" onClick={props.onRefresh}>刷新</button></div></div>
-    <ProductionStatus sessionId={props.sessionId} diagnostics={props.production.diagnostics} onNavigate={props.onNavigate} />
+    <ProductionStatus sessionId={props.sessionId} diagnostics={props.production.diagnostics} onNavigate={props.onNavigate} onSectionChange={props.onSectionChange} pipeline={pipeline} />
     {notice !== undefined && <div className="oh-story-production-notice" role="status"><span>{notice}</span><button type="button" aria-label="关闭提示" onClick={() => { setNotice(undefined); }}>×</button></div>}
     {props.section === "shots" && <ShotBoard {...props} onCreateJob={createJob} onBatch={createBatch} />}
     {props.section === "assets" && <AssetBoard {...props} onCreateJob={createJob} onWriteImagePrompts={writeImagePromptsForVisual} onPrepareMusic={prepareMusic} />}

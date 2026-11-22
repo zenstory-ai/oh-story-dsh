@@ -141,6 +141,40 @@ describe("VideoDocuments", () => {
       onChat={vi.fn()}
     />);
     expect(html).toContain("正在读取文稿…");
+    expect(html).toContain("oh-loading-state");
     expect(html).not.toContain("读取其他项目失败");
+  });
+
+  it("keeps all missing dirty drafts reachable after switching files and shows saved pill and dirty save metadata", () => {
+    const activePath = "video-recaps/ep1/work/EDIT_PLAN.md";
+    const missingA = "video-recaps/ep1/work/BRIEF.md";
+    const missingB = "video-recaps/ep1/work/custom.md";
+    const html = renderToStaticMarkup(<VideoDocuments
+      project={project}
+      editor={makeEditor({
+        selected: activePath,
+        buffers: {
+          [activePath]: { content: "# 修改中", saved: "# 原稿", version: "1", source: "human" },
+          [missingA]: { content: "# 删除草稿A", saved: "# 旧", version: "1", source: "human", missing: true },
+          [missingB]: { content: "# 删除草稿B", saved: "# 旧", version: "1", source: "human", missing: true }
+        }
+      })}
+      onChat={vi.fn()}
+    />);
+    expect(html).toContain("需求与画幅（已删除草稿）");
+    expect(html).toContain("work/custom.md（已删除草稿）");
+    expect(html).toContain('data-dirty="true"');
+    expect(html).toContain('title="保存（⌘S / Ctrl+S）"');
+
+    const savedHtml = renderToStaticMarkup(<VideoDocuments
+      project={project}
+      editor={makeEditor({
+        selected: activePath,
+        buffers: { [activePath]: { content: "# 稳稿", saved: "# 稳稿", version: "1", source: "disk" } }
+      })}
+      justSaved
+      onChat={vi.fn()}
+    />);
+    expect(savedHtml).toContain("✓ 已保存");
   });
 });

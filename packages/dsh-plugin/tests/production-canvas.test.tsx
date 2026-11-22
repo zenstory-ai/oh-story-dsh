@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { parseEpisodeProduction } from "../src/client/drama-production.js";
-import { ProductionCanvas } from "../src/client/production-canvas.js";
+import { canvasNodeMatchesFilter, ProductionCanvas } from "../src/client/production-canvas.js";
 
 describe("ProductionCanvas", () => {
   afterEach(() => { vi.restoreAllMocks(); });
@@ -67,5 +67,60 @@ describe("ProductionCanvas", () => {
     expect(markup).toContain("1 个版本");
     expect(markup).not.toContain("2 个版本");
     expect(markup).not.toContain("oh-story-canvas-node-versions");
+  });
+
+  it("renders segmented canvas filter, dims non-matching nodes without unmounting them, and styles version badges", () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const episode = "剧集/EP001";
+    const production = parseEpisodeProduction({
+      [`${episode}/剧本.md`]: "## EP001-SC001 内 · 房间 · 夜\n她抬起头。",
+      [`${episode}/分镜.md`]: "## SHOT-EP001-001 · 抬头\n- 来源：EP001-SC001\n- 时长：3s\n## SHOT-EP001-002 · 转身\n- 来源：EP001-SC001\n- 时长：3s"
+    }, episode);
+    const twoVersions = [
+      { id: "v1", targetId: "SHOT-EP001-001", kind: "image" as const, url: "/media/s1.png" },
+      { id: "v2", targetId: "SHOT-EP001-001", kind: "video" as const, url: "/media/s1.mp4" }
+    ];
+    expect(canvasNodeMatchesFilter({ kind: "story" }, [], "all")).toBe(true);
+    expect(canvasNodeMatchesFilter({ kind: "story" }, [], "pending")).toBe(false);
+    expect(canvasNodeMatchesFilter({ kind: "story" }, [], "ready")).toBe(false);
+    expect(canvasNodeMatchesFilter({ kind: "shot" }, [], "pending")).toBe(true);
+    expect(canvasNodeMatchesFilter({ kind: "shot" }, twoVersions, "pending")).toBe(false);
+    expect(canvasNodeMatchesFilter({ kind: "shot" }, twoVersions, "ready")).toBe(true);
+
+    const htmlAll = renderToStaticMarkup(<ProductionCanvas
+      production={production}
+      selectedId={undefined}
+      canvas={{}}
+      viewport={undefined}
+      versions={twoVersions}
+      onSelect={() => undefined}
+      onNavigate={() => undefined}
+      onCanvasChange={() => undefined}
+      onViewportChange={() => undefined}
+    />);
+    expect(htmlAll).toContain('class="oh-story-canvas-filter"');
+    expect(htmlAll).toContain('aria-pressed="true">全部</button>');
+    expect(htmlAll).toContain('aria-pressed="false">待准备</button>');
+    expect(htmlAll).toContain('aria-pressed="false">已生成</button>');
+    expect(htmlAll).toContain('<span class="oh-story-canvas-version-badge">V1</span>');
+    expect(htmlAll).toContain('<span class="oh-story-canvas-version-badge">V2</span>');
+    expect(htmlAll.match(/<article class="oh-story-canvas-node"/gu)).toHaveLength(3);
+    expect(htmlAll).not.toContain('data-dimmed="true"');
+
+    const htmlReady = renderToStaticMarkup(<ProductionCanvas
+      production={production}
+      selectedId={undefined}
+      canvas={{}}
+      viewport={undefined}
+      versions={twoVersions}
+      initialFilter="ready"
+      onSelect={() => undefined}
+      onNavigate={() => undefined}
+      onCanvasChange={() => undefined}
+      onViewportChange={() => undefined}
+    />);
+    // All 3 articles stay mounted; only non-matching story + pending shot are dimmed.
+    expect(htmlReady.match(/<article class="oh-story-canvas-node"/gu)).toHaveLength(3);
+    expect(htmlReady.match(/<article[^>]*data-dimmed="true"/gu)).toHaveLength(2);
   });
 });

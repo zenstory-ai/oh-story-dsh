@@ -41,24 +41,41 @@ export function VideoDocuments({
   onChat,
   fileReadError,
   onRetryRead,
-  resolveImageSrc
+  resolveImageSrc,
+  justSaved
 }: {
   readonly project: VideoProject;
   readonly editor: GameDocumentEditor;
   readonly onChat: (prompt: string) => void;
   readonly fileReadError?: string | null | undefined;
   readonly onRetryRead?: (() => void) | undefined;
-  readonly resolveImageSrc?: ((src: string) => string | undefined) | undefined;
+  readonly resolveImageSrc?: ((src: string, basePath?: string) => string | undefined) | undefined;
+  readonly justSaved?: boolean | undefined;
 }) {
   const creative: VideoArtifactSummary[] = [...videoCreativeDocuments(project)];
   const records: VideoArtifactSummary[] = [...videoProductionRecords(project)];
   const files: VideoArtifactSummary[] = [...creative, ...records];
-  const retained = editor.selected;
-  if (retained?.startsWith(`${project.root}/`) === true && editor.buffers[retained]?.missing === true && !files.some((file) => file.path === retained)) {
-    const draftArtifact: VideoArtifactSummary = { path: retained, version: editor.buffers[retained]?.version ?? "", label: "保留的本地草稿", kind: "script" };
-    creative.push(draftArtifact);
-    files.push(draftArtifact);
+  const knownPaths = new Set(files.map((file) => file.path));
+  const missingPaths = new Set<string>();
+  for (const [bufferPath, buf] of Object.entries(editor.buffers)) {
+    if (bufferPath.startsWith(`${project.root}/`) && buf.missing === true && !knownPaths.has(bufferPath)) {
+      const relative = bufferPath.slice(project.root.length + 1);
+      const draftArtifact: VideoArtifactSummary = {
+        path: bufferPath,
+        version: buf.version,
+        label: relative,
+        kind: "script"
+      };
+      creative.push(draftArtifact);
+      files.push(draftArtifact);
+      knownPaths.add(bufferPath);
+      missingPaths.add(bufferPath);
+    }
   }
+  const artifactLabel = (file: VideoArtifactSummary): string => {
+    const base = videoDocumentTitle(file);
+    return missingPaths.has(file.path) ? `${base}（已删除草稿）` : base;
+  };
   const selected = files.find((file) => file.path === editor.selected) ?? files[0];
   const path = selected?.path;
   useEffect(() => { if (path !== undefined && path !== editor.selected) editor.onSelect(path); }, [path, editor.selected, editor.onSelect]);
@@ -80,7 +97,7 @@ export function VideoDocuments({
     aria-current={file.path === path ? "page" : undefined}
     onClick={() => { editor.onSelect(file.path); }}
   >
-    <span>{videoDocumentTitle(file)}</span>
+    <span>{artifactLabel(file)}</span>
     {editor.buffers[file.path] !== undefined && editor.buffers[file.path]?.content !== editor.buffers[file.path]?.saved && <i title="尚未保存" />}
   </button>;
   return <div className="oh-video-documents oh-game-documents">
@@ -92,22 +109,22 @@ export function VideoDocuments({
       </details>}
     </nav>
     <label className="oh-game-doc-picker">创作文稿<select aria-label="选择视频创作文稿" value={path ?? ""} onChange={(event) => { editor.onSelect(event.target.value); }}>
-      {creative.map((file) => <option key={file.path} value={file.path}>{videoDocumentTitle(file)}</option>)}
-      {records.length > 0 && <optgroup label="更多制作记录">{records.map((file) => <option key={file.path} value={file.path}>{videoDocumentTitle(file)}</option>)}</optgroup>}
+      {creative.map((file) => <option key={file.path} value={file.path}>{artifactLabel(file)}</option>)}
+      {records.length > 0 && <optgroup label="更多制作记录">{records.map((file) => <option key={file.path} value={file.path}>{artifactLabel(file)}</option>)}</optgroup>}
     </select></label>
     <section className="oh-game-document-body">
       <header>
-        <div><h2>{title}</h2>{dirty && <span className="oh-game-draft-label">改稿草稿 · 尚未保存</span>}</div>
+        <div><h2>{title}</h2>{dirty && <span className="oh-game-draft-label">改稿草稿 · 尚未保存</span>}{!dirty && buffer?.saving !== true && justSaved === true && <span className="oh-story-saved-pill" role="status">✓ 已保存</span>}</div>
         <div>
           {buffer !== undefined && buffer.missing !== true && <>
             <button type="button" onClick={() => { editor.onMode(source ? "preview" : "source"); }}>{source ? "阅读文稿" : narration && rows.length > 0 ? "编辑解说" : "编辑原文"}</button>
-            {dirty && <button type="button" disabled={buffer.saving === true} onClick={() => { if (path !== undefined) void editor.onSave(path); }}>{buffer.saving === true ? "正在保存…" : "保存文稿"}</button>}
+            {dirty && <button className="oh-story-save" data-dirty="true" title="保存（⌘S / Ctrl+S）" type="button" disabled={buffer.saving === true} onClick={() => { if (path !== undefined) void editor.onSave(path); }}>{buffer.saving === true ? "正在保存…" : "保存文稿"}</button>}
           </>}
           <button type="button" onClick={() => { onChat(`我想继续讨论《${project.title}》的「${title}」。${path === undefined ? "" : `文稿：${path}。`}请先讨论表达与修改思路。`); }}>Chat</button>
         </div>
       </header>
       {path === undefined ? <div className="oh-game-design-empty"><strong>先想清楚，怎么讲</strong><p>一起讨论观众最想知道什么、哪些画面和原声值得留下。已有文稿会出现在这里。</p><button type="button" onClick={() => { onChat(`我想讨论《${project.title}》的解说方向，先明确故事主线和想保留的原声。`); }}>聊聊解说方向</button></div>
-        : buffer === undefined ? <div className="oh-game-design-empty" role={readError === undefined ? "status" : "alert"}><p>{readError ?? "正在读取文稿…"}</p>{readError !== undefined && <button type="button" onClick={retryRead}>重新读取</button>}</div>
+        : buffer === undefined ? <div className={`oh-game-design-empty${readError === undefined ? " oh-loading-state" : ""}`} role={readError === undefined ? "status" : "alert"}><p>{readError ?? "正在读取文稿…"}</p>{readError !== undefined && <button type="button" onClick={retryRead}>重新读取</button>}</div>
           : <>
             {buffer.error !== undefined && <div className="oh-story-error" role="alert">{buffer.error}</div>}
             {buffer.conflict !== undefined && <div className="oh-story-conflict" role="alert">

@@ -1,4 +1,4 @@
-import { useEffect, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { ohStoryEndpointUrl } from "./workbench-ui.js";
 import {
   readWelcomeGuidePreference,
@@ -151,13 +151,73 @@ export class WelcomeGuideController {
   }
 }
 
+export interface WelcomeStarterCard {
+  readonly id: "story" | "drama" | "game" | "video";
+  readonly title: string;
+  readonly subtitle: string;
+  readonly prompt: string;
+}
+
+export const WELCOME_STARTERS: readonly WelcomeStarterCard[] = [
+  { id: "story", title: "写小说", subtitle: "从设定、大纲到长短篇正文连载", prompt: "/story" },
+  { id: "drama", title: "编短剧", subtitle: "写剧本、拆视觉分镜并生成素材成片", prompt: "/short-drama" },
+  { id: "game", title: "做互动游戏", subtitle: "把故事改编为可试玩的互动小说游戏", prompt: "/novel-to-game quick" },
+  { id: "video", title: "剪视频解说", subtitle: "梳理原片故事主线、配解说与字幕成片", prompt: "/video-recap" }
+];
+
+function WelcomeStarterGrid({ onStartPrompt }: { readonly onStartPrompt?: ((prompt: string) => boolean) | undefined }) {
+  const [feedback, setFeedback] = useState<{ readonly id: WelcomeStarterCard["id"]; readonly text: string }>();
+  const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => { clearTimeout(timerRef.current); }, []);
+
+  const flash = (id: WelcomeStarterCard["id"], text: string): void => {
+    clearTimeout(timerRef.current);
+    setFeedback({ id, text });
+    timerRef.current = setTimeout(() => { setFeedback(undefined); }, 1800);
+  };
+
+  const handleSelect = (card: WelcomeStarterCard): void => {
+    if (onStartPrompt !== undefined) {
+      const filled = onStartPrompt(card.prompt);
+      if (filled) return;
+    }
+    const clipboard = typeof navigator === "undefined" ? undefined : navigator.clipboard;
+    if (clipboard !== undefined && typeof clipboard.writeText === "function") {
+      void clipboard.writeText(card.prompt)
+        .then(() => { flash(card.id, "已复制，粘贴到输入框即可"); })
+        .catch(() => { flash(card.id, `请输入 ${card.prompt}`); });
+      return;
+    }
+    flash(card.id, `请输入 ${card.prompt}`);
+  };
+
+  return <div className="oh-story-welcome-starters" role="group" aria-label="快速开始创作">
+    {WELCOME_STARTERS.map((card) => (
+      <button
+        key={card.id}
+        type="button"
+        className="oh-story-welcome-starter"
+        data-mode={card.id}
+        title={onStartPrompt === undefined ? `复制 ${card.prompt} 到剪贴板` : `在输入框填入 ${card.prompt}`}
+        onClick={() => { handleSelect(card); }}
+      >
+        <strong>{card.title}</strong>
+        <span>{card.subtitle}</span>
+        <code>{feedback?.id === card.id ? feedback.text : card.prompt}</code>
+      </button>
+    ))}
+  </div>;
+}
+
 /** How to reach the workbench from a DSH that has no creative work open yet. */
 export function WelcomeGuide({
   onDismiss,
-  dismissing = false
+  dismissing = false,
+  onStartPrompt
 }: {
   readonly onDismiss?: (() => void) | undefined;
   readonly dismissing?: boolean | undefined;
+  readonly onStartPrompt?: ((prompt: string) => boolean) | undefined;
 } = {}) {
   return <section className="oh-story-welcome" aria-label="Oh Story 使用引导">
     <div className="oh-story-welcome-header">
@@ -169,12 +229,16 @@ export function WelcomeGuide({
         onClick={onDismiss}
       >关闭欢迎引导</button>}
     </div>
-    <p>打开已有作品目录时，小说、短剧、游戏、视频工作台会自动展开。要从空白会话开始创作，输入 <code>/story</code>、<code>/short-drama</code>、<code>/novel-to-game quick</code>、<code>/video-recap</code>，或直接说说想写什么。</p>
-    <ol>
-      <li>直接开写：不选文件夹也能开始，作品会自动保存在 DSH 默认工作区（Default workspace）。</li>
-      <li>打开已有作品：点左侧「工作区」旁的「添加工作区」，选中你的作品目录即可自动展开对应工作台。</li>
-      <li>配置模型：输入框右下角显示模型名即可开始对话；只浏览和编辑已有稿件无需 API Key。</li>
-    </ol>
+    <p>打开已有作品目录时，小说、短剧、游戏、视频工作台会自动展开。从空白会话开始创作，点下面任一方向，或直接说说想写什么。</p>
+    <WelcomeStarterGrid onStartPrompt={onStartPrompt} />
+    <details className="oh-story-welcome-details">
+      <summary>使用说明与会话模式</summary>
+      <ol>
+        <li>直接开写：不选文件夹也能开始，作品会自动保存在 DSH 默认工作区（Default workspace）。</li>
+        <li>打开已有作品：点左侧「工作区」旁的「添加工作区」，选中你的作品目录即可自动展开对应工作台。</li>
+        <li>配置模型：输入框右下角显示模型名即可开始对话；只浏览和编辑已有稿件无需 API Key。</li>
+      </ol>
+    </details>
     <p className="oh-story-welcome-note">提示：新建作品请使用支持技能的会话模式（默认 <code>Standard</code> 或 <code>PTC</code>；<code>Minimal</code> 模式不加载插件技能）。不需要引导时可点击右上角「关闭欢迎引导」，日后可在「插件 → @oh-story/dsh」或配置项 <code>welcomeGuide</code> 中重新开启。</p>
   </section>;
 }

@@ -9,7 +9,12 @@ import {
   workbenchModesKey,
   writeWorkbenchModes
 } from "../src/client/workbench-settings.js";
-import { isDialogBackdropClick, WorkbenchSettingsForm, WorkbenchSettingsPanel } from "../src/client/workbench-settings-panel.js";
+import {
+  createDialogBackdropGuard,
+  isDialogBackdropClick,
+  WorkbenchSettingsForm,
+  WorkbenchSettingsPanel
+} from "../src/client/workbench-settings-panel.js";
 
 describe("workbench visibility preferences", () => {
   it("defaults to all modes and recovers malformed or empty preferences", () => {
@@ -115,5 +120,19 @@ describe("workbench settings form", () => {
     expect(isDialogBackdropClick(dialog, { target: dialog, detail: 0, clientX: 0, clientY: 0 })).toBe(false);
     // Clicking outside the dialog rect (true ::backdrop click) -> closes.
     expect(isDialogBackdropClick(dialog, { target: dialog, detail: 1, clientX: 40, clientY: 200 })).toBe(true);
+
+    // Dragging a text selection from inside the dialog onto the backdrop must NOT close.
+    const guard = createDialogBackdropGuard();
+    guard.onPointerDown(dialog, { target: {}, clientX: 200, clientY: 200 });
+    expect(guard.shouldCloseOnClick(dialog, { target: dialog, detail: 1, clientX: 40, clientY: 200 })).toBe(false);
+
+    // Pointer down AND click on backdrop -> closes once, then resets.
+    guard.onPointerDown(dialog, { target: dialog, clientX: 40, clientY: 200 });
+    expect(guard.shouldCloseOnClick(dialog, { target: dialog, detail: 1, clientX: 40, clientY: 200 })).toBe(true);
+    expect(guard.shouldCloseOnClick(dialog, { target: dialog, detail: 1, clientX: 40, clientY: 200 })).toBe(false);
+
+    // Pointer down on backdrop then released inside dialog -> must NOT close.
+    guard.onPointerDown(dialog, { target: dialog, clientX: 40, clientY: 200 });
+    expect(guard.shouldCloseOnClick(dialog, { target: dialog, detail: 1, clientX: 200, clientY: 200 })).toBe(false);
   });
 });

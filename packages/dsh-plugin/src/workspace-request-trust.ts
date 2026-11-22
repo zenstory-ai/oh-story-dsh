@@ -10,9 +10,33 @@ function header(headers: IncomingHttpHeaders | Headers, name: string): string | 
   return typeof value === "string" ? value : undefined;
 }
 
+function hasUnsafeAuthorityChar(authority: string): boolean {
+  if (/[\s;,@'"/\\?#]/u.test(authority)) return true;
+  for (let index = 0; index < authority.length; index += 1) {
+    const code = authority.charCodeAt(index);
+    if (code <= 0x20 || code === 0x7f) return true;
+  }
+  return false;
+}
+
 function parseAuthority(authority: string, scheme: "http:" | "https:" = "http:"): URL | undefined {
-  try { return new URL(`${scheme}//${authority}`); }
-  catch { return undefined; }
+  if (authority === "" || hasUnsafeAuthorityChar(authority)) return undefined;
+  try {
+    const parsed = new URL(`${scheme}//${authority}`);
+    if (
+      parsed.username !== ""
+      || parsed.password !== ""
+      || parsed.pathname !== "/"
+      || parsed.search !== ""
+      || parsed.hash !== ""
+      || parsed.hostname === ""
+    ) {
+      return undefined;
+    }
+    return parsed;
+  } catch {
+    return undefined;
+  }
 }
 
 function canonicalAuthority(entry: string, url: URL): string {

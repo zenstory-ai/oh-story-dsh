@@ -747,4 +747,40 @@ describe("registered native hooks", () => {
     expect(dupDecision.additionalContexts).toHaveLength(1);
     expect(dupDecision.additionalContexts?.[0]?.content[0]?.text).toContain("章节标题重复「雪夜」");
   });
+
+  it("avoids false positives on 略微/忽略/攻略, non-.md files under 正文/, cross-quote token gluing, and formats \\uFFFD label", async () => {
+    // 1. Bare `略` inside normal parenthetical prose is not a placeholder; real omission placeholders still trigger.
+    expect(detectProseHardDefects("他（略微迟疑了一下）才开口，把（忽略细节的）计划与（攻略路线）收进袖中。")).toEqual([]);
+    expect(detectProseHardDefects("这一段（以下略去五百字）。")).toEqual(["出现括号省略占位符"]);
+
+    // 2. Dialogue masking preserves token/sentence boundary so removing quotes never glues words into false hits.
+    expect(detectProseHardDefects("我「从没说过」无法继续，作为「普通人」AI不会那样做。")).toEqual([]);
+    expect(detectProseHardDefects("「开场」Here's what he muttered.")).toEqual([]);
+    expect(detectProseHardDefects("他作为AI「说了句话」。")).toEqual(["叙述中出现 AI 自指元信息"]);
+
+    // 3. Replacement character label includes U+FFFD explicitly.
+    expect(detectProseHardDefects("门缝透进一道\uFFFD微光。")).toEqual(["出现乱码替换字符（\uFFFD）"]);
+
+    // 4. Non-.md and dotfile notes under 正文/ are ignored, while valid .md chapter files remain detected.
+    expect(detectStoryMutation("write", { file_path: "正文/notes.json" }, "/books/demo")).toBeUndefined();
+    expect(detectStoryMutation("write", { file_path: "正文/notes.txt" }, "/books/demo")).toBeUndefined();
+    expect(detectStoryMutation("write", { file_path: "正文/.draft.md" }, "/books/demo")).toBeUndefined();
+    expect(detectStoryMutation("write", { file_path: "正文/001.md" }, "/books/demo"))
+      .toEqual({ root: "/books/demo", path: "正文/001.md" });
+    expect(detectStoryMutation("write", { file_path: "正文/第001章_雨夜.md" }, "/books/demo"))
+      .toMatchObject({ path: "正文/第001章_雨夜.md", chapter: 1 });
+
+    // Writing 正文/notes.json in a tracked book must not trigger truncation notices or Tracking reminders.
+    const book = await project();
+    await mkdir(join(book, "正文"));
+    await writeFile(join(book, "正文", "notes.json"), "{\"idea\": \"draft\"}");
+    const handlers = registered();
+    const postExecute = handlers.get("tools/post-execute")![0]!;
+    const accept = async (): Promise<PostToolDecision> => ({ kind: "accept" } as PostToolDecision);
+    await expect(postExecute(
+      execution("write", { file_path: "正文/notes.json", content: "{\"idea\": \"draft\"}" }, agentOn(book, localDshFs())),
+      { isError: false },
+      accept
+    )).resolves.toEqual({ kind: "accept" });
+  });
 });

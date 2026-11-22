@@ -221,7 +221,7 @@ describe("video narrative projection", () => {
         audio: {
           narration: [
             { id: "n1", at: 0.5, text: "第一段尚未配音的草稿旁白" },
-            { id: "n2", at: 4.0, text: "第二段草稿旁白" }
+            { id: "n2", at: 4.0, duration: null, end: null, text: "第二段草稿旁白" }
           ]
         }
       }

@@ -62,8 +62,32 @@ export function clearRuntimeError(): null {
   return null;
 }
 
+export function appendRuntimeError(
+  errors: readonly string[],
+  next: string | null | undefined,
+  limit = 10
+): readonly string[] {
+  const normalized = normalizeRuntimeError(next);
+  if (normalized === null) return errors;
+  const max = Math.max(1, Math.trunc(limit));
+  if (errors.includes(normalized)) return errors;
+  const combined = [...errors, normalized];
+  return combined.length > max ? combined.slice(combined.length - max) : combined;
+}
+
 export function formatRuntimeErrorPrompt(projectTitle: string, runtimeError: string): string {
   return `《${projectTitle}》在游戏预览中出现运行报错，请定位并修复：\n${runtimeError}`;
+}
+
+export function formatRuntimeErrorsPrompt(projectTitle: string, errors: readonly string[]): string {
+  const cleaned = errors
+    .map((item) => normalizeRuntimeError(item))
+    .filter((item): item is string => item !== null);
+  if (cleaned.length <= 1) {
+    return formatRuntimeErrorPrompt(projectTitle, cleaned[0] ?? "");
+  }
+  const numbered = cleaned.map((item, index) => `${String(index + 1)}. ${item}`).join("\n");
+  return `《${projectTitle}》在游戏预览中出现 ${String(cleaned.length)} 条运行报错，请逐一定位并修复：\n${numbered}`;
 }
 
 /**
