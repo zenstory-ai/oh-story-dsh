@@ -91,14 +91,14 @@ const WORKBENCH_STYLESHEET_ID = "oh-story-workbench-css";
 const MAX_STYLESHEET_RETRIES = 3;
 
 function scheduleWorkbenchStylesheetRetry(doc: Document, failedLink: HTMLLinkElement, attempt: number): void {
-  if (attempt >= MAX_STYLESHEET_RETRIES) return;
+  if (attempt >= MAX_STYLESHEET_RETRIES || failedLink.dataset.ohStoryCssRetrying === "1") return;
+  failedLink.dataset.ohStoryCssRetrying = "1";
   const prefix = detectOhStoryApiPrefix();
+  const baseUrl = ohStoryEndpointUrl("workbench.css");
   globalThis.setTimeout(() => {
     if (doc.head == null) return;
     const current = doc.getElementById(WORKBENCH_STYLESHEET_ID);
-    if (current instanceof HTMLLinkElement && current !== failedLink && (current.dataset.ohStoryCssState === "loaded" || current.sheet !== null)) {
-      return;
-    }
+    if (current !== null && current !== failedLink) return;
     if (current !== null) current.remove();
     const nextAttempt = attempt + 1;
     const next = doc.createElement("link");
@@ -106,7 +106,6 @@ function scheduleWorkbenchStylesheetRetry(doc: Document, failedLink: HTMLLinkEle
     next.rel = "stylesheet";
     next.setAttribute("data-oh-story-api-prefix", prefix);
     next.dataset.ohStoryCssRetries = String(nextAttempt);
-    const baseUrl = ohStoryEndpointUrl("workbench.css");
     const retryUrl = `${baseUrl}${baseUrl.includes("?") ? "&" : "?"}retry=${String(nextAttempt)}`;
     next.href = retryUrl;
     attachWorkbenchStylesheetListeners(doc, next, nextAttempt);
@@ -2380,7 +2379,7 @@ function CreativeWorkbench({
                 <MarkdownPreview content={buffer.content} label={selected} resolveImageSrc={resolveImageSrc} />
                 {hasChapterNav && <nav className="oh-story-chapter-nav" aria-label="章节切换">
                   <button type="button" disabled={chapterNav.prev === undefined} onClick={() => { if (chapterNav.prev !== undefined) revealPath(chapterNav.prev); }}>← 上一章</button>
-                  {chapterNav.index !== undefined && chapterNav.total !== undefined && <span>第 {chapterNav.index} / {chapterNav.total} 章</span>}
+                  {chapterNav.index !== undefined && chapterNav.total !== undefined && <span>第 {chapterNav.index + 1} / {chapterNav.total} 章</span>}
                   <button type="button" disabled={chapterNav.next === undefined} onClick={() => { if (chapterNav.next !== undefined) revealPath(chapterNav.next); }}>下一章 →</button>
                 </nav>}
               </>

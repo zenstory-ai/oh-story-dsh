@@ -16,14 +16,14 @@
 默认配套 DSH `0.2.2-rc.5`，需要 **Node.js 24.9+**（命令已自带临时 `pnpm`，无需提前全局安装）：
 
 ```bash
-npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.2-rc.5 dsh plugin --profile web add @oh-story/dsh@0.1.27 &&
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.2-rc.5 dsh plugin --profile web add @oh-story/dsh@0.1.28 &&
 npx -y @deepseek-ai/dsh@0.2.2-rc.5 web
 ```
 
 也可直接安装 GitHub Release 预构建包：
 
 ```bash
-npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.2-rc.5 dsh plugin --profile web add https://github.com/zenstory-ai/oh-story-dsh/releases/download/v0.1.27/oh-story-dsh-0.1.27.tgz &&
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.2-rc.5 dsh plugin --profile web add https://github.com/zenstory-ai/oh-story-dsh/releases/download/v0.1.28/oh-story-dsh-0.1.28.tgz &&
 npx -y @deepseek-ai/dsh@0.2.2-rc.5 web
 ```
 
@@ -69,7 +69,7 @@ npx -y @deepseek-ai/dsh@0.2.2-rc.5 web
 想让默认 `web` 环境保持原样，可把插件装进独立的 `story` profile：
 
 ```bash
-npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.2-rc.5 dsh plugin --profile story add @oh-story/dsh@0.1.27
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.2-rc.5 dsh plugin --profile story add @oh-story/dsh@0.1.28
 ```
 
 将 `~/.dsh/profiles/story/package.json` 中的 `dsh.profile.bundles` 设为 `["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-web-app", "@oh-story/dsh"]`，之后即可用 `npx -y @deepseek-ai/dsh@0.2.2-rc.5 --profile story --port 3081` 单独启动创作工作台。

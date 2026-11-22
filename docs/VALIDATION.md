@@ -1,6 +1,21 @@
 # Validation
 
-Candidate: `@oh-story/dsh` 0.1.27 on DeepSeek Harness `0.2.2-rc.1`, with release-gate coverage of `0.2.0-rc.2` and `0.2.2-rc.3`. Local aggregate acceptance passed on 2026-11-17.
+Candidate: `@oh-story/dsh` 0.1.28 on DeepSeek Harness `0.2.2-rc.5`, with release-gate coverage of `0.2.0-rc.2` and real `deepseek-official/deepseek-flash` provider validation. Local aggregate acceptance passed on 2026-11-22.
+
+## 0.1.28 release evidence
+
+0.1.28 syncs Oh Story 0.11.0, Drama Skills 0.13.0, and video-recap-skills 0.8.0 (NovelToGame 0.9.0 stays pinned), moves the default host to DeepSeek Harness `0.2.2-rc.5`, adopts DSH `0.2.2-rc.5` `connection.fetch.register`, `conversation.hero.frame`, and static `lib/workbench.css` delivery (while preserving `0.2.0-rc.2` fallback parity), hardens workspace/preview security, and adds creator UX upgrades across all four workbenches.
+
+### Local evidence
+
+- Upstream parity: Oh Story 0.11.0 (`e5a8b98657c0`, 14 Skills, 7 Roles, `agents_version` 45); Drama Skills 0.13.0 (`7fed9dfcd33c`, 12 Skills, 9 compiled scripts); NovelToGame 0.9.0 (`48328cd756cd`, 5 Skills, no bundled examples); video-recap-skills 0.8.0 (`4ae6380a6a5a`, `video-recap` + `video-reference`).
+- DSH `0.2.2-rc.5` architecture & bundle budget: `/api/oh-story/*` mounts on `connection.fetch.register` (`POST` save, `connection.admit` trust delegation, `ETag`/`304` + `no-cache` on unversioned CSS, `503` on empty CSS); `WelcomeGuide` renders via `conversation.hero.frame` (with zero-observer fallback on `<0.2.2-rc.2`); static `packages/dsh-plugin/lib/workbench.css` (~151 KB) removes all `?inline` CSS from `packages/dsh-plugin/lib/client.js` (~275 KB, down ~27% from 379 KB).
+- On 2026-11-22, `pnpm verify` + `pnpm test:dsh` (`0.2.2-rc.5`) + `pnpm test:dsh:rc` (`0.2.0-rc.2`) + `node scripts/release.mjs check --tag v0.1.28` all passed: lint (`--max-warnings=0`), typecheck, 4/4 parity checks, DSH boundary (94 non-plugin files), release/upstream tests (18/18), 364 unit/contract tests across 40 files, build, and packaged Chrome E2E on both DSH `0.2.2-rc.5` and `0.2.0-rc.2` (`ok: true` on both).
+
+### Release gates
+
+- **Local aggregate acceptance:** passed 2026-11-22 (`pnpm verify`, `pnpm test:dsh` on `0.2.2-rc.5`, `pnpm test:dsh:rc` on `0.2.0-rc.2`, `node scripts/release.mjs check --tag v0.1.28`).
+- **Paid provider:** passed 2026-11-22. `pnpm test:dsh:real` ran packed `@oh-story/dsh` on DSH `0.2.2-rc.5` with `deepseek-official/deepseek-flash`: `{"ok":true,"dshVersion":"0.2.2-rc.5","provider":"deepseek-official","model":"deepseek-flash","skills":["story-review","short-drama-review"],"roleCalls":4,"successfulRoles":2,"durableSessionEvents":{"story":178,"drama":92},"projectUnchanged":true}`. The operator-authorized credential was injected in-memory from Railway and never printed, written to disk, or logged.
 
 ## 0.1.27 release evidence
 

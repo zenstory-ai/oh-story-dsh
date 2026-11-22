@@ -40,14 +40,14 @@
 | **Interactive game** | [NovelToGame 0.9.0](https://github.com/zenstory-ai/novel-to-game/releases/tag/v0.9.0) · 5 Skills | `/novel-to-game quick`, `/game-build`, `/game-qa` |
 | **Video recap** | [video-recap-skills 0.8.0](https://github.com/zenstory-ai/video-recap-skills/releases/tag/v0.8.0) · 2 Skills | `/video-recap`, `/video-reference` |
 
-> Latest release: **v0.1.27**, paired by default with DeepSeek Harness `0.2.2-rc.5` (Node.js 24.9+) and also compatible with `0.2.2-rc.1`, `0.2.1-rc.5`, and `0.2.0-rc.2`. See [CHANGELOG.md](CHANGELOG.md), [Releases](https://github.com/zenstory-ai/oh-story-dsh/releases), and [Upgrading](#what-do-i-do-after-upgrading) for release and migration notes.
+> Latest release: **v0.1.28**, paired by default with DeepSeek Harness `0.2.2-rc.5` (Node.js 24.9+) and also compatible with `0.2.2-rc.1`, `0.2.1-rc.5`, and `0.2.0-rc.2`. See [CHANGELOG.md](CHANGELOG.md), [Releases](https://github.com/zenstory-ai/oh-story-dsh/releases), and [Upgrading](#what-do-i-do-after-upgrading) for release and migration notes.
 
 ## Installation
 
 Paired by default with DSH `0.2.2-rc.5` on **Node.js 24.9+** (the command brings a temporary `pnpm`, so nothing else needs to be installed globally):
 
 ```bash
-npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.2-rc.5 dsh plugin --profile web add @oh-story/dsh@0.1.27 &&
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.2-rc.5 dsh plugin --profile web add @oh-story/dsh@0.1.28 &&
 npx -y @deepseek-ai/dsh@0.2.2-rc.5 web
 ```
 
@@ -59,7 +59,7 @@ Use the **same DSH version** for both `plugin add` and `web` (`>=0.2.0-rc.2 <0.2
 <summary>Install the prebuilt tarball from GitHub Releases</summary>
 
 ```bash
-npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.2-rc.5 dsh plugin --profile web add https://github.com/zenstory-ai/oh-story-dsh/releases/download/v0.1.27/oh-story-dsh-0.1.27.tgz &&
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.2-rc.5 dsh plugin --profile web add https://github.com/zenstory-ai/oh-story-dsh/releases/download/v0.1.28/oh-story-dsh-0.1.28.tgz &&
 npx -y @deepseek-ai/dsh@0.2.2-rc.5 web
 ```
 
@@ -101,7 +101,7 @@ Video Recap 0.8.0 is local-first and only requires **Python 3.10+** and **ffmpeg
 Bundled Skills load in any session preset that enables the skill tool (`Standard` or `PTC`; `Minimal` skips skills). To leave your default `web` profile untouched, install into a separate `story` profile:
 
 ```bash
-npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.2-rc.5 dsh plugin --profile story add @oh-story/dsh@0.1.27
+npx -y --package pnpm@11.7.0 --package @deepseek-ai/dsh@0.2.2-rc.5 dsh plugin --profile story add @oh-story/dsh@0.1.28
 ```
 
 Then edit `~/.dsh/profiles/story/package.json` so DSH's Web UI loads before the plugin:
