@@ -1,7 +1,24 @@
-import type { ChildProcess } from "node:child_process";
+import { spawnSync, type ChildProcess } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { join } from "node:path";
+
+/** Cross-platform pnpm execution (uses cmd.exe on Windows where pnpm is pnpm.cmd). */
+export function runPnpm(
+  cwd: string,
+  args: readonly string[],
+  env: NodeJS.ProcessEnv = process.env,
+  stdio: "pipe" | "inherit" = "pipe"
+): void {
+  const command = process.platform === "win32" ? (process.env.ComSpec ?? "cmd.exe") : "pnpm";
+  const finalArgs = process.platform === "win32" ? ["/d", "/s", "/c", "pnpm", ...args] : [...args];
+  const result = spawnSync(command, finalArgs, { cwd, env, encoding: "utf8", stdio });
+  if (result.status !== 0) {
+    throw new Error(
+      `Command failed: pnpm ${args.join(" ")}\n${result.error?.message ?? ""}\n${result.stdout ?? ""}\n${result.stderr ?? ""}`
+    );
+  }
+}
 
 /** Exact WebSocket route carrying every Typert Remote stream. */
 export const REMOTE_STREAM_MUX_PATH = "/api/remote.mux";

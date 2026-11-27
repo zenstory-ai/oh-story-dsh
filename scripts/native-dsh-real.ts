@@ -11,6 +11,7 @@ import {
   freePort,
   isolateFirstUseWorkspace,
   rpc,
+  runPnpm,
   sessionEvents,
   stopDshProcess,
   type HistoryEvent
@@ -27,9 +28,8 @@ function run(command: string, args: readonly string[], env: NodeJS.ProcessEnv = 
 async function readApiKey(): Promise<string> {
   const local = parseEnv(await readFile(join(repositoryRoot, ".env.local"), "utf8").catch(() => ""));
   let value = process.env.DEEPSEEK_API_KEY ?? local.DEEPSEEK_API_KEY;
-  if (value === undefined) {
-    const keyPath = process.env.DEEPSEEK_API_KEY_FILE ?? "/Volumes/My Shared Files/tmp/.key";
-    const source = await readFile(keyPath, "utf8").catch(() => "");
+  if (value === undefined && process.env.DEEPSEEK_API_KEY_FILE) {
+    const source = await readFile(process.env.DEEPSEEK_API_KEY_FILE, "utf8").catch(() => "");
     if (source.includes("=")) value = parseEnv(source).DEEPSEEK_API_KEY;
     else value = source.trim();
   }
@@ -107,17 +107,16 @@ async function main(): Promise<void> {
       writeFile(join(projectRoot, "剧集", "EP001", "视频提示词.md"), "# EP001 视频提示词\n\n## MOTION-EP001-001 · 车票滑出\n- 分镜：SHOT-EP001-001\n- 时长：4s\n- 开场画面：An abandoned ticket booth glowing in a storm.\n- 动作过程：空售票窗亮灯 → 湿车票从缝隙滑出\n- 终点：湿车票滑到人物面前。\n\n### 可复制提示词\n> The ticket booth light switches on and a wet ticket slides through the slot.\n")
     ]);
     const before = await treeDigest(projectRoot);
-    run("pnpm", ["--filter", "@oh-story/dsh", "build"]);
-    run("pnpm", ["--filter", "@oh-story/dsh", "pack", "--pack-destination", packDirectory]);
+    runPnpm(repositoryRoot, ["--filter", "@oh-story/dsh", "pack", "--pack-destination", packDirectory]);
     await mkdir(installation, { recursive: true });
     await writeFile(join(installation, "package.json"), `${JSON.stringify({ private: true, dependencies: { "@deepseek-ai/dsh": dshVersion } }, null, 2)}\n`);
     await writeFile(join(installation, "pnpm-workspace.yaml"), [
-      "packages:", "  - .", "nodeLinker: hoisted", "allowBuilds:",
+      "packages:", "  - .", "nodeLinker: hoisted", "minimumReleaseAge: 0", "allowBuilds:",
       "  '@deepseek-ai/dsh-subprocess-local': true", "  '@google/genai': false", "  koffi: true",
       "  node-addon-require-builtin: false", "  node-pty: true", "  protobufjs: false", ""
     ].join("\n"));
-    try { run("pnpm", ["--dir", installation, "install", "--offline"]); }
-    catch { run("pnpm", ["--dir", installation, "install"]); }
+    try { runPnpm(repositoryRoot, ["--dir", installation, "install", "--offline"]); }
+    catch { runPnpm(repositoryRoot, ["--dir", installation, "install"]); }
     const dshBin = join(installation, "node_modules", "@deepseek-ai", "dsh", "lib", "bin.js");
     const tarball = (await readdir(packDirectory)).find((entry) => entry.endsWith(".tgz"));
     if (tarball === undefined) throw new Error("Plugin pack did not create a tarball.");

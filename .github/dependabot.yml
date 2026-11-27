@@ -14,6 +14,15 @@ updates:
       # DSH host/runtime packages are pinned in lockstep via pnpm-workspace.yaml
       # overrides and tracked by .github/workflows/upstream-updates.yml.
       - dependency-name: "@deepseek-ai/*"
+      # Host DSH runs React 18 (peerDependencies: ^18.3.1); never bump React/React-DOM to v19 independently.
+      - dependency-name: "react"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "react-dom"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@types/react"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@types/react-dom"
+        update-types: ["version-update:semver-major"]
     commit-message:
       prefix: "chore"
       prefix-development: "chore"

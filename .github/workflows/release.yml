@@ -63,15 +63,13 @@ jobs:
           mkdir -p release
           node scripts/release.mjs ci-proof "${args[@]}"
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
-        with:
-          version: 11.7.0
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Install Chrome for the official DSH Web smoke
-        run: pnpm exec playwright install --with-deps chrome
+      - name: Ensure Chrome for the official DSH Web smoke
+        run: command -v google-chrome >/dev/null || pnpm exec playwright install --with-deps chrome
       - run: pnpm verify:release
       - run: pnpm pack:release
       - name: Create source-bound release manifest
@@ -153,29 +151,7 @@ jobs:
           path: release
       - name: Revalidate the exact tarball
         run: node scripts/release.mjs verify-manifest --manifest release/RELEASE-MANIFEST.json --promotion-proof release/PROMOTION-PROOF.json --ci-proof release/ci-proof.json --manifest-sha256 "${{ needs.verify.outputs.manifest-sha256 }}" --promotion-proof-sha256 "${{ needs.verify.outputs.promotion-proof-sha256 }}" --ci-proof-sha256 "${{ needs.verify.outputs.ci-proof-sha256 }}" --directory release --sha "$GITHUB_SHA" --run-id "$GITHUB_RUN_ID" --run-attempt "$GITHUB_RUN_ATTEMPT" --artifact-name "$ARTIFACT_NAME"
-      - name: Detect the existing token fallback
-        id: npm-auth
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
-        shell: bash
-        run: |
-          if [[ -n "$NPM_TOKEN" ]]; then
-            echo "token=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "token=false" >> "$GITHUB_OUTPUT"
-          fi
-      - name: Publish with the existing token fallback
-        if: steps.npm-auth.outputs.token == 'true'
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-          NPM_CONFIG_USERCONFIG: ${{ runner.temp }}/oh-story-dsh-npmrc
-        run: |
-          printf '//registry.npmjs.org/:_authToken=%s\n' "$NODE_AUTH_TOKEN" > "$NPM_CONFIG_USERCONFIG"
-          chmod 600 "$NPM_CONFIG_USERCONFIG"
-          node scripts/release.mjs npm-publish --manifest release/RELEASE-MANIFEST.json --directory release --sha "$GITHUB_SHA" --repository "$GITHUB_REPOSITORY" --tag "$GITHUB_REF_NAME"
       - name: Publish with npm Trusted Publishing
-        if: steps.npm-auth.outputs.token == 'false'
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/release.mjs npm-publish --manifest release/RELEASE-MANIFEST.json --directory release --sha "$GITHUB_SHA" --repository "$GITHUB_REPOSITORY" --tag "$GITHUB_REF_NAME"
