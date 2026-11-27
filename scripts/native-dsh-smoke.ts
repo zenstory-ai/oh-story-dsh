@@ -13,6 +13,7 @@ import {
   freePort,
   isolateFirstUseWorkspace,
   rpc,
+  runPnpm as runPnpmIn,
   sessionEvents,
   stopDshProcess,
   type HistoryEvent
@@ -134,11 +135,7 @@ function run(command: string, args: readonly string[], env: NodeJS.ProcessEnv = 
 }
 
 function runPnpm(args: readonly string[]): void {
-  if (process.platform === "win32") {
-    run(process.env.ComSpec ?? "cmd.exe", ["/d", "/s", "/c", "pnpm", ...args]);
-    return;
-  }
-  run("pnpm", args);
+  runPnpmIn(repositoryRoot, args);
 }
 
 interface MockDeepSeek {
@@ -599,21 +596,23 @@ async function main(): Promise<void> {
       const source = await readFile(path, "utf8");
       await writeFile(path, source.replaceAll("EP001", "EP002").replaceAll("四个号，四个粉", "百万倒计时"));
     }));
-    runPnpm(["--filter", "@oh-story/dsh", "build"]);
-    runPnpm(["--filter", "@oh-story/dsh", "pack", "--pack-destination", packDirectory]);
+    let archivePath = process.env.OH_STORY_PACKED_TARBALL;
+    if (archivePath === undefined || archivePath === "") {
+      runPnpm(["--filter", "@oh-story/dsh", "pack", "--pack-destination", packDirectory]);
+      const tarball = (await readdir(packDirectory)).find((entry) => entry.endsWith(".tgz"));
+      if (tarball === undefined) throw new Error("Plugin pack did not create a tarball.");
+      archivePath = join(packDirectory, tarball);
+    }
     await mkdir(installation, { recursive: true });
     await writeFile(join(installation, "package.json"), `${JSON.stringify({ private: true, dependencies: { "@deepseek-ai/dsh": dshVersion } }, null, 2)}\n`);
     await writeFile(join(installation, "pnpm-workspace.yaml"), [
-      "packages:", "  - .", "nodeLinker: hoisted", "allowBuilds:",
+      "packages:", "  - .", "nodeLinker: hoisted", "minimumReleaseAge: 0", "allowBuilds:",
       "  '@deepseek-ai/dsh-subprocess-local': true", "  '@google/genai': false", "  koffi: true",
       "  node-addon-require-builtin: false", "  node-pty: true", "  protobufjs: false", ""
     ].join("\n"));
     try { runPnpm(["--dir", installation, "install", "--offline"]); }
     catch { runPnpm(["--dir", installation, "install"]); }
     const dshBin = join(installation, "node_modules", "@deepseek-ai", "dsh", "lib", "bin.js");
-    const tarball = (await readdir(packDirectory)).find((entry) => entry.endsWith(".tgz"));
-    if (tarball === undefined) throw new Error("Plugin pack did not create a tarball.");
-    const archivePath = join(packDirectory, tarball);
     const archive = spawnSync("tar", ["-tzf", archivePath], { cwd: repositoryRoot, encoding: "utf8", stdio: "pipe" });
     if (archive.status !== 0) throw new Error(`Could not inspect plugin tarball:\n${archive.stderr}`);
     const entries = new Set(archive.stdout.split(/\r?\n/u).filter((entry) => entry !== ""));

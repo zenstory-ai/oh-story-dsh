@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { runPnpm } from "./native-dsh-helpers.js";
+
 /**
  * One packaged smoke pass captures every workbench, so a single run renders all
  * four demos; naming a workbench only narrows which GIFs get written.
@@ -43,11 +45,11 @@ function run(command: string, args: readonly string[], env = process.env): void 
 }
 
 try {
-  run("pnpm", ["test:dsh"], {
+  runPnpm(repositoryRoot, ["test:dsh"], {
     ...process.env,
     OH_STORY_DEMO_FRAMES_DIR: frames,
     ...useMock ? {} : { OH_STORY_DEMO_USE_REAL_DEEPSEEK: "1" }
-  });
+  }, "inherit");
   for (const target of targets) {
     const output = resolve(repositoryRoot, demos[target]);
     run("ffmpeg", [

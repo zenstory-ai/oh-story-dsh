@@ -10,7 +10,6 @@ export default tseslint.config(
       "**/lib/**",
       "**/coverage/**",
       "**/node_modules/**",
-      "docs/blueprint/**",
       // Bundled upstream knowledge is vendored verbatim and hashed by the parity
       // checks, so it is never ours to restyle.
       "packages/knowledge/**",
@@ -36,10 +35,7 @@ export default tseslint.config(
       "**/test/**/*.{ts,tsx}",
       "**/tests/**/*.{ts,tsx}",
       "**/*.config.ts",
-      "scripts/**/*.ts",
-      "tests/**/*.ts",
-      "vitest.workspace.ts",
-      "playwright.config.ts"
+      "scripts/**/*.ts"
     ],
     ...tseslint.configs.disableTypeChecked
   }

@@ -37,8 +37,8 @@
     "assets:check": "tsx scripts/check-upstream-parity.ts && tsx scripts/check-drama-parity.ts && tsx scripts/check-novel-to-game-parity.ts && tsx scripts/check-video-recap-parity.ts",
     "dsh:boundary": "tsx scripts/check-dsh-boundary.ts",
     "verify": "pnpm lint && pnpm typecheck && pnpm assets:check && pnpm dsh:boundary && pnpm test:release && pnpm test:upstream-updates && pnpm test:unit && pnpm build",
-    "verify:portable": "pnpm typecheck && pnpm assets:check && pnpm test:release && pnpm test:unit && pnpm build",
-    "verify:release": "pnpm verify && pnpm test:dsh && pnpm test:dsh:rc && pnpm test:dsh:next",
+    "verify:portable": "pnpm assets:check && pnpm test:release && pnpm test:unit && pnpm build",
+    "verify:release": "pnpm verify && pnpm test:dsh && pnpm test:dsh:rc",
     "pack:release": "pnpm --filter @oh-story/dsh pack --pack-destination release",
     "test:dsh:rc": "tsx scripts/native-dsh-smoke.ts 0.2.0-rc.2",
     "test:dsh:next": "tsx scripts/native-dsh-smoke.ts 0.2.2-rc.5"

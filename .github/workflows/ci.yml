@@ -22,9 +22,9 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
         with:
-          version: 11.7.0
+          persist-credentials: false
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 24
@@ -48,9 +48,9 @@ jobs:
             runner: windows-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
         with:
-          version: 11.7.0
+          persist-credentials: false
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 24
@@ -65,16 +65,37 @@ jobs:
     timeout-minutes: 25
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
-      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
         with:
-          version: 11.7.0
+          persist-credentials: false
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Install Chrome for the official DSH Web smoke
-        run: pnpm exec playwright install --with-deps chrome
-      - run: pnpm test:dsh
-      - name: Verify npm latest DSH compatibility
-        run: pnpm test:dsh:rc
+      - name: Ensure Chrome for the official DSH Web smoke
+        run: command -v google-chrome >/dev/null || pnpm exec playwright install --with-deps chrome
+      - name: Pack plugin once and run current + baseline DSH smokes in parallel
+        shell: bash
+        run: |
+          set -euo pipefail
+          pack_dir="$(mktemp -d)"
+          trap 'rm -rf "$pack_dir"' EXIT
+          pnpm --filter @oh-story/dsh pack --pack-destination "$pack_dir"
+          tarball="$(find "$pack_dir" -maxdepth 1 -name '*.tgz' | head -n 1)"
+          test -f "$tarball"
+          export OH_STORY_PACKED_TARBALL="$tarball"
+          pnpm test:dsh >"$pack_dir/dsh-current.log" 2>&1 &
+          pid_current=$!
+          pnpm test:dsh:rc >"$pack_dir/dsh-rc.log" 2>&1 &
+          pid_rc=$!
+          rc1=0; rc2=0
+          wait "$pid_current" || rc1=$?
+          wait "$pid_rc" || rc2=$?
+          echo "=== test:dsh (current) ==="
+          cat "$pack_dir/dsh-current.log"
+          echo "=== test:dsh:rc (0.2.0-rc.2) ==="
+          cat "$pack_dir/dsh-rc.log"
+          if [[ "$rc1" -ne 0 || "$rc2" -ne 0 ]]; then
+            exit 1
+          fi
