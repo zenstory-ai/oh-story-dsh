@@ -49,7 +49,7 @@
     "@types/node": "25.5.0",
     "esbuild": "0.28.2",
     "eslint": "10.8.1",
-    "tsx": "4.23.12",
+    "tsx": "4.23.15",
     "typescript": "6.0.3",
     "typescript-eslint": "8.67.0",
     "vitest": "4.1.11"
