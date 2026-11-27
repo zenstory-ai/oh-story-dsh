@@ -471,6 +471,32 @@ async function assertChatAnchorContract(
   throw new Error(`Chat anchor contract failed in ${expectedLayout} layout: ${JSON.stringify(measurement)}`);
 }
 
+async function assertElementFocused(locator: Locator, message: string, timeoutMs = 3_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (await locator.evaluate((element) => document.activeElement === element)) return;
+    await new Promise<void>((accept) => { setTimeout(accept, 50); });
+  }
+  throw new Error(message);
+}
+
+async function assertTabFocused(
+  tab: Locator,
+  message: string,
+  requireTabIndexZero = false,
+  timeoutMs = 3_000
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const selected = await tab.getAttribute("aria-selected") === "true";
+    const tabIndexOk = !requireTabIndexZero || await tab.getAttribute("tabindex") === "0";
+    const focused = await tab.evaluate((element) => document.activeElement === element);
+    if (selected && tabIndexOk && focused) return;
+    await new Promise<void>((accept) => { setTimeout(accept, 50); });
+  }
+  throw new Error(message);
+}
+
 async function main(): Promise<void> {
   const temporaryRoot = await mkdtemp(join(tmpdir(), "oh-story-native-dsh-smoke-"));
   const packDirectory = join(temporaryRoot, "pack");
@@ -1470,13 +1496,9 @@ async function main(): Promise<void> {
         await dramaTab.waitFor({ state: "visible", timeout: 10_000 });
         await storyTab.focus();
         await storyTab.press("ArrowRight");
-        if (await dramaTab.getAttribute("aria-selected") !== "true" || !await dramaTab.evaluate((element) => document.activeElement === element)) {
-          throw new Error("Workspace tabs did not support roving ArrowRight navigation.");
-        }
+        await assertTabFocused(dramaTab, "Workspace tabs did not support roving ArrowRight navigation.");
         await dramaTab.press("ArrowLeft");
-        if (await storyTab.getAttribute("aria-selected") !== "true" || !await storyTab.evaluate((element) => document.activeElement === element)) {
-          throw new Error("Workspace tabs did not support roving ArrowLeft navigation.");
-        }
+        await assertTabFocused(storyTab, "Workspace tabs did not support roving ArrowLeft navigation.");
         await rm(mixedMarker);
         await page.getByRole("button", { name: "刷新项目文件", exact: true }).click();
         await dramaTab.waitFor({ state: "visible", timeout: 10_000 });
@@ -1497,13 +1519,9 @@ async function main(): Promise<void> {
       const sourceTab = page.getByRole("tab", { name: "源码", exact: true });
       await previewTab.focus();
       await previewTab.press("End");
-      if (await sourceTab.getAttribute("aria-selected") !== "true" || !await sourceTab.evaluate((element) => document.activeElement === element)) {
-        throw new Error("Editor tabs did not support End-key navigation.");
-      }
+      await assertTabFocused(sourceTab, "Editor tabs did not support End-key navigation.");
       await sourceTab.press("Home");
-      if (await previewTab.getAttribute("aria-selected") !== "true" || !await previewTab.evaluate((element) => document.activeElement === element)) {
-        throw new Error("Editor tabs did not support Home-key navigation.");
-      }
+      await assertTabFocused(previewTab, "Editor tabs did not support Home-key navigation.");
       await sourceTab.click();
       const chapterEditor = page.getByRole("textbox", { name: chapterPath });
       await chapterEditor.waitFor({ state: "visible", timeout: 10_000 });
@@ -1892,9 +1910,7 @@ async function main(): Promise<void> {
       await page.waitForFunction(() => document.fullscreenElement?.classList.contains("oh-game-preview-shell") === true);
       await page.evaluate(async () => { await document.exitFullscreen(); });
       await page.waitForFunction(() => document.fullscreenElement === null);
-      if (!await fullscreenButton.evaluate((element) => document.activeElement === element)) {
-        throw new Error("Exiting fullscreen did not restore focus to the fullscreen control.");
-      }
+      await assertElementFocused(fullscreenButton, "Exiting fullscreen did not restore focus to the fullscreen control.");
 
       await page.setViewportSize({ width: 500, height: 900 });
       await page.waitForFunction(() => document.querySelector("[data-conversation-scroll]")?.getAttribute("data-oh-story-layout") === "compact");
@@ -3038,12 +3054,11 @@ async function main(): Promise<void> {
       }
       const dramaProductionTab = dramaWorkspaceTabs.getByRole("tab", { name: "制作", exact: true });
       const dramaDocumentsTab = dramaWorkspaceTabs.getByRole("tab", { name: "文稿", exact: true });
-      const dramaTabHasFocus = async (tab: typeof dramaProductionTab): Promise<boolean> => await tab.getAttribute("aria-selected") === "true" && await tab.getAttribute("tabindex") === "0" && await tab.evaluate((element) => document.activeElement === element);
       await dramaProductionTab.focus();
       await dramaProductionTab.press("ArrowRight");
-      if (!await dramaTabHasFocus(dramaDocumentsTab)) throw new Error("ArrowRight did not move the drama workspace tabs to 文稿.");
+      await assertTabFocused(dramaDocumentsTab, "ArrowRight did not move the drama workspace tabs to 文稿.", true);
       await dramaDocumentsTab.press("ArrowLeft");
-      if (!await dramaTabHasFocus(dramaProductionTab)) throw new Error("ArrowLeft did not move the drama workspace tabs to 制作.");
+      await assertTabFocused(dramaProductionTab, "ArrowLeft did not move the drama workspace tabs to 制作.", true);
       await dramaProductionTab.press("ArrowRight");
       await page.getByRole("button", { name: "收起项目文稿", exact: true }).click();
       await page.getByRole("tab", { name: "源码" }).click();
