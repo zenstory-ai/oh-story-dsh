@@ -58,11 +58,19 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm verify:portable
 
-  native-dsh:
-    name: Packaged DSH Web integration
+  native-dsh-smoke:
+    name: Packaged DSH Web smoke (${{ matrix.label }})
     needs: quality
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: current
+            script: test:dsh
+          - label: 0.2.0-rc.2
+            script: test:dsh:rc
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -75,7 +83,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Ensure Chrome for the official DSH Web smoke
         run: command -v google-chrome >/dev/null || pnpm exec playwright install --with-deps chrome
-      - name: Pack plugin once and run current + baseline DSH smokes in parallel
+      - name: Pack plugin and run DSH Web smoke (${{ matrix.label }})
         shell: bash
         run: |
           set -euo pipefail
@@ -84,18 +92,19 @@ jobs:
           pnpm --filter @oh-story/dsh pack --pack-destination "$pack_dir"
           tarball="$(find "$pack_dir" -maxdepth 1 -name '*.tgz' | head -n 1)"
           test -f "$tarball"
-          export OH_STORY_PACKED_TARBALL="$tarball"
-          pnpm test:dsh >"$pack_dir/dsh-current.log" 2>&1 &
-          pid_current=$!
-          pnpm test:dsh:rc >"$pack_dir/dsh-rc.log" 2>&1 &
-          pid_rc=$!
-          rc1=0; rc2=0
-          wait "$pid_current" || rc1=$?
-          wait "$pid_rc" || rc2=$?
-          echo "=== test:dsh (current) ==="
-          cat "$pack_dir/dsh-current.log"
-          echo "=== test:dsh:rc (0.2.0-rc.2) ==="
-          cat "$pack_dir/dsh-rc.log"
-          if [[ "$rc1" -ne 0 || "$rc2" -ne 0 ]]; then
+          OH_STORY_PACKED_TARBALL="$tarball" pnpm "${{ matrix.script }}"
+
+  native-dsh:
+    name: Packaged DSH Web integration
+    needs: native-dsh-smoke
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify DSH Web smoke matrix succeeded
+        shell: bash
+        run: |
+          if [[ "${{ needs.native-dsh-smoke.result }}" != "success" ]]; then
+            echo "Packaged DSH Web smoke matrix finished with status: ${{ needs.native-dsh-smoke.result }}"
             exit 1
           fi
