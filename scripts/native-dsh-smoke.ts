@@ -3060,6 +3060,7 @@ async function main(): Promise<void> {
       await dramaDocumentsTab.press("ArrowLeft");
       await assertTabFocused(dramaProductionTab, "ArrowLeft did not move the drama workspace tabs to 制作.", true);
       await dramaProductionTab.press("ArrowRight");
+      await assertTabFocused(dramaDocumentsTab, "ArrowRight did not return the drama workspace tabs to 文稿.", true);
       await page.getByRole("button", { name: "收起项目文稿", exact: true }).click();
       await page.getByRole("tab", { name: "源码" }).click();
       const compactSource = page.getByRole("textbox", { name: compactPath });
